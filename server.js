@@ -21,17 +21,17 @@ const ARENA_W = CANVAS_W - 16, ARENA_H = CANVAS_H - 16;
 const TICK_MS = 20;
 
 const WEAPONS = [
-  { id: 'sword',      name: 'SWORD',      damage: 20, range: 22,  atkSpd: 400,  type: 'melee',  unlockXp: 0    },
-  { id: 'dagger',     name: 'DAGGER',     damage: 10, range: 16,  atkSpd: 180,  type: 'melee',  unlockXp: 0    },
-  { id: 'axe',        name: 'AXE',        damage: 38, range: 20,  atkSpd: 700,  type: 'melee',  unlockXp: 150  },
-  { id: 'spear',      name: 'SPEAR',      damage: 18, range: 40,  atkSpd: 500,  type: 'melee',  unlockXp: 300  },
+  { id: 'sword',      name: 'SWORD',      damage: 20, range: 42,  atkSpd: 400,  type: 'melee',  unlockXp: 0    },
+  { id: 'dagger',     name: 'DAGGER',     damage: 10, range: 34,  atkSpd: 180,  type: 'melee',  unlockXp: 0    },
+  { id: 'axe',        name: 'AXE',        damage: 38, range: 42,  atkSpd: 700,  type: 'melee',  unlockXp: 150  },
+  { id: 'spear',      name: 'SPEAR',      damage: 18, range: 68,  atkSpd: 500,  type: 'melee',  unlockXp: 300  },
   { id: 'bow',        name: 'BOW',        damage: 15, range: 200, atkSpd: 600,  type: 'ranged', unlockXp: 500  },
   { id: 'staff',      name: 'STAFF',      damage: 25, range: 180, atkSpd: 900,  type: 'ranged', unlockXp: 800,  aoeRadius: 28 },
-  { id: 'hammer',     name: 'HAMMER',     damage: 50, range: 24,  atkSpd: 1000, type: 'melee',  unlockXp: 1200 },
+  { id: 'hammer',     name: 'HAMMER',     damage: 50, range: 44,  atkSpd: 1000, type: 'melee',  unlockXp: 1200 },
   { id: 'wand',       name: 'WAND',       damage: 8,  range: 150, atkSpd: 250,  type: 'ranged', unlockXp: 1700 },
   { id: 'crossbow',   name: 'CROSSBOW',   damage: 30, range: 220, atkSpd: 800,  type: 'ranged', unlockXp: 2400, pierce: true },
-  { id: 'flail',      name: 'FLAIL',      damage: 22, range: 26,  atkSpd: 500,  type: 'melee',  unlockXp: 3200, swing360: true },
-  { id: 'greatsword', name: 'GREATSWORD', damage: 45, range: 40,  atkSpd: 850,  type: 'melee',  unlockXp: 4500 },
+  { id: 'flail',      name: 'FLAIL',      damage: 22, range: 50,  atkSpd: 500,  type: 'melee',  unlockXp: 3200, swing360: true },
+  { id: 'greatsword', name: 'GREATSWORD', damage: 45, range: 70,  atkSpd: 850,  type: 'melee',  unlockXp: 4500 },
 ];
 
 const WAVE_CONFIG = [
