@@ -44,7 +44,17 @@ function loadLocalSkin() {
 function saveLocalSkin(s) {
   try { localStorage.setItem('weponare_skin', JSON.stringify(s)); } catch {}
 }
+function loadLocalXp(password) {
+  if (!password) return 0;
+  try { return parseInt(localStorage.getItem('weponare_xp_' + password)) || 0; }
+  catch { return 0; }
+}
+function saveLocalXp(password, xp) {
+  if (!password) return;
+  try { localStorage.setItem('weponare_xp_' + password, String(xp)); } catch {}
+}
 let pendingSkin = loadLocalSkin();
+let skinModified = false;
 
 function getSkinColor(p, defaultColor) {
   if (!p || !p.skin) return defaultColor;
@@ -83,10 +93,17 @@ function connect() {
   ws.onopen = () => { connected = true; };
   ws.onmessage = (e) => {
     const msg = JSON.parse(e.data);
+    if (msg.type === 'skin_init') {
+      pendingSkin = msg.skin;
+      saveLocalSkin(msg.skin);
+      buildSkinGrids();
+      renderSkinPreview();
+    }
     if (msg.type === 'welcome') {
       myNum = msg.num;
       if (msg.leaderboard) welcomeLeaderboard = msg.leaderboard;
-      ws.send(JSON.stringify({ type: 'join', name: pendingName, mode: pendingMode, password: pendingPass, skin: pendingSkin }));
+      ws.send(JSON.stringify({ type: 'join', name: pendingName, mode: pendingMode, password: pendingPass, skin: pendingSkin, skinModified, localXp: loadLocalXp(pendingPass) }));
+      skinModified = false;
       const modeLabel = pendingMode === 'coop' ? 'CO-OP' : pendingMode === 'waves' ? 'WAVES' : 'PvP';
       if (pendingMode === 'waves') {
         setLobbyMsg(`<span class="p1-color">WAVES MODE</span><br><span style="color:#888">SOLO ENDLESS</span><br>Loading...`);
@@ -103,6 +120,7 @@ function connect() {
       return;
     }
     if (msg.type === 'state') {
+      if (pendingPass && msg.xp !== undefined) saveLocalXp(pendingPass, msg.xp);
       if (currState && msg.gameState === 'GAMEPLAY') detectSlashes(currState, msg);
       prevState = currState;
       currState = msg;
@@ -148,6 +166,47 @@ function interpState(prev, curr, t) {
       return pp ? { ...p, x: lerp(pp.x, p.x, t), y: lerp(pp.y, p.y, t) } : p;
     }),
   };
+}
+
+// ─── Client-side Prediction (local player) ──────────────────────────────────────
+// Renders the local player using locally-applied input immediately, instead of
+// waiting for the server round-trip + interpolation buffer. Reconciles toward the
+// authoritative server position each frame to correct drift.
+
+let pred = null; // { x, y, facing }
+
+function updatePrediction(frameDt) {
+  if (!currState || currState.gameState !== 'GAMEPLAY' || !myNum) { pred = null; return; }
+  const key = myNum === 1 ? 'p1' : 'p2';
+  const me = currState.players?.[key];
+  if (!me || me.dead) { pred = null; return; }
+  if (!pred) pred = { x: me.x, y: me.y, facing: me.facing };
+
+  // Reconcile toward authoritative server position
+  const dx = me.x - pred.x, dy = me.y - pred.y;
+  if (Math.hypot(dx, dy) > 22) { pred.x = me.x; pred.y = me.y; } // snap on big correction (hit/respawn)
+  else { pred.x += dx * 0.18; pred.y += dy * 0.18; }
+
+  // Apply currently-held inputs immediately
+  const inp = currentInputs();
+  let vx = 0, vy = 0;
+  if (inp.left)  { vx = -PLAYER_SPEED; pred.facing = -1; }
+  if (inp.right) { vx =  PLAYER_SPEED; pred.facing =  1; }
+  if (inp.up)    vy = -PLAYER_SPEED;
+  if (inp.down)  vy =  PLAYER_SPEED;
+  if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
+  const f = frameDt / 16.67;
+  pred.x = Math.max(ARENA_X + 2, Math.min(ARENA_X + ARENA_W - me.w - 2, pred.x + vx * f));
+  pred.y = Math.max(ARENA_Y + 2, Math.min(ARENA_Y + ARENA_H - me.h - 2, pred.y + vy * f));
+}
+
+function applyPrediction(state) {
+  if (!pred || !myNum) return state;
+  const key = myNum === 1 ? 'p1' : 'p2';
+  const me = state.players?.[key];
+  if (!me || me.dead) return state;
+  state.players[key] = { ...me, x: pred.x, y: pred.y, facing: pred.facing };
+  return state;
 }
 
 // ─── Slash Effects ────────────────────────────────────────────────────────────
@@ -242,25 +301,32 @@ function drawSlashes() {
 
 const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 const keys = {};
-const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false };
+const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false };
+
+const PLAYER_SPEED = 3.0; // must match server makePlayer().speed
 
 window.addEventListener('keydown', (e) => {
   if (!keys[e.code]) { keys[e.code] = true; sendInput(); }
-  if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter'].includes(e.code)) e.preventDefault();
+  if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','ShiftLeft','ShiftRight'].includes(e.code)) e.preventDefault();
   if (e.code === 'Space' && currState && currState.gameState === 'WEAPON_UNLOCK' && currState.pendingUnlock) sendAckUnlock();
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; sendInput(); });
 
+function currentInputs() {
+  return {
+    up:      !!keys['ArrowUp']    || touchKeys.up,
+    down:    !!keys['ArrowDown']  || touchKeys.down,
+    left:    !!keys['ArrowLeft']  || touchKeys.left,
+    right:   !!keys['ArrowRight'] || touchKeys.right,
+    attack:  !!keys['Space']      || touchKeys.attack,
+    swap:    !!keys['Enter']      || touchKeys.swap,
+    special: !!keys['ShiftLeft'] || !!keys['ShiftRight'] || touchKeys.special,
+  };
+}
+
 function sendInput() {
   if (!ws || ws.readyState !== 1) return;
-  ws.send(JSON.stringify({ type:'input', keys:{
-    up:    !!keys['ArrowUp']    || touchKeys.up,
-    down:  !!keys['ArrowDown']  || touchKeys.down,
-    left:  !!keys['ArrowLeft']  || touchKeys.left,
-    right: !!keys['ArrowRight'] || touchKeys.right,
-    attack:!!keys['Space']      || touchKeys.attack,
-    swap:  !!keys['Enter']      || touchKeys.swap,
-  }}));
+  ws.send(JSON.stringify({ type:'input', keys: currentInputs() }));
 }
 function sendAckUnlock() { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type:'ack_unlock' })); }
 
@@ -274,6 +340,7 @@ function setupTouchControls() {
   const btnMap = [
     ['btn-up','up'], ['btn-down','down'], ['btn-left','left'],
     ['btn-right','right'], ['btn-attack','attack'], ['btn-swap','swap'],
+    ['btn-special','special'],
   ];
   for (const [id, key] of btnMap) {
     const el = document.getElementById(id);
@@ -307,12 +374,14 @@ function closeSkinsScreen() { showScreen('startScreen'); }
 
 function selectSkinColor(idx) {
   pendingSkin.colorIdx = idx;
+  skinModified = true;
   saveLocalSkin(pendingSkin);
   buildSkinGrids();
   renderSkinPreview();
 }
 function selectSkinHat(idx) {
   pendingSkin.hatIdx = idx;
+  skinModified = true;
   saveLocalSkin(pendingSkin);
   buildSkinGrids();
   renderSkinPreview();
@@ -461,8 +530,11 @@ function renderLoop(now) {
   lastFrameTime = now;
   tickSlashes(dt);
   if (currState && currState.gameState === 'GAMEPLAY') {
+    updatePrediction(dt);
     const t = Math.min(1, (now - stateRecvTime) / SERVER_TICK_MS);
-    draw(interpState(prevState, currState, t));
+    draw(applyPrediction(interpState(prevState, currState, t)));
+  } else {
+    pred = null;
   }
   requestAnimationFrame(renderLoop);
 }
@@ -508,7 +580,7 @@ function drawPlayer(p, baseColor, label) {
   ctx.fillStyle=c; ctx.fillRect(x+1,y,p.w-2,5);
   ctx.fillStyle=PAL.white; ctx.fillRect(p.facing===1?x+8:x+2,y+1,2,2);
   drawHat(x, y, skinCol, p.skin?.hatIdx);
-  drawNametag(x+p.w/2, y-2, label, skinCol);
+  drawNametag(x+p.w/2, y-9, label, skinCol);
   drawWeaponSprite(p, x, y);
 }
 
@@ -753,6 +825,20 @@ function drawMonsters(ms) { for(const m of ms) drawMonster(m); }
 
 function drawProjectiles(projs) {
   for(const pr of projs) {
+    if(pr.special) {
+      const wc = WEAPON_COLOR[pr.weaponId] || PAL.white;
+      ctx.save();
+      ctx.globalAlpha = 0.4; ctx.fillStyle = wc;
+      ctx.beginPath(); ctx.arc(pr.x, pr.y, 7, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 0.5; ctx.strokeStyle = wc; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(pr.x, pr.y); ctx.lineTo(pr.x - pr.dx*3, pr.y - pr.dy*3); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.fillStyle = wc;
+      ctx.beginPath(); ctx.arc(pr.x, pr.y, 3.5, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(pr.x-1, pr.y-1, 1.3, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+      continue;
+    }
     if(pr.weaponId==='bow') {
       ctx.strokeStyle=PAL.bow; ctx.lineWidth=1;
       ctx.beginPath(); ctx.moveTo(pr.x,pr.y); ctx.lineTo(pr.x-pr.dx*4,pr.y-pr.dy*4); ctx.stroke();
@@ -793,6 +879,14 @@ function drawParticles(particles) {
       ctx.fillStyle=PAL.xp; ctx.font='12px "Courier New",monospace';
       ctx.textBaseline='middle'; ctx.textAlign='center';
       ctx.fillText(p.text,p.x,p.y); ctx.textAlign='left'; ctx.globalAlpha=1;
+    } else if(p.type==='shockwave') {
+      const m=p.max||420, k=1-p.timer/m, r=(p.maxR||30)*k;
+      ctx.globalAlpha=Math.max(0,p.timer/m)*0.9;
+      ctx.strokeStyle=p.color||PAL.white; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.stroke();
+      ctx.strokeStyle='#ffffff'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.arc(p.x,p.y,Math.max(0,r-4),0,Math.PI*2); ctx.stroke();
+      ctx.globalAlpha=1;
     }
   }
 }
@@ -841,6 +935,29 @@ function drawHUD(state) {
   }
   ctx.textAlign = 'left';
 
+  // ── Special-attack cooldown (local player) ──
+  const mp = myNum === 1 ? p1 : (myNum === 2 ? p2 : null);
+  if (mp && mp.specialMax > 0) {
+    const ready = (mp.specialCd || 0) <= 0;
+    const ratio = ready ? 1 : Math.max(0, 1 - mp.specialCd / mp.specialMax);
+    const barW = 74, barH = 4;
+    const bx = myNum === 1 ? 4 : CANVAS_W - 4 - barW;
+    const by = 28;
+    ctx.fillStyle = '#1a0a2a'; ctx.fillRect(bx, by, barW, barH);
+    ctx.fillStyle = ready ? '#cc66ff' : '#6a3a99';
+    ctx.fillRect(bx, by, Math.round(barW * ratio), barH);
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.strokeRect(bx, by, barW, barH);
+    ctx.font = '7px "Courier New",monospace';
+    ctx.textBaseline = 'top';
+    ctx.textAlign = myNum === 1 ? 'left' : 'right';
+    const lx = myNum === 1 ? bx : bx + barW;
+    const txt = ready ? 'SPECIAL READY' : 'SPECIAL';
+    ctx.fillStyle = '#000'; ctx.fillText(txt, lx + 1, by + barH + 2);
+    ctx.fillStyle = ready ? '#dd88ff' : '#8866aa'; ctx.fillText(txt, lx, by + barH + 1);
+    ctx.textAlign = 'left';
+    ctx.font = '10px "Courier New",monospace';
+  }
+
   ctx.textBaseline = 'bottom';
   ctx.fillStyle = '#000'; ctx.fillText('XP:' + state.xp, 5, CANVAS_H - 3);
   ctx.fillStyle = PAL.xp; ctx.fillText('XP:' + state.xp, 4, CANVAS_H - 4);
@@ -868,6 +985,7 @@ function drawWeaponPanel(state) {
     ctx.fillStyle='#505060'; ctx.fillText('ARROWS MOVE',hx,hy);
     ctx.fillStyle='#505060'; ctx.fillText('SPACE  ATK', hx,hy+9);
     ctx.fillStyle='#505060'; ctx.fillText('ENTER  SWAP',hx,hy+18);
+    ctx.fillStyle='#8866aa'; ctx.fillText('SHIFT  SPECIAL',hx,hy+27);
     ctx.restore();
   }
 

@@ -21,18 +21,24 @@ const ARENA_W = CANVAS_W - 16, ARENA_H = CANVAS_H - 16;
 const TICK_MS = 20;
 
 const WEAPONS = [
-  { id: 'sword',      name: 'SWORD',      damage: 20, range: 42,  atkSpd: 400,  type: 'melee',  unlockXp: 0    },
-  { id: 'dagger',     name: 'DAGGER',     damage: 10, range: 34,  atkSpd: 180,  type: 'melee',  unlockXp: 0    },
-  { id: 'axe',        name: 'AXE',        damage: 38, range: 42,  atkSpd: 700,  type: 'melee',  unlockXp: 150  },
-  { id: 'spear',      name: 'SPEAR',      damage: 18, range: 68,  atkSpd: 500,  type: 'melee',  unlockXp: 300  },
-  { id: 'bow',        name: 'BOW',        damage: 15, range: 200, atkSpd: 600,  type: 'ranged', unlockXp: 500  },
-  { id: 'staff',      name: 'STAFF',      damage: 25, range: 180, atkSpd: 900,  type: 'ranged', unlockXp: 800,  aoeRadius: 28 },
-  { id: 'hammer',     name: 'HAMMER',     damage: 50, range: 44,  atkSpd: 1000, type: 'melee',  unlockXp: 1200 },
-  { id: 'wand',       name: 'WAND',       damage: 8,  range: 150, atkSpd: 250,  type: 'ranged', unlockXp: 1700 },
-  { id: 'crossbow',   name: 'CROSSBOW',   damage: 30, range: 220, atkSpd: 800,  type: 'ranged', unlockXp: 2400, pierce: true },
-  { id: 'flail',      name: 'FLAIL',      damage: 22, range: 50,  atkSpd: 500,  type: 'melee',  unlockXp: 3200, swing360: true },
-  { id: 'greatsword', name: 'GREATSWORD', damage: 45, range: 70,  atkSpd: 850,  type: 'melee',  unlockXp: 4500 },
+  { id: 'sword',      name: 'SWORD',      damage: 20, range: 42,  atkSpd: 400,  type: 'melee',  unlockXp: 0,    special: { kind: 'slam',    dmg: 45, range: 62,  cd: 5000 } },
+  { id: 'dagger',     name: 'DAGGER',     damage: 10, range: 34,  atkSpd: 180,  type: 'melee',  unlockXp: 0,    special: { kind: 'slam',    dmg: 28, range: 46,  cd: 3500 } },
+  { id: 'axe',        name: 'AXE',        damage: 38, range: 42,  atkSpd: 700,  type: 'melee',  unlockXp: 150,  special: { kind: 'slam',    dmg: 75, range: 58,  cd: 7000 } },
+  { id: 'spear',      name: 'SPEAR',      damage: 18, range: 68,  atkSpd: 500,  type: 'melee',  unlockXp: 300,  special: { kind: 'pierce',  dmg: 45, range: 150, cd: 5000 } },
+  { id: 'bow',        name: 'BOW',        damage: 15, range: 200, atkSpd: 600,  type: 'ranged', unlockXp: 500,  special: { kind: 'spread',  dmg: 22, range: 200, cd: 6000, count: 3 } },
+  { id: 'staff',      name: 'STAFF',      damage: 25, range: 180, atkSpd: 900,  type: 'ranged', unlockXp: 800,  aoeRadius: 28, special: { kind: 'aoeshot', dmg: 55, range: 200, cd: 7000, aoe: 52 } },
+  { id: 'hammer',     name: 'HAMMER',     damage: 50, range: 44,  atkSpd: 1000, type: 'melee',  unlockXp: 1200, special: { kind: 'slam',    dmg: 95, range: 74,  cd: 9000 } },
+  { id: 'wand',       name: 'WAND',       damage: 8,  range: 150, atkSpd: 250,  type: 'ranged', unlockXp: 1700, special: { kind: 'spread',  dmg: 14, range: 170, cd: 4500, count: 5 } },
+  { id: 'crossbow',   name: 'CROSSBOW',   damage: 30, range: 220, atkSpd: 800,  type: 'ranged', unlockXp: 2400, pierce: true, special: { kind: 'pierce',  dmg: 60, range: 250, cd: 7000 } },
+  { id: 'flail',      name: 'FLAIL',      damage: 22, range: 50,  atkSpd: 500,  type: 'melee',  unlockXp: 3200, swing360: true, special: { kind: 'slam', dmg: 50, range: 68, cd: 6000 } },
+  { id: 'greatsword', name: 'GREATSWORD', damage: 45, range: 70,  atkSpd: 850,  type: 'melee',  unlockXp: 4500, special: { kind: 'slam',    dmg: 85, range: 80,  cd: 8000 } },
 ];
+
+const WEAPON_COLORS = {
+  sword: '#c8d8e8', dagger: '#d4e8b0', axe: '#e8a040', spear: '#c0c8d0',
+  bow: '#b89060', staff: '#cc66ff', hammer: '#aab0b8', wand: '#88ddff',
+  crossbow: '#cc8844', flail: '#dd4444', greatsword: '#ddeeff',
+};
 
 const WAVE_CONFIG = [
   { monsters: 3, hpMult: 1.0, speedMult: 1.0  },
@@ -98,6 +104,27 @@ function getUnlockedWeaponIds(xp) {
   return WEAPONS.filter(w => w.unlockXp <= xp).map(w => w.id);
 }
 
+// Order a weapon-id list by their position in WEAPONS (stable, canonical order)
+function sortWeaponIds(ids) {
+  const valid = ids.filter(id => WEAPONS.some(w => w.id === id));
+  return Array.from(new Set(valid)).sort(
+    (a, b) => WEAPONS.findIndex(w => w.id === a) - WEAPONS.findIndex(w => w.id === b)
+  );
+}
+
+function getStoredWeapons(password) {
+  if (!password) return [];
+  return sortWeaponIds(loadProgress().weapons?.[password] || []);
+}
+
+function saveStoredWeapons(password, ids) {
+  if (!password) return;
+  const data = loadProgress();
+  if (!data.weapons) data.weapons = {};
+  data.weapons[password] = sortWeaponIds(ids);
+  saveProgress(data);
+}
+
 function checkNewUnlocks(oldXp, newXp) {
   const was = getUnlockedWeaponIds(oldXp);
   return getUnlockedWeaponIds(newXp).filter(id => !was.includes(id));
@@ -111,13 +138,14 @@ function makePlayer(num, xp) {
     x: num === 1 ? 80 : 388,
     y: 135,
     w: 12, h: 16,
-    speed: 2.2,
+    speed: 3.0,
     hp: 100, maxHp: 100,
     lives: 3,
     facing: num === 1 ? 1 : -1,
     weaponIdx: 0,
     unlockedWeapons: getUnlockedWeaponIds(xp),
     atkCooldown: 0,
+    specialCooldown: 0,
     swingTimer: 0,
     invincible: 0,
     hitFlash: 0,
@@ -135,6 +163,7 @@ const room = {
   passwords: { p1: '', p2: '' },
   playerXp: { p1: 0, p2: 0 },
   playerSkins: { p1: null, p2: null },
+  playerUnlocks: { p1: null, p2: null },
   p1Joined: false, p2Joined: false,
   players: { p1: null, p2: null },
   inputs: {
@@ -153,9 +182,10 @@ const room = {
   lastLeaderboard: [],
   attackJustPressed: { p1: false, p2: false },
   swapJustPressed: { p1: false, p2: false },
+  specialJustPressed: { p1: false, p2: false },
   prevInputs: {
-    p1: { attack: false, swap: false },
-    p2: { attack: false, swap: false },
+    p1: { attack: false, swap: false, special: false },
+    p2: { attack: false, swap: false, special: false },
   },
 };
 
@@ -223,6 +253,8 @@ function startGame() {
   room.players.p2 = (room.gameMode !== 'waves') ? makePlayer(2, p2Xp) : null;
   if (room.players.p1 && room.playerSkins.p1) room.players.p1.skin = room.playerSkins.p1;
   if (room.players.p2 && room.playerSkins.p2) room.players.p2.skin = room.playerSkins.p2;
+  if (room.players.p1 && room.playerUnlocks.p1) room.players.p1.unlockedWeapons = room.playerUnlocks.p1;
+  if (room.players.p2 && room.playerUnlocks.p2) room.players.p2.unlockedWeapons = room.playerUnlocks.p2;
   room.monsters   = [];
   room.projectiles = [];
   room.particles  = [];
@@ -253,7 +285,13 @@ function handleKill(target, attackerKey) {
 
     const newUnlocks = checkNewUnlocks(oldXp, room.playerXp[attackerKey]);
     room.unlockQueues[attackerKey].push(...newUnlocks);
-    room.players[attackerKey].unlockedWeapons = getUnlockedWeaponIds(room.playerXp[attackerKey]);
+    const merged = sortWeaponIds([
+      ...(room.players[attackerKey].unlockedWeapons || []),
+      ...getUnlockedWeaponIds(room.playerXp[attackerKey]),
+    ]);
+    room.players[attackerKey].unlockedWeapons = merged;
+    room.playerUnlocks[attackerKey] = merged;
+    saveStoredWeapons(room.passwords[attackerKey], merged);
   }
 
   room.particles.push({
@@ -342,9 +380,10 @@ setInterval(() => {
   for (const key of ['p1', 'p2']) {
     const inp  = room.inputs[key];
     const prev = room.prevInputs[key];
-    room.attackJustPressed[key] = inp.attack && !prev.attack;
-    room.swapJustPressed[key]   = inp.swap   && !prev.swap;
-    room.prevInputs[key] = { attack: inp.attack, swap: inp.swap };
+    room.attackJustPressed[key]  = inp.attack  && !prev.attack;
+    room.swapJustPressed[key]    = inp.swap    && !prev.swap;
+    room.specialJustPressed[key] = inp.special && !prev.special;
+    room.prevInputs[key] = { attack: inp.attack, swap: inp.swap, special: inp.special };
   }
 
   // ── Move players ──
@@ -368,16 +407,20 @@ setInterval(() => {
     p.x = Math.max(ARENA_X + 2, Math.min(ARENA_X + ARENA_W - p.w - 2, p.x + vx * factor));
     p.y = Math.max(ARENA_Y + 2, Math.min(ARENA_Y + ARENA_H - p.h - 2, p.y + vy * factor));
 
-    if (p.atkCooldown > 0) p.atkCooldown -= dt;
-    if (p.invincible  > 0) p.invincible  -= dt;
-    if (p.hitFlash    > 0) p.hitFlash    -= dt;
-    if (p.swingTimer  > 0) p.swingTimer  -= dt;
+    if (p.atkCooldown     > 0) p.atkCooldown     -= dt;
+    if (p.specialCooldown > 0) p.specialCooldown -= dt;
+    if (p.invincible      > 0) p.invincible      -= dt;
+    if (p.hitFlash        > 0) p.hitFlash        -= dt;
+    if (p.swingTimer      > 0) p.swingTimer      -= dt;
 
     if (room.swapJustPressed[key]) {
       p.weaponIdx = (p.weaponIdx + 1) % p.unlockedWeapons.length;
     }
     if (room.attackJustPressed[key] && p.atkCooldown <= 0) {
       doAttack(p, key);
+    }
+    if (room.specialJustPressed[key] && p.specialCooldown <= 0) {
+      doSpecial(p, key);
     }
   }
 
@@ -521,6 +564,82 @@ function doAttack(p, pKey) {
   }
 }
 
+function nearestTargetAngle(p, pKey) {
+  const cx = p.x + p.w / 2, cy = p.y + p.h / 2;
+  const cands = [
+    ...(pKey !== 'p1' ? [room.players.p1] : []),
+    ...(pKey !== 'p2' ? [room.players.p2] : []),
+    ...room.monsters,
+  ].filter(t => t && !t.dead);
+  let best = null, bd = Infinity;
+  for (const t of cands) {
+    const d = Math.hypot(t.x + t.w / 2 - cx, t.y + t.h / 2 - cy);
+    if (d < bd) { bd = d; best = t; }
+  }
+  if (!best) return p.facing === 1 ? 0 : Math.PI;
+  return Math.atan2(best.y + best.h / 2 - cy, best.x + best.w / 2 - cx);
+}
+
+function doSpecial(p, pKey) {
+  const w = weapon(p);
+  const sp = w.special;
+  if (!sp) return;
+  p.specialCooldown = sp.cd;
+  p.swingTimer = Math.min(sp.cd, 300);
+
+  const cx = p.x + p.w / 2, cy = p.y + p.h / 2;
+  const wc = WEAPON_COLORS[w.id] || '#ffffff';
+
+  if (sp.kind === 'slam') {
+    const targets = [
+      ...(pKey !== 'p1' ? [room.players.p1] : []),
+      ...(pKey !== 'p2' ? [room.players.p2] : []),
+      ...room.monsters,
+    ].filter(t => t && !t.dead);
+    for (const t of targets) {
+      if (Math.hypot(t.x + t.w / 2 - cx, t.y + t.h / 2 - cy) <= sp.range) {
+        applyDamage(t, sp.dmg, pKey);
+      }
+    }
+    room.particles.push({
+      type: 'shockwave', x: cx, y: cy, maxR: sp.range,
+      timer: 420, max: 420, color: wc,
+    });
+  } else {
+    const aim = nearestTargetAngle(p, pKey);
+    const speed = 4.2;
+    const mkProj = (angle, extra = {}) => ({
+      x: cx, y: cy,
+      dx: Math.cos(angle) * speed,
+      dy: Math.sin(angle) * speed,
+      damage: sp.dmg,
+      owner: pKey,
+      traveled: 0,
+      maxRange: sp.range,
+      weaponId: w.id,
+      special: true,
+      isAoe: false,
+      aoeRadius: 0,
+      pierce: false,
+      hitTargets: null,
+      ...extra,
+    });
+
+    if (sp.kind === 'pierce') {
+      room.projectiles.push(mkProj(aim, { pierce: true, hitTargets: new Set() }));
+    } else if (sp.kind === 'aoeshot') {
+      room.projectiles.push(mkProj(aim, { isAoe: true, aoeRadius: sp.aoe || 40 }));
+    } else if (sp.kind === 'spread') {
+      const n = sp.count || 3;
+      const fan = 0.42;
+      for (let i = 0; i < n; i++) {
+        const a = aim + (i - (n - 1) / 2) * fan;
+        room.projectiles.push(mkProj(a));
+      }
+    }
+  }
+}
+
 function detonateAoe(proj) {
   const targets = [room.players.p1, room.players.p2, ...room.monsters]
     .filter(t => t && !t.dead && (t !== room.players[proj.owner === 'p1' ? 'p1' : 'p2']));
@@ -553,14 +672,16 @@ function buildStateMsg(playerNum) {
       p1: p1 ? { x: p1.x, y: p1.y, w: p1.w, h: p1.h, hp: p1.hp, maxHp: p1.maxHp,
                   lives: p1.lives, facing: p1.facing, weaponId: weapon(p1).id,
                   hitFlash: p1.hitFlash, dead: p1.dead, swingTimer: p1.swingTimer,
-                  unlockedWeapons: p1.unlockedWeapons, skin: p1.skin } : null,
+                  unlockedWeapons: p1.unlockedWeapons, skin: p1.skin,
+                  specialCd: Math.max(0, p1.specialCooldown), specialMax: weapon(p1).special?.cd || 0 } : null,
       p2: p2 ? { x: p2.x, y: p2.y, w: p2.w, h: p2.h, hp: p2.hp, maxHp: p2.maxHp,
                   lives: p2.lives, facing: p2.facing, weaponId: weapon(p2).id,
                   hitFlash: p2.hitFlash, dead: p2.dead, swingTimer: p2.swingTimer,
-                  unlockedWeapons: p2.unlockedWeapons, skin: p2.skin } : null,
+                  unlockedWeapons: p2.unlockedWeapons, skin: p2.skin,
+                  specialCd: Math.max(0, p2.specialCooldown), specialMax: weapon(p2).special?.cd || 0 } : null,
     },
     monsters:    room.monsters.map(m => ({ x: m.x, y: m.y, w: m.w, h: m.h, hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash })),
-    projectiles: room.projectiles.map(pr => ({ x: pr.x, y: pr.y, dx: pr.dx, dy: pr.dy, weaponId: pr.weaponId, isAoe: pr.isAoe })),
+    projectiles: room.projectiles.map(pr => ({ x: pr.x, y: pr.y, dx: pr.dx, dy: pr.dy, weaponId: pr.weaponId, isAoe: pr.isAoe, special: !!pr.special })),
     particles:   room.particles,
     wave:        room.wave,
     xp:          room.playerXp[key],
@@ -610,18 +731,66 @@ wss.on('connection', (ws) => {
         const rawName = String(msg.name || '').trim().replace(/[<>&"']/g, '').slice(0, 12);
         room.playerNames[myKey] = rawName || (isP1 ? 'PLAYER 1' : 'PLAYER 2');
 
-        // Load per-player XP using password
         const pw = String(msg.password || '').trim().replace(/[<>&"']/g, '').slice(0, 32);
         room.passwords[myKey] = pw;
-        room.playerXp[myKey]  = getPlayerXp(pw);
 
+        // Single progress read — merge server XP with client-cached XP (covers server restarts)
+        const progress = pw ? loadProgress() : null;
+        let progressDirty = false;
+
+        const serverXp = progress?.players?.[pw] || 0;
+        const clientXp = Math.max(0, Math.floor(Number(msg.localXp) || 0));
+        const effectiveXp = Math.max(serverXp, clientXp);
+        room.playerXp[myKey] = effectiveXp;
+        if (pw && effectiveXp > serverXp) {
+          if (!progress.players) progress.players = {};
+          progress.players[pw] = effectiveXp;
+          progressDirty = true;
+        }
+
+        // Skin: if user explicitly changed it this session, save new skin; else restore saved
         const rawSkin = msg.skin && typeof msg.skin === 'object' ? msg.skin : null;
-        const skin = rawSkin
-          ? { colorIdx: Math.max(0, Math.min(7, Number(rawSkin.colorIdx) || 0)),
-              hatIdx:   Math.max(0, Math.min(4, Number(rawSkin.hatIdx)   || 0)) }
-          : getPlayerSkin(pw);
-        setPlayerSkin(pw, skin);
+        const skinModified = !!msg.skinModified;
+        const savedSkin = progress?.skins?.[pw];
+        const hasSavedSkin = savedSkin !== undefined;
+
+        let skin;
+        if (skinModified || !hasSavedSkin) {
+          skin = rawSkin
+            ? { colorIdx: Math.max(0, Math.min(7, Number(rawSkin.colorIdx) || 0)),
+                hatIdx:   Math.max(0, Math.min(4, Number(rawSkin.hatIdx)   || 0)) }
+            : { colorIdx: 0, hatIdx: 0 };
+          if (pw) {
+            if (!progress.skins) progress.skins = {};
+            progress.skins[pw] = skin;
+            progressDirty = true;
+          }
+        } else {
+          skin = {
+            colorIdx: Math.max(0, Math.min(7, Number(savedSkin.colorIdx) || 0)),
+            hatIdx:   Math.max(0, Math.min(4, Number(savedSkin.hatIdx)   || 0)),
+          };
+        }
         room.playerSkins[myKey] = skin;
+
+        // Weapon unlocks: union of XP-derived unlocks and any previously stored unlocks
+        const xpUnlocks = getUnlockedWeaponIds(effectiveXp);
+        const storedWeapons = progress?.weapons?.[pw] || [];
+        const unionWeapons = sortWeaponIds([...xpUnlocks, ...storedWeapons]);
+        room.playerUnlocks[myKey] = unionWeapons;
+        if (pw) {
+          const prevStored = sortWeaponIds(storedWeapons);
+          if (JSON.stringify(prevStored) !== JSON.stringify(unionWeapons)) {
+            if (!progress.weapons) progress.weapons = {};
+            progress.weapons[pw] = unionWeapons;
+            progressDirty = true;
+          }
+        }
+
+        if (pw && progressDirty) saveProgress(progress);
+
+        // Tell client which skin is active (may restore from password if not modified)
+        ws.send(JSON.stringify({ type: 'skin_init', skin }));
 
         if (isP1 && msg.mode) {
           room.gameMode = ['pvp', 'coop', 'waves'].includes(msg.mode) ? msg.mode : 'pvp';
@@ -666,6 +835,7 @@ wss.on('connection', (ws) => {
     room.players     = { p1: null, p2: null };
     room.playerXp    = { p1: 0, p2: 0 };
     room.playerSkins = { p1: null, p2: null };
+    room.playerUnlocks = { p1: null, p2: null };
     room.unlockQueues = { p1: [], p2: [] };
     broadcastState();
   });
