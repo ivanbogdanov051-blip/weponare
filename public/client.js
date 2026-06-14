@@ -96,6 +96,33 @@ function toggleSound() {
   if (btn) btn.innerHTML = '♪ SOUND: ' + (m ? 'OFF' : 'ON');
 }
 
+function updateMusicButtons(info) {
+  const sb = document.getElementById('musicBtn');
+  if (sb) sb.innerHTML = '♫ MUSIC: ' + (info.idx + 1) + '/' + info.count;
+  const gb = document.getElementById('musicBtnGame');
+  if (gb) gb.innerHTML = '♫ ' + (info.idx + 1) + '/' + info.count;
+}
+
+function cycleMusic() {
+  if (!window.GameAudio) return;
+  GameAudio.init();
+  updateMusicButtons(GameAudio.changeTrack());
+}
+
+let leaving = false;
+function leaveGame() {
+  leaving = true;
+  if (window.GameAudio) GameAudio.stopMusic();
+  if (ws) { try { ws.close(); } catch {} }
+  showGameControls(false);
+  showScreen('startScreen');
+}
+
+function showGameControls(show) {
+  const el = document.getElementById('gameControls');
+  if (el) el.className = show ? 'visible' : '';
+}
+
 function connect() {
   roomWasFull = false;
   ws = new WebSocket(wsUrl);
@@ -113,6 +140,7 @@ function connect() {
       if (msg.leaderboard) welcomeLeaderboard = msg.leaderboard;
       ws.send(JSON.stringify({ type: 'join', name: pendingName, mode: pendingMode, password: pendingPass, skin: pendingSkin, skinModified, localXp: loadLocalXp(pendingPass) }));
       skinModified = false;
+      showGameControls(true);
       const modeLabel = pendingMode === 'coop' ? 'CO-OP' : pendingMode === 'waves' ? 'WAVES' : 'PvP';
       if (pendingMode === 'waves') {
         setLobbyMsg(`<span class="p1-color">WAVES MODE</span><br><span style="color:#888">SOLO ENDLESS</span><br>Loading...`);
@@ -142,6 +170,12 @@ function connect() {
   ws.onclose = () => {
     connected = false;
     if (window.GameAudio) GameAudio.stopMusic();
+    showGameControls(false);
+    if (leaving) {
+      leaving = false;
+      showScreen('startScreen');
+      return;
+    }
     if (roomWasFull) {
       roomWasFull = false;
       setTimeout(() => showScreen('startScreen'), 2000);
@@ -296,6 +330,11 @@ function detectAudioEvents(prev, curr) {
   const pWc = (prev.particles || []).filter(p => p.type === 'waveclear').length;
   const cWc = (curr.particles || []).filter(p => p.type === 'waveclear').length;
   if (cWc > pWc) GameAudio.sfx.waveclear();
+
+  // Parry triggered (new parry spark)
+  const pPar = (prev.particles || []).filter(p => p.type === 'parry').length;
+  const cPar = (curr.particles || []).filter(p => p.type === 'parry').length;
+  if (cPar > pPar) GameAudio.sfx.parry();
 }
 
 function tickSlashes(dt) {
@@ -348,13 +387,13 @@ function drawSlashes() {
 
 const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 const keys = {};
-const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false };
+const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false };
 
 const PLAYER_SPEED = 3.0; // must match server makePlayer().speed
 
 window.addEventListener('keydown', (e) => {
   if (!keys[e.code]) { keys[e.code] = true; sendInput(); }
-  if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','ShiftLeft','ShiftRight'].includes(e.code)) e.preventDefault();
+  if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','ShiftLeft','ShiftRight','KeyP','ControlLeft','ControlRight'].includes(e.code)) e.preventDefault();
   if (e.code === 'Space' && currState && currState.gameState === 'WEAPON_UNLOCK' && currState.pendingUnlock) sendAckUnlock();
   if (e.code === 'KeyM') toggleSound();
 });
@@ -369,6 +408,7 @@ function currentInputs() {
     attack:  !!keys['Space']      || touchKeys.attack,
     swap:    !!keys['Enter']      || touchKeys.swap,
     special: !!keys['ShiftLeft'] || !!keys['ShiftRight'] || touchKeys.special,
+    parry:   !!keys['KeyP'] || !!keys['ControlLeft'] || !!keys['ControlRight'] || touchKeys.parry,
   };
 }
 
@@ -388,7 +428,7 @@ function setupTouchControls() {
   const btnMap = [
     ['btn-up','up'], ['btn-down','down'], ['btn-left','left'],
     ['btn-right','right'], ['btn-attack','attack'], ['btn-swap','swap'],
-    ['btn-special','special'],
+    ['btn-special','special'], ['btn-parry','parry'],
   ];
   for (const [id, key] of btnMap) {
     const el = document.getElementById(id);
@@ -411,10 +451,13 @@ function setupTouchControls() {
 }
 setupTouchControls();
 
-// Reflect saved mute preference on the start-screen button
-if (window.GameAudio && GameAudio.isMuted()) {
-  const b = document.getElementById('soundBtn');
-  if (b) b.innerHTML = '♪ SOUND: OFF';
+// Reflect saved audio preferences on the start-screen buttons
+if (window.GameAudio) {
+  if (GameAudio.isMuted()) {
+    const b = document.getElementById('soundBtn');
+    if (b) b.innerHTML = '♪ SOUND: OFF';
+  }
+  updateMusicButtons(GameAudio.trackInfo());
 }
 
 // ─── Skin Screen ──────────────────────────────────────────────────────────────
@@ -636,6 +679,18 @@ function drawPlayer(p, baseColor, label) {
   drawHat(x, y, skinCol, p.skin?.hatIdx);
   drawNametag(x+p.w/2, y-9, label, skinCol);
   drawWeaponSprite(p, x, y);
+  if (p.parryActive) {
+    const t = performance.now() / 60;
+    ctx.save();
+    ctx.strokeStyle = '#66ccff';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath(); ctx.arc(x + p.w/2, y + p.h/2, p.w + 3, 0, Math.PI*2); ctx.stroke();
+    ctx.strokeStyle = '#cceeff';
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath(); ctx.arc(x + p.w/2, y + p.h/2, p.w + 1 + Math.sin(t)*1.5, 0, Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function drawNametag(cx, bottomY, label, color) {
@@ -941,6 +996,22 @@ function drawParticles(particles) {
       ctx.strokeStyle='#ffffff'; ctx.lineWidth=1;
       ctx.beginPath(); ctx.arc(p.x,p.y,Math.max(0,r-4),0,Math.PI*2); ctx.stroke();
       ctx.globalAlpha=1;
+    } else if(p.type==='parry') {
+      const m=p.max||320, a=Math.max(0,p.timer/m), k=1-a;
+      ctx.save();
+      ctx.translate(p.x,p.y); ctx.rotate(k*0.8);
+      ctx.globalAlpha=a; ctx.strokeStyle='#aee4ff'; ctx.lineWidth=2;
+      const spikes=6, rr=4+k*10;
+      for(let i=0;i<spikes;i++){
+        const ang=(Math.PI*2/spikes)*i;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(ang)*2,Math.sin(ang)*2);
+        ctx.lineTo(Math.cos(ang)*rr,Math.sin(ang)*rr);
+        ctx.stroke();
+      }
+      ctx.fillStyle='#ffffff'; ctx.globalAlpha=a;
+      ctx.beginPath(); ctx.arc(0,0,2,0,Math.PI*2); ctx.fill();
+      ctx.restore(); ctx.globalAlpha=1;
     }
   }
 }
@@ -989,25 +1060,36 @@ function drawHUD(state) {
   }
   ctx.textAlign = 'left';
 
-  // ── Special-attack cooldown (local player) ──
+  // ── Ability cooldown bars (local player): special + parry ──
   const mp = myNum === 1 ? p1 : (myNum === 2 ? p2 : null);
-  if (mp && mp.specialMax > 0) {
-    const ready = (mp.specialCd || 0) <= 0;
-    const ratio = ready ? 1 : Math.max(0, 1 - mp.specialCd / mp.specialMax);
-    const barW = 74, barH = 4;
+  if (mp) {
+    const barW = 60, barH = 4;
     const bx = myNum === 1 ? 4 : CANVAS_W - 4 - barW;
-    const by = 28;
-    ctx.fillStyle = '#1a0a2a'; ctx.fillRect(bx, by, barW, barH);
-    ctx.fillStyle = ready ? '#cc66ff' : '#6a3a99';
-    ctx.fillRect(bx, by, Math.round(barW * ratio), barH);
-    ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.strokeRect(bx, by, barW, barH);
-    ctx.font = '7px "Courier New",monospace';
+    const lx = myNum === 1 ? bx + barW + 3 : bx - 3;
+    const align = myNum === 1 ? 'left' : 'right';
     ctx.textBaseline = 'top';
-    ctx.textAlign = myNum === 1 ? 'left' : 'right';
-    const lx = myNum === 1 ? bx : bx + barW;
-    const txt = ready ? 'SPECIAL READY' : 'SPECIAL';
-    ctx.fillStyle = '#000'; ctx.fillText(txt, lx + 1, by + barH + 2);
-    ctx.fillStyle = ready ? '#dd88ff' : '#8866aa'; ctx.fillText(txt, lx, by + barH + 1);
+    ctx.textAlign = align;
+
+    const drawBar = (by, ratio, ready, label, colReady, colCool, fillBg) => {
+      ctx.fillStyle = fillBg; ctx.fillRect(bx, by, barW, barH);
+      ctx.fillStyle = ready ? colReady : colCool;
+      ctx.fillRect(bx, by, Math.round(barW * ratio), barH);
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.strokeRect(bx, by, barW, barH);
+      ctx.font = '7px "Courier New",monospace';
+      ctx.fillStyle = '#000'; ctx.fillText(label, lx + 1, by - 1 + 1);
+      ctx.fillStyle = ready ? colReady : '#778'; ctx.fillText(label, lx, by - 1);
+    };
+
+    if (mp.specialMax > 0) {
+      const ready = (mp.specialCd || 0) <= 0;
+      drawBar(28, ready ? 1 : Math.max(0, 1 - mp.specialCd / mp.specialMax), ready,
+              ready ? 'SPECIAL' : 'SP', '#dd88ff', '#6a3a99', '#1a0a2a');
+    }
+    if (mp.parryMax > 0) {
+      const ready = (mp.parryCd || 0) <= 0;
+      drawBar(35, ready ? 1 : Math.max(0, 1 - mp.parryCd / mp.parryMax), ready,
+              ready ? 'PARRY' : 'PAR', '#66ccff', '#2a5a7a', '#0a1a2a');
+    }
     ctx.textAlign = 'left';
     ctx.font = '10px "Courier New",monospace';
   }
@@ -1040,6 +1122,7 @@ function drawWeaponPanel(state) {
     ctx.fillStyle='#505060'; ctx.fillText('SPACE  ATK', hx,hy+9);
     ctx.fillStyle='#505060'; ctx.fillText('ENTER  SWAP',hx,hy+18);
     ctx.fillStyle='#8866aa'; ctx.fillText('SHIFT  SPECIAL',hx,hy+27);
+    ctx.fillStyle='#3399cc'; ctx.fillText('P      PARRY',hx,hy+36);
     ctx.restore();
   }
 

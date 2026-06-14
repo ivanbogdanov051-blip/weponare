@@ -24,6 +24,10 @@ const ADMIN_PASSWORD = '67892155';
 const ADMIN_XP = 1000000000000000000; // 1e18 — unlocks everything
 function isAdminPw(pw) { return pw === ADMIN_PASSWORD; }
 
+const PARRY_WINDOW   = 350;   // ms the parry is "active" and reflects
+const PARRY_COOLDOWN = 5000;  // ms before it can be used again
+const PARRY_REFLECT  = 1.5;   // reflected damage multiplier
+
 const WEAPONS = [
   { id: 'sword',      name: 'SWORD',      damage: 20, range: 42,  atkSpd: 400,  type: 'melee',  unlockXp: 0,    special: { kind: 'slam',    dmg: 45, range: 62,  cd: 5000 } },
   { id: 'dagger',     name: 'DAGGER',     damage: 10, range: 34,  atkSpd: 180,  type: 'melee',  unlockXp: 0,    special: { kind: 'slam',    dmg: 28, range: 46,  cd: 3500 } },
@@ -150,6 +154,8 @@ function makePlayer(num, xp) {
     unlockedWeapons: getUnlockedWeaponIds(xp),
     atkCooldown: 0,
     specialCooldown: 0,
+    parryCooldown: 0,
+    parryTimer: 0,
     swingTimer: 0,
     invincible: 0,
     hitFlash: 0,
@@ -171,8 +177,8 @@ const room = {
   p1Joined: false, p2Joined: false,
   players: { p1: null, p2: null },
   inputs: {
-    p1: { up: false, down: false, left: false, right: false, attack: false, swap: false },
-    p2: { up: false, down: false, left: false, right: false, attack: false, swap: false },
+    p1: { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false },
+    p2: { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false },
   },
   monsters: [],
   projectiles: [],
@@ -187,9 +193,10 @@ const room = {
   attackJustPressed: { p1: false, p2: false },
   swapJustPressed: { p1: false, p2: false },
   specialJustPressed: { p1: false, p2: false },
+  parryJustPressed: { p1: false, p2: false },
   prevInputs: {
-    p1: { attack: false, swap: false, special: false },
-    p2: { attack: false, swap: false, special: false },
+    p1: { attack: false, swap: false, special: false, parry: false },
+    p2: { attack: false, swap: false, special: false, parry: false },
   },
 };
 
@@ -202,6 +209,14 @@ function aabb(a, b) {
 
 function weapon(p) {
   return WEAPONS.find(w => w.id === p.unlockedWeapons[p.weaponIdx]) || WEAPONS[0];
+}
+
+function playerKeyOf(t) {
+  return t === room.players.p1 ? 'p1' : t === room.players.p2 ? 'p2' : null;
+}
+
+function spawnParrySpark(x, y) {
+  room.particles.push({ type: 'parry', x, y, timer: 320, max: 320 });
 }
 
 function broadcast(msg) {
@@ -389,7 +404,8 @@ setInterval(() => {
     room.attackJustPressed[key]  = inp.attack  && !prev.attack;
     room.swapJustPressed[key]    = inp.swap    && !prev.swap;
     room.specialJustPressed[key] = inp.special && !prev.special;
-    room.prevInputs[key] = { attack: inp.attack, swap: inp.swap, special: inp.special };
+    room.parryJustPressed[key]   = inp.parry   && !prev.parry;
+    room.prevInputs[key] = { attack: inp.attack, swap: inp.swap, special: inp.special, parry: inp.parry };
   }
 
   // ── Move players ──
@@ -415,6 +431,8 @@ setInterval(() => {
 
     if (p.atkCooldown     > 0) p.atkCooldown     -= dt;
     if (p.specialCooldown > 0) p.specialCooldown -= dt;
+    if (p.parryCooldown   > 0) p.parryCooldown   -= dt;
+    if (p.parryTimer      > 0) p.parryTimer      -= dt;
     if (p.invincible      > 0) p.invincible      -= dt;
     if (p.hitFlash        > 0) p.hitFlash        -= dt;
     if (p.swingTimer      > 0) p.swingTimer      -= dt;
@@ -427,6 +445,11 @@ setInterval(() => {
     }
     if (room.specialJustPressed[key] && p.specialCooldown <= 0) {
       doSpecial(p, key);
+    }
+    if (room.parryJustPressed[key] && p.parryCooldown <= 0) {
+      p.parryTimer    = PARRY_WINDOW;
+      p.parryCooldown = PARRY_COOLDOWN;
+      spawnParrySpark(p.x + p.w / 2, p.y + p.h / 2);
     }
   }
 
@@ -450,7 +473,13 @@ setInterval(() => {
     }
 
     if (dist <= m.atkRange + 4 && m.atkCooldown <= 0) {
-      applyDamage(nearest, m.atkDamage, 'monster');
+      if (nearest.parryTimer > 0) {
+        // Parried: reflect the blow back onto the monster
+        applyDamage(m, Math.round(m.atkDamage * PARRY_REFLECT) + 10, playerKeyOf(nearest));
+        spawnParrySpark(nearest.x + nearest.w / 2, nearest.y + nearest.h / 2);
+      } else {
+        applyDamage(nearest, m.atkDamage, 'monster');
+      }
       m.atkCooldown = 1200;
     }
     if (m.atkCooldown > 0) m.atkCooldown -= dt;
@@ -483,6 +512,18 @@ setInterval(() => {
     let shouldRemove = false;
     for (const t of targets) {
       if (aabb({ x: proj.x - 3, y: proj.y - 3, w: 6, h: 6 }, t)) {
+        const tk = playerKeyOf(t);
+        if (tk && t.parryTimer > 0) {
+          // Parried: bounce the projectile back at its owner
+          proj.dx = -proj.dx; proj.dy = -proj.dy;
+          proj.owner = tk;
+          proj.traveled = 0;
+          proj.damage = Math.round(proj.damage * PARRY_REFLECT);
+          if (proj.hitTargets) proj.hitTargets.clear();
+          spawnParrySpark(proj.x, proj.y);
+          shouldRemove = false;
+          break;
+        }
         if (proj.isAoe) {
           detonateAoe(proj);
           shouldRemove = true;
@@ -548,7 +589,14 @@ function doAttack(p, pKey) {
     const cx = p.x + p.w / 2, cy = p.y + p.h / 2;
     for (const t of targets) {
       if (Math.hypot(t.x + t.w / 2 - cx, t.y + t.h / 2 - cy) <= w.range) {
-        applyDamage(t, w.damage, pKey);
+        const tk = playerKeyOf(t);
+        if (tk && t.parryTimer > 0) {
+          // Parried: the attacker takes the (boosted) hit instead
+          applyDamage(p, Math.round(w.damage * PARRY_REFLECT), tk);
+          spawnParrySpark(cx, cy);
+        } else {
+          applyDamage(t, w.damage, pKey);
+        }
       }
     }
   } else {
@@ -683,12 +731,14 @@ function buildStateMsg(playerNum) {
                   lives: p1.lives, facing: p1.facing, weaponId: weapon(p1).id,
                   hitFlash: p1.hitFlash, dead: p1.dead, swingTimer: p1.swingTimer,
                   unlockedWeapons: p1.unlockedWeapons, skin: p1.skin,
-                  specialCd: Math.max(0, p1.specialCooldown), specialMax: weapon(p1).special?.cd || 0 } : null,
+                  specialCd: Math.max(0, p1.specialCooldown), specialMax: weapon(p1).special?.cd || 0,
+                  parryCd: Math.max(0, p1.parryCooldown), parryMax: PARRY_COOLDOWN, parryActive: p1.parryTimer > 0 } : null,
       p2: p2 ? { x: p2.x, y: p2.y, w: p2.w, h: p2.h, hp: p2.hp, maxHp: p2.maxHp,
                   lives: p2.lives, facing: p2.facing, weaponId: weapon(p2).id,
                   hitFlash: p2.hitFlash, dead: p2.dead, swingTimer: p2.swingTimer,
                   unlockedWeapons: p2.unlockedWeapons, skin: p2.skin,
-                  specialCd: Math.max(0, p2.specialCooldown), specialMax: weapon(p2).special?.cd || 0 } : null,
+                  specialCd: Math.max(0, p2.specialCooldown), specialMax: weapon(p2).special?.cd || 0,
+                  parryCd: Math.max(0, p2.parryCooldown), parryMax: PARRY_COOLDOWN, parryActive: p2.parryTimer > 0 } : null,
     },
     monsters:    room.monsters.map(m => ({ x: m.x, y: m.y, w: m.w, h: m.h, hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash })),
     projectiles: room.projectiles.map(pr => ({ x: pr.x, y: pr.y, dx: pr.dx, dy: pr.dy, weaponId: pr.weaponId, isAoe: pr.isAoe, special: !!pr.special })),
