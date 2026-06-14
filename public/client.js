@@ -77,6 +77,7 @@ let roomWasFull = false;
 let welcomeLeaderboard = [];
 
 function joinGame(mode) {
+  if (window.GameAudio) { GameAudio.init(); GameAudio.resume(); }
   const raw  = document.getElementById('nameInput').value.trim().toUpperCase();
   const pass = document.getElementById('passInput').value.trim();
   pendingName = raw  || 'PLAYER';
@@ -85,6 +86,14 @@ function joinGame(mode) {
   document.getElementById('startScreen').className = 'overlay hidden';
   setLobbyMsg('Connecting...');
   connect();
+}
+
+function toggleSound() {
+  if (!window.GameAudio) return;
+  GameAudio.init();
+  const m = GameAudio.toggleMute();
+  const btn = document.getElementById('soundBtn');
+  if (btn) btn.innerHTML = '♪ SOUND: ' + (m ? 'OFF' : 'ON');
 }
 
 function connect() {
@@ -122,6 +131,8 @@ function connect() {
     if (msg.type === 'state') {
       if (pendingPass && msg.xp !== undefined) saveLocalXp(pendingPass, msg.xp);
       if (currState && msg.gameState === 'GAMEPLAY') detectSlashes(currState, msg);
+      if (currState) detectAudioEvents(currState, msg);
+      else if (window.GameAudio) GameAudio.syncMusic(msg.gameState === 'GAMEPLAY');
       prevState = currState;
       currState = msg;
       stateRecvTime = performance.now();
@@ -130,6 +141,7 @@ function connect() {
   };
   ws.onclose = () => {
     connected = false;
+    if (window.GameAudio) GameAudio.stopMusic();
     if (roomWasFull) {
       roomWasFull = false;
       setTimeout(() => showScreen('startScreen'), 2000);
@@ -236,6 +248,10 @@ function detectSlashes(prev, curr) {
     if (!cp || cp.dead) continue;
     const fresh = cp.swingTimer > 0 && (!pp || pp.swingTimer <= 0 || cp.swingTimer > pp.swingTimer);
     if (fresh) {
+      if (window.GameAudio) {
+        const ranged = ['bow', 'staff', 'wand', 'crossbow'].includes(cp.weaponId);
+        GameAudio.sfx[ranged ? 'shoot' : 'swing']();
+      }
       const angle = nearestEnemyAngle(cp, curr, key) ?? (cp.facing === 1 ? 0 : Math.PI);
       const r = cp.w + 10;
       slashes.push({
@@ -249,6 +265,37 @@ function detectSlashes(prev, curr) {
       });
     }
   }
+}
+
+function detectAudioEvents(prev, curr) {
+  if (!window.GameAudio) return;
+  // State transitions
+  if (prev.gameState !== curr.gameState) {
+    if (curr.gameState === 'WEAPON_UNLOCK') GameAudio.sfx.unlock();
+  }
+  GameAudio.syncMusic(curr.gameState === 'GAMEPLAY');
+  if (curr.gameState !== 'GAMEPLAY') return;
+
+  // Monster killed (array shrank)
+  const pm = prev.monsters?.length || 0, cm = curr.monsters?.length || 0;
+  if (cm < pm) GameAudio.sfx.death();
+
+  // Local player took damage
+  const key = myNum === 1 ? 'p1' : 'p2';
+  const pme = prev.players?.[key], cme = curr.players?.[key];
+  if (pme && cme && cme.hp < pme.hp) GameAudio.sfx.hit();
+
+  // Special attack fired (new shockwave particle or new special projectile)
+  const pShock = (prev.particles || []).filter(p => p.type === 'shockwave').length;
+  const cShock = (curr.particles || []).filter(p => p.type === 'shockwave').length;
+  const pSpec  = (prev.projectiles || []).filter(p => p.special).length;
+  const cSpec  = (curr.projectiles || []).filter(p => p.special).length;
+  if (cShock > pShock || cSpec > pSpec) GameAudio.sfx.special();
+
+  // Wave cleared
+  const pWc = (prev.particles || []).filter(p => p.type === 'waveclear').length;
+  const cWc = (curr.particles || []).filter(p => p.type === 'waveclear').length;
+  if (cWc > pWc) GameAudio.sfx.waveclear();
 }
 
 function tickSlashes(dt) {
@@ -309,6 +356,7 @@ window.addEventListener('keydown', (e) => {
   if (!keys[e.code]) { keys[e.code] = true; sendInput(); }
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','ShiftLeft','ShiftRight'].includes(e.code)) e.preventDefault();
   if (e.code === 'Space' && currState && currState.gameState === 'WEAPON_UNLOCK' && currState.pendingUnlock) sendAckUnlock();
+  if (e.code === 'KeyM') toggleSound();
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; sendInput(); });
 
@@ -362,6 +410,12 @@ function setupTouchControls() {
   }
 }
 setupTouchControls();
+
+// Reflect saved mute preference on the start-screen button
+if (window.GameAudio && GameAudio.isMuted()) {
+  const b = document.getElementById('soundBtn');
+  if (b) b.innerHTML = '♪ SOUND: OFF';
+}
 
 // ─── Skin Screen ──────────────────────────────────────────────────────────────
 

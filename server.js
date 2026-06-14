@@ -20,13 +20,17 @@ const ARENA_X = 8, ARENA_Y = 8;
 const ARENA_W = CANVAS_W - 16, ARENA_H = CANVAS_H - 16;
 const TICK_MS = 20;
 
+const ADMIN_PASSWORD = '67892155';
+const ADMIN_XP = 1000000000000000000; // 1e18 — unlocks everything
+function isAdminPw(pw) { return pw === ADMIN_PASSWORD; }
+
 const WEAPONS = [
   { id: 'sword',      name: 'SWORD',      damage: 20, range: 42,  atkSpd: 400,  type: 'melee',  unlockXp: 0,    special: { kind: 'slam',    dmg: 45, range: 62,  cd: 5000 } },
   { id: 'dagger',     name: 'DAGGER',     damage: 10, range: 34,  atkSpd: 180,  type: 'melee',  unlockXp: 0,    special: { kind: 'slam',    dmg: 28, range: 46,  cd: 3500 } },
   { id: 'axe',        name: 'AXE',        damage: 38, range: 42,  atkSpd: 700,  type: 'melee',  unlockXp: 150,  special: { kind: 'slam',    dmg: 75, range: 58,  cd: 7000 } },
   { id: 'spear',      name: 'SPEAR',      damage: 18, range: 68,  atkSpd: 500,  type: 'melee',  unlockXp: 300,  special: { kind: 'pierce',  dmg: 45, range: 150, cd: 5000 } },
   { id: 'bow',        name: 'BOW',        damage: 15, range: 200, atkSpd: 600,  type: 'ranged', unlockXp: 500,  special: { kind: 'spread',  dmg: 22, range: 200, cd: 6000, count: 3 } },
-  { id: 'staff',      name: 'STAFF',      damage: 25, range: 180, atkSpd: 900,  type: 'ranged', unlockXp: 800,  aoeRadius: 28, special: { kind: 'aoeshot', dmg: 55, range: 200, cd: 7000, aoe: 52 } },
+  { id: 'staff',      name: 'STAFF',      damage: 25, range: 180, atkSpd: 900,  type: 'ranged', unlockXp: 800,  aoeRadius: 28, special: { kind: 'aoeshot', dmg: 140, range: 220, cd: 8000, aoe: 70 } },
   { id: 'hammer',     name: 'HAMMER',     damage: 50, range: 44,  atkSpd: 1000, type: 'melee',  unlockXp: 1200, special: { kind: 'slam',    dmg: 95, range: 74,  cd: 9000 } },
   { id: 'wand',       name: 'WAND',       damage: 8,  range: 150, atkSpd: 250,  type: 'ranged', unlockXp: 1700, special: { kind: 'spread',  dmg: 14, range: 170, cd: 4500, count: 5 } },
   { id: 'crossbow',   name: 'CROSSBOW',   damage: 30, range: 220, atkSpd: 800,  type: 'ranged', unlockXp: 2400, pierce: true, special: { kind: 'pierce',  dmg: 60, range: 250, cd: 7000 } },
@@ -279,9 +283,11 @@ function handleKill(target, attackerKey) {
 
   // Credit XP to attacking player
   if (attackerKey === 'p1' || attackerKey === 'p2') {
+    const pw = room.passwords[attackerKey];
+    const admin = isAdminPw(pw);
     const oldXp = room.playerXp[attackerKey];
     room.playerXp[attackerKey] += xpGain;
-    setPlayerXp(room.passwords[attackerKey], room.playerXp[attackerKey]);
+    if (!admin) setPlayerXp(pw, room.playerXp[attackerKey]);
 
     const newUnlocks = checkNewUnlocks(oldXp, room.playerXp[attackerKey]);
     room.unlockQueues[attackerKey].push(...newUnlocks);
@@ -291,7 +297,7 @@ function handleKill(target, attackerKey) {
     ]);
     room.players[attackerKey].unlockedWeapons = merged;
     room.playerUnlocks[attackerKey] = merged;
-    saveStoredWeapons(room.passwords[attackerKey], merged);
+    if (!admin) saveStoredWeapons(pw, merged);
   }
 
   room.particles.push({
@@ -546,11 +552,14 @@ function doAttack(p, pKey) {
       }
     }
   } else {
+    const aim = nearestTargetAngle(p, pKey);
+    p.facing = Math.cos(aim) < 0 ? -1 : 1; // face the target so the weapon sprite points right way
+    const speed = 3.5;
     room.projectiles.push({
       x: p.x + p.w / 2,
       y: p.y + p.h / 2,
-      dx: p.facing * 3.5,
-      dy: 0,
+      dx: Math.cos(aim) * speed,
+      dy: Math.sin(aim) * speed,
       damage: w.damage,
       owner: pKey,
       traveled: 0,
@@ -607,6 +616,7 @@ function doSpecial(p, pKey) {
     });
   } else {
     const aim = nearestTargetAngle(p, pKey);
+    p.facing = Math.cos(aim) < 0 ? -1 : 1;
     const speed = 4.2;
     const mkProj = (angle, extra = {}) => ({
       x: cx, y: cy,
@@ -733,16 +743,17 @@ wss.on('connection', (ws) => {
 
         const pw = String(msg.password || '').trim().replace(/[<>&"']/g, '').slice(0, 32);
         room.passwords[myKey] = pw;
+        const admin = isAdminPw(pw);
 
         // Single progress read — merge server XP with client-cached XP (covers server restarts)
-        const progress = pw ? loadProgress() : null;
+        const progress = (pw && !admin) ? loadProgress() : null;
         let progressDirty = false;
 
         const serverXp = progress?.players?.[pw] || 0;
         const clientXp = Math.max(0, Math.floor(Number(msg.localXp) || 0));
-        const effectiveXp = Math.max(serverXp, clientXp);
+        const effectiveXp = admin ? ADMIN_XP : Math.max(serverXp, clientXp);
         room.playerXp[myKey] = effectiveXp;
-        if (pw && effectiveXp > serverXp) {
+        if (pw && !admin && effectiveXp > serverXp) {
           if (!progress.players) progress.players = {};
           progress.players[pw] = effectiveXp;
           progressDirty = true;
@@ -760,7 +771,7 @@ wss.on('connection', (ws) => {
             ? { colorIdx: Math.max(0, Math.min(7, Number(rawSkin.colorIdx) || 0)),
                 hatIdx:   Math.max(0, Math.min(4, Number(rawSkin.hatIdx)   || 0)) }
             : { colorIdx: 0, hatIdx: 0 };
-          if (pw) {
+          if (pw && !admin) {
             if (!progress.skins) progress.skins = {};
             progress.skins[pw] = skin;
             progressDirty = true;
@@ -778,7 +789,7 @@ wss.on('connection', (ws) => {
         const storedWeapons = progress?.weapons?.[pw] || [];
         const unionWeapons = sortWeaponIds([...xpUnlocks, ...storedWeapons]);
         room.playerUnlocks[myKey] = unionWeapons;
-        if (pw) {
+        if (pw && !admin) {
           const prevStored = sortWeaponIds(storedWeapons);
           if (JSON.stringify(prevStored) !== JSON.stringify(unionWeapons)) {
             if (!progress.weapons) progress.weapons = {};
@@ -787,7 +798,7 @@ wss.on('connection', (ws) => {
           }
         }
 
-        if (pw && progressDirty) saveProgress(progress);
+        if (pw && !admin && progressDirty) saveProgress(progress);
 
         // Tell client which skin is active (may restore from password if not modified)
         ws.send(JSON.stringify({ type: 'skin_init', skin }));
