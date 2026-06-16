@@ -413,7 +413,9 @@ function applyDamage(target, dmg, attackerKey) {
 
 function handleKill(target, attackerKey) {
   const isPlayer = !!target.num;
-  const baseGain  = isPlayer ? 15 : 6;
+  let baseGain  = isPlayer ? 15 : 6;
+  // Bigger (tankier) monsters reward more XP, scaled by their max HP over the base 30.
+  if (!isPlayer) baseGain = Math.round(baseGain * Math.max(1, (target.maxHp || 30) / 30));
   const xpGain    = room.gameMode === 'waves' ? baseGain * 2 : baseGain;
 
   // Credit XP to attacking player
