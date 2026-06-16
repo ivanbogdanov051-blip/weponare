@@ -17,6 +17,7 @@ const PAL = {
   spear:'#c0c8d0', bow:'#b89060', staff:'#cc66ff',
   hammer:'#aab0b8', wand:'#88ddff', crossbow:'#cc8844',
   flail:'#dd4444', greatsword:'#ddeeff',
+  glaive:'#b0d8c0', katana:'#eef0ff', chakram:'#66e0c0', cannon:'#9a90a8', reaper:'#cc66aa',
   handle:'#6b3a1f', guard:'#8899aa',
 };
 
@@ -24,12 +25,20 @@ const WEAPON_COLOR = {
   sword:PAL.sword, dagger:PAL.dagger, axe:PAL.axe, spear:PAL.spear,
   bow:PAL.bow, staff:PAL.staff, hammer:PAL.hammer, wand:PAL.wand,
   crossbow:PAL.crossbow, flail:PAL.flail, greatsword:PAL.greatsword,
+  glaive:PAL.glaive, katana:PAL.katana, chakram:PAL.chakram, cannon:PAL.cannon, reaper:PAL.reaper,
 };
 const WEAPON_DESC = {
   sword:'Balanced blade', dagger:'Fast, low damage', axe:'Slow, heavy hit',
   spear:'Long reach', bow:'Fires arrows', staff:'AoE magic burst',
   hammer:'Crushes with force', wand:'Rapid magic bolts', crossbow:'Piercing shot',
   flail:'360° chain strike', greatsword:'Massive two-hander',
+  glaive:'Sweeping polearm', katana:'Lightning-fast cuts', chakram:'Piercing ring',
+  cannon:'Explosive shells', reaper:'Reaping 360° scythe',
+};
+// Mirror of server WEAPONS atkSpd — used for client-side attack prediction.
+const WEAPON_ATKSPD = {
+  sword:400, dagger:180, axe:700, spear:500, bow:600, staff:900, hammer:1000, wand:250,
+  crossbow:800, flail:500, greatsword:850, glaive:820, katana:240, chakram:360, cannon:1200, reaper:920,
 };
 
 // ─── Skins ────────────────────────────────────────────────────────────────────
@@ -121,6 +130,7 @@ function leaveGame() {
 function showGameControls(show) {
   const el = document.getElementById('gameControls');
   if (el) el.className = show ? 'visible' : '';
+  if (!show) updateInventoryBar([]);
 }
 
 function connect() {
@@ -228,18 +238,33 @@ function updatePrediction(frameDt) {
   if (!me || me.dead) { pred = null; return; }
   if (!pred) pred = { x: me.x, y: me.y, facing: me.facing };
 
-  // Reconcile toward authoritative server position
-  const dx = me.x - pred.x, dy = me.y - pred.y;
-  if (Math.hypot(dx, dy) > 22) { pred.x = me.x; pred.y = me.y; } // snap on big correction (hit/respawn)
-  else { pred.x += dx * 0.18; pred.y += dy * 0.18; }
-
-  // Apply currently-held inputs immediately
   const inp = currentInputs();
+  const moving = inp.left || inp.right || inp.up || inp.down;
+
+  // Reconcile toward the authoritative position. While moving we only nudge very
+  // gently — the server position lags by the round-trip, so pulling hard toward it
+  // causes a draggy / rubber-band feel. When idle we settle firmly onto it.
+  const dx = me.x - pred.x, dy = me.y - pred.y;
+  const gap = Math.hypot(dx, dy);
+  if (gap > 36) {            // knockback / respawn / teleport → snap
+    pred.x = me.x; pred.y = me.y;
+  } else if (!moving) {
+    pred.x += dx * 0.30; pred.y += dy * 0.30;
+  } else {
+    pred.x += dx * 0.05; pred.y += dy * 0.05;
+  }
+
+  // Mirror server speed modifiers so prediction matches authoritative movement.
+  let spd = PLAYER_SPEED;
+  if (me.effects && me.effects.speed > 0) spd *= 1.7;
+  if (me.effects && me.effects.slow  > 0) spd *= 0.4;
+
+  // Apply currently-held inputs immediately (instant response)
   let vx = 0, vy = 0;
-  if (inp.left)  { vx = -PLAYER_SPEED; pred.facing = -1; }
-  if (inp.right) { vx =  PLAYER_SPEED; pred.facing =  1; }
-  if (inp.up)    vy = -PLAYER_SPEED;
-  if (inp.down)  vy =  PLAYER_SPEED;
+  if (inp.left)  { vx = -spd; pred.facing = -1; }
+  if (inp.right) { vx =  spd; pred.facing =  1; }
+  if (inp.up)    vy = -spd;
+  if (inp.down)  vy =  spd;
   if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
   const f = frameDt / 16.67;
   pred.x = Math.max(ARENA_X + 2, Math.min(ARENA_X + ARENA_W - me.w - 2, pred.x + vx * f));
@@ -251,8 +276,10 @@ function applyPrediction(state) {
   const key = myNum === 1 ? 'p1' : 'p2';
   const me = state.players?.[key];
   if (!me || me.dead) return state;
-  state.players[key] = { ...me, x: pred.x, y: pred.y, facing: pred.facing };
-  return state;
+  // Clone so we never mutate the stored authoritative currState.
+  const players = { ...state.players };
+  players[key] = { ...me, x: pred.x, y: pred.y, facing: pred.facing };
+  return { ...state, players };
 }
 
 // ─── Slash Effects ────────────────────────────────────────────────────────────
@@ -277,13 +304,17 @@ function nearestEnemyAngle(cp, state, playerKey) {
 }
 
 function detectSlashes(prev, curr) {
+  const myKey = myNum === 1 ? 'p1' : (myNum === 2 ? 'p2' : null);
   for (const key of ['p1', 'p2']) {
     const cp = curr.players?.[key], pp = prev.players?.[key];
     if (!cp || cp.dead) continue;
     const fresh = cp.swingTimer > 0 && (!pp || pp.swingTimer <= 0 || cp.swingTimer > pp.swingTimer);
     if (fresh) {
+      // For the local player we already showed a predicted slash on key-press;
+      // skip the (delayed) server echo so we don't draw / hear it twice.
+      if (key === myKey && performance.now() - lastLocalSlashTime < 350) continue;
       if (window.GameAudio) {
-        const ranged = ['bow', 'staff', 'wand', 'crossbow'].includes(cp.weaponId);
+        const ranged = ['bow', 'staff', 'wand', 'crossbow', 'chakram', 'cannon'].includes(cp.weaponId);
         GameAudio.sfx[ranged ? 'shoot' : 'swing']();
       }
       const angle = nearestEnemyAngle(cp, curr, key) ?? (cp.facing === 1 ? 0 : Math.PI);
@@ -335,6 +366,21 @@ function detectAudioEvents(prev, curr) {
   const pPar = (prev.particles || []).filter(p => p.type === 'parry').length;
   const cPar = (curr.particles || []).filter(p => p.type === 'parry').length;
   if (cPar > pPar) GameAudio.sfx.parry();
+
+  // Trap detonated
+  const pTrap = (prev.particles || []).filter(p => p.type === 'trapburst').length;
+  const cTrap = (curr.particles || []).filter(p => p.type === 'trapburst').length;
+  if (cTrap > pTrap) GameAudio.sfx.trap();
+
+  // Item picked up
+  const pPick = (prev.particles || []).filter(p => p.type === 'pickup').length;
+  const cPick = (curr.particles || []).filter(p => p.type === 'pickup').length;
+  if (cPick > pPick) GameAudio.sfx.pickup();
+
+  // Item used
+  const pUse = (prev.particles || []).filter(p => p.type === 'useitem').length;
+  const cUse = (curr.particles || []).filter(p => p.type === 'useitem').length;
+  if (cUse > pUse) GameAudio.sfx.useitem();
 }
 
 function tickSlashes(dt) {
@@ -349,7 +395,7 @@ function drawSlashes() {
     const alpha = sl.timer / sl.maxTimer;
     const prog = 1 - alpha;
     const cx = Math.round(sl.x), cy = Math.round(sl.y);
-    const isRanged = ['bow', 'staff', 'wand', 'crossbow'].includes(sl.weaponId);
+    const isRanged = ['bow', 'staff', 'wand', 'crossbow', 'chakram', 'cannon'].includes(sl.weaponId);
     ctx.save();
     ctx.lineCap = 'round';
     if (!isRanged) {
@@ -396,6 +442,10 @@ window.addEventListener('keydown', (e) => {
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','ShiftLeft','ShiftRight','KeyP','ControlLeft','ControlRight'].includes(e.code)) e.preventDefault();
   if (e.code === 'Space' && currState && currState.gameState === 'WEAPON_UNLOCK' && currState.pendingUnlock) sendAckUnlock();
   if (e.code === 'KeyM') toggleSound();
+  if (e.code.startsWith('Digit')) {
+    const n = parseInt(e.code.slice(5));
+    if (n >= 1 && n <= 4) useItem(n - 1);
+  }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; sendInput(); });
 
@@ -412,11 +462,75 @@ function currentInputs() {
   };
 }
 
+let localPrevAttack = false;
+let localAtkCd = 0;          // client-mirrored attack cooldown (ms)
+let lastLocalSlashTime = 0;  // suppress the server echo of a slash we already showed
+
 function sendInput() {
   if (!ws || ws.readyState !== 1) return;
-  ws.send(JSON.stringify({ type:'input', keys: currentInputs() }));
+  const inp = currentInputs();
+  ws.send(JSON.stringify({ type:'input', keys: inp }));
+  // Predict the attack swing locally for instant feedback (rising edge only).
+  if (inp.attack && !localPrevAttack) tryLocalAttack();
+  localPrevAttack = inp.attack;
+}
+
+function tryLocalAttack() {
+  if (!currState || currState.gameState !== 'GAMEPLAY' || !myNum) return;
+  const key = myNum === 1 ? 'p1' : 'p2';
+  const me = currState.players?.[key];
+  if (!me || me.dead || localAtkCd > 0) return;
+  const haste = me.effects && me.effects.haste > 0;
+  localAtkCd = (WEAPON_ATKSPD[me.weaponId] || 400) * (haste ? 0.5 : 1);
+  spawnLocalSlash(me, key);
+}
+
+function spawnLocalSlash(me, key) {
+  const px = pred ? pred.x : me.x, py = pred ? pred.y : me.y;
+  const facing = pred ? pred.facing : me.facing;
+  const cp = { ...me, x: px, y: py, facing };
+  if (window.GameAudio) {
+    const ranged = ['bow','staff','wand','crossbow','chakram','cannon'].includes(me.weaponId);
+    GameAudio.sfx[ranged ? 'shoot' : 'swing']();
+  }
+  const angle = nearestEnemyAngle(cp, currState, key) ?? (facing === 1 ? 0 : Math.PI);
+  const r = cp.w + 10;
+  slashes.push({
+    x: cp.x + cp.w / 2 + Math.cos(angle) * r,
+    y: cp.y + cp.h / 2 + Math.sin(angle) * r,
+    angle, facing, weaponId: cp.weaponId,
+    timer: 220, maxTimer: 220,
+    color: WEAPON_COLOR[cp.weaponId] || PAL.white,
+  });
+  lastLocalSlashTime = performance.now();
 }
 function sendAckUnlock() { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type:'ack_unlock' })); }
+
+// ── Tap a weapon slot to select it directly (mobile-friendly quick swap) ──
+function selectWeaponIndex(idx) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'select_weapon', index: idx }));
+}
+
+function handleCanvasTap(clientX, clientY) {
+  if (!currState || currState.gameState !== 'GAMEPLAY' || !weaponSlotRects.length) return false;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return false;
+  const cx = (clientX - rect.left) * (CANVAS_W / rect.width);
+  const cy = (clientY - rect.top)  * (CANVAS_H / rect.height);
+  const pad = 6; // generous vertical hit area for fingers
+  for (const s of weaponSlotRects) {
+    if (cx >= s.x - pad && cx <= s.x + s.w + pad && cy >= s.y - pad && cy <= s.y + s.h + pad) {
+      selectWeaponIndex(s.index);
+      if (window.GameAudio) GameAudio.sfx.swing();
+      return true;
+    }
+  }
+  return false;
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (handleCanvasTap(e.clientX, e.clientY)) e.preventDefault();
+}, { passive: false });
 
 // ─── Touch Controls ───────────────────────────────────────────────────────────
 
@@ -626,12 +740,14 @@ function renderLoop(now) {
   const dt = lastFrameTime ? Math.min(now - lastFrameTime, 100) : 16;
   lastFrameTime = now;
   tickSlashes(dt);
+  if (localAtkCd > 0) localAtkCd -= dt;
   if (currState && currState.gameState === 'GAMEPLAY') {
     updatePrediction(dt);
     const t = Math.min(1, (now - stateRecvTime) / SERVER_TICK_MS);
     draw(applyPrediction(interpState(prevState, currState, t)));
   } else {
     pred = null;
+    updateInventoryBar([]);
   }
   requestAnimationFrame(renderLoop);
 }
@@ -642,6 +758,8 @@ requestAnimationFrame(renderLoop);
 function draw(state) {
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
   drawArena();
+  drawTraps(state.traps || []);
+  drawItems(state.items || []);
   drawSlashes();
   drawProjectiles(state.projectiles || []);
   drawMonsters(state.monsters || []);
@@ -651,6 +769,95 @@ function draw(state) {
   drawParticles(state.particles || []);
   drawHUD(state);
   drawWeaponPanel(state);
+  updateInventoryBar(state.inventory || []);
+}
+
+// ─── Traps & Items ──────────────────────────────────────────────────────────────
+
+function drawTraps(traps) {
+  const now = performance.now();
+  for (const tr of traps) {
+    const cx = tr.x + tr.w / 2, cy = tr.y + tr.h / 2;
+    if (tr.state === 'firing') {
+      ctx.save();
+      ctx.globalAlpha = 0.5; ctx.fillStyle = tr.color;
+      ctx.beginPath(); ctx.arc(cx, cy, tr.radius, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+      continue;
+    }
+    if (tr.state === 'arming') {
+      // Telegraph: pulsing danger ring that fills up
+      ctx.save();
+      ctx.globalAlpha = 0.18; ctx.fillStyle = tr.color;
+      ctx.beginPath(); ctx.arc(cx, cy, tr.radius, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 0.9; ctx.strokeStyle = tr.color; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(cx, cy, tr.radius, -Math.PI/2, -Math.PI/2 + Math.PI*2*tr.armRatio); ctx.stroke();
+      ctx.restore();
+    }
+    // Trap body sprite
+    const x = Math.round(tr.x), y = Math.round(tr.y);
+    if (tr.type === 'spike') {
+      ctx.fillStyle = '#3a2a1a'; ctx.fillRect(x+2, y+10, tr.w-4, 4);
+      ctx.fillStyle = tr.color;
+      for (let i = 0; i < 3; i++) {
+        const sx = x + 3 + i*4;
+        ctx.beginPath(); ctx.moveTo(sx, y+11); ctx.lineTo(sx+2, y+3); ctx.lineTo(sx+4, y+11); ctx.fill();
+      }
+    } else if (tr.type === 'mine') {
+      ctx.fillStyle = '#552020'; ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = tr.color;
+      const blink = (Math.sin(now/180) > 0) ? 1 : 0.3;
+      ctx.globalAlpha = blink; ctx.fillRect(Math.round(cx)-1, Math.round(cy)-1, 2, 2); ctx.globalAlpha = 1;
+      for (let a = 0; a < 4; a++) { const an = a*Math.PI/2; ctx.fillRect(Math.round(cx+Math.cos(an)*6)-1, Math.round(cy+Math.sin(an)*6)-1, 2, 2); }
+    } else if (tr.type === 'snare') {
+      ctx.strokeStyle = tr.color; ctx.lineWidth = 1; ctx.globalAlpha = 0.9;
+      for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(cx, cy, 3 + i*2, 0, Math.PI*2); ctx.stroke(); }
+      ctx.beginPath(); ctx.moveTo(x+2, cy); ctx.lineTo(x+tr.w-2, cy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx, y+2); ctx.lineTo(cx, y+tr.h-2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+const ITEM_ICON = { speed:'»', strength:'⚔', shield:'◆', haste:'⚡', heal:'+' };
+
+function drawItems(items) {
+  const now = performance.now();
+  for (const it of items) {
+    const cx = it.x + it.w / 2, cy = it.y + it.h / 2 + Math.sin(now/300 + it.x)*1.5;
+    ctx.save();
+    ctx.globalAlpha = 0.35; ctx.fillStyle = it.color;
+    ctx.beginPath(); ctx.arc(cx, cy, 8, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = it.color;
+    ctx.fillRect(Math.round(it.x), Math.round(cy - it.h/2), it.w, it.h);
+    ctx.fillStyle = '#0a0a14';
+    ctx.font = '9px "Courier New",monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(ITEM_ICON[it.type] || '?', Math.round(cx), Math.round(cy)+1);
+    ctx.restore();
+  }
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
+
+// ── Inventory bar (collected items → tappable buff buttons) ──
+const ITEM_COLOR = { speed:'#44ddee', strength:'#ff5544', shield:'#ffdd44', haste:'#aa66ff', heal:'#44ff66' };
+let _invSig = '';
+function updateInventoryBar(inv) {
+  const bar = document.getElementById('itemBar');
+  if (!bar) return;
+  const sig = inv.join(',');
+  if (sig === _invSig) return;
+  _invSig = sig;
+  if (!inv.length) { bar.className = ''; bar.innerHTML = ''; return; }
+  bar.className = 'visible';
+  bar.innerHTML = inv.map((type, i) => {
+    const col = ITEM_COLOR[type] || '#888';
+    return `<button class="item-slot" style="border-color:${col};color:${col}" onclick="useItem(${i})" title="${type}">`
+      + `<span class="item-ic">${ITEM_ICON[type] || '?'}</span><span class="item-key">${i + 1}</span></button>`;
+  }).join('');
+}
+function useItem(idx) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'use_item', index: idx }));
 }
 
 function drawArena() {
@@ -665,11 +872,26 @@ function drawArena() {
   for(let y=ARENA_Y;y<ARENA_Y+ARENA_H;y+=16){ctx.beginPath();ctx.moveTo(ARENA_X,y);ctx.lineTo(ARENA_X+ARENA_W,y);ctx.stroke();}
 }
 
+const EFFECT_GLOW = { speed:'#44ddee', strength:'#ff5544', shield:'#ffdd44', haste:'#aa66ff', slow:'#3366aa' };
+
 function drawPlayer(p, baseColor, label) {
   if (p.dead) return;
   const skinCol = getSkinColor(p, baseColor);
   const c = p.hitFlash > 0 ? PAL.white : skinCol;
   const x = Math.round(p.x), y = Math.round(p.y);
+  // Active-effect aura
+  if (p.effects) {
+    const active = Object.keys(p.effects).filter(k => p.effects[k] > 0);
+    if (active.length) {
+      const t = performance.now() / 200;
+      const glow = EFFECT_GLOW[active[0]] || '#ffffff';
+      ctx.save();
+      ctx.globalAlpha = 0.25 + Math.sin(t)*0.1;
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(x + p.w/2, y + p.h/2, p.w, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+  }
   ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(x+1,y+p.h,p.w-2,2);
   ctx.fillStyle = c; ctx.fillRect(x+1,y+11,4,5); ctx.fillRect(x+7,y+11,4,5);
   ctx.fillRect(x,y+5,p.w,7);
@@ -914,6 +1136,62 @@ function drawWeaponSprite(p, px, py) {
     ctx.fillStyle = wc;
     ctx.fillRect(d===1?hx+22:hx-24, hy, 2, 1);
     ctx.fillRect(d===1?hx+24:hx-25, hy+1, 1, 1);
+
+  } else if (wId === 'glaive') {
+    // Long pole with a curved blade at the tip
+    ctx.fillStyle = PAL.handle;
+    ctx.fillRect(d===1?hx:hx-18, hy-1, 18, 2);
+    ctx.fillStyle = '#556';
+    ctx.fillRect(d===1?hx+18:hx-20, hy-1, 2, 2);
+    ctx.fillStyle = wc;
+    ctx.fillRect(d===1?hx+20:hx-25, hy-6, 5, 5);
+    ctx.fillRect(d===1?hx+22:hx-26, hy-9, 4, 8);
+    ctx.fillStyle = '#eef8f0';
+    ctx.fillRect(d===1?hx+22:hx-23, hy-8, 1, 7);
+
+  } else if (wId === 'katana') {
+    // Slim straight blade, small round guard
+    ctx.fillStyle = '#1a1a22';
+    ctx.fillRect(d===1?hx:hx-4, hy-1, 4, 2);
+    ctx.fillStyle = PAL.guard;
+    ctx.fillRect(d===1?hx+4:hx-5, hy-2, 1, 4);
+    ctx.fillStyle = wc;
+    ctx.fillRect(d===1?hx+5:hx-18, hy-1, 13, 1);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(d===1?hx+5:hx-18, hy, 13, 1);
+    ctx.fillStyle = wc;
+    ctx.fillRect(d===1?hx+18:hx-20, hy-1, 2, 1);
+
+  } else if (wId === 'chakram') {
+    // Spinning ring held at side
+    const ox = d===1?hx+4:hx-4;
+    ctx.strokeStyle = wc; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(ox, hy, 5, 0, Math.PI*2); ctx.stroke();
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
+    const sp = performance.now()/60;
+    for (let i=0;i<4;i++){ const a=sp+i*Math.PI/2; ctx.fillStyle='#ffffff'; ctx.fillRect(Math.round(ox+Math.cos(a)*5)-1, Math.round(hy+Math.sin(a)*5)-1, 2, 2); }
+
+  } else if (wId === 'cannon') {
+    // Stubby barrel
+    ctx.fillStyle = '#3a3a44';
+    ctx.fillRect(d===1?hx:hx-12, hy-3, 12, 7);
+    ctx.fillStyle = wc;
+    ctx.fillRect(d===1?hx+10:hx-14, hy-4, 4, 9);
+    ctx.fillStyle = '#222';
+    ctx.fillRect(d===1?hx+13:hx-14, hy-2, 1, 5);
+    ctx.fillStyle = '#665';
+    ctx.fillRect(d===1?hx:hx-12, hy-3, 12, 1);
+
+  } else if (wId === 'reaper') {
+    // Scythe: long handle, big curved blade
+    ctx.fillStyle = '#2a1a12';
+    ctx.fillRect(d===1?hx:hx-16, hy-1, 16, 2);
+    ctx.fillStyle = wc;
+    ctx.fillRect(d===1?hx+14:hx-18, hy-10, 4, 4);
+    ctx.fillRect(d===1?hx+10:hx-20, hy-12, 5, 3);
+    ctx.fillRect(d===1?hx+5:hx-19, hy-11, 5, 2);
+    ctx.fillStyle = '#ffd0ee';
+    ctx.fillRect(d===1?hx+6:hx-18, hy-11, 8, 1);
   }
 
   ctx.restore();
@@ -924,10 +1202,15 @@ function drawWeaponSprite(p, px, py) {
 function drawMonster(m) {
   const c = m.hitFlash > 0 ? PAL.white : PAL.monster;
   const x = Math.round(m.x), y = Math.round(m.y);
+  const head = Math.max(5, Math.round(m.h * 0.32));
+  const eye = Math.max(2, Math.round(m.w * 0.18));
   ctx.fillStyle=c;
-  ctx.fillRect(x+1,y+4,m.w-2,m.h-4); ctx.fillRect(x,y,m.w,5);
+  ctx.fillRect(x+1,y+head-1,m.w-2,m.h-head+1); ctx.fillRect(x,y,m.w,head);
   ctx.fillRect(x-1,y+1,2,3); ctx.fillRect(x+m.w-1,y+1,2,3);
-  ctx.fillStyle='#ff2222'; ctx.fillRect(x+2,y+1,2,2); ctx.fillRect(x+6,y+1,2,2);
+  // Eyes scale + space out with monster size
+  ctx.fillStyle='#ff2222';
+  ctx.fillRect(x+Math.round(m.w*0.2),y+2,eye,eye);
+  ctx.fillRect(x+Math.round(m.w*0.6),y+2,eye,eye);
   drawHpBar(x-1,y-5,m.w+2,2,m.hp/m.maxHp,'#44ff44','#003300');
 }
 function drawMonsters(ms) { for(const m of ms) drawMonster(m); }
@@ -967,6 +1250,18 @@ function drawProjectiles(projs) {
       ctx.beginPath(); ctx.moveTo(pr.x,pr.y); ctx.lineTo(pr.x-pr.dx*5,pr.y-pr.dy*5); ctx.stroke();
       ctx.fillStyle='#ddaa55'; ctx.fillRect(Math.round(pr.x)-1,Math.round(pr.y)-1,3,2);
       ctx.fillStyle='#aaddff'; ctx.fillRect(Math.round(pr.x)+1,Math.round(pr.y)-1,2,2);
+    } else if(pr.weaponId==='chakram') {
+      const sp = performance.now()/40;
+      ctx.strokeStyle=PAL.chakram; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.arc(pr.x,pr.y,4,0,Math.PI*2); ctx.stroke();
+      ctx.fillStyle='#ffffff';
+      for(let i=0;i<4;i++){ const a=sp+i*Math.PI/2; ctx.fillRect(Math.round(pr.x+Math.cos(a)*4)-1, Math.round(pr.y+Math.sin(a)*4)-1, 2, 2); }
+    } else if(pr.weaponId==='cannon') {
+      ctx.fillStyle='rgba(180,150,120,0.4)';
+      ctx.beginPath(); ctx.arc(pr.x,pr.y,5,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#3a3a44';
+      ctx.beginPath(); ctx.arc(pr.x,pr.y,3,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#ff9944'; ctx.fillRect(Math.round(pr.x)-1,Math.round(pr.y)-1,2,2);
     }
   }
 }
@@ -1012,6 +1307,22 @@ function drawParticles(particles) {
       ctx.fillStyle='#ffffff'; ctx.globalAlpha=a;
       ctx.beginPath(); ctx.arc(0,0,2,0,Math.PI*2); ctx.fill();
       ctx.restore(); ctx.globalAlpha=1;
+    } else if(p.type==='trapburst') {
+      const m=p.max||300, k=1-p.timer/m, r=(p.maxR||20)*k;
+      ctx.globalAlpha=Math.max(0,p.timer/m);
+      ctx.fillStyle=p.color||'#ff8822';
+      ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.fill();
+      ctx.globalAlpha=Math.max(0,p.timer/m)*0.8; ctx.strokeStyle='#ffffff'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.stroke();
+      ctx.globalAlpha=1;
+    } else if(p.type==='pickup' || p.type==='useitem') {
+      const m=p.max||600, a=Math.max(0,p.timer/m), rise=(1-a)*14;
+      ctx.globalAlpha=a; ctx.fillStyle=p.color||'#44ff66';
+      const yy=Math.round(p.y-rise);
+      ctx.beginPath(); ctx.arc(Math.round(p.x),yy,3,0,Math.PI*2); ctx.fill();
+      ctx.globalAlpha=a*0.5;
+      ctx.beginPath(); ctx.arc(Math.round(p.x),yy,6,0,Math.PI*2); ctx.fill();
+      ctx.globalAlpha=1;
     }
   }
 }
@@ -1101,7 +1412,10 @@ function drawHUD(state) {
 
 // ─── Weapon Panel ─────────────────────────────────────────────────────────────
 
+let weaponSlotRects = []; // canvas-space hit boxes for tap-to-select
+
 function drawWeaponPanel(state) {
+  weaponSlotRects = [];
   if(!myNum) return;
   const mp = myNum===1 ? state.players?.p1 : state.players?.p2;
   if(!mp||!mp.unlockedWeapons) return;
@@ -1129,6 +1443,7 @@ function drawWeaponPanel(state) {
   for(let i=0;i<weapons.length;i++) {
     const wId=weapons[i], sel=wId===mp.weaponId;
     const sx=panelX+i*(slotW+gap), sy=panelY;
+    weaponSlotRects.push({ x: sx, y: sy, w: slotW, h: slotH, index: i });
     const wc=WEAPON_COLOR[wId]||PAL.white;
     ctx.fillStyle=sel?'rgba(255,255,255,0.1)':'rgba(5,5,15,0.8)';
     ctx.fillRect(sx,sy,slotW,slotH);
@@ -1206,6 +1521,25 @@ function drawWeaponIconMini(wId, cx, cy, color, bright) {
     ctx.fillStyle=PAL.guard; ctx.fillRect(icx-2,icy-4,2,8);
     ctx.fillStyle=c; ctx.fillRect(icx,icy-1,9,3); ctx.fillRect(icx+9,icy,1,1);
     ctx.fillStyle='#eef4ff'; ctx.fillRect(icx,icy-1,8,1);
+  } else if(wId==='glaive') {
+    ctx.fillStyle=h; ctx.fillRect(icx-8,icy,14,1); ctx.fillRect(icx-8,icy-1,12,2);
+    ctx.fillStyle=c; ctx.fillRect(icx+6,icy-5,3,4); ctx.fillRect(icx+7,icy-7,2,6);
+  } else if(wId==='katana') {
+    ctx.fillStyle='#222'; ctx.fillRect(icx-6,icy-1,3,2);
+    ctx.fillStyle=PAL.guard; ctx.fillRect(icx-3,icy-2,1,4);
+    ctx.fillStyle=c; ctx.fillRect(icx-2,icy-1,9,1); ctx.fillStyle='#fff'; ctx.fillRect(icx-2,icy,9,1);
+  } else if(wId==='chakram') {
+    ctx.lineWidth=2; ctx.strokeStyle=c;
+    ctx.beginPath(); ctx.arc(icx,icy,5,0,Math.PI*2); ctx.stroke();
+    ctx.fillStyle='#fff'; for(let i=0;i<4;i++){const a=i*Math.PI/2;ctx.fillRect(Math.round(icx+Math.cos(a)*5)-1,Math.round(icy+Math.sin(a)*5)-1,1,1);}
+  } else if(wId==='cannon') {
+    ctx.fillStyle=bright?'#3a3a44':'#2a2a30'; ctx.fillRect(icx-6,icy-3,10,6);
+    ctx.fillStyle=c; ctx.fillRect(icx+4,icy-4,3,8);
+    ctx.fillStyle='#111'; ctx.fillRect(icx+6,icy-2,1,4);
+  } else if(wId==='reaper') {
+    ctx.fillStyle='#2a1a12'; ctx.fillRect(icx-6,icy-1,12,1);
+    ctx.fillStyle=c; ctx.fillRect(icx+5,icy-5,3,3); ctx.fillRect(icx+1,icy-6,5,2);
+    ctx.fillStyle='#ffd0ee'; ctx.fillRect(icx+1,icy-6,4,1);
   }
 }
 
@@ -1277,5 +1611,38 @@ function drawUnlockPreview(weaponId) {
     ux.fillStyle='#eef4ff'; ux.fillRect(cx-34,cy-4,64,3);
     ux.fillStyle=wc; ux.fillRect(cx+28,cy-12,8,26);
     ux.fillStyle='#8899aa'; ux.fillRect(cx-14,cy-2,8,5);
+  }
+  else if(weaponId==='glaive'){
+    ux.fillStyle='#6b3a1f'; ux.fillRect(cx-34,cy-2,52,4);
+    ux.fillStyle=wc; ux.fillRect(cx+18,cy-14,8,10); ux.fillRect(cx+22,cy-22,8,18);
+    ux.fillStyle='#eef8f0'; ux.fillRect(cx+23,cy-21,2,16);
+  }
+  else if(weaponId==='katana'){
+    ux.fillStyle='#1a1a22'; ux.fillRect(cx-30,cy-2,10,4);
+    ux.fillStyle='#8899aa'; ux.fillRect(cx-20,cy-4,2,8);
+    ux.fillStyle=wc; ux.fillRect(cx-18,cy-2,46,3);
+    ux.fillStyle='#ffffff'; ux.fillRect(cx-18,cy-2,44,1);
+    ux.fillStyle=wc; ux.fillRect(cx+28,cy-2,5,2);
+  }
+  else if(weaponId==='chakram'){
+    ux.lineWidth=5; ux.strokeStyle=wc;
+    ux.beginPath(); ux.arc(cx,cy,18,0,Math.PI*2); ux.stroke();
+    ux.fillStyle='#ffffff';
+    for(let i=0;i<6;i++){const a=i*Math.PI/3;ux.fillRect(Math.round(cx+Math.cos(a)*18)-2,Math.round(cy+Math.sin(a)*18)-2,4,4);}
+  }
+  else if(weaponId==='cannon'){
+    ux.fillStyle='#3a3a44'; ux.fillRect(cx-26,cy-9,40,18);
+    ux.fillStyle=wc; ux.fillRect(cx+10,cy-12,12,24);
+    ux.fillStyle='#111'; ux.fillRect(cx+18,cy-6,5,12);
+    ux.fillStyle='#665'; ux.fillRect(cx-26,cy-9,40,3);
+    ux.fillStyle='#ff9944'; ux.beginPath(); ux.arc(cx+24,cy,4,0,Math.PI*2); ux.fill();
+  }
+  else if(weaponId==='reaper'){
+    ux.fillStyle='#2a1a12'; ux.fillRect(cx-30,cy-2,54,4);
+    ux.fillStyle=wc;
+    ux.fillRect(cx+20,cy-18,6,8);
+    ux.fillRect(cx+4,cy-24,18,6);
+    ux.fillRect(cx-8,cy-20,14,5);
+    ux.fillStyle='#ffd0ee'; ux.fillRect(cx-6,cy-19,24,2);
   }
 }

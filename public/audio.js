@@ -70,6 +70,9 @@ const GameAudio = (() => {
     waveclear(){ [392, 523, 659, 784].forEach((f, i) => setTimeout(() => tone(f, 0.3, 'triangle', 0.26), i * 120)); },
     xp()     { tone(880, 0.08, 'sine', 0.12, 1320); },
     parry()  { tone(1200, 0.14, 'square', 0.28, 2400); tone(700, 0.12, 'triangle', 0.2, 1600); noise(0.05, 0.12, 4000); },
+    trap()   { tone(120, 0.3, 'sawtooth', 0.3, 50); noise(0.25, 0.28, 900); },
+    pickup() { tone(660, 0.08, 'square', 0.2, 990); setTimeout(() => tone(990, 0.1, 'square', 0.2, 1320), 70); },
+    useitem(){ [440, 660, 880].forEach((f, i) => setTimeout(() => tone(f, 0.12, 'triangle', 0.22), i * 60)); },
   };
 
   // ── Background music: 5 selectable looping chiptune tracks ──
