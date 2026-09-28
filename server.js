@@ -157,6 +157,9 @@ const MONSTER_TYPES = {
   },
 };
 
+// Length of a monster's attack animation; mirrored by the client.
+const MONSTER_SWING_MS = 320;
+
 // Pick a type for the current wave. Eligible types are weighted by their own
 // share, then biased upward with the wave number, so late waves lean on the
 // tougher roster instead of still being mostly grunts.
@@ -628,6 +631,10 @@ function spawnMonster() {
     // Bigger is slower, then the type's own pace on top.
     speed: (0.72 / (1 + (sizeScale - 1) * 0.35)) * def.speed * room.waveSpeedMult,
     atkCooldown: 0,
+    // Cosmetic only: which way the monster holds its weapon, and how far into an
+    // attack animation it is (ms left), so clients can draw the swing.
+    face: 1,
+    swing: 0,
     atkRange: def.ranged ? def.shotRange : 8 + w * 0.5,
     atkDamage,
     armor: def.armor || 0,
@@ -955,11 +962,13 @@ setInterval(() => {
     if (m.atkCooldown > 0) m.atkCooldown -= dt;
     if (m.hitFlash    > 0) m.hitFlash    -= dt;
     if (m.invincible  > 0) m.invincible  -= dt;
+    if (m.swing       > 0) m.swing       -= dt;
 
     if (nearest) {
       const def = MONSTER_TYPES[m.type] || MONSTER_TYPES.grunt;
       const dx = cx(nearest) - cx(m), dy = cy(nearest) - cy(m);
       const dist = Math.hypot(dx, dy) || 1;
+      if (Math.abs(dx) > 2) m.face = dx > 0 ? 1 : -1;
       const spd = m.speed * (m.slowTimer > 0 ? 0.4 : 1);
 
       if (m.ranged) {
@@ -970,6 +979,7 @@ setInterval(() => {
         if (dist <= m.atkRange && m.atkCooldown <= 0) {
           monsterShoot(m, nearest);
           m.atkCooldown = def.reload || 2000;
+          m.swing = MONSTER_SWING_MS;
         }
       } else {
         const reach = m.atkRange + (nearest.w + nearest.h) / 4;
@@ -986,6 +996,7 @@ setInterval(() => {
             applyDamage(nearest, m.atkDamage, 'monster');
           }
           m.atkCooldown = 1200;
+          m.swing = MONSTER_SWING_MS;
         }
       }
     }
@@ -1469,7 +1480,8 @@ function buildStateMsg(playerNum) {
     playerNames: room.playerNames,
     players: { p1: playerView(room.players.p1), p2: playerView(room.players.p2) },
     monsters:    room.monsters.map(m => ({ id: m.id, type: m.type, x: r1(m.x), y: r1(m.y), w: m.w, h: m.h,
-                  hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash, slowed: (m.slowTimer || 0) > 0, armor: m.armor || 0 })),
+                  hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash, slowed: (m.slowTimer || 0) > 0, armor: m.armor || 0,
+                  face: m.face, swing: m.swing > 0 ? Math.round(m.swing) : 0 })),
     projectiles: room.projectiles.map(pr => ({ id: pr.id, x: r1(pr.x), y: r1(pr.y), dx: r1(pr.dx), dy: r1(pr.dy), weaponId: pr.weaponId,
                   upg: pr.upg || null, isAoe: pr.isAoe, special: !!pr.special, grapple: !!pr.grapple,
                   hook: !!pr.hook, boomerang: !!pr.boomerang })),

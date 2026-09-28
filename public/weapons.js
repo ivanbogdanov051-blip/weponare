@@ -353,6 +353,119 @@ function measureArt(draw) {
 }
 for (const art of Object.values(WEAPON_ART)) art.box = measureArt(art.draw);
 
+// ─── Monster arms ─────────────────────────────────────────────────────────────
+// What each monster carries, in the same local space as the player weapons (grip
+// at the origin, pointing +X). Kept out of WEAPON_ART so they never show up as
+// pickups or in the shop. Each one reads as its owner's role: a scrappy club for
+// the grunt, a quick shiv for the runner, a crushing maul for the brute, a venom
+// staff for the spitter, pike and tower shield for the armoured warden, and a
+// huge double axe for the behemoth.
+const MON_MAT = {
+  bone: '#d8cfb0', boneDark: '#9d9274',
+  stone: '#8a867c', stoneLight: '#b3aea2', stoneDark: '#57534b',
+};
+
+const MONSTER_ARMS_ART = {
+
+  m_club: { draw(k, wc) {
+    k.r(0, -1.3, 4, 2.6, MAT.leather);
+    k.r(1, -1.3, 0.8, 2.6, MAT.leatherLt);
+    k.r(2.6, -1.3, 0.8, 2.6, MAT.leatherLt);
+    // Nail spikes first so the knotted head overlaps their roots.
+    for (const [x, s] of [[8.5, -1], [11.5, 1], [14.2, -1], [13, 1]]) {
+      k.poly([[x - 0.8, s * 2], [x, s * 4.8], [x + 0.8, s * 2]], MAT.steel);
+    }
+    k.poly([[3.5, -1.5], [13.5, -3.3], [16.5, -2.2], [17, 0], [16.5, 2.2], [13.5, 3.3], [3.5, 1.5]], wc);
+    k.poly([[3.5, -1.5], [13.5, -3.3], [16.5, -2.2], [16, -1.1], [4, -0.6]], MAT.woodLight);
+    k.poly([[4, 0.9], [13.5, 2.3], [16.5, 2.2], [13.5, 3.3], [3.5, 1.5]], MAT.woodDark);
+    k.r(10, -0.6, 1.2, 1.2, MAT.woodDark);            // knot
+  }},
+
+  m_shiv: { draw(k, wc) {
+    k.r(0, -1.2, 3.8, 2.4, MON_MAT.boneDark);
+    k.r(0, -1.2, 3.8, 0.8, MON_MAT.bone);
+    k.r(3.6, -2.4, 1.3, 4.8, MAT.iron);
+    // Serrated back edge, hooked tip.
+    k.poly([[4.9, -1.6], [6.6, -2.1], [7.4, -1.2], [8.8, -1.9], [9.6, -1], [11, -1.6], [13.5, 0.2], [11.5, 1.3], [4.9, 1.4]], wc);
+    k.poly([[4.9, -1.6], [6.6, -2.1], [7.4, -1.2], [8.8, -1.9], [9.6, -1], [11, -1.6], [12.4, -0.5], [4.9, -0.3]], MAT.steelLight);
+    k.r(5, 0.6, 6, 0.6, MAT.steelDark);
+  }},
+
+  m_maul: { draw(k, wc) {
+    haft(k, 15, 2.8);
+    k.r(1.5, -1.7, 3.5, 3.4, MAT.leather);
+    k.r(2.4, -1.7, 0.8, 3.4, MAT.leatherLt);
+    // A rough-cut stone block lashed on with iron bands.
+    k.poly([[13, -6.5], [14.5, -7.5], [21.5, -7], [22.5, -5.5], [22.5, 6], [21, 7.5], [14, 7], [13, 5.5]], wc);
+    k.poly([[13, -6.5], [14.5, -7.5], [21.5, -7], [22.5, -5.5], [13, -4.8]], MON_MAT.stoneLight);
+    k.poly([[13, 4.6], [22.5, 4.8], [22.5, 6], [21, 7.5], [14, 7], [13, 5.5]], MON_MAT.stoneDark);
+    k.r(15, -7.8, 1.7, 15.4, MAT.iron);
+    k.r(19.3, -7.6, 1.7, 15.2, MAT.iron);
+    k.r(15, -7.8, 1.7, 1, MAT.ironLight);
+    k.r(19.3, -7.6, 1.7, 1, MAT.ironLight);
+    k.r(17.4, -2.5, 1, 1, MON_MAT.stoneDark);            // chips
+    k.r(21.4, 1.5, 1, 1.2, MON_MAT.stoneDark);
+  }},
+
+  m_venom: { draw(k, wc) {
+    k.r(0, -1.2, 15, 2.4, MAT.woodDark);
+    k.r(0, -1.2, 15, 0.8, '#5c4a2c');
+    k.r(4, -1.7, 1.2, 3.4, MAT.rope);
+    k.r(6, -1.7, 1.2, 3.4, MAT.rope);
+    // Bone prongs cradle a sac of venom that drips from below.
+    k.poly([[14, -1.2], [16.5, -5.2], [18, -5], [15.8, -0.6]], MON_MAT.bone);
+    k.poly([[14, 1.2], [16.5, 5.2], [18, 5], [15.8, 0.6]], MON_MAT.boneDark);
+    k.glow(20, 0, 7, wc, 0.3);
+    k.circ(20, 0, 3.8, wc);
+    k.circ(19, -1.3, 1.4, '#efffd0');
+    k.poly([[19.4, 3.2], [20.4, 6.4], [21, 3.2]], wc);
+    k.r(20.2, 7, 0.9, 1, wc);
+  }},
+
+  m_pike: { draw(k, wc) {
+    haft(k, 22, 2.2);
+    k.r(3, -1.3, 1, 2.6, MAT.rope);
+    collar(k, 21, 4.6);
+    // Halberd head: a thrusting point with a hooked axe blade on top.
+    k.poly([[21.5, -1.6], [22.5, -6.5], [25.5, -7], [25, -1.6]], MAT.steel);
+    k.poly([[22.5, -6.5], [25.5, -7], [25.3, -5.6], [22.8, -5.2]], MAT.steelLight);
+    k.poly([[21.5, 1.2], [21, 3.8], [23.5, 1.2]], MAT.steelDark);
+    k.poly([[22.8, -2.6], [28, -1.6], [31.5, 0], [28, 1.6], [22.8, 2.6]], wc);
+    k.poly([[22.8, -2.6], [28, -1.6], [30.5, -0.3], [22.8, -0.5]], MAT.steelLight);
+    k.r(23.5, -0.3, 5, 0.6, MAT.steelDark);
+  }},
+
+  // Carried flat against the body rather than swung, so its origin is its centre.
+  m_shield: { draw(k, wc) {
+    k.poly([[-4.6, -8], [4.6, -8], [5, 3.5], [0, 9], [-5, 3.5]], MAT.steelDark);
+    k.poly([[-3.4, -6.8], [3.4, -6.8], [3.8, 3], [0, 7.4], [-3.8, 3]], wc);
+    k.poly([[-3.4, -6.8], [3.4, -6.8], [3.5, -5.4], [-3.5, -5.4]], MAT.steelLight);
+    k.r(-0.6, -6.8, 1.2, 14, MAT.steelDark);         // central rib
+    k.r(-3.6, -1.2, 7.2, 1.2, MAT.steelDark);
+    k.circ(0, -0.6, 1.7, MAT.steel);
+    k.circ(-0.4, -1, 0.7, MAT.steelLight);
+    for (const [x, y] of [[-3.8, -7.2], [3.8, -7.2], [-4, 2.6], [4, 2.6]]) k.r(x - 0.5, y - 0.5, 1, 1, MAT.steelLight);
+  }},
+
+  m_greataxe: { draw(k, wc) {
+    haft(k, 21, 3);
+    k.r(1, -1.8, 4.5, 3.6, MAT.leather);
+    k.r(2, -1.8, 0.9, 3.6, MAT.leatherLt);
+    k.r(3.8, -1.8, 0.9, 3.6, MAT.leatherLt);
+    k.poly([[21, -1.5], [25.5, 0], [21, 1.5]], MAT.steel);        // top spike
+    collar(k, 13.5, 8);
+    // Double-bitted head, blood along both edges.
+    k.poly([[15.5, -3], [16.5, -12], [21, -13.5], [23, -7], [23, 7], [21, 13.5], [16.5, 12], [15.5, 3]], MAT.iron);
+    k.poly([[16.5, -12], [21, -13.5], [20.5, -11.4], [17, -10.2]], MAT.ironLight);
+    k.poly([[21, -13.5], [23, -7], [23, 7], [21, 13.5], [22, 0]], MAT.steelLight);
+    k.poly([[21.6, -11.5], [22.6, -7.5], [22.4, -4], [21.8, -6]], wc);
+    k.poly([[21.6, 11.5], [22.6, 7.5], [22.4, 4], [21.8, 6]], wc);
+    k.r(15.5, -1.4, 3, 2.8, MAT.ironLight);
+    k.circ(19, 0, 1.4, wc);
+  }},
+};
+for (const art of Object.values(MONSTER_ARMS_ART)) art.box = measureArt(art.draw);
+
 // Draw a weapon into `g`, already translated to its origin and oriented +X.
 function drawWeaponArt(g, id, scale, color, outline) {
   const art = WEAPON_ART[id];
@@ -388,4 +501,107 @@ if (typeof window !== 'undefined') {
   window.WEAPON_ART = WEAPON_ART;
   window.drawWeaponArt = drawWeaponArt;
   window.drawWeaponFitted = drawWeaponFitted;
+}
+
+// ─── Pixel rasterisation ──────────────────────────────────────────────────────
+// The same 19 definitions above, rendered into a pixel buffer instead of onto a
+// canvas path, so weapons match the rest of the art: hard edges, a dark outline
+// and a lit top rim, with no antialiasing at any scale.
+
+const _PK = (typeof window !== 'undefined' && window.PixelKit) ||
+            (typeof require !== 'undefined' ? require('./pixel.js') : null);
+
+const WEAPON_EDGE = '#0b0b14';
+
+// A kit that speaks the same primitives as artKit but writes pixels.
+function rasterKit(buf, ox, oy, s) {
+  const K = _PK;
+  const S = (v) => v * s;
+  return {
+    r(x, y, w, h, c) {
+      K.rect(buf, ox + S(x), oy + S(y), Math.max(1, Math.round(S(w))), Math.max(1, Math.round(S(h))), c);
+    },
+    poly(pts, c) { K.poly(buf, pts.map(([x, y]) => [ox + S(x), oy + S(y)]), c); },
+    circ(x, y, r, c) { K.disc(buf, ox + S(x), oy + S(y), Math.max(0.6, S(r)), c); },
+    ring(x, y, r, lw, c, a0, a1) {
+      K.arcPx(buf, ox + S(x), oy + S(y), S(r), Math.max(1, S(lw)), c,
+              a0 === undefined ? 0 : a0, a1 === undefined ? Math.PI * 2 : a1);
+    },
+    line(x1, y1, x2, y2, lw, c) {
+      K.thickLine(buf, ox + S(x1), oy + S(y1), ox + S(x2), oy + S(y2), Math.max(1, S(lw)), c);
+    },
+    // Glows are soft light, which pixel art conveys with a sparse dither rather
+    // than an alpha blur.
+    glow(x, y, r, c) {
+      const cx = ox + S(x), cy = oy + S(y), rr = S(r);
+      for (let py = Math.floor(cy - rr); py <= Math.ceil(cy + rr); py++) {
+        for (let px = Math.floor(cx - rr); px <= Math.ceil(cx + rr); px++) {
+          const d = Math.hypot(px + 0.5 - cx, py + 0.5 - cy);
+          if (d > rr || d < rr * 0.45) continue;
+          if (((px * 2 + py) % 4) !== 0) continue;
+          K.setPx(buf, px, py, c);
+        }
+      }
+    },
+  };
+}
+
+// Render a weapon to a pixel buffer at `scale`. Returns { buf, ox, oy } where the
+// offsets locate the art origin (the hand) inside the buffer.
+function rasterWeapon(id, scale, color) {
+  const art = WEAPON_ART[id] || MONSTER_ARMS_ART[id];
+  if (!art || !_PK) return null;
+  const b = art.box;
+  const pad = 2;
+  const w = Math.max(1, Math.ceil(b.w * scale) + pad * 2);
+  const h = Math.max(1, Math.ceil(b.h * scale) + pad * 2);
+  const ox = pad - b.x * scale, oy = pad - b.y * scale;
+  const buf = _PK.makeBuf(w, h);
+  art.draw(rasterKit(buf, ox, oy, scale), color);
+  _PK.rimLight(buf, null, null);          // reserved: shading is baked in the art
+  _PK.outline(buf, WEAPON_EDGE);
+  return { buf, ox, oy, w, h };
+}
+
+// Cached canvas of a weapon at a given scale, plus where its origin sits.
+const _weaponSprites = new Map();
+function weaponSprite(id, scale, color) {
+  const key = `${id}:${scale.toFixed(3)}:${color}`;
+  let e = _weaponSprites.get(key);
+  if (e !== undefined) return e;
+  const r = rasterWeapon(id, scale, color);
+  e = r ? { cv: _PK.bufToCanvas(r.buf), ox: r.ox, oy: r.oy, w: r.w, h: r.h } : null;
+  _weaponSprites.set(key, e);
+  if (_weaponSprites.size > 400) _weaponSprites.delete(_weaponSprites.keys().next().value);
+  return e;
+}
+
+// Blit a weapon so its origin lands at the current transform's (0,0).
+function drawWeaponPixels(g, id, scale, color) {
+  const sp = weaponSprite(id, scale, color);
+  if (!sp) return;
+  g.drawImage(sp.cv, -sp.ox, -sp.oy);
+}
+
+// Pixel equivalent of drawWeaponFitted: scale to fit, then blit centred.
+function drawWeaponPixelsFitted(g, id, cx, cy, maxW, maxH, color) {
+  const art = WEAPON_ART[id];
+  if (!art) return;
+  const b = art.box;
+  const s = Math.min(maxW / b.w, maxH / b.h);
+  const sp = weaponSprite(id, s, color);
+  if (!sp) return;
+  g.drawImage(sp.cv, Math.round(cx - sp.ox - (b.x + b.w / 2) * s),
+                     Math.round(cy - sp.oy - (b.y + b.h / 2) * s));
+}
+
+if (typeof window !== 'undefined') {
+  window.MONSTER_ARMS_ART = MONSTER_ARMS_ART;
+  window.rasterWeapon = rasterWeapon;
+  window.weaponSprite = weaponSprite;
+  window.drawWeaponPixels = drawWeaponPixels;
+  window.drawWeaponPixelsFitted = drawWeaponPixelsFitted;
+}
+if (typeof module !== 'undefined') {
+  module.exports = { WEAPON_ART, MONSTER_ARMS_ART, rasterWeapon, drawWeaponArt, drawWeaponFitted };
 }

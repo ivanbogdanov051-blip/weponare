@@ -742,45 +742,18 @@ function renderSkinPreview() {
   if (!uc) return;
   const ux = uc.getContext('2d');
   ux.imageSmoothingEnabled = false;
-  ux.clearRect(0, 0, 72, 80);
-  ux.fillStyle = '#1a1a2e'; ux.fillRect(0, 0, 72, 80);
-
+  ux.clearRect(0, 0, uc.width, uc.height);
+  ux.fillStyle = '#1a1a2e'; ux.fillRect(0, 0, uc.width, uc.height);
   const color = SKIN_COLORS[pendingSkin.colorIdx] || '#4488ff';
-  ux.save();
-  const sc = 3.5;
-  ux.translate(36, 40 - 8 * sc / 2);
-  ux.scale(sc, sc);
-  const bx = -6, by = 0;
-  ux.fillStyle = 'rgba(0,0,0,0.3)'; ux.fillRect(bx + 1, by + 16, 10, 2);
-  ux.fillStyle = color;
-  ux.fillRect(bx + 1, by + 11, 4, 5); ux.fillRect(bx + 7, by + 11, 4, 5);
-  ux.fillRect(bx, by + 5, 12, 7);
-  ux.fillStyle = 'rgba(0,0,0,0.25)'; ux.fillRect(bx, by + 5, 12, 2);
-  ux.fillStyle = color; ux.fillRect(bx + 1, by, 10, 5);
-  ux.fillStyle = '#fff'; ux.fillRect(bx + 8, by + 1, 2, 2);
-  drawHatOn(ux, bx, by, color, pendingSkin.hatIdx);
-  ux.restore();
+  const cv = playerSprite(color, pendingSkin.hatIdx, 1, false);
+  if (!cv) return;
+  // Integer zoom keeps the preview as crisp as the in-game sprite.
+  const z = Math.max(1, Math.floor(Math.min(uc.width / cv.width, uc.height / cv.height)));
+  ux.drawImage(cv, Math.round((uc.width - cv.width * z) / 2),
+                   Math.round((uc.height - cv.height * z) / 2),
+                   cv.width * z, cv.height * z);
 }
 
-function drawHatOn(g, x, y, color, hatIdx) {
-  const hat = SKIN_HATS[hatIdx] || 'NONE';
-  if (hat === 'CAP') {
-    g.fillStyle = '#223344'; g.fillRect(x - 1, y - 3, 14, 2); g.fillRect(x + 1, y - 6, 10, 3);
-    g.fillStyle = '#334455'; g.fillRect(x + 1, y - 6, 9, 1);
-  } else if (hat === 'CROWN') {
-    g.fillStyle = '#ddaa00';
-    g.fillRect(x, y - 4, 2, 3); g.fillRect(x + 4, y - 6, 3, 5); g.fillRect(x + 9, y - 4, 2, 3);
-    g.fillStyle = '#ffee44';
-    g.fillRect(x + 1, y - 4, 1, 1); g.fillRect(x + 5, y - 6, 1, 1); g.fillRect(x + 10, y - 4, 1, 1);
-  } else if (hat === 'HORNS') {
-    g.fillStyle = '#aa1111'; g.fillRect(x + 1, y - 6, 2, 5); g.fillRect(x + 9, y - 6, 2, 5);
-    g.fillStyle = '#ee3333'; g.fillRect(x + 1, y - 7, 2, 1); g.fillRect(x + 9, y - 7, 2, 1);
-  } else if (hat === 'SPIKY') {
-    g.fillStyle = color;
-    g.fillRect(x + 1, y - 3, 2, 2); g.fillRect(x + 4, y - 5, 2, 4);
-    g.fillRect(x + 7, y - 3, 2, 2); g.fillRect(x + 10, y - 2, 2, 1);
-  }
-}
 
 // ─── Upgrade Shop ─────────────────────────────────────────────────────────────
 
@@ -870,8 +843,9 @@ function renderShop() {
     const g = cv.getContext('2d');
     g.clearRect(0, 0, cv.width, cv.height);
     const id = cv.dataset.weapon;
-    drawWeaponFitted(g, id, cv.width / 2, cv.height / 2, cv.width - 8, cv.height - 8,
-                     WEAPON_COLOR[id] || '#ccc', false);
+    g.imageSmoothingEnabled = false;
+    drawWeaponPixelsFitted(g, id, cv.width / 2, cv.height / 2, cv.width - 8, cv.height - 8,
+                           WEAPON_COLOR[id] || '#ccc');
   }
 }
 
@@ -1074,7 +1048,6 @@ function drawArena() {
 // ─── Traps & Items ──────────────────────────────────────────────────────────────
 
 function drawTraps(traps) {
-  const now = performance.now();
   for (const tr of traps) {
     const cx = tr.x + tr.w / 2, cy = tr.y + tr.h / 2;
     if (tr.state === 'firing') {
@@ -1101,118 +1074,8 @@ function drawTraps(traps) {
     ctx.setLineDash([]);
     ctx.restore();
 
-    const s = tr.w;             // trap bodies are square
-    ctx.save();
-    ctx.translate(cx, cy);
-    if (tr.type === 'spike') {
-      // Wooden pressure plate with iron spikes bursting out of it.
-      ctx.fillStyle = '#2a1c10'; ctx.fillRect(-s/2, -s/2, s, s);
-      ctx.fillStyle = '#3d2a17'; ctx.fillRect(-s/2+2, -s/2+2, s-4, s-4);
-      ctx.strokeStyle = '#1a1108'; ctx.lineWidth = 1.5;
-      ctx.strokeRect(-s/2+0.5, -s/2+0.5, s-1, s-1);
-      for (let i = 0; i < 3; i++) {
-        ctx.fillStyle = '#231508';
-        ctx.fillRect(-s/2+3, -s/2 + 4 + i*(s-8)/2.4, s-6, 1.5);
-      }
-      const up = tr.state === 'arming' ? 1 : 0.45;
-      for (let ry = -1; ry <= 1; ry++) for (let rx = -1; rx <= 1; rx++) {
-        const px = rx * s * 0.28, py = ry * s * 0.28;
-        const hgt = s * 0.30 * up;
-        ctx.fillStyle = '#20262e';
-        ctx.beginPath(); ctx.moveTo(px-3.2, py+1); ctx.lineTo(px, py-hgt); ctx.lineTo(px+3.2, py+1); ctx.fill();
-        ctx.fillStyle = tr.color;
-        ctx.beginPath(); ctx.moveTo(px-2, py+1); ctx.lineTo(px-0.4, py-hgt+1); ctx.lineTo(px+0.8, py+1); ctx.fill();
-      }
-    } else if (tr.type === 'mine') {
-      ctx.fillStyle = '#1b1b22';
-      ctx.beginPath(); ctx.arc(0, 2, s*0.40, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#3a2226';
-      ctx.beginPath(); ctx.arc(0, 0, s*0.40, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#5c2f34';
-      ctx.beginPath(); ctx.arc(-s*0.10, -s*0.12, s*0.24, 0, Math.PI*2); ctx.fill();
-      for (let a = 0; a < 8; a++) {               // trigger prongs
-        const an = a * Math.PI / 4;
-        ctx.save(); ctx.rotate(an);
-        ctx.fillStyle = '#6b7078'; ctx.fillRect(s*0.36, -1.6, s*0.20, 3.2);
-        ctx.fillStyle = tr.color;  ctx.fillRect(s*0.50, -2.2, 3, 4.4);
-        ctx.restore();
-      }
-      const blink = (Math.sin(now/160) > 0) ? 1 : 0.25;
-      ctx.globalAlpha = blink;
-      ctx.fillStyle = tr.color;
-      ctx.beginPath(); ctx.arc(0, 0, 3.2, 0, Math.PI*2); ctx.fill();
-      ctx.globalAlpha = blink * 0.4;
-      ctx.beginPath(); ctx.arc(0, 0, 6.5, 0, Math.PI*2); ctx.fill();
-      ctx.globalAlpha = 1;
-    } else if (tr.type === 'snare') {
-      // A net of rope pegged at the corners.
-      ctx.strokeStyle = '#2b3d4a'; ctx.lineWidth = 3;
-      ctx.strokeRect(-s/2, -s/2, s, s);
-      ctx.strokeStyle = tr.color; ctx.lineWidth = 1;
-      ctx.globalAlpha = 0.85;
-      for (let i = 1; i < 5; i++) {
-        const o = -s/2 + (s/5)*i;
-        ctx.beginPath(); ctx.moveTo(o, -s/2); ctx.lineTo(o, s/2); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-s/2, o); ctx.lineTo(s/2, o); ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = '#8fa4b2';
-      for (const [sx, sy] of [[-1,-1],[1,-1],[-1,1],[1,1]]) {
-        ctx.fillRect(sx*s/2 - 2, sy*s/2 - 2, 4, 4);
-      }
-      ctx.fillStyle = tr.color;
-      ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill();
-    }
-    ctx.restore();
-  }
-}
-
-// Item symbols are drawn rather than typed: a device font may not carry »/◆/⚡,
-// and shapes stay crisp at this size.
-function drawItemGlyph(g, type, s, color) {
-  const u = s / 2;
-  g.fillStyle = color; g.strokeStyle = color;
-  g.lineWidth = Math.max(1, s * 0.15);
-  g.lineCap = 'round'; g.lineJoin = 'round';
-  if (type === 'speed') {                     // double chevron
-    for (const off of [-u * 0.5, u * 0.25]) {
-      g.beginPath();
-      g.moveTo(off - u * 0.25, -u * 0.6);
-      g.lineTo(off + u * 0.45, 0);
-      g.lineTo(off - u * 0.25, u * 0.6);
-      g.stroke();
-    }
-  } else if (type === 'strength') {            // flexed arm
-    g.beginPath();
-    g.moveTo(-u * 0.75, u * 0.55); g.lineTo(-u * 0.2, u * 0.55);
-    g.lineTo(u * 0.25, -u * 0.1);  g.lineTo(u * 0.75, -u * 0.55);
-    g.stroke();
-    g.beginPath(); g.arc(u * 0.75, -u * 0.55, u * 0.26, 0, Math.PI * 2); g.fill();
-    g.beginPath(); g.arc(-u * 0.75, u * 0.55, u * 0.24, 0, Math.PI * 2); g.fill();
-  } else if (type === 'shield') {
-    g.beginPath();
-    g.moveTo(0, -u * 0.92);
-    g.lineTo(u * 0.78, -u * 0.5);
-    g.lineTo(u * 0.56, u * 0.42);
-    g.lineTo(0, u * 0.95);
-    g.lineTo(-u * 0.56, u * 0.42);
-    g.lineTo(-u * 0.78, -u * 0.5);
-    g.closePath(); g.fill();
-  } else if (type === 'haste') {               // lightning bolt
-    g.beginPath();
-    g.moveTo(u * 0.32, -u * 0.95);
-    g.lineTo(-u * 0.6, u * 0.12);
-    g.lineTo(-u * 0.08, u * 0.12);
-    g.lineTo(-u * 0.32, u * 0.95);
-    g.lineTo(u * 0.62, -u * 0.18);
-    g.lineTo(u * 0.08, -u * 0.18);
-    g.closePath(); g.fill();
-  } else if (type === 'heal') {                // cross
-    const t = u * 0.3;
-    g.fillRect(-t, -u * 0.88, t * 2, u * 1.76);
-    g.fillRect(-u * 0.88, -t, u * 1.76, t * 2);
-  } else {
-    g.beginPath(); g.arc(0, 0, u * 0.5, 0, Math.PI * 2); g.fill();
+    const cv = trapSprite(tr.type, tr.w, tr.state === 'arming');
+    if (cv) ctx.drawImage(cv, Math.round(tr.x) - 2, Math.round(tr.y) - 2);
   }
 }
 
@@ -1220,50 +1083,37 @@ function drawItems(items) {
   const now = performance.now();
   for (const it of items) {
     const s = it.w;
-    const cx = it.x + s / 2, cy = it.y + s / 2 + Math.sin(now/300 + it.x)*2;
+    const bob = Math.sin(now / 300 + it.x) * 2;
+    const cx = it.x + s / 2, cy = it.y + s / 2 + bob;
     ctx.save();
-    ctx.globalAlpha = 0.30; ctx.fillStyle = it.color;
-    ctx.beginPath(); ctx.arc(cx, cy, s*0.8, 0, Math.PI*2); ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.translate(cx, cy);
-    // Gem casing, then the symbol punched out of it in near-black.
-    ctx.rotate(Math.PI/4);
-    ctx.fillStyle = '#0d0d18'; ctx.fillRect(-s*0.42, -s*0.42, s*0.84, s*0.84);
-    ctx.fillStyle = it.color;   ctx.fillRect(-s*0.36, -s*0.36, s*0.72, s*0.72);
-    ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.fillRect(-s*0.36, -s*0.36, s*0.72, s*0.18);
-    ctx.rotate(-Math.PI/4);
-    drawItemGlyph(ctx, it.type, s * 0.72, '#0a0a14');
+    ctx.globalAlpha = 0.28; ctx.fillStyle = it.color;
+    ctx.beginPath(); ctx.arc(cx, cy, s * 0.8, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
+    const cv = itemSprite(it.type, it.color);
+    if (cv) ctx.drawImage(cv, Math.round(it.x), Math.round(it.y + bob));
   }
 }
 
 function drawCoins(coins) {
   const now = performance.now();
   for (const c of coins) {
-    const cx = c.x + c.w/2, cy = c.y + c.h/2;
-    // Flatten and unflatten so they look like spinning discs.
-    const spin = Math.abs(Math.cos(now/260 + c.x));
+    // Each coin spins from its own phase so a scattered pile does not pulse in
+    // lockstep, and blinks out over its last seconds.
+    const frame = Math.floor(now / 70 + c.x * 0.7) & 7;
+    const blink = c.fading && Math.sin(now / 110) < -0.2;
     ctx.save();
-    if (c.fading && Math.sin(now/110) < -0.2) ctx.globalAlpha = 0.35;
-    ctx.globalAlpha *= 0.9;
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.beginPath(); ctx.ellipse(cx, cy + c.h*0.45, c.w*0.4, 1.6, 0, 0, Math.PI*2); ctx.fill();
-    ctx.globalAlpha = c.fading && Math.sin(now/110) < -0.2 ? 0.4 : 1;
-    ctx.fillStyle = '#8a5f10';
-    ctx.beginPath(); ctx.ellipse(cx, cy, Math.max(1, c.w*0.44*spin), c.h*0.44, 0, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = PAL.coin;
-    ctx.beginPath(); ctx.ellipse(cx, cy - 0.6, Math.max(0.8, c.w*0.36*spin), c.h*0.36, 0, 0, Math.PI*2); ctx.fill();
-    if (spin > 0.55) {
-      ctx.fillStyle = '#fff3b0';
-      ctx.fillRect(Math.round(cx - 1), Math.round(cy - 2), 1, 3);
-    }
+    if (blink) ctx.globalAlpha = 0.35;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(Math.round(c.x) + 2, Math.round(c.y) + c.h - 1, c.w - 4, 2);
+    const cv = coinSprite(frame);
+    if (cv) ctx.drawImage(cv, Math.round(c.x), Math.round(c.y));
     ctx.restore();
   }
 }
 
 // ── Inventory (drawn inside the HUD so it always fits, whatever the screen) ──
 const ITEM_COLOR = { speed:'#44ddee', strength:'#ff5544', shield:'#ffdd44', haste:'#aa66ff', heal:'#44ff66' };
-const INV_SLOT = 20, INV_GAP = 3, INV_X = 4, INV_Y = 44;
+const INV_SLOT = 22, INV_GAP = 3, INV_X = 4, INV_Y = 44;
 let itemSlotRects = [];   // HUD-space hit boxes for tap-to-use
 
 function drawItemBar(inv) {
@@ -1282,10 +1132,11 @@ function drawItemBar(inv) {
     ctx.fillRect(x, y, INV_SLOT, INV_SLOT);
     ctx.strokeStyle = col; ctx.lineWidth = 1;
     ctx.strokeRect(x + 0.5, y + 0.5, INV_SLOT - 1, INV_SLOT - 1);
-    ctx.save();
-    ctx.translate(x + INV_SLOT/2, y + INV_SLOT/2 - 1);
-    drawItemGlyph(ctx, type, INV_SLOT * 0.62, col);
-    ctx.restore();
+    const cv = itemSprite(type, ITEM_COLOR[type] || '#888');
+    if (cv) {
+      ctx.drawImage(cv, Math.round(x + (INV_SLOT - cv.width) / 2),
+                        Math.round(y + (INV_SLOT - cv.height) / 2));
+    }
     ctx.font = '7px "Courier New",monospace';
     ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
     ctx.fillStyle = '#8a8aa0';
@@ -1343,39 +1194,35 @@ const EFFECT_GLOW = { speed:'#44ddee', strength:'#ff5544', shield:'#ffdd44', has
 function drawPlayer(p, baseColor, label) {
   if (p.dead) return;
   const skinCol = getSkinColor(p, baseColor);
-  const c = p.hitFlash > 0 ? PAL.white : skinCol;
   const x = Math.round(p.x), y = Math.round(p.y);
-  // Active-effect aura
+
+  // Active-effect aura sits under the sprite.
   if (p.effects) {
     const active = Object.keys(p.effects).filter(k => p.effects[k] > 0);
     if (active.length) {
       const t = performance.now() / 200;
-      const glow = EFFECT_GLOW[active[0]] || '#ffffff';
       ctx.save();
-      ctx.globalAlpha = 0.25 + Math.sin(t)*0.1;
-      ctx.fillStyle = glow;
-      ctx.beginPath(); ctx.arc(x + p.w/2, y + p.h/2, p.w, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 0.25 + Math.sin(t) * 0.1;
+      ctx.fillStyle = EFFECT_GLOW[active[0]] || '#ffffff';
+      ctx.beginPath(); ctx.arc(x + p.w / 2, y + p.h / 2, p.w, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
   }
-  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(x+1,y+p.h,p.w-2,2);
-  ctx.fillStyle = c; ctx.fillRect(x+1,y+11,4,5); ctx.fillRect(x+7,y+11,4,5);
-  ctx.fillRect(x,y+5,p.w,7);
-  ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.fillRect(x,y+5,p.w,2);
-  ctx.fillStyle=c; ctx.fillRect(x+1,y,p.w-2,5);
-  ctx.fillStyle=PAL.white; ctx.fillRect(p.facing===1?x+8:x+2,y+1,2,2);
-  drawHatOn(ctx, x, y, skinCol, p.skin?.hatIdx);
-  drawNametag(x+p.w/2, y-9, label, skinCol);
+  ctx.fillStyle = 'rgba(0,0,0,0.32)';
+  ctx.fillRect(x + 1, y + p.h, p.w - 2, 2);
+
+  const cv = playerSprite(skinCol, p.skin?.hatIdx || 0, p.facing, p.hitFlash > 0);
+  if (cv) ctx.drawImage(cv, x, y - PLAYER_PAD);
+
+  drawNametag(x + p.w / 2, y - 9, label, skinCol);
   drawWeaponSprite(p, x, y);
+
   if (p.parryActive) {
     const t = performance.now() / 60;
     ctx.save();
-    ctx.strokeStyle = '#66ccff';
-    ctx.lineWidth = 1.5;
-    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = '#66ccff'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.85;
     ctx.beginPath(); ctx.arc(x + p.w/2, y + p.h/2, p.w + 3, 0, Math.PI*2); ctx.stroke();
-    ctx.strokeStyle = '#cceeff';
-    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = '#cceeff'; ctx.globalAlpha = 0.5;
     ctx.beginPath(); ctx.arc(x + p.w/2, y + p.h/2, p.w + 1 + Math.sin(t)*1.5, 0, Math.PI*2); ctx.stroke();
     ctx.restore();
   }
@@ -1406,8 +1253,8 @@ function drawWeaponSprite(p, px, py) {
   const hy = py + 8;
   const prog = p.swingTimer > 0 ? 1 - Math.min(1, p.swingTimer / 200) : -1;
   const u = upgScale(p.upg);
-  // Range upgrades lengthen the weapon itself, so the thing in your hand shows
-  // the reach you paid for.
+  // Range upgrades lengthen the weapon itself, quantised so the sprite cache
+  // does not grow a new bitmap for every possible level combination.
   const scale = 1 + u.rng * 0.045;
 
   ctx.save();
@@ -1426,15 +1273,15 @@ function drawWeaponSprite(p, px, py) {
 
   // A damage-upgraded weapon carries a hot sheen along its length.
   if (u.dmg >= 2) {
-    const art = WEAPON_ART[wId];
+    const box = WEAPON_ART[wId].box;
     ctx.save();
     ctx.globalAlpha = Math.min(0.5, 0.1 + u.dmg * 0.035);
     ctx.fillStyle = u.dmg >= 7 ? '#ffd8a0' : '#ffffff';
-    ctx.fillRect(art.box.x * scale, -1.2 * scale, art.box.w * scale, 2.4 * scale);
+    ctx.fillRect(box.x * scale, -1.2 * scale, box.w * scale, 2.4 * scale);
     ctx.restore();
   }
 
-  drawWeaponArt(ctx, wId, scale, wc, true);
+  drawWeaponPixels(ctx, wId, scale, wc);
 
   // Range trim: a notch per level on the grip, a visible tally of the upgrade.
   if (u.rng) {
@@ -1448,139 +1295,94 @@ function drawWeaponSprite(p, px, py) {
 
 // Each monster type gets its own silhouette and palette, so what a thing is — and
 // roughly how hard it hits — is readable at a glance, not just from its size.
-const MONSTER_LOOK = {
-  grunt:    { body:'#44cc44', dark:'#256d25', eye:'#ff2222', eyes:2 },
-  runner:   { body:'#c8e04a', dark:'#7d8c22', eye:'#ff5522', eyes:1 },
-  brute:    { body:'#cc5533', dark:'#7a2a16', eye:'#ffdd44', eyes:2 },
-  spitter:  { body:'#a65cd0', dark:'#5c2b78', eye:'#d6ff5c', eyes:3 },
-  warden:   { body:'#7f93b8', dark:'#3d4a63', eye:'#8ee8ff', eyes:2 },
-  behemoth: { body:'#8a3a6a', dark:'#4a1938', eye:'#ff4466', eyes:4 },
-};
-
 function drawMonster(m) {
-  const look = MONSTER_LOOK[m.type] || MONSTER_LOOK.grunt;
-  const flash = m.hitFlash > 0;
-  const body = flash ? PAL.white : (m.slowed ? '#39a7b0' : look.body);
-  const dark = flash ? '#cccccc' : (m.slowed ? '#1d6a72' : look.dark);
+  const type = m.type || 'grunt';
+  const state = m.hitFlash > 0 ? 'flash' : (m.slowed ? 'slow' : 'base');
   const x = Math.round(m.x), y = Math.round(m.y);
-  const w = m.w, h = m.h;
-  const head = Math.max(4, Math.round(h * 0.32));
-  const eye = Math.max(2, Math.round(w * 0.17));
-  const now = performance.now();
 
-  ctx.save();
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.fillRect(x + 1, y + h, w - 2, 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.32)';
+  ctx.fillRect(x + 1, y + m.h, m.w - 2, 2);
 
-  if (m.type === 'runner') {
-    // Lean and forward-leaning, with speed streaks trailing it.
-    ctx.globalAlpha = 0.28; ctx.strokeStyle = body; ctx.lineWidth = 1;
-    for (let i = 0; i < 3; i++) {
-      const oy = y + head + i * Math.max(2, h * 0.22);
-      ctx.beginPath(); ctx.moveTo(x - 3 - i, oy); ctx.lineTo(x - 8 - i * 2, oy); ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = dark;
-    ctx.fillRect(x + 1, y + h - 3, 2, 3); ctx.fillRect(x + w - 3, y + h - 3, 2, 3);
-    ctx.fillStyle = body;
-    ctx.fillRect(x + 1, y + head - 1, w - 2, h - head - 1);
-    ctx.fillRect(x, y, w, head);
-    ctx.fillStyle = dark; ctx.fillRect(x + 1, y + head - 1, w - 2, 1);
-  } else if (m.type === 'brute') {
-    // Squat and wide, with a heavy brow and tusks.
-    ctx.fillStyle = body;
-    ctx.fillRect(x - 1, y + head - 1, w + 2, h - head + 1);
-    ctx.fillRect(x, y, w, head);
-    ctx.fillStyle = dark;
-    ctx.fillRect(x - 2, y + head, 3, Math.max(3, h * 0.4));            // shoulders
-    ctx.fillRect(x + w - 1, y + head, 3, Math.max(3, h * 0.4));
-    ctx.fillRect(x, y, w, Math.max(2, head * 0.45));                    // brow
-    ctx.fillStyle = '#efe6d2';
-    ctx.fillRect(x + 2, y + head, 2, 2); ctx.fillRect(x + w - 4, y + head, 2, 2);  // tusks
-  } else if (m.type === 'spitter') {
-    // Bulbous sac of a head above a narrow body, venting when it has a shot ready.
-    ctx.fillStyle = body;
-    ctx.fillRect(x + 2, y + head, w - 4, h - head);
-    ctx.beginPath();
-    ctx.ellipse(x + w / 2, y + head * 0.75, w * 0.58, head * 0.95, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = dark;
-    ctx.beginPath();
-    ctx.ellipse(x + w / 2, y + head * 1.15, w * 0.34, head * 0.42, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 0.45 + Math.sin(now / 180) * 0.25;
-    ctx.fillStyle = '#d6ff5c';
-    ctx.fillRect(x + Math.round(w / 2) - 1, y + head + 1, 2, 2);
-    ctx.globalAlpha = 1;
-  } else if (m.type === 'warden') {
-    // Plated: overlapping armour bands and a raised shield face.
-    ctx.fillStyle = body;
-    ctx.fillRect(x + 1, y + head - 1, w - 2, h - head + 1);
-    ctx.fillRect(x, y, w, head);
-    ctx.fillStyle = dark;
-    for (let i = 0; i < 3; i++) {
-      ctx.fillRect(x + 1, y + head + i * Math.max(2, (h - head) / 3), w - 2, 1);
-    }
-    ctx.fillStyle = '#c9d7ea';
-    ctx.fillRect(x - 2, y + head - 1, 3, Math.max(4, (h - head) * 0.8));   // shield
-    ctx.fillStyle = dark;
-    ctx.fillRect(x - 2, y + head - 1, 3, 1);
-  } else if (m.type === 'behemoth') {
-    // Huge, horned, with molten cracks and a slow pulse.
-    ctx.fillStyle = body;
-    ctx.fillRect(x - 1, y + head - 1, w + 2, h - head + 1);
-    ctx.fillRect(x, y, w, head);
-    ctx.fillStyle = dark;
-    ctx.fillRect(x - 2, y + head, 3, Math.max(4, h * 0.45));
-    ctx.fillRect(x + w - 1, y + head, 3, Math.max(4, h * 0.45));
-    // Horns
-    ctx.beginPath();
-    ctx.moveTo(x + 1, y); ctx.lineTo(x - 2, y - Math.max(3, head * 0.8)); ctx.lineTo(x + 4, y);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(x + w - 1, y); ctx.lineTo(x + w + 2, y - Math.max(3, head * 0.8)); ctx.lineTo(x + w - 4, y);
-    ctx.fill();
-    ctx.globalAlpha = 0.5 + Math.sin(now / 260) * 0.3;
-    ctx.strokeStyle = '#ff7744'; ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x + w * 0.3, y + head); ctx.lineTo(x + w * 0.5, y + h * 0.6); ctx.lineTo(x + w * 0.35, y + h - 2);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-  } else {
-    // Grunt: the original blob.
-    ctx.fillStyle = body;
-    ctx.fillRect(x + 1, y + head - 1, w - 2, h - head + 1);
-    ctx.fillRect(x, y, w, head);
-    ctx.fillRect(x - 1, y + 1, 2, 3); ctx.fillRect(x + w - 1, y + 1, 2, 3);
-    ctx.fillStyle = 'rgba(0,0,0,0.22)';
-    ctx.fillRect(x + 1, y + head - 1, w - 2, 2);
+  const cv = monsterSprite(type, m.w, m.h, state);
+  if (cv) {
+    const pad = monsterPad(m.w, m.h);
+    ctx.drawImage(cv, x - pad, y - pad);
   }
+  drawMonsterArms(m, x, y);
 
-  // Eyes: count is part of the type's identity.
-  ctx.fillStyle = flash ? '#ff8888' : look.eye;
-  const ey = y + Math.max(1, Math.round(head * 0.3));
-  if (look.eyes === 1) {
-    ctx.fillRect(x + Math.round(w * 0.5 - eye * 0.7), ey, Math.round(eye * 1.4), eye);
-  } else if (look.eyes === 3) {
-    ctx.fillRect(x + Math.round(w * 0.22), ey, eye, eye);
-    ctx.fillRect(x + Math.round(w * 0.5 - eye / 2), ey - 1, eye, eye);
-    ctx.fillRect(x + Math.round(w * 0.78 - eye), ey, eye, eye);
-  } else if (look.eyes === 4) {
-    for (const ox of [0.18, 0.38, 0.58, 0.78]) ctx.fillRect(x + Math.round(w * ox), ey, eye, eye);
-  } else {
-    ctx.fillRect(x + Math.round(w * 0.2), ey, eye, eye);
-    ctx.fillRect(x + Math.round(w * 0.8 - eye), ey, eye, eye);
-  }
-  ctx.restore();
-
-  drawHpBar(x - 1, y - 5, w + 2, 2, m.hp / m.maxHp, '#44ff44', '#003300');
-  // Armoured types get a marker on the bar, since their health bar drains slowly.
+  drawHpBar(x - 1, y - 5, m.w + 2, 2, m.hp / m.maxHp, '#44ff44', '#003300');
+  // Armoured types get a marker on the bar, since their health drains slowly.
   if (m.armor > 0) {
     ctx.fillStyle = '#c9d7ea';
-    ctx.fillRect(x - 1, y - 8, Math.max(2, Math.round((w + 2) * m.armor)), 2);
+    ctx.fillRect(x - 1, y - 8, Math.max(2, Math.round((m.w + 2) * m.armor)), 2);
   }
 }
 function drawMonsters(ms) { for(const m of ms) drawMonster(m); }
+
+// What each monster carries and how it uses it. `size` is the weapon's scale per
+// 12px of monster height, `rest` the idle tilt (negative = raised), and `move`
+// the attack animation: chop/slam arc over, stab/thrust lunge forward, cast
+// recoils like a shot.
+const MONSTER_ARMS = {
+  grunt:    { art: 'm_club',     color: '#7a5230', size: 0.75, rest: -0.5,  move: 'chop'   },
+  runner:   { art: 'm_shiv',     color: '#b3ad98', size: 0.8,  rest:  0.3,  move: 'stab'   },
+  brute:    { art: 'm_maul',     color: '#8a867c', size: 0.66, rest: -1.0,  move: 'slam'   },
+  spitter:  { art: 'm_venom',    color: '#8ee04a', size: 0.68, rest: -1.15, move: 'cast'   },
+  warden:   { art: 'm_pike',     color: '#c9d4e2', size: 0.6,  rest: -0.85, move: 'thrust', shield: '#7f93b8' },
+  behemoth: { art: 'm_greataxe', color: '#b3203a', size: 0.64, rest: -1.05, move: 'slam'   },
+};
+// Weapons grow slower than bodies, so a giant's axe stays a weapon, not scenery.
+const monsterArmScale = (h, size) => Math.max(0.5, Math.round(Math.pow(h / 12, 0.65) * size * 10) / 10);
+const MONSTER_SWING_MS = 320;   // mirrors the server
+
+// Attack angle offset for a swing `prog` 0..1: a short wind-up, a fast strike
+// past the rest pose, then a slower recovery.
+function monsterSwingAngle(prog, amp) {
+  if (prog < 0.18) return -amp * 0.55 * (prog / 0.18);
+  if (prog < 0.38) return -amp * 0.55 + amp * 1.55 * ((prog - 0.18) / 0.2);
+  return amp * (1 - (prog - 0.38) / 0.62);
+}
+
+function drawMonsterArms(m, x, y) {
+  const arms = MONSTER_ARMS[m.type || 'grunt'];
+  if (!arms) return;
+  const d = m.face === -1 ? -1 : 1;
+  // Weapons scale with the body, quantised so the sprite cache stays small.
+  const scale = monsterArmScale(m.h, arms.size);
+  const prog = m.swing > 0 ? 1 - Math.min(1, m.swing / MONSTER_SWING_MS) : -1;
+  const bob = Math.sin(performance.now() / 280 + (Number(m.id) || 0)) * 0.05;
+  const flash = m.hitFlash > 0 ? '#ffffff' : arms.color;
+
+  // The warden's shield rides on its front, with the pike held over it.
+  if (arms.shield) {
+    ctx.save();
+    ctx.translate(Math.round(x + m.w / 2 + d * m.w * 0.38), Math.round(y + m.h * 0.6));
+    ctx.scale(d, 1);
+    if (prog >= 0) ctx.translate(Math.sin(prog * Math.PI) * 1.5, 0);   // shield bash
+    drawWeaponPixels(ctx, 'm_shield', monsterArmScale(m.h, 0.8),
+                     m.hitFlash > 0 ? '#ffffff' : arms.shield);
+    ctx.restore();
+  }
+
+  ctx.save();
+  const hx = arms.shield ? x + m.w / 2 + d * m.w * 0.2 : (d === 1 ? x + m.w - 1 : x + 1);
+  ctx.translate(Math.round(hx), Math.round(y + m.h * (arms.shield ? 0.5 : 0.55)));
+  ctx.scale(d, 1);
+  let ang = arms.rest + bob;
+  if (prog >= 0) {
+    const kick = Math.sin(prog * Math.PI);
+    switch (arms.move) {
+      case 'chop':   ang += monsterSwingAngle(prog, 1.3); break;
+      case 'slam':   ang += monsterSwingAngle(prog, 1.9); break;
+      case 'stab':   ctx.translate(kick * m.w * 0.5, 0); ang = arms.rest * (1 - kick); break;
+      case 'thrust': ctx.translate(kick * m.w * 0.6, 0); ang = arms.rest * (1 - kick); break;
+      case 'cast':   ctx.translate(-kick * 2, 0); ang -= kick * 0.35; break;
+    }
+  }
+  ctx.rotate(ang);
+  drawWeaponPixels(ctx, arms.art, scale, flash);
+  ctx.restore();
+}
 
 // ─── Projectiles ──────────────────────────────────────────────────────────────
 
@@ -1987,7 +1789,7 @@ function drawWeaponPanel(state) {
     }
     ctx.save();
     ctx.globalAlpha = sel ? 1 : 0.42;   // unselected slots dim, but still readable
-    drawWeaponFitted(ctx, wId, sx + slotW/2, sy + 8.5, slotW - 4, 13, wc, false);
+    drawWeaponPixelsFitted(ctx, wId, sx + slotW/2, sy + 8.5, slotW - 4, 13, wc);
     ctx.restore();
     ctx.save();
     ctx.font='7px "Courier New",monospace'; ctx.textBaseline='bottom'; ctx.textAlign='center';
@@ -2048,5 +1850,5 @@ function drawUnlockPreview(ux, weaponId) {
   ux.beginPath(); ux.arc(W/2, H/2, 34, 0, Math.PI*2); ux.fill();
   ux.restore();
   ux.strokeStyle=wc; ux.lineWidth=1; ux.strokeRect(2.5,2.5,W-5,H-5);
-  drawWeaponFitted(ux, weaponId, W/2, H/2, W-22, H-22, wc, true);
+  drawWeaponPixelsFitted(ux, weaponId, W/2, H/2, W-22, H-22, wc);
 }
