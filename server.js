@@ -23,6 +23,10 @@ const ARENA_X = 12, ARENA_Y = 12;
 const ARENA_W = CANVAS_W - ARENA_X * 2, ARENA_H = CANVAS_H - ARENA_Y * 2;
 const TICK_MS = 20;
 
+// Dev hook: start co-op/waves at a later wave so the deep-wave monster roster can
+// be exercised without playing there first. Unset in production.
+const START_WAVE = Math.max(1, Math.floor(Number(process.env.WEPONARE_START_WAVE) || 1));
+
 const ADMIN_PASSWORD = '67892155';
 const ADMIN_XP = 1000000000000000000; // 1e18 — unlocks everything
 const ADMIN_COINS = 999999999;
@@ -118,6 +122,59 @@ function costTable() {
     for (let lv = 1; lv <= UPGRADE_STATS[k].max; lv++) out[k].push(upgradeCost(k, lv));
   }
   return out;
+}
+
+// ── Monster types ──
+// Each type is a multiplier set over the wave's base stats, so a monster's size
+// follows its health and its punch follows its damage. `minWave` gates when a
+// type starts appearing and `weight` is its spawn share, which is re-weighted
+// toward the tougher types the deeper the wave (see pickMonsterType).
+const MONSTER_TYPES = {
+  grunt: {
+    name: 'GRUNT',    minWave: 1,  weight: 10, hp: 1.0,  dmg: 1.0, speed: 1.0,  size: 1.0,
+    color: '#44cc44', xp: 1.0, coins: 1.0,
+  },
+  runner: {
+    name: 'RUNNER',   minWave: 2,  weight: 7,  hp: 0.55, dmg: 0.7, speed: 2.0,  size: 0.8,
+    color: '#c8e04a', xp: 1.0, coins: 1.0,
+  },
+  brute: {
+    name: 'BRUTE',    minWave: 3,  weight: 5,  hp: 2.4,  dmg: 1.9, speed: 0.62, size: 1.35,
+    color: '#cc5533', xp: 1.15, coins: 1.2,
+  },
+  spitter: {
+    name: 'SPITTER',  minWave: 5,  weight: 4,  hp: 0.9,  dmg: 1.0, speed: 0.75, size: 1.0,
+    color: '#a65cd0', xp: 1.2, coins: 1.3,
+    ranged: true, shotRange: 210, shotSpeed: 3.4, reload: 2100,
+  },
+  warden: {
+    name: 'WARDEN',   minWave: 7,  weight: 3,  hp: 3.2,  dmg: 1.6, speed: 0.7,  size: 1.25,
+    color: '#7f93b8', xp: 1.4, coins: 1.5, armor: 0.42,
+  },
+  behemoth: {
+    name: 'BEHEMOTH', minWave: 10, weight: 2,  hp: 7.0,  dmg: 2.8, speed: 0.5,  size: 1.9,
+    color: '#8a3a6a', xp: 2.2, coins: 2.4, armor: 0.2,
+  },
+};
+
+// Pick a type for the current wave. Eligible types are weighted by their own
+// share, then biased upward with the wave number, so late waves lean on the
+// tougher roster instead of still being mostly grunts.
+function pickMonsterType(wave) {
+  const pool = [];
+  let total = 0;
+  for (const [id, def] of Object.entries(MONSTER_TYPES)) {
+    if (wave < def.minWave) continue;
+    // The further past a type's debut, the more it crowds out the weaker ones.
+    const maturity = 1 + Math.min(2.2, (wave - def.minWave) * 0.16);
+    const toughness = Math.max(1, def.hp);
+    pool.push([id, def.weight * maturity * Math.pow(toughness, Math.min(1.1, wave * 0.045))]);
+    total += pool[pool.length - 1][1];
+  }
+  if (!pool.length) return 'grunt';
+  let roll = Math.random() * total;
+  for (const [id, w] of pool) { roll -= w; if (roll <= 0) return id; }
+  return pool[pool.length - 1][0];
 }
 
 const WAVE_CONFIG = [
@@ -309,6 +366,7 @@ const room = {
   traps: [],
   items: [],
   coins: [],
+  seenTypes: new Set(),
   trapSpawnTimer: TRAP_SPAWN_MIN,
   itemSpawnTimer: ITEM_SPAWN_MIN,
   wave: emptyWave(),
@@ -355,6 +413,15 @@ function playerKeyOf(t) {
 // they are neither a target nor an obstacle for attacks and auto-aim.
 function enemyTargets(pKey) {
   const out = [];
+  // Monster fire only ever threatens players — a spitter must not mow down the
+  // pack it spawned with.
+  if (pKey === 'monster') {
+    for (const k of ['p1', 'p2']) {
+      const p = room.players[k];
+      if (p && !p.dead) out.push(p);
+    }
+    return out;
+  }
   for (const k of ['p1', 'p2']) {
     if (k === pKey) continue;
     if (room.gameMode === 'coop' && (pKey === 'p1' || pKey === 'p2')) continue;
@@ -463,7 +530,8 @@ function spawnItem() {
 // ── Coins ──
 function coinsForKill(target, isPlayer) {
   if (isPlayer) return 10;
-  return 2 + Math.floor((target.maxHp || 30) / 30);
+  const def = MONSTER_TYPES[target.type] || MONSTER_TYPES.grunt;
+  return Math.max(1, Math.round((2 + Math.floor((target.maxHp || 30) / 30)) * (def.coins || 1)));
 }
 
 function dropCoins(x, y, total) {
@@ -503,15 +571,39 @@ function broadcast(msg) {
 }
 
 function spawnMonster() {
-  // HP grows with both the wave config multiplier and the wave number reached
-  // (so monsters keep getting tankier in co-op and waves the further you go).
-  const waveBonus = 1 + Math.max(0, room.wave.num - 1) * 0.12;
-  const hp = Math.round(30 * room.waveHpMult * waveBonus);
+  const type = pickMonsterType(room.wave.num);
+  const def = MONSTER_TYPES[type];
 
-  // Size scales with max HP (capped so they stay playable).
-  const sizeScale = Math.min(2.6, 1 + (hp - 30) / 130);
-  const w = Math.round(10 * sizeScale);
-  const h = Math.round(12 * sizeScale);
+  // Call out a type the first time it appears in this run.
+  if (!room.seenTypes.has(type)) {
+    room.seenTypes.add(type);
+    if (room.wave.num > 1) {
+      room.particles.push({
+        type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
+        text: def.name + 'S INCOMING', color: def.color, timer: 2200, max: 2200,
+      });
+    }
+  }
+
+  // Base health grows with the wave config multiplier and the wave reached, then
+  // the type's own multiplier is applied on top.
+  const waveBonus = 1 + Math.max(0, room.wave.num - 1) * 0.12;
+  const hp = Math.max(1, Math.round(30 * room.waveHpMult * waveBonus * def.hp));
+
+  // Bulk follows health, but on a flattening curve inside hard limits: deep waves
+  // should still read as their type rather than filling the arena, so growth tops
+  // out at 1.7x and the type's own shape factor does the rest.
+  const baseHp = hp / def.hp;                                     // this wave's baseline
+  const waveGrowth = Math.min(1.7, Math.pow(Math.max(1, baseHp / 30), 0.28));
+  const sizeScale = Math.max(0.6, Math.min(2.7, def.size * waveGrowth));
+  const w = Math.max(6, Math.round(10 * sizeScale));
+  const h = Math.max(8, Math.round(12 * sizeScale));
+
+  // Damage follows the same shape — bulk, then type, then a slow wave ramp — and
+  // is capped so even a late behemoth cannot one-shot a full-health player.
+  const waveDmg = Math.min(1.8, 1 + Math.max(0, room.wave.num - 1) * 0.025);
+  const atkDamage = Math.max(1, Math.min(45,
+    Math.round(8 * (1 + (sizeScale - 1) * 0.7) * def.dmg * waveDmg)));
 
   // Spawn on a wall, fully inside the floor, and not on top of a player.
   const minX = ARENA_X + 2, maxX = ARENA_X + ARENA_W - w - 2;
@@ -530,17 +622,42 @@ function spawnMonster() {
 
   room.monsters.push({
     id: nextId(),
+    type,
     x: mx, y: my, w, h,
     hp, maxHp: hp,
-    speed: (0.72 / (1 + (sizeScale - 1) * 0.35)) * room.waveSpeedMult, // bigger = a bit slower
+    // Bigger is slower, then the type's own pace on top.
+    speed: (0.72 / (1 + (sizeScale - 1) * 0.35)) * def.speed * room.waveSpeedMult,
     atkCooldown: 0,
-    atkRange: 8 + w * 0.5,
-    atkDamage: Math.round(8 * (1 + (sizeScale - 1) * 0.7)),
+    atkRange: def.ranged ? def.shotRange : 8 + w * 0.5,
+    atkDamage,
+    armor: def.armor || 0,
+    ranged: !!def.ranged,
     hitFlash: 0,
     invincible: 0,
     slowTimer: 0,
     pull: null,
     dead: false,
+  });
+}
+
+// A spitter keeps its distance and lobs corrosive shots instead of closing in.
+function monsterShoot(m, target) {
+  const def = MONSTER_TYPES[m.type];
+  const ang = Math.atan2(cy(target) - cy(m), cx(target) - cx(m));
+  const sp = def.shotSpeed || 3.4;
+  room.projectiles.push({
+    id: nextId(),
+    x: cx(m), y: cy(m),
+    dx: Math.cos(ang) * sp,
+    dy: Math.sin(ang) * sp,
+    damage: m.atkDamage,
+    owner: 'monster',
+    traveled: 0,
+    maxRange: def.shotRange || 210,
+    weaponId: 'spit',
+    isAoe: false, aoeRadius: 0,
+    pierce: false, grapple: false, boomerang: false, teleport: false,
+    returning: false, life: 0, hitTargets: null,
   });
 }
 
@@ -563,6 +680,7 @@ function startWave(num) {
 }
 
 function clearField() {
+  room.seenTypes   = new Set();
   room.monsters    = [];
   room.projectiles = [];
   room.particles   = [];
@@ -588,7 +706,7 @@ function startGame() {
   room.unlockQueues = { p1: [], p2: [] };
   room.wave = emptyWave();
   room.gameState = 'GAMEPLAY';
-  if (room.gameMode !== 'pvp') startWave(1);
+  if (room.gameMode !== 'pvp') startWave(START_WAVE);
 }
 
 function resetToLobby() {
@@ -608,6 +726,8 @@ function applyDamage(target, dmg, attackerKey) {
     return;
   }
   if (room.gameMode === 'coop' && target.num && (attackerKey === 'p1' || attackerKey === 'p2')) return;
+  // Armoured monsters shrug off a share of every hit, but never all of it.
+  if (target.armor) dmg = Math.max(1, Math.round(dmg * (1 - target.armor)));
   target.hp -= dmg;
   target.hitFlash  = 200;
   target.invincible = target.num ? 500 : 300;
@@ -617,8 +737,12 @@ function applyDamage(target, dmg, attackerKey) {
 function handleKill(target, attackerKey) {
   const isPlayer = !!target.num;
   let baseGain = isPlayer ? 15 : 6;
-  // Bigger (tankier) monsters reward more XP, scaled by their max HP over the base 30.
-  if (!isPlayer) baseGain = Math.round(baseGain * Math.max(1, (target.maxHp || 30) / 30));
+  // Bigger (tankier) monsters reward more XP, scaled by their max HP over the base
+  // 30, then again by how dangerous their type is.
+  if (!isPlayer) {
+    const def = MONSTER_TYPES[target.type] || MONSTER_TYPES.grunt;
+    baseGain = Math.round(baseGain * Math.max(1, (target.maxHp || 30) / 30) * (def.xp || 1));
+  }
   const xpGain = room.gameMode === 'waves' ? baseGain * 2 : baseGain;
 
   // Credit XP to attacking player
@@ -833,23 +957,36 @@ setInterval(() => {
     if (m.invincible  > 0) m.invincible  -= dt;
 
     if (nearest) {
+      const def = MONSTER_TYPES[m.type] || MONSTER_TYPES.grunt;
       const dx = cx(nearest) - cx(m), dy = cy(nearest) - cy(m);
       const dist = Math.hypot(dx, dy) || 1;
-      const reach = m.atkRange + (nearest.w + nearest.h) / 4;
-      if (dist > reach) {
-        const spd = m.speed * (m.slowTimer > 0 ? 0.4 : 1);
-        m.x += (dx / dist) * spd * factor;
-        m.y += (dy / dist) * spd * factor;
-      }
-      if (dist <= reach + 4 && m.atkCooldown <= 0) {
-        if (nearest.parryTimer > 0) {
-          // Parried: reflect the blow back onto the monster
-          applyDamage(m, Math.round(m.atkDamage * PARRY_REFLECT) + 10, playerKeyOf(nearest));
-          spawnParrySpark(cx(nearest), cy(nearest));
-        } else {
-          applyDamage(nearest, m.atkDamage, 'monster');
+      const spd = m.speed * (m.slowTimer > 0 ? 0.4 : 1);
+
+      if (m.ranged) {
+        // Hold a firing line: close if out of range, back off if crowded.
+        const want = m.atkRange * 0.7;
+        if (dist > want)            { m.x += (dx / dist) * spd * factor;       m.y += (dy / dist) * spd * factor; }
+        else if (dist < want * 0.6) { m.x -= (dx / dist) * spd * 0.8 * factor; m.y -= (dy / dist) * spd * 0.8 * factor; }
+        if (dist <= m.atkRange && m.atkCooldown <= 0) {
+          monsterShoot(m, nearest);
+          m.atkCooldown = def.reload || 2000;
         }
-        m.atkCooldown = 1200;
+      } else {
+        const reach = m.atkRange + (nearest.w + nearest.h) / 4;
+        if (dist > reach) {
+          m.x += (dx / dist) * spd * factor;
+          m.y += (dy / dist) * spd * factor;
+        }
+        if (dist <= reach + 4 && m.atkCooldown <= 0) {
+          if (nearest.parryTimer > 0) {
+            // Parried: reflect the blow back onto the monster
+            applyDamage(m, Math.round(m.atkDamage * PARRY_REFLECT) + 10, playerKeyOf(nearest));
+            spawnParrySpark(cx(nearest), cy(nearest));
+          } else {
+            applyDamage(nearest, m.atkDamage, 'monster');
+          }
+          m.atkCooldown = 1200;
+        }
       }
     }
 
@@ -1187,6 +1324,7 @@ function doAttack(p, pKey) {
       traveled: 0,
       maxRange: w.range,
       weaponId: w.id,
+      upg: p.upgrades?.[w.id] || null,
       isAoe: !!w.aoeRadius,
       aoeRadius: w.aoeRadius || 0,
       pierce: !!w.pierce,
@@ -1246,6 +1384,7 @@ function doSpecial(p, pKey) {
     traveled: 0,
     maxRange: sp.range,
     weaponId: w.id,
+    upg: p.upgrades?.[w.id] || null,
     special: true,
     isAoe: false,
     aoeRadius: 0,
@@ -1309,7 +1448,8 @@ function playerView(p) {
   return {
     x: r1(p.x), y: r1(p.y), w: p.w, h: p.h, hp: p.hp, maxHp: p.maxHp,
     lives: p.lives, facing: p.facing, weaponId: w.id, weaponIdx: p.weaponIdx,
-    atkSpd: w.atkSpd,
+    atkSpd: w.atkSpd, reach: w.range, wType: w.type,
+    upg: p.upgrades?.[w.id] || null,
     hitFlash: p.hitFlash, dead: p.dead, swingTimer: p.swingTimer,
     unlockedWeapons: p.unlockedWeapons, skin: p.skin,
     specialCd: Math.max(0, p.specialCooldown), specialMax: w.special?.cd || 0,
@@ -1328,9 +1468,11 @@ function buildStateMsg(playerNum) {
     gameMode: room.gameMode,
     playerNames: room.playerNames,
     players: { p1: playerView(room.players.p1), p2: playerView(room.players.p2) },
-    monsters:    room.monsters.map(m => ({ id: m.id, x: r1(m.x), y: r1(m.y), w: m.w, h: m.h, hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash, slowed: (m.slowTimer || 0) > 0 })),
+    monsters:    room.monsters.map(m => ({ id: m.id, type: m.type, x: r1(m.x), y: r1(m.y), w: m.w, h: m.h,
+                  hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash, slowed: (m.slowTimer || 0) > 0, armor: m.armor || 0 })),
     projectiles: room.projectiles.map(pr => ({ id: pr.id, x: r1(pr.x), y: r1(pr.y), dx: r1(pr.dx), dy: r1(pr.dy), weaponId: pr.weaponId,
-                  isAoe: pr.isAoe, special: !!pr.special, grapple: !!pr.grapple, hook: !!pr.hook, boomerang: !!pr.boomerang })),
+                  upg: pr.upg || null, isAoe: pr.isAoe, special: !!pr.special, grapple: !!pr.grapple,
+                  hook: !!pr.hook, boomerang: !!pr.boomerang })),
     chains:      buildChains().map(c => ({ x1: r1(c.x1), y1: r1(c.y1), x2: r1(c.x2), y2: r1(c.y2), kind: c.kind })),
     traps:       room.traps.map(tr => ({ x: r1(tr.x), y: r1(tr.y), w: tr.w, h: tr.h, type: tr.type, state: tr.state, radius: tr.radius, color: tr.color,
                   armRatio: tr.state === 'arming' ? r1(1 - tr.armTimer / (TRAP_TYPES[tr.type].armTime || 1)) : 0 })),

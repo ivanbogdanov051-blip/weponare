@@ -93,6 +93,61 @@ function readCredentials() {
   const pass = document.getElementById('passInput').value.trim();
   pendingName = raw  || 'PLAYER';
   pendingPass = pass || '';
+  // Remember the save slot so coins and upgrades are still reachable after a
+  // reload without having to retype the password.
+  lsSet('weponare_name', pendingName);
+  lsSet('weponare_pass', pendingPass);
+}
+
+// Restore the remembered slot and show what is banked against it.
+function restoreCredentials() {
+  const n = document.getElementById('nameInput'), pw = document.getElementById('passInput');
+  if (!n || !pw) return;
+  const savedName = lsGet('weponare_name'), savedPass = lsGet('weponare_pass');
+  if (savedName && !n.value) n.value = savedName;
+  if (savedPass && !pw.value) pw.value = savedPass;
+  pendingName = (n.value.trim().toUpperCase()) || 'PLAYER';
+  pendingPass = pw.value.trim();
+  refreshSavedBanner();
+  pw.addEventListener('input', () => {
+    lsSet('weponare_pass', pw.value.trim());
+    clearTimeout(refreshSavedBanner._t);
+    refreshSavedBanner._t = setTimeout(refreshSavedBanner, 400);
+  });
+  n.addEventListener('input', () => lsSet('weponare_name', n.value.trim().toUpperCase()));
+}
+
+// Title-screen readout of the progress held against the current password, so it
+// is obvious the slot is saved and which slot you are on.
+async function refreshSavedBanner() {
+  const el = document.getElementById('savedInfo');
+  if (!el) return;
+  const pw = (document.getElementById('passInput')?.value || '').trim();
+  if (!pw) {
+    el.innerHTML = '<span style="color:#555">No password — progress will not be saved</span>';
+    return;
+  }
+  el.innerHTML = '<span style="color:#555">Loading save...</span>';
+  try {
+    const res = await fetch('/api/profile', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw, localXp: loadLocalXp(pw), localCoins: loadLocalCoins(pw) }),
+    });
+    if (!res.ok) { el.innerHTML = '<span style="color:#555">Save unavailable</span>'; return; }
+    const d = await res.json();
+    applyCatalog(d.catalog, d.colors);
+    saveLocalCoins(pw, d.coins);
+    saveLocalXp(pw, d.xp);
+    const upgCount = Object.values(d.upgrades || {})
+      .reduce((n, lv) => n + Object.values(lv).reduce((a, b) => a + b, 0), 0);
+    el.innerHTML = `<span style="color:#6a6a80">SAVE:</span> `
+      + `<span style="color:var(--c-gold)">${d.coins.toLocaleString()} coins</span>`
+      + ` <span style="color:#555">|</span> <span style="color:#c8c8dc">${d.xp.toLocaleString()} XP</span>`
+      + ` <span style="color:#555">|</span> <span style="color:#c8c8dc">${d.weapons.length} weapons</span>`
+      + (upgCount ? ` <span style="color:#555">|</span> <span style="color:#8fd8a0">${upgCount} upgrades</span>` : '');
+  } catch {
+    el.innerHTML = '<span style="color:#555">Save unavailable (offline)</span>';
+  }
 }
 
 function joinGame(mode) {
@@ -220,6 +275,7 @@ function connect() {
     if (leaving) {
       leaving = false;
       showScreen('startScreen');
+      refreshSavedBanner();
       return;
     }
     if (roomWasFull) {
@@ -348,14 +404,24 @@ function nearestEnemyAngle(cp, state, playerKey) {
   return Math.atan2(nearest.y + nearest.h / 2 - py, nearest.x + nearest.w / 2 - px);
 }
 
+// A melee swing is drawn as an arc pivoting on the player at the weapon's real
+// reach, so a range upgrade is immediately visible as a wider sweep. Ranged shots
+// keep their burst at the muzzle.
 function pushSlash(cp, angle) {
-  const r = cp.w + 12;
+  const melee = !isRanged(cp.weaponId);
+  const reach = cp.reach || 44;
+  const tipR = cp.w + 12;
   slashes.push({
-    x: cp.x + cp.w / 2 + Math.cos(angle) * r,
-    y: cp.y + cp.h / 2 + Math.sin(angle) * r,
+    px: cp.x + cp.w / 2,
+    py: cp.y + cp.h / 2,
+    x: cp.x + cp.w / 2 + Math.cos(angle) * tipR,
+    y: cp.y + cp.h / 2 + Math.sin(angle) * tipR,
     angle,
     facing: cp.facing,
     weaponId: cp.weaponId,
+    reach,
+    melee,
+    upg: cp.upg || null,
     timer: 220, maxTimer: 220,
     color: WEAPON_COLOR[cp.weaponId] || PAL.white,
   });
@@ -388,6 +454,11 @@ function detectAudioEvents(prev, curr) {
   GameAudio.syncMusic(curr.gameState === 'GAMEPLAY');
   if (curr.gameState !== 'GAMEPLAY') return;
 
+  // A spitter loosing a shot — the tell for incoming ranged damage.
+  const pSpit = (prev.projectiles || []).filter(p => p.weaponId === 'spit').length;
+  const cSpit = (curr.projectiles || []).filter(p => p.weaponId === 'spit').length;
+  if (cSpit > pSpit) GameAudio.sfx.shoot();
+
   // Monster killed (array shrank)
   if ((curr.monsters?.length || 0) < (prev.monsters?.length || 0)) GameAudio.sfx.death();
 
@@ -404,7 +475,7 @@ function detectAudioEvents(prev, curr) {
   }
 
   const evt = [
-    ['waveclear', 'waveclear'], ['parry', 'parry'], ['trapburst', 'trap'],
+    ['waveclear', 'waveclear'], ['newtype', 'unlock'], ['parry', 'parry'], ['trapburst', 'trap'],
     ['pickup', 'pickup'], ['useitem', 'useitem'], ['coin', 'xp'],
     ['teleport', 'special'], ['hookhit', 'hit'],
   ];
@@ -424,30 +495,57 @@ function drawSlashes() {
   for (const sl of slashes) {
     const alpha = sl.timer / sl.maxTimer;
     const prog = 1 - alpha;
-    const cx = Math.round(sl.x), cy = Math.round(sl.y);
+    const u = upgScale(sl.upg);
     ctx.save();
     ctx.lineCap = 'round';
-    if (!isRanged(sl.weaponId)) {
-      const r = 13 + prog * 7;
+
+    if (sl.melee) {
+      // The crescent sweeps out to the weapon's actual reach.
+      const cx = Math.round(sl.px), cy = Math.round(sl.py);
+      const r = sl.reach * (0.6 + 0.35 * prog);
       const aim = sl.angle ?? (sl.facing === 1 ? 0 : Math.PI);
-      const span = Math.PI * 0.85;
-      ctx.globalAlpha = alpha * 0.9;
+      const span = Math.PI * 0.8;
+      const heft = 2.5 * u.weight;
+
+      ctx.globalAlpha = alpha * 0.85;
       ctx.strokeStyle = sl.color;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = heft;
       ctx.beginPath(); ctx.arc(cx, cy, r, aim - span / 2, aim + span / 2, false); ctx.stroke();
+
+      // Range levels add trailing edges behind the main arc — the swing reads
+      // heavier and deeper the more it has been upgraded.
+      for (let i = 1; i <= u.rng; i++) {
+        ctx.globalAlpha = alpha * (0.3 - i * 0.03);
+        ctx.lineWidth = Math.max(0.6, heft - i * 0.3);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r - i * 2.4, aim - span / 2 * (1 - i * 0.04), aim + span / 2 * (1 - i * 0.04), false);
+        ctx.stroke();
+      }
+
       if (alpha > 0.5) {
-        ctx.globalAlpha = ((alpha - 0.5) / 0.5) * 0.6;
+        ctx.globalAlpha = ((alpha - 0.5) / 0.5) * 0.65;
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(cx, cy, r - 4, aim - span / 2, aim + span / 2, false); ctx.stroke();
+        ctx.lineWidth = Math.max(0.8, 1 * u.weight);
+        ctx.beginPath(); ctx.arc(cx, cy, r - heft, aim - span / 2 * 0.9, aim + span / 2 * 0.9, false); ctx.stroke();
+      }
+      // A damage-upgraded strike sparks at the leading tip.
+      if (u.dmg >= 3) {
+        const tipA = aim + span / 2;
+        ctx.globalAlpha = alpha * 0.8;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(cx + Math.cos(tipA) * r, cy + Math.sin(tipA) * r, 1 + u.dmg * 0.14, 0, Math.PI * 2);
+        ctx.fill();
       }
     } else {
+      // Muzzle burst, widened by range levels.
+      const cx = Math.round(sl.x), cy = Math.round(sl.y);
       ctx.globalAlpha = alpha * 0.75;
       ctx.strokeStyle = sl.color;
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.5 * u.weight;
       const steps = sl.weaponId === 'staff' ? 8 : 6;
       for (let a = 0; a < Math.PI * 2; a += Math.PI * 2 / steps) {
-        const len = 3 + prog * 6;
+        const len = (3 + prog * 6) * u.trail;
         ctx.beginPath();
         ctx.moveTo(cx + Math.cos(a) * 3, cy + Math.sin(a) * 3);
         ctx.lineTo(cx + Math.cos(a) * (3 + len), cy + Math.sin(a) * (3 + len));
@@ -593,6 +691,7 @@ function setupTouchControls() {
   }
 }
 setupTouchControls();
+restoreCredentials();
 
 // Reflect saved audio preferences on the start-screen buttons
 if (window.GameAudio) {
@@ -701,7 +800,7 @@ async function openShop() {
   document.getElementById('shopList').innerHTML = '';
   document.getElementById('shopCoins').innerHTML = '';
   if (!pendingPass) {
-    setShopMsg('Enter a password on the title screen first — upgrades and coins are saved to it.', true);
+    setShopMsg('Enter a password on the title screen first — coins and upgrades are saved against it.', true);
     return;
   }
   setShopMsg('Loading...');
@@ -726,7 +825,7 @@ async function openShop() {
     setShopMsg('Could not reach the server.', true);
   }
 }
-function closeShop() { showScreen('startScreen'); }
+function closeShop() { showScreen('startScreen'); refreshSavedBanner(); }
 
 function renderShop() {
   if (!shopData) return;
@@ -1306,6 +1405,10 @@ function drawWeaponSprite(p, px, py) {
   const hx = d === 1 ? px + p.w - 1 : px + 1;   // hand attachment
   const hy = py + 8;
   const prog = p.swingTimer > 0 ? 1 - Math.min(1, p.swingTimer / 200) : -1;
+  const u = upgScale(p.upg);
+  // Range upgrades lengthen the weapon itself, so the thing in your hand shows
+  // the reach you paid for.
+  const scale = 1 + u.rng * 0.045;
 
   ctx.save();
   ctx.translate(hx, hy);
@@ -1320,37 +1423,198 @@ function drawWeaponSprite(p, px, py) {
   } else {
     ctx.rotate(0.12);  // resting tilt
   }
-  drawWeaponArt(ctx, wId, 1, wc, true);
+
+  // A damage-upgraded weapon carries a hot sheen along its length.
+  if (u.dmg >= 2) {
+    const art = WEAPON_ART[wId];
+    ctx.save();
+    ctx.globalAlpha = Math.min(0.5, 0.1 + u.dmg * 0.035);
+    ctx.fillStyle = u.dmg >= 7 ? '#ffd8a0' : '#ffffff';
+    ctx.fillRect(art.box.x * scale, -1.2 * scale, art.box.w * scale, 2.4 * scale);
+    ctx.restore();
+  }
+
+  drawWeaponArt(ctx, wId, scale, wc, true);
+
+  // Range trim: a notch per level on the grip, a visible tally of the upgrade.
+  if (u.rng) {
+    ctx.fillStyle = '#ffd24a';
+    for (let i = 0; i < u.rng; i++) ctx.fillRect(1 + i * 1.6, -2.6, 1, 1.4);
+  }
   ctx.restore();
 }
 
 // ─── Monsters ─────────────────────────────────────────────────────────────────
 
+// Each monster type gets its own silhouette and palette, so what a thing is — and
+// roughly how hard it hits — is readable at a glance, not just from its size.
+const MONSTER_LOOK = {
+  grunt:    { body:'#44cc44', dark:'#256d25', eye:'#ff2222', eyes:2 },
+  runner:   { body:'#c8e04a', dark:'#7d8c22', eye:'#ff5522', eyes:1 },
+  brute:    { body:'#cc5533', dark:'#7a2a16', eye:'#ffdd44', eyes:2 },
+  spitter:  { body:'#a65cd0', dark:'#5c2b78', eye:'#d6ff5c', eyes:3 },
+  warden:   { body:'#7f93b8', dark:'#3d4a63', eye:'#8ee8ff', eyes:2 },
+  behemoth: { body:'#8a3a6a', dark:'#4a1938', eye:'#ff4466', eyes:4 },
+};
+
 function drawMonster(m) {
-  const c = m.hitFlash > 0 ? PAL.white : (m.slowed ? '#39a7b0' : PAL.monster);
+  const look = MONSTER_LOOK[m.type] || MONSTER_LOOK.grunt;
+  const flash = m.hitFlash > 0;
+  const body = flash ? PAL.white : (m.slowed ? '#39a7b0' : look.body);
+  const dark = flash ? '#cccccc' : (m.slowed ? '#1d6a72' : look.dark);
   const x = Math.round(m.x), y = Math.round(m.y);
-  const head = Math.max(5, Math.round(m.h * 0.32));
-  const eye = Math.max(2, Math.round(m.w * 0.18));
-  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(x+1, y+m.h, m.w-2, 2);
-  ctx.fillStyle=c;
-  ctx.fillRect(x+1,y+head-1,m.w-2,m.h-head+1); ctx.fillRect(x,y,m.w,head);
-  ctx.fillRect(x-1,y+1,2,3); ctx.fillRect(x+m.w-1,y+1,2,3);
-  ctx.fillStyle='rgba(0,0,0,0.22)'; ctx.fillRect(x+1,y+head-1,m.w-2,2);
-  // Eyes scale + space out with monster size
-  ctx.fillStyle='#ff2222';
-  ctx.fillRect(x+Math.round(m.w*0.2),y+2,eye,eye);
-  ctx.fillRect(x+Math.round(m.w*0.6),y+2,eye,eye);
-  drawHpBar(x-1,y-5,m.w+2,2,m.hp/m.maxHp,'#44ff44','#003300');
+  const w = m.w, h = m.h;
+  const head = Math.max(4, Math.round(h * 0.32));
+  const eye = Math.max(2, Math.round(w * 0.17));
+  const now = performance.now();
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(x + 1, y + h, w - 2, 2);
+
+  if (m.type === 'runner') {
+    // Lean and forward-leaning, with speed streaks trailing it.
+    ctx.globalAlpha = 0.28; ctx.strokeStyle = body; ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+      const oy = y + head + i * Math.max(2, h * 0.22);
+      ctx.beginPath(); ctx.moveTo(x - 3 - i, oy); ctx.lineTo(x - 8 - i * 2, oy); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = dark;
+    ctx.fillRect(x + 1, y + h - 3, 2, 3); ctx.fillRect(x + w - 3, y + h - 3, 2, 3);
+    ctx.fillStyle = body;
+    ctx.fillRect(x + 1, y + head - 1, w - 2, h - head - 1);
+    ctx.fillRect(x, y, w, head);
+    ctx.fillStyle = dark; ctx.fillRect(x + 1, y + head - 1, w - 2, 1);
+  } else if (m.type === 'brute') {
+    // Squat and wide, with a heavy brow and tusks.
+    ctx.fillStyle = body;
+    ctx.fillRect(x - 1, y + head - 1, w + 2, h - head + 1);
+    ctx.fillRect(x, y, w, head);
+    ctx.fillStyle = dark;
+    ctx.fillRect(x - 2, y + head, 3, Math.max(3, h * 0.4));            // shoulders
+    ctx.fillRect(x + w - 1, y + head, 3, Math.max(3, h * 0.4));
+    ctx.fillRect(x, y, w, Math.max(2, head * 0.45));                    // brow
+    ctx.fillStyle = '#efe6d2';
+    ctx.fillRect(x + 2, y + head, 2, 2); ctx.fillRect(x + w - 4, y + head, 2, 2);  // tusks
+  } else if (m.type === 'spitter') {
+    // Bulbous sac of a head above a narrow body, venting when it has a shot ready.
+    ctx.fillStyle = body;
+    ctx.fillRect(x + 2, y + head, w - 4, h - head);
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + head * 0.75, w * 0.58, head * 0.95, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = dark;
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + head * 1.15, w * 0.34, head * 0.42, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.45 + Math.sin(now / 180) * 0.25;
+    ctx.fillStyle = '#d6ff5c';
+    ctx.fillRect(x + Math.round(w / 2) - 1, y + head + 1, 2, 2);
+    ctx.globalAlpha = 1;
+  } else if (m.type === 'warden') {
+    // Plated: overlapping armour bands and a raised shield face.
+    ctx.fillStyle = body;
+    ctx.fillRect(x + 1, y + head - 1, w - 2, h - head + 1);
+    ctx.fillRect(x, y, w, head);
+    ctx.fillStyle = dark;
+    for (let i = 0; i < 3; i++) {
+      ctx.fillRect(x + 1, y + head + i * Math.max(2, (h - head) / 3), w - 2, 1);
+    }
+    ctx.fillStyle = '#c9d7ea';
+    ctx.fillRect(x - 2, y + head - 1, 3, Math.max(4, (h - head) * 0.8));   // shield
+    ctx.fillStyle = dark;
+    ctx.fillRect(x - 2, y + head - 1, 3, 1);
+  } else if (m.type === 'behemoth') {
+    // Huge, horned, with molten cracks and a slow pulse.
+    ctx.fillStyle = body;
+    ctx.fillRect(x - 1, y + head - 1, w + 2, h - head + 1);
+    ctx.fillRect(x, y, w, head);
+    ctx.fillStyle = dark;
+    ctx.fillRect(x - 2, y + head, 3, Math.max(4, h * 0.45));
+    ctx.fillRect(x + w - 1, y + head, 3, Math.max(4, h * 0.45));
+    // Horns
+    ctx.beginPath();
+    ctx.moveTo(x + 1, y); ctx.lineTo(x - 2, y - Math.max(3, head * 0.8)); ctx.lineTo(x + 4, y);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x + w - 1, y); ctx.lineTo(x + w + 2, y - Math.max(3, head * 0.8)); ctx.lineTo(x + w - 4, y);
+    ctx.fill();
+    ctx.globalAlpha = 0.5 + Math.sin(now / 260) * 0.3;
+    ctx.strokeStyle = '#ff7744'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.3, y + head); ctx.lineTo(x + w * 0.5, y + h * 0.6); ctx.lineTo(x + w * 0.35, y + h - 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  } else {
+    // Grunt: the original blob.
+    ctx.fillStyle = body;
+    ctx.fillRect(x + 1, y + head - 1, w - 2, h - head + 1);
+    ctx.fillRect(x, y, w, head);
+    ctx.fillRect(x - 1, y + 1, 2, 3); ctx.fillRect(x + w - 1, y + 1, 2, 3);
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(x + 1, y + head - 1, w - 2, 2);
+  }
+
+  // Eyes: count is part of the type's identity.
+  ctx.fillStyle = flash ? '#ff8888' : look.eye;
+  const ey = y + Math.max(1, Math.round(head * 0.3));
+  if (look.eyes === 1) {
+    ctx.fillRect(x + Math.round(w * 0.5 - eye * 0.7), ey, Math.round(eye * 1.4), eye);
+  } else if (look.eyes === 3) {
+    ctx.fillRect(x + Math.round(w * 0.22), ey, eye, eye);
+    ctx.fillRect(x + Math.round(w * 0.5 - eye / 2), ey - 1, eye, eye);
+    ctx.fillRect(x + Math.round(w * 0.78 - eye), ey, eye, eye);
+  } else if (look.eyes === 4) {
+    for (const ox of [0.18, 0.38, 0.58, 0.78]) ctx.fillRect(x + Math.round(w * ox), ey, eye, eye);
+  } else {
+    ctx.fillRect(x + Math.round(w * 0.2), ey, eye, eye);
+    ctx.fillRect(x + Math.round(w * 0.8 - eye), ey, eye, eye);
+  }
+  ctx.restore();
+
+  drawHpBar(x - 1, y - 5, w + 2, 2, m.hp / m.maxHp, '#44ff44', '#003300');
+  // Armoured types get a marker on the bar, since their health bar drains slowly.
+  if (m.armor > 0) {
+    ctx.fillStyle = '#c9d7ea';
+    ctx.fillRect(x - 1, y - 8, Math.max(2, Math.round((w + 2) * m.armor)), 2);
+  }
 }
 function drawMonsters(ms) { for(const m of ms) drawMonster(m); }
 
 // ─── Projectiles ──────────────────────────────────────────────────────────────
+
+// A range-upgraded weapon throws a visibly bigger, longer-tailed shot; a damage
+// upgrade makes it denser. Returns { size, trail, weight } multipliers.
+function upgScale(upg) {
+  const rng = upg?.rng || 0, dmg = upg?.dmg || 0;
+  return {
+    size:   1 + rng * 0.085,
+    trail:  1 + rng * 0.30,
+    weight: 1 + dmg * 0.055,
+    rng, dmg,
+  };
+}
 
 function drawProjectiles(projs) {
   const now = performance.now();
   for (const pr of projs) {
     const wc = WEAPON_COLOR[pr.weaponId] || PAL.white;
     const ang = Math.atan2(pr.dy, pr.dx);
+    const u = upgScale(pr.upg);
+
+    // Spitter venom: a monster's shot, not a player's weapon.
+    if (pr.weaponId === 'spit') {
+      ctx.save();
+      ctx.globalAlpha = 0.35; ctx.fillStyle = '#a65cd0';
+      ctx.beginPath(); ctx.arc(pr.x - pr.dx, pr.y - pr.dy, 6, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 1; ctx.fillStyle = '#7d3fa8';
+      ctx.beginPath(); ctx.arc(pr.x, pr.y, 4, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#d6ff5c';
+      ctx.beginPath(); ctx.arc(pr.x - 0.8, pr.y - 1, 1.8, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+      continue;
+    }
 
     if (pr.hook) {
       ctx.save();
@@ -1392,13 +1656,19 @@ function drawProjectiles(projs) {
     if (pr.special) {
       ctx.save();
       ctx.globalAlpha = 0.4; ctx.fillStyle = wc;
-      ctx.beginPath(); ctx.arc(pr.x, pr.y, 7, 0, Math.PI*2); ctx.fill();
-      ctx.globalAlpha = 0.5; ctx.strokeStyle = wc; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(pr.x, pr.y); ctx.lineTo(pr.x - pr.dx*3, pr.y - pr.dy*3); ctx.stroke();
+      ctx.beginPath(); ctx.arc(pr.x, pr.y, 7 * u.size, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 0.5; ctx.strokeStyle = wc; ctx.lineWidth = 2 * u.weight;
+      ctx.beginPath(); ctx.moveTo(pr.x, pr.y);
+      ctx.lineTo(pr.x - pr.dx*3*u.trail, pr.y - pr.dy*3*u.trail); ctx.stroke();
       ctx.globalAlpha = 1; ctx.fillStyle = wc;
-      ctx.beginPath(); ctx.arc(pr.x, pr.y, 3.5, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(pr.x, pr.y, 3.5 * u.size, 0, Math.PI*2); ctx.fill();
       ctx.fillStyle = '#ffffff';
-      ctx.beginPath(); ctx.arc(pr.x-1, pr.y-1, 1.3, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(pr.x-1, pr.y-1, 1.3 * u.size, 0, Math.PI*2); ctx.fill();
+      // Range trim: a ring per level, so the upgrade is legible mid-flight.
+      if (u.rng) {
+        ctx.globalAlpha = 0.5; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.arc(pr.x, pr.y, 5 * u.size + u.rng * 0.7, 0, Math.PI*2); ctx.stroke();
+      }
       ctx.restore();
       continue;
     }
@@ -1407,29 +1677,31 @@ function drawProjectiles(projs) {
       const long = pr.weaponId === 'crossbow';
       ctx.save();
       ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+      const L = (long ? 11 : 9) * u.trail;
       ctx.fillStyle = long ? '#7a4a20' : '#8a6a3a';
-      ctx.fillRect(-(long?11:9), -0.6, long?11:9, 1.3);
+      ctx.fillRect(-L, -0.6 * u.weight, L, 1.3 * u.weight);
       ctx.fillStyle = long ? '#cfd8e2' : '#aaddff';
-      ctx.beginPath(); ctx.moveTo(4,0); ctx.lineTo(-1,-1.9); ctx.lineTo(-1,1.9); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(4 * u.size, 0);
+      ctx.lineTo(-1, -1.9 * u.size); ctx.lineTo(-1, 1.9 * u.size); ctx.fill();
       ctx.fillStyle = '#dfe6ee';
-      ctx.beginPath(); ctx.moveTo(-(long?11:9),-2.1); ctx.lineTo(-(long?7:6),-0.4); ctx.lineTo(-(long?11:9),0); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(-(long?11:9), 2.1); ctx.lineTo(-(long?7:6), 0.4); ctx.lineTo(-(long?11:9),0); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-L,-2.1); ctx.lineTo(-L*0.62,-0.4); ctx.lineTo(-L,0); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-L, 2.1); ctx.lineTo(-L*0.62, 0.4); ctx.lineTo(-L,0); ctx.fill();
       ctx.restore();
     } else if (pr.weaponId === 'staff') {
       ctx.save();
       ctx.globalAlpha = 0.45; ctx.fillStyle = wc;
-      ctx.beginPath(); ctx.arc(pr.x,pr.y,7,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(pr.x,pr.y,7*u.size,0,Math.PI*2); ctx.fill();
       ctx.globalAlpha = 1; ctx.fillStyle = wc;
-      ctx.beginPath(); ctx.arc(pr.x,pr.y,3.6,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(pr.x,pr.y,3.6*u.size*u.weight,0,Math.PI*2); ctx.fill();
       ctx.fillStyle = '#ffe6ff';
       ctx.beginPath(); ctx.arc(pr.x-1,pr.y-1,1.5,0,Math.PI*2); ctx.fill();
       ctx.restore();
     } else if (pr.weaponId === 'wand') {
       ctx.save();
       ctx.globalAlpha = 0.45; ctx.fillStyle = wc;
-      ctx.beginPath(); ctx.arc(pr.x,pr.y,4.5,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(pr.x,pr.y,4.5*u.size,0,Math.PI*2); ctx.fill();
       ctx.globalAlpha = 1; ctx.fillStyle = '#eaf9ff';
-      ctx.beginPath(); ctx.arc(pr.x,pr.y,2,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(pr.x,pr.y,2*u.size*u.weight,0,Math.PI*2); ctx.fill();
       ctx.restore();
     } else if (pr.weaponId === 'chakram') {
       ctx.save();
@@ -1442,9 +1714,9 @@ function drawProjectiles(projs) {
     } else if (pr.weaponId === 'cannon') {
       ctx.save();
       ctx.globalAlpha = 0.35; ctx.fillStyle = '#ffb066';
-      ctx.beginPath(); ctx.arc(pr.x - pr.dx, pr.y - pr.dy, 6, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(pr.x - pr.dx*u.trail, pr.y - pr.dy*u.trail, 6*u.size, 0, Math.PI*2); ctx.fill();
       ctx.globalAlpha = 1; ctx.fillStyle = '#25252c';
-      ctx.beginPath(); ctx.arc(pr.x,pr.y,4,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(pr.x,pr.y,4*u.size*u.weight,0,Math.PI*2); ctx.fill();
       ctx.fillStyle = '#5a5a66';
       ctx.beginPath(); ctx.arc(pr.x-1,pr.y-1.2,1.6,0,Math.PI*2); ctx.fill();
       ctx.fillStyle = '#ff9944';
@@ -1483,6 +1755,13 @@ function drawParticles(particles) {
       ctx.strokeStyle=p.color||'#aa44ff'; ctx.lineWidth=2.5;
       ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.stroke();
       ctx.globalAlpha=1;
+    } else if (p.type==='newtype') {
+      const m=p.max||2200, a=Math.min(1, p.timer/m*2.5);
+      ctx.globalAlpha=a; ctx.font='bold 13px "Courier New",monospace';
+      ctx.textBaseline='middle'; ctx.textAlign='center';
+      ctx.fillStyle='#000'; ctx.fillText(p.text,p.x+2,p.y+2);
+      ctx.fillStyle=p.color||'#ff6644'; ctx.fillText(p.text,p.x,p.y);
+      ctx.textAlign='left'; ctx.textBaseline='alphabetic'; ctx.globalAlpha=1;
     } else if (p.type==='waveclear') {
       ctx.globalAlpha=Math.min(1,p.timer/2500*3);
       ctx.fillStyle=PAL.xp; ctx.font='bold 18px "Courier New",monospace';

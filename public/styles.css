@@ -511,3 +511,12 @@ body {
   .action-btn { padding: 5px 10px; min-width: 54px; font-size: 9px; }
   .action-btn.big-btn { padding: 9px 14px; font-size: 12px; min-width: 62px; }
 }
+
+/* Title-screen readout of what is banked against the current password. */
+.saved-info {
+  font-size: 10px;
+  letter-spacing: 1px;
+  margin: 10px 0 2px;
+  min-height: 13px;
+  line-height: 1.4;
+}
