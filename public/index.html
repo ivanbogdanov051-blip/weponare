@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>WEPONARE</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -21,9 +21,22 @@
         <button class="mode-btn btn-waves" onclick="joinGame('waves')">&#9670; WAVES</button>
       </div>
       <div class="hint-text">PvP/Co-op: 2 players &nbsp;|&nbsp; Waves: solo endless mode</div>
+      <button class="skin-btn shop-open-btn" onclick="openShop()">&#9670; UPGRADE WEAPONS</button>
       <button class="skin-btn" onclick="openSkinsScreen()">&#10022; CUSTOMIZE CHARACTER</button>
       <button class="skin-btn" id="soundBtn" onclick="toggleSound()">&#9834; SOUND: ON</button>
       <button class="skin-btn" id="musicBtn" onclick="cycleMusic()">&#9835; MUSIC: 1/5</button>
+    </div>
+  </div>
+
+  <!-- Weapon upgrades bought with coins -->
+  <div id="shopScreen" class="overlay hidden">
+    <div class="pixel-box shop-box">
+      <div class="title-text shop-title">UPGRADES</div>
+      <div class="subtitle">SPEND COINS ON YOUR WEAPONS</div>
+      <div id="shopCoins" class="shop-coins"></div>
+      <div id="shopMsg" class="shop-msg"></div>
+      <div id="shopList" class="shop-list"></div>
+      <button class="mode-btn shop-back" onclick="closeShop()">&#10003; BACK</button>
     </div>
   </div>
 
@@ -68,7 +81,7 @@
       <div id="roundTitle" class="title-text"></div>
       <div id="roundStats" class="body-text"></div>
       <div id="leaderboardBox" class="leaderboard hidden"></div>
-      <div class="hint-text">NEXT ROUND STARTING...</div>
+      <div id="roundHint" class="hint-text">NEXT ROUND STARTING...</div>
     </div>
   </div>
 
@@ -76,13 +89,13 @@
   <div id="disconnectedScreen" class="overlay hidden">
     <div class="pixel-box">
       <div class="title-text">DISCONNECTED</div>
-      <div id="disconnectMsg" class="body-text">Opponent left the game.</div>
-      <div class="hint-text">Waiting for new opponent...</div>
+      <div id="disconnectMsg" class="body-text">Connection to the match was lost.</div>
+      <div class="hint-text">Returning to the menu...</div>
     </div>
   </div>
 
   <!-- Game canvas -->
-  <canvas id="gameCanvas" width="480" height="270"></canvas>
+  <canvas id="gameCanvas" width="720" height="405"></canvas>
 
   <!-- In-game controls (top-right) -->
   <div id="gameControls">
@@ -90,8 +103,8 @@
     <button id="leaveBtn" onclick="leaveGame()">&#10005; LEAVE</button>
   </div>
 
-  <!-- Collected items → tap to activate (bottom-left) -->
-  <div id="itemBar"></div>
+  <!-- Collected items are drawn inside the canvas HUD (see drawItemBar), so they
+       scale with the view and can never fall off a small screen. -->
 
   <!-- Touch controls (mobile only) -->
   <div id="touchControls">
@@ -113,6 +126,7 @@
   </div>
 
   <script src="audio.js"></script>
+  <script src="weapons.js"></script>
   <script src="client.js"></script>
 </body>
 </html>

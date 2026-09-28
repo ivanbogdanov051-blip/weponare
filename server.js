@@ -15,32 +15,40 @@ const PROGRESS_FILE = path.join(__dirname, 'progress.json');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CANVAS_W = 480, CANVAS_H = 270;
-const ARENA_X = 8, ARENA_Y = 8;
-const ARENA_W = CANVAS_W - 16, ARENA_H = CANVAS_H - 16;
+// World is 1.5× the old 480×270 arena. The client renders the whole world at
+// 720×405 and draws its HUD in a 480×270 space scaled by 1.5, so the bigger map
+// is simply zoomed out to fit the screen.
+const CANVAS_W = 720, CANVAS_H = 405;
+const ARENA_X = 12, ARENA_Y = 12;
+const ARENA_W = CANVAS_W - ARENA_X * 2, ARENA_H = CANVAS_H - ARENA_Y * 2;
 const TICK_MS = 20;
 
 const ADMIN_PASSWORD = '67892155';
 const ADMIN_XP = 1000000000000000000; // 1e18 — unlocks everything
+const ADMIN_COINS = 999999999;
 function isAdminPw(pw) { return pw === ADMIN_PASSWORD; }
 
 const PARRY_WINDOW   = 350;   // ms the parry is "active" and reflects
 const PARRY_COOLDOWN = 5000;  // ms before it can be used again
 const PARRY_REFLECT  = 1.5;   // reflected damage multiplier
 
-// ── Traps: spawn sparsely on the map ──
-const MAX_TRAPS = 3;
-const TRAP_SPAWN_MIN = 6000, TRAP_SPAWN_MAX = 13000;
+const PLAYER_SPEED  = 3.6;    // scaled up with the bigger arena
+const PLAYER_W = 12, PLAYER_H = 16;
+
+// ── Traps: sparse, and big enough to be a real hazard on the larger map ──
+const MAX_TRAPS = 5;
+const TRAP_SPAWN_MIN = 5000, TRAP_SPAWN_MAX = 11000;
 const TRAP_TYPES = {
-  spike: { mode: 'delayed', armTime: 700, radius: 22, damage: 28, color: '#ff8822' },
-  mine:  { mode: 'instant', radius: 26, damage: 42, color: '#ff3333' },
-  snare: { mode: 'instant', radius: 18, effect: 'slow', dur: 2500, color: '#66ccff' },
+  spike: { mode: 'delayed', armTime: 750, size: 34, radius: 52, damage: 30, color: '#ff8822' },
+  mine:  { mode: 'instant',              size: 30, radius: 60, damage: 46, color: '#ff3333' },
+  snare: { mode: 'instant',              size: 32, radius: 46, effect: 'slow', dur: 2800, color: '#66ccff' },
 };
 
 // ── Items: collectible, grant an activatable buff ──
-const MAX_ITEMS = 3;
-const ITEM_SPAWN_MIN = 7000, ITEM_SPAWN_MAX = 15000;
+const MAX_ITEMS = 4;
+const ITEM_SPAWN_MIN = 6000, ITEM_SPAWN_MAX = 13000;
 const MAX_INVENTORY = 4;
+const ITEM_SIZE = 18;
 const ITEM_TYPES = {
   speed:    { effect: 'speed',    dur: 6000, color: '#44ddee' },
   strength: { effect: 'strength', dur: 6000, color: '#ff5544' },
@@ -49,91 +57,120 @@ const ITEM_TYPES = {
   heal:     { effect: 'heal',     instant: true, amount: 50, color: '#44ff66' },
 };
 
+// ── Coins: drop from every kill, spent on weapon upgrades in the menu ──
+const COIN_SIZE = 10;
+const COIN_LIFETIME = 22000;
+const COIN_MAGNET = 26;       // auto-collect radius
+const COIN_ATTRACT = 95;      // coins drift toward a player from this far away
+const MAX_COIN_DROPS = 6;     // entities per kill (value is stacked instead)
+const MAX_COINS_ON_FLOOR = 140;
+
 const WEAPONS = [
-  { id: 'sword',      name: 'SWORD',      damage: 20, range: 42,  atkSpd: 400,  type: 'melee',  unlockXp: 0,    special: { kind: 'slam',    dmg: 45, range: 62,  cd: 5000 } },
-  { id: 'dagger',     name: 'DAGGER',     damage: 10, range: 34,  atkSpd: 180,  type: 'melee',  unlockXp: 0,    special: { kind: 'slam',    dmg: 28, range: 46,  cd: 3500 } },
-  { id: 'axe',        name: 'AXE',        damage: 38, range: 42,  atkSpd: 700,  type: 'melee',  unlockXp: 150,  special: { kind: 'slam',    dmg: 75, range: 58,  cd: 7000 } },
-  { id: 'spear',      name: 'SPEAR',      damage: 18, range: 68,  atkSpd: 500,  type: 'melee',  unlockXp: 300,  special: { kind: 'pierce',  dmg: 45, range: 150, cd: 5000 } },
-  { id: 'bow',        name: 'BOW',        damage: 15, range: 200, atkSpd: 600,  type: 'ranged', unlockXp: 500,  special: { kind: 'spread',  dmg: 22, range: 200, cd: 6000, count: 3 } },
-  { id: 'staff',      name: 'STAFF',      damage: 25, range: 180, atkSpd: 900,  type: 'ranged', unlockXp: 800,  aoeRadius: 28, special: { kind: 'aoeshot', dmg: 140, range: 220, cd: 8000, aoe: 70 } },
-  { id: 'hammer',     name: 'HAMMER',     damage: 50, range: 44,  atkSpd: 1000, type: 'melee',  unlockXp: 1200, special: { kind: 'slam',    dmg: 95, range: 74,  cd: 9000 } },
-  { id: 'wand',       name: 'WAND',       damage: 8,  range: 150, atkSpd: 250,  type: 'ranged', unlockXp: 1700, special: { kind: 'spread',  dmg: 14, range: 170, cd: 4500, count: 5 } },
-  { id: 'crossbow',   name: 'CROSSBOW',   damage: 30, range: 220, atkSpd: 800,  type: 'ranged', unlockXp: 2400, pierce: true, special: { kind: 'pierce',  dmg: 60, range: 250, cd: 7000 } },
-  { id: 'flail',      name: 'FLAIL',      damage: 22, range: 50,  atkSpd: 500,  type: 'melee',  unlockXp: 3200, swing360: true, special: { kind: 'slam', dmg: 50, range: 68, cd: 6000 } },
-  { id: 'greatsword', name: 'GREATSWORD', damage: 45, range: 70,  atkSpd: 850,  type: 'melee',  unlockXp: 4500, special: { kind: 'slam',    dmg: 85, range: 80,  cd: 8000 } },
-  { id: 'glaive',     name: 'GLAIVE',     damage: 42, range: 80,  atkSpd: 820,  type: 'melee',  unlockXp: 5800,  special: { kind: 'slam',    dmg: 90,  range: 88,  cd: 8000 } },
-  { id: 'katana',     name: 'KATANA',     damage: 26, range: 48,  atkSpd: 240,  type: 'melee',  unlockXp: 7200,  special: { kind: 'pierce',  dmg: 55,  range: 170, cd: 4500 } },
-  { id: 'chakram',    name: 'CHAKRAM',    damage: 22, range: 230, atkSpd: 360,  type: 'ranged', unlockXp: 9000,  pierce: true, special: { kind: 'spread', dmg: 26, range: 230, cd: 6000, count: 4 } },
-  { id: 'cannon',     name: 'CANNON',     damage: 60, range: 175, atkSpd: 1200, type: 'ranged', unlockXp: 11000, aoeRadius: 32, special: { kind: 'aoeshot', dmg: 150, range: 185, cd: 9000, aoe: 82 } },
-  { id: 'reaper',     name: 'REAPER',     damage: 55, range: 74,  atkSpd: 920,  type: 'melee',  unlockXp: 13500, swing360: true, special: { kind: 'slam', dmg: 110, range: 92, cd: 9500 } },
+  { id: 'sword',      name: 'SWORD',      damage: 20, range: 48,  atkSpd: 400,  type: 'melee',  unlockXp: 0,     special: { kind: 'slam',    dmg: 45,  range: 72,  cd: 5000 } },
+  { id: 'dagger',     name: 'DAGGER',     damage: 10, range: 38,  atkSpd: 180,  type: 'melee',  unlockXp: 0,     special: { kind: 'slam',    dmg: 28,  range: 54,  cd: 3500 } },
+  { id: 'axe',        name: 'AXE',        damage: 38, range: 48,  atkSpd: 700,  type: 'melee',  unlockXp: 150,   special: { kind: 'slam',    dmg: 75,  range: 68,  cd: 7000 } },
+  { id: 'spear',      name: 'SPEAR',      damage: 18, range: 78,  atkSpd: 500,  type: 'melee',  unlockXp: 300,   special: { kind: 'pierce',  dmg: 45,  range: 215, cd: 5000 } },
+  { id: 'bow',        name: 'BOW',        damage: 15, range: 290, atkSpd: 600,  type: 'ranged', unlockXp: 500,   special: { kind: 'spread',  dmg: 22,  range: 290, cd: 6000, count: 3 } },
+  { id: 'staff',      name: 'STAFF',      damage: 25, range: 260, atkSpd: 900,  type: 'ranged', unlockXp: 800,   aoeRadius: 34, special: { kind: 'aoeshot', dmg: 140, range: 315, cd: 8000, aoe: 86 } },
+  { id: 'hammer',     name: 'HAMMER',     damage: 50, range: 50,  atkSpd: 1000, type: 'melee',  unlockXp: 1200,  special: { kind: 'slam',    dmg: 95,  range: 86,  cd: 9000 } },
+  { id: 'wand',       name: 'WAND',       damage: 8,  range: 215, atkSpd: 250,  type: 'ranged', unlockXp: 1700,  special: { kind: 'spread',  dmg: 14,  range: 245, cd: 4500, count: 5 } },
+  { id: 'whip',       name: 'WHIP',       damage: 17, range: 84,  atkSpd: 400,  type: 'melee',  unlockXp: 2000,  swing360: true, special: { kind: 'slam', dmg: 42, range: 112, cd: 6000 } },
+  { id: 'crossbow',   name: 'CROSSBOW',   damage: 30, range: 315, atkSpd: 800,  type: 'ranged', unlockXp: 2400,  pierce: true, special: { kind: 'pierce', dmg: 60, range: 360, cd: 7000 } },
+  { id: 'flail',      name: 'FLAIL',      damage: 22, range: 58,  atkSpd: 500,  type: 'melee',  unlockXp: 3200,  swing360: true, special: { kind: 'slam', dmg: 50, range: 80, cd: 6000 } },
+  { id: 'greatsword', name: 'GREATSWORD', damage: 45, range: 80,  atkSpd: 850,  type: 'melee',  unlockXp: 4500,  special: { kind: 'slam',    dmg: 85,  range: 94,  cd: 8000 } },
+  { id: 'glaive',     name: 'GLAIVE',     damage: 42, range: 92,  atkSpd: 820,  type: 'melee',  unlockXp: 5800,  special: { kind: 'slam',    dmg: 90,  range: 102, cd: 8000 } },
+  { id: 'grapple',    name: 'GRAPPLE',    damage: 14, range: 190, atkSpd: 700,  type: 'ranged', unlockXp: 6500,  grapple: true, special: { kind: 'hook', dmg: 30, range: 430, cd: 5500 } },
+  { id: 'katana',     name: 'KATANA',     damage: 26, range: 55,  atkSpd: 240,  type: 'melee',  unlockXp: 7200,  special: { kind: 'pierce',  dmg: 55,  range: 245, cd: 4500 } },
+  { id: 'chakram',    name: 'CHAKRAM',    damage: 22, range: 330, atkSpd: 360,  type: 'ranged', unlockXp: 9000,  pierce: true, special: { kind: 'spread', dmg: 26, range: 330, cd: 6000, count: 4 } },
+  { id: 'boomerang',  name: 'BOOMERANG',  damage: 24, range: 200, atkSpd: 560,  type: 'ranged', unlockXp: 10000, pierce: true, boomerang: true, special: { kind: 'spread', dmg: 30, range: 215, cd: 6500, count: 3, boomerang: true } },
+  { id: 'cannon',     name: 'CANNON',     damage: 60, range: 250, atkSpd: 1200, type: 'ranged', unlockXp: 11000, aoeRadius: 40, special: { kind: 'aoeshot', dmg: 150, range: 265, cd: 9000, aoe: 100 } },
+  { id: 'reaper',     name: 'REAPER',     damage: 55, range: 86,  atkSpd: 920,  type: 'melee',  unlockXp: 13500, swing360: true, special: { kind: 'slam', dmg: 110, range: 110, cd: 9500 } },
 ];
+
+const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
 
 const WEAPON_COLORS = {
   sword: '#c8d8e8', dagger: '#d4e8b0', axe: '#e8a040', spear: '#c0c8d0',
   bow: '#b89060', staff: '#cc66ff', hammer: '#aab0b8', wand: '#88ddff',
   crossbow: '#cc8844', flail: '#dd4444', greatsword: '#ddeeff',
   glaive: '#b0d8c0', katana: '#eef0ff', chakram: '#66e0c0', cannon: '#9a90a8', reaper: '#cc66aa',
+  whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
 };
 
+// ── Weapon upgrades bought with coins from the menu ──
+const UPGRADE_STATS = {
+  dmg: { name: 'DAMAGE', max: 10, perLevel: 0.06,  baseCost: 12 },
+  spd: { name: 'SPEED',  max: 10, perLevel: 0.045, baseCost: 14 },
+  rng: { name: 'RANGE',  max: 6,  perLevel: 0.05,  baseCost: 16 },
+};
+const UPGRADE_KEYS = Object.keys(UPGRADE_STATS);
+
+// Cost of buying the `nextLevel`th level — later levels cost steeply more.
+function upgradeCost(stat, nextLevel) {
+  const s = UPGRADE_STATS[stat];
+  if (!s || nextLevel < 1 || nextLevel > s.max) return Infinity;
+  return Math.round(s.baseCost * Math.pow(nextLevel, 1.55));
+}
+function costTable() {
+  const out = {};
+  for (const k of UPGRADE_KEYS) {
+    out[k] = [];
+    for (let lv = 1; lv <= UPGRADE_STATS[k].max; lv++) out[k].push(upgradeCost(k, lv));
+  }
+  return out;
+}
+
 const WAVE_CONFIG = [
-  { monsters: 3, hpMult: 1.0, speedMult: 1.0  },
-  { monsters: 5, hpMult: 1.1, speedMult: 1.05 },
-  { monsters: 7, hpMult: 1.2, speedMult: 1.1  },
-  { monsters: 8, hpMult: 1.4, speedMult: 1.15 },
+  { monsters: 4,  hpMult: 1.0, speedMult: 1.0  },
+  { monsters: 6,  hpMult: 1.1, speedMult: 1.05 },
+  { monsters: 8,  hpMult: 1.2, speedMult: 1.1  },
+  { monsters: 10, hpMult: 1.4, speedMult: 1.15 },
 ];
 
 // ─── Progress Persistence ─────────────────────────────────────────────────────
+// Held in memory and flushed on a timer — the game loop credits XP/coins on every
+// kill, and a synchronous read+write of the whole file per kill would stall it.
 
-function loadProgress() {
-  try { return JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf8')); }
-  catch { return { players: {}, leaderboard: [] }; }
-}
+let progressCache = null;
+let progressDirty = false;
 
-function saveProgress(data) {
-  try { fs.writeFileSync(PROGRESS_FILE, JSON.stringify(data, null, 2)); } catch {}
+function progress() {
+  if (!progressCache) {
+    let loaded = null;
+    try { loaded = JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf8')); } catch {}
+    progressCache = (loaded && typeof loaded === 'object') ? loaded : {};
+  }
+  const d = progressCache;
+  if (!d.players)     d.players = {};
+  if (!d.leaderboard) d.leaderboard = [];
+  if (!d.skins)       d.skins = {};
+  if (!d.weapons)     d.weapons = {};
+  if (!d.coins)       d.coins = {};
+  if (!d.upgrades)    d.upgrades = {};
+  return d;
 }
-
-function getPlayerXp(password) {
-  if (!password) return 0;
-  return loadProgress().players[password] || 0;
+function markDirty() { progressDirty = true; }
+function flushProgress() {
+  if (!progressDirty || !progressCache) return;
+  progressDirty = false;
+  try { fs.writeFileSync(PROGRESS_FILE, JSON.stringify(progressCache, null, 2)); }
+  catch {}
 }
-
-function setPlayerXp(password, xp) {
-  if (!password) return;
-  const data = loadProgress();
-  data.players[password] = xp;
-  saveProgress(data);
+setInterval(flushProgress, 2000).unref?.();
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => { flushProgress(); process.exit(0); });
 }
+process.on('exit', flushProgress);
 
 function addLeaderboardEntry(name, waves) {
-  const data = loadProgress();
-  if (!data.leaderboard) data.leaderboard = [];
-  data.leaderboard.push({ name, waves, date: new Date().toISOString().split('T')[0] });
-  data.leaderboard.sort((a, b) => b.waves - a.waves);
-  data.leaderboard = data.leaderboard.slice(0, 10);
-  saveProgress(data);
-  return data.leaderboard;
+  const d = progress();
+  d.leaderboard.push({ name, waves, date: new Date().toISOString().split('T')[0] });
+  d.leaderboard.sort((a, b) => b.waves - a.waves);
+  d.leaderboard = d.leaderboard.slice(0, 10);
+  markDirty();
+  return d.leaderboard;
 }
-
-function getLeaderboard() {
-  return loadProgress().leaderboard || [];
-}
-
-function getPlayerSkin(password) {
-  if (!password) return { colorIdx: 0, hatIdx: 0 };
-  return loadProgress().skins?.[password] || { colorIdx: 0, hatIdx: 0 };
-}
-
-function setPlayerSkin(password, skin) {
-  if (!password) return;
-  const data = loadProgress();
-  if (!data.skins) data.skins = {};
-  data.skins[password] = {
-    colorIdx: Math.max(0, Math.min(7, Number(skin.colorIdx) || 0)),
-    hatIdx:   Math.max(0, Math.min(4, Number(skin.hatIdx)   || 0)),
-  };
-  saveProgress(data);
-}
+function getLeaderboard() { return progress().leaderboard; }
 
 function getUnlockedWeaponIds(xp) {
   return WEAPONS.filter(w => w.unlockXp <= xp).map(w => w.id);
@@ -141,23 +178,10 @@ function getUnlockedWeaponIds(xp) {
 
 // Order a weapon-id list by their position in WEAPONS (stable, canonical order)
 function sortWeaponIds(ids) {
-  const valid = ids.filter(id => WEAPONS.some(w => w.id === id));
+  const valid = (Array.isArray(ids) ? ids : []).filter(id => WEAPON_BY_ID[id]);
   return Array.from(new Set(valid)).sort(
     (a, b) => WEAPONS.findIndex(w => w.id === a) - WEAPONS.findIndex(w => w.id === b)
   );
-}
-
-function getStoredWeapons(password) {
-  if (!password) return [];
-  return sortWeaponIds(loadProgress().weapons?.[password] || []);
-}
-
-function saveStoredWeapons(password, ids) {
-  if (!password) return;
-  const data = loadProgress();
-  if (!data.weapons) data.weapons = {};
-  data.weapons[password] = sortWeaponIds(ids);
-  saveProgress(data);
 }
 
 function checkNewUnlocks(oldXp, newXp) {
@@ -165,20 +189,83 @@ function checkNewUnlocks(oldXp, newXp) {
   return getUnlockedWeaponIds(newXp).filter(id => !was.includes(id));
 }
 
+function sanitizeText(v, len) {
+  return String(v == null ? '' : v).trim().replace(/[<>&"']/g, '').slice(0, len);
+}
+
+// Normalise a stored upgrade map to { weaponId: { dmg, spd, rng } } with sane levels.
+function normalizeUpgrades(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [wid, lv] of Object.entries(raw)) {
+    if (!WEAPON_BY_ID[wid] || !lv || typeof lv !== 'object') continue;
+    const e = {};
+    let any = false;
+    for (const k of UPGRADE_KEYS) {
+      const n = Math.max(0, Math.min(UPGRADE_STATS[k].max, Math.floor(Number(lv[k]) || 0)));
+      if (n > 0) { e[k] = n; any = true; }
+    }
+    if (any) out[wid] = e;
+  }
+  return out;
+}
+
+// ─── Weapon stats with upgrades applied ───────────────────────────────────────
+
+function applyUpgrades(w, levels) {
+  if (!levels) return w;
+  const dmgM = 1 + (levels.dmg || 0) * UPGRADE_STATS.dmg.perLevel;
+  const spdM = 1 - (levels.spd || 0) * UPGRADE_STATS.spd.perLevel;
+  const rngM = 1 + (levels.rng || 0) * UPGRADE_STATS.rng.perLevel;
+  return {
+    ...w,
+    damage: Math.max(1, Math.round(w.damage * dmgM)),
+    range: Math.round(w.range * rngM),
+    atkSpd: Math.max(70, Math.round(w.atkSpd * spdM)),
+    aoeRadius: w.aoeRadius ? Math.round(w.aoeRadius * rngM) : w.aoeRadius,
+    special: w.special ? {
+      ...w.special,
+      dmg: Math.max(1, Math.round(w.special.dmg * dmgM)),
+      range: Math.round(w.special.range * rngM),
+      cd: Math.max(500, Math.round(w.special.cd * spdM)),
+      aoe: w.special.aoe ? Math.round(w.special.aoe * rngM) : w.special.aoe,
+    } : null,
+  };
+}
+
+// Recompute (and cache) the player's effective weapon. Called whenever the
+// selected weapon, the unlock list or the upgrade levels change.
+function refreshWeapon(p) {
+  if (!p) return;
+  const ids = p.unlockedWeapons || [];
+  if (p.weaponIdx >= ids.length) p.weaponIdx = 0;
+  const base = WEAPON_BY_ID[ids[p.weaponIdx]] || WEAPONS[0];
+  p.w_ = applyUpgrades(base, p.upgrades?.[base.id]);
+}
+function weapon(p) { return p.w_ || WEAPONS[0]; }
+
 // ─── Room State ───────────────────────────────────────────────────────────────
 
-function makePlayer(num, xp) {
+function spawnPointFor(num) {
   return {
+    x: num === 1 ? ARENA_X + 56 : ARENA_X + ARENA_W - 56 - PLAYER_W,
+    y: ARENA_Y + Math.round(ARENA_H / 2) - PLAYER_H / 2,
+  };
+}
+
+function makePlayer(num, xp, upgrades) {
+  const sp = spawnPointFor(num);
+  const p = {
     num,
-    x: num === 1 ? 80 : 388,
-    y: 135,
-    w: 12, h: 16,
-    speed: 3.0,
+    x: sp.x, y: sp.y,
+    w: PLAYER_W, h: PLAYER_H,
+    speed: PLAYER_SPEED,
     hp: 100, maxHp: 100,
     lives: 3,
     facing: num === 1 ? 1 : -1,
     weaponIdx: 0,
     unlockedWeapons: getUnlockedWeaponIds(xp),
+    upgrades: upgrades || {},
     atkCooldown: 0,
     specialCooldown: 0,
     parryCooldown: 0,
@@ -191,8 +278,13 @@ function makePlayer(num, xp) {
     skin: { colorIdx: 0, hatIdx: 0 },
     inventory: [],
     effects: {},
+    pull: null,
   };
+  refreshWeapon(p);
+  return p;
 }
+
+function emptyWave() { return { num: 0, monstersLeft: 0, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 }; }
 
 const room = {
   p1: null, p2: null,
@@ -201,8 +293,10 @@ const room = {
   playerNames: { p1: 'PLAYER 1', p2: 'PLAYER 2' },
   passwords: { p1: '', p2: '' },
   playerXp: { p1: 0, p2: 0 },
+  playerCoins: { p1: 0, p2: 0 },
   playerSkins: { p1: null, p2: null },
   playerUnlocks: { p1: null, p2: null },
+  playerUpgrades: { p1: null, p2: null },
   p1Joined: false, p2Joined: false,
   players: { p1: null, p2: null },
   inputs: {
@@ -214,13 +308,14 @@ const room = {
   particles: [],
   traps: [],
   items: [],
+  coins: [],
   trapSpawnTimer: TRAP_SPAWN_MIN,
   itemSpawnTimer: ITEM_SPAWN_MIN,
-  wave: { num: 0, monstersLeft: 0, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 },
+  wave: emptyWave(),
   waveHpMult: 1,
   waveSpeedMult: 1,
   unlockQueues: { p1: [], p2: [] },
-  round: { p1Wins: 0, p2Wins: 0, maxWins: 3 },
+  round: { p1Wins: 0, p2Wins: 0, maxWins: 3, matchWinner: 0 },
   roundOverTimer: 0,
   lastLeaderboard: [],
   attackJustPressed: { p1: false, p2: false },
@@ -235,17 +330,39 @@ const room = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+let idSeq = 0;
+function nextId() { return (++idSeq).toString(36); }
+
 function aabb(a, b) {
   return a.x < b.x + b.w && a.x + a.w > b.x
       && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
-function weapon(p) {
-  return WEAPONS.find(w => w.id === p.unlockedWeapons[p.weaponIdx]) || WEAPONS[0];
+function cx(e) { return e.x + e.w / 2; }
+function cy(e) { return e.y + e.h / 2; }
+function distBetween(a, b) { return Math.hypot(cx(a) - cx(b), cy(a) - cy(b)); }
+
+function clampToArena(e, pad = 1) {
+  e.x = Math.max(ARENA_X + pad, Math.min(ARENA_X + ARENA_W - e.w - pad, e.x));
+  e.y = Math.max(ARENA_Y + pad, Math.min(ARENA_Y + ARENA_H - e.h - pad, e.y));
 }
 
 function playerKeyOf(t) {
   return t === room.players.p1 ? 'p1' : t === room.players.p2 ? 'p2' : null;
+}
+
+// Everything `pKey` is allowed to hit. In co-op the other player is an ally, so
+// they are neither a target nor an obstacle for attacks and auto-aim.
+function enemyTargets(pKey) {
+  const out = [];
+  for (const k of ['p1', 'p2']) {
+    if (k === pKey) continue;
+    if (room.gameMode === 'coop' && (pKey === 'p1' || pKey === 'p2')) continue;
+    const p = room.players[k];
+    if (p && !p.dead) out.push(p);
+  }
+  for (const m of room.monsters) if (!m.dead) out.push(m);
+  return out;
 }
 
 function spawnParrySpark(x, y) {
@@ -268,16 +385,25 @@ function effectiveSpeed(p) {
 function tooCloseToPlayers(x, y, dist) {
   for (const key of ['p1', 'p2']) {
     const p = room.players[key];
-    if (p && !p.dead && Math.hypot(p.x - x, p.y - y) < dist) return true;
+    if (p && !p.dead && Math.hypot(cx(p) - x, cy(p) - y) < dist) return true;
   }
   return false;
 }
 
-function randArenaPos(margin) {
+// A random spot fully inside the arena floor for an object of the given size.
+function randArenaPos(w, h, inset = 6) {
+  const minX = ARENA_X + inset, maxX = ARENA_X + ARENA_W - w - inset;
+  const minY = ARENA_Y + inset, maxY = ARENA_Y + ARENA_H - h - inset;
   return {
-    x: ARENA_X + margin + Math.random() * (ARENA_W - margin * 2),
-    y: ARENA_Y + margin + Math.random() * (ARENA_H - margin * 2),
+    x: minX + Math.random() * Math.max(0, maxX - minX),
+    y: minY + Math.random() * Math.max(0, maxY - minY),
   };
+}
+
+// Keep spawned pickups/hazards from overlapping each other.
+function overlapsAny(list, box, pad = 4) {
+  const grown = { x: box.x - pad, y: box.y - pad, w: box.w + pad * 2, h: box.h + pad * 2 };
+  return list.some(o => aabb(grown, o));
 }
 
 // ── Traps ──
@@ -285,11 +411,17 @@ function spawnTrap() {
   const types = Object.keys(TRAP_TYPES);
   const type = types[Math.floor(Math.random() * types.length)];
   const def = TRAP_TYPES[type];
-  let pos;
-  for (let i = 0; i < 12; i++) { pos = randArenaPos(24); if (!tooCloseToPlayers(pos.x, pos.y, 48)) break; }
+  const size = def.size;
+  let pos = randArenaPos(size, size);
+  for (let i = 0; i < 16; i++) {
+    pos = randArenaPos(size, size);
+    const box = { x: pos.x, y: pos.y, w: size, h: size };
+    if (!tooCloseToPlayers(pos.x + size / 2, pos.y + size / 2, def.radius + 40)
+        && !overlapsAny(room.traps, box, 10) && !overlapsAny(room.items, box, 6)) break;
+  }
   room.traps.push({
-    id: Math.random().toString(36).slice(2),
-    type, x: pos.x, y: pos.y, w: 16, h: 16,
+    id: nextId(),
+    type, x: pos.x, y: pos.y, w: size, h: size,
     state: 'idle', armTimer: 0, fireTimer: 0,
     mode: def.mode, radius: def.radius, damage: def.damage || 0,
     effect: def.effect || null, dur: def.dur || 0, color: def.color,
@@ -298,28 +430,70 @@ function spawnTrap() {
 
 function fireTrap(tr) {
   tr.state = 'firing';
-  tr.fireTimer = 250;
-  const cx = tr.x + tr.w / 2, cy = tr.y + tr.h / 2;
+  tr.fireTimer = 280;
+  const tx = tr.x + tr.w / 2, ty = tr.y + tr.h / 2;
   const targets = [room.players.p1, room.players.p2, ...room.monsters].filter(t => t && !t.dead);
   for (const t of targets) {
-    if (Math.hypot(t.x + t.w / 2 - cx, t.y + t.h / 2 - cy) <= tr.radius) {
+    if (Math.hypot(cx(t) - tx, cy(t) - ty) <= tr.radius) {
       if (tr.effect === 'slow') {
         if (t.num) applyEffect(t, 'slow', tr.dur);
+        else t.slowTimer = Math.max(t.slowTimer || 0, tr.dur);
       } else {
         applyDamage(t, tr.damage, 'trap');
       }
     }
   }
-  room.particles.push({ type: 'trapburst', x: cx, y: cy, maxR: tr.radius, timer: 300, max: 300, color: tr.color });
+  room.particles.push({ type: 'trapburst', x: tx, y: ty, maxR: tr.radius, timer: 340, max: 340, color: tr.color });
 }
 
 // ── Items ──
 function spawnItem() {
   const types = Object.keys(ITEM_TYPES);
   const type = types[Math.floor(Math.random() * types.length)];
-  let pos;
-  for (let i = 0; i < 12; i++) { pos = randArenaPos(20); if (!tooCloseToPlayers(pos.x, pos.y, 30)) break; }
-  room.items.push({ id: Math.random().toString(36).slice(2), type, x: pos.x, y: pos.y, w: 12, h: 12 });
+  let pos = randArenaPos(ITEM_SIZE, ITEM_SIZE);
+  for (let i = 0; i < 16; i++) {
+    pos = randArenaPos(ITEM_SIZE, ITEM_SIZE);
+    const box = { x: pos.x, y: pos.y, w: ITEM_SIZE, h: ITEM_SIZE };
+    if (!tooCloseToPlayers(pos.x + ITEM_SIZE / 2, pos.y + ITEM_SIZE / 2, 60)
+        && !overlapsAny(room.traps, box, 12) && !overlapsAny(room.items, box, 8)) break;
+  }
+  room.items.push({ id: nextId(), type, x: pos.x, y: pos.y, w: ITEM_SIZE, h: ITEM_SIZE });
+}
+
+// ── Coins ──
+function coinsForKill(target, isPlayer) {
+  if (isPlayer) return 10;
+  return 2 + Math.floor((target.maxHp || 30) / 30);
+}
+
+function dropCoins(x, y, total) {
+  const n = Math.min(MAX_COIN_DROPS, Math.max(1, total));
+  const per = Math.floor(total / n), extra = total - per * n;
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = 0.6 + Math.random() * 1.1;
+    room.coins.push({
+      id: nextId(),
+      x: x - COIN_SIZE / 2, y: y - COIN_SIZE / 2,
+      w: COIN_SIZE, h: COIN_SIZE,
+      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+      value: per + (i < extra ? 1 : 0),
+      life: COIN_LIFETIME,
+    });
+  }
+  if (room.coins.length > MAX_COINS_ON_FLOOR) {
+    room.coins.splice(0, room.coins.length - MAX_COINS_ON_FLOOR);
+  }
+}
+
+function addCoins(pKey, amount) {
+  if (amount <= 0) return;
+  room.playerCoins[pKey] = (room.playerCoins[pKey] || 0) + amount;
+  const pw = room.passwords[pKey];
+  if (pw && !isAdminPw(pw)) {
+    progress().coins[pw] = room.playerCoins[pKey];
+    markDirty();
+  }
 }
 
 function broadcast(msg) {
@@ -329,13 +503,6 @@ function broadcast(msg) {
 }
 
 function spawnMonster() {
-  const edge = Math.floor(Math.random() * 4);
-  let mx, my;
-  if (edge === 0)      { mx = ARENA_X + Math.random() * ARENA_W; my = ARENA_Y + 4; }
-  else if (edge === 1) { mx = ARENA_X + Math.random() * ARENA_W; my = ARENA_Y + ARENA_H - 16; }
-  else if (edge === 2) { mx = ARENA_X + 4;                        my = ARENA_Y + Math.random() * ARENA_H; }
-  else                 { mx = ARENA_X + ARENA_W - 14;             my = ARENA_Y + Math.random() * ARENA_H; }
-
   // HP grows with both the wave config multiplier and the wave number reached
   // (so monsters keep getting tankier in co-op and waves the further you go).
   const waveBonus = 1 + Math.max(0, room.wave.num - 1) * 0.12;
@@ -346,60 +513,96 @@ function spawnMonster() {
   const w = Math.round(10 * sizeScale);
   const h = Math.round(12 * sizeScale);
 
+  // Spawn on a wall, fully inside the floor, and not on top of a player.
+  const minX = ARENA_X + 2, maxX = ARENA_X + ARENA_W - w - 2;
+  const minY = ARENA_Y + 2, maxY = ARENA_Y + ARENA_H - h - 2;
+  const rand = (a, b) => a + Math.random() * Math.max(0, b - a);
+  let mx = minX, my = minY;
+  const startEdge = Math.floor(Math.random() * 4);
+  for (let tries = 0; tries < 12; tries++) {
+    const edge = (startEdge + tries) % 4;
+    if (edge === 0)      { mx = rand(minX, maxX); my = minY; }
+    else if (edge === 1) { mx = rand(minX, maxX); my = maxY; }
+    else if (edge === 2) { mx = minX;             my = rand(minY, maxY); }
+    else                 { mx = maxX;             my = rand(minY, maxY); }
+    if (!tooCloseToPlayers(mx + w / 2, my + h / 2, 100)) break;
+  }
+
   room.monsters.push({
-    id: Math.random().toString(36).slice(2),
+    id: nextId(),
     x: mx, y: my, w, h,
     hp, maxHp: hp,
-    speed: (0.55 / (1 + (sizeScale - 1) * 0.35)) * room.waveSpeedMult, // bigger = a bit slower
+    speed: (0.72 / (1 + (sizeScale - 1) * 0.35)) * room.waveSpeedMult, // bigger = a bit slower
     atkCooldown: 0,
-    atkRange: 10 + w * 0.45,
+    atkRange: 8 + w * 0.5,
     atkDamage: Math.round(8 * (1 + (sizeScale - 1) * 0.7)),
     hitFlash: 0,
     invincible: 0,
+    slowTimer: 0,
+    pull: null,
+    dead: false,
   });
 }
 
 function startWave(num) {
   let cfg;
-  if (room.gameMode === 'waves' && num > WAVE_CONFIG.length) {
+  if (num > WAVE_CONFIG.length) {
     const extra = num - WAVE_CONFIG.length;
     const base  = WAVE_CONFIG[WAVE_CONFIG.length - 1];
     cfg = {
-      monsters:   Math.min(base.monsters + Math.floor(extra * 0.6), 24),
+      monsters:   Math.min(base.monsters + Math.floor(extra * 0.7), 28),
       hpMult:     base.hpMult    * (1 + extra * 0.15),
       speedMult:  Math.min(base.speedMult * (1 + extra * 0.04), 2.8),
     };
   } else {
-    cfg = WAVE_CONFIG[Math.min(num - 1, WAVE_CONFIG.length - 1)];
+    cfg = WAVE_CONFIG[num - 1];
   }
   room.wave = { num, monstersLeft: cfg.monsters, spawnQueue: cfg.monsters, spawnTimer: 500, betweenTimer: 0 };
-  room.waveHpMult   = cfg.hpMult;
+  room.waveHpMult    = cfg.hpMult;
   room.waveSpeedMult = cfg.speedMult;
 }
 
-function startGame() {
-  const p1Xp = room.playerXp.p1;
-  const p2Xp = room.playerXp.p2;
-  room.players.p1 = makePlayer(1, p1Xp);
-  room.players.p2 = (room.gameMode !== 'waves') ? makePlayer(2, p2Xp) : null;
-  if (room.players.p1 && room.playerSkins.p1) room.players.p1.skin = room.playerSkins.p1;
-  if (room.players.p2 && room.playerSkins.p2) room.players.p2.skin = room.playerSkins.p2;
-  if (room.players.p1 && room.playerUnlocks.p1) room.players.p1.unlockedWeapons = room.playerUnlocks.p1;
-  if (room.players.p2 && room.playerUnlocks.p2) room.players.p2.unlockedWeapons = room.playerUnlocks.p2;
-  room.monsters   = [];
+function clearField() {
+  room.monsters    = [];
   room.projectiles = [];
-  room.particles  = [];
-  room.traps      = [];
-  room.items      = [];
+  room.particles   = [];
+  room.traps       = [];
+  room.items       = [];
+  room.coins       = [];
   room.trapSpawnTimer = TRAP_SPAWN_MIN;
   room.itemSpawnTimer = ITEM_SPAWN_MIN;
+}
+
+function startGame() {
+  if (room.round.matchWinner) room.round = { p1Wins: 0, p2Wins: 0, maxWins: 3, matchWinner: 0 };
+  room.players.p1 = makePlayer(1, room.playerXp.p1, room.playerUpgrades.p1);
+  room.players.p2 = (room.gameMode !== 'waves') ? makePlayer(2, room.playerXp.p2, room.playerUpgrades.p2) : null;
+  for (const key of ['p1', 'p2']) {
+    const p = room.players[key];
+    if (!p) continue;
+    if (room.playerSkins[key])   p.skin = room.playerSkins[key];
+    if (room.playerUnlocks[key]) p.unlockedWeapons = room.playerUnlocks[key];
+    refreshWeapon(p);
+  }
+  clearField();
   room.unlockQueues = { p1: [], p2: [] };
-  room.gameState  = 'GAMEPLAY';
+  room.wave = emptyWave();
+  room.gameState = 'GAMEPLAY';
   if (room.gameMode !== 'pvp') startWave(1);
 }
 
+function resetToLobby() {
+  room.gameState = 'LOBBY';
+  room.players = { p1: null, p2: null };
+  room.wave = emptyWave();
+  room.round = { p1Wins: 0, p2Wins: 0, maxWins: 3, matchWinner: 0 };
+  room.roundOverTimer = 0;
+  room.unlockQueues = { p1: [], p2: [] };
+  clearField();
+}
+
 function applyDamage(target, dmg, attackerKey) {
-  if (target.invincible > 0) return;
+  if (target.dead || target.invincible > 0) return;
   if (target.num && hasEffect(target, 'shield')) {  // shield item: ignore all incoming damage
     target.hitFlash = 80;
     return;
@@ -413,51 +616,72 @@ function applyDamage(target, dmg, attackerKey) {
 
 function handleKill(target, attackerKey) {
   const isPlayer = !!target.num;
-  let baseGain  = isPlayer ? 15 : 6;
+  let baseGain = isPlayer ? 15 : 6;
   // Bigger (tankier) monsters reward more XP, scaled by their max HP over the base 30.
   if (!isPlayer) baseGain = Math.round(baseGain * Math.max(1, (target.maxHp || 30) / 30));
-  const xpGain    = room.gameMode === 'waves' ? baseGain * 2 : baseGain;
+  const xpGain = room.gameMode === 'waves' ? baseGain * 2 : baseGain;
 
   // Credit XP to attacking player
   if (attackerKey === 'p1' || attackerKey === 'p2') {
+    const attacker = room.players[attackerKey];
     const pw = room.passwords[attackerKey];
     const admin = isAdminPw(pw);
     const oldXp = room.playerXp[attackerKey];
     room.playerXp[attackerKey] += xpGain;
-    if (!admin) setPlayerXp(pw, room.playerXp[attackerKey]);
 
     const newUnlocks = checkNewUnlocks(oldXp, room.playerXp[attackerKey]);
     room.unlockQueues[attackerKey].push(...newUnlocks);
     const merged = sortWeaponIds([
-      ...(room.players[attackerKey].unlockedWeapons || []),
+      ...(attacker?.unlockedWeapons || []),
       ...getUnlockedWeaponIds(room.playerXp[attackerKey]),
     ]);
-    room.players[attackerKey].unlockedWeapons = merged;
+    if (attacker) { attacker.unlockedWeapons = merged; refreshWeapon(attacker); }
     room.playerUnlocks[attackerKey] = merged;
-    if (!admin) saveStoredWeapons(pw, merged);
+
+    if (pw && !admin) {
+      const d = progress();
+      d.players[pw] = room.playerXp[attackerKey];
+      d.weapons[pw] = merged;
+      markDirty();
+    }
   }
 
-  room.particles.push({
-    type: 'xp', x: target.x + target.w / 2, y: target.y,
-    text: '+' + xpGain, timer: 900,
-  });
+  // Only float the XP number when a player actually banked it — a trap or a
+  // monster finishing something off earns nobody anything.
+  if (attackerKey === 'p1' || attackerKey === 'p2') {
+    room.particles.push({
+      type: 'xp', x: cx(target), y: target.y,
+      text: '+' + xpGain, timer: 900,
+    });
+  }
+
+  // Coins drop on the floor for anyone to pick up. Dying to a monster or a trap
+  // drops nothing — otherwise you could farm coins off your own deaths.
+  const killedByRival = attackerKey === 'p1' || attackerKey === 'p2';
+  if (!isPlayer || killedByRival) {
+    dropCoins(cx(target), cy(target), coinsForKill(target, isPlayer));
+  }
 
   if (isPlayer) {
     target.dead = true;
+    target.pull = null;
     target.lives--;
     target.hp = 0;
     if (target.lives > 0) target.respawnTimer = 2000;
   } else {
+    target.dead = true;
     room.monsters = room.monsters.filter(m => m !== target);
     room.wave.monstersLeft--;
   }
 }
 
 function respawnPlayer(p) {
+  const sp = spawnPointFor(p.num);
   p.hp = p.maxHp;
-  p.x  = p.num === 1 ? 80 : 388;
-  p.y  = CANVAS_H / 2;
+  p.x  = sp.x;
+  p.y  = sp.y;
   p.dead = false;
+  p.pull = null;
   p.invincible = 2000;
   p.hitFlash   = 0;
 }
@@ -469,7 +693,7 @@ function checkRoundEnd() {
   if (room.gameMode === 'waves') {
     if (p1 && p1.dead && p1.lives <= 0) {
       room.lastLeaderboard = addLeaderboardEntry(room.playerNames.p1, room.wave.num);
-      room.gameState     = 'ROUND_OVER';
+      room.gameState      = 'ROUND_OVER';
       room.roundOverTimer = 6000;
     }
     return;
@@ -481,42 +705,52 @@ function checkRoundEnd() {
     if (p1Out && p2Out) { room.gameState = 'ROUND_OVER'; room.roundOverTimer = 4000; }
   } else {
     if (!p1 || !p2) return;
-    if ((p1.dead && p1.lives <= 0) || (p2.dead && p2.lives <= 0)) {
-      if (p2.dead && p2.lives <= 0) room.round.p1Wins++;
-      if (p1.dead && p1.lives <= 0) room.round.p2Wins++;
-      room.gameState     = 'ROUND_OVER';
-      room.roundOverTimer = 4000;
+    const p1Out = p1.dead && p1.lives <= 0;
+    const p2Out = p2.dead && p2.lives <= 0;
+    if (p1Out || p2Out) {
+      // A double knock-out is a draw — neither side banks a win.
+      if (p2Out && !p1Out) room.round.p1Wins++;
+      if (p1Out && !p2Out) room.round.p2Wins++;
+      // First to maxWins takes the match; the next round starts a fresh tally.
+      const { p1Wins, p2Wins, maxWins } = room.round;
+      room.round.matchWinner = p1Wins >= maxWins ? 1 : p2Wins >= maxWins ? 2 : 0;
+      room.gameState      = 'ROUND_OVER';
+      room.roundOverTimer = room.round.matchWinner ? 6000 : 4000;
     }
   }
 }
 
 // ─── Game Loop ────────────────────────────────────────────────────────────────
 
+// setInterval never fires exactly on time — on Windows a 20 ms timer really lands
+// every ~28 ms — so the loop is driven by the wall clock. Assuming a fixed TICK_MS
+// made the whole game run in slow motion wherever the timer was coarse.
+let lastTickAt = Date.now();
+
 setInterval(() => {
+  const nowMs = Date.now();
+  const dt = Math.max(1, Math.min(80, nowMs - lastTickAt));
+  lastTickAt = nowMs;
+
   if (room.gameState !== 'GAMEPLAY') {
     if (room.gameState === 'ROUND_OVER') {
-      room.roundOverTimer -= TICK_MS;
+      room.roundOverTimer -= dt;
       if (room.roundOverTimer <= 0) {
         const hasUnlocks = room.unlockQueues.p1.length > 0 ||
                            (room.gameMode !== 'waves' && room.unlockQueues.p2.length > 0);
         if (hasUnlocks) {
           room.gameState = 'WEAPON_UNLOCK';
         } else if (room.gameMode === 'waves') {
-          // Close P1 connection → client returns to start screen
-          if (room.p1) try { room.p1.close(); } catch {}
+          endWavesRun();
         } else {
           startGame();
         }
       }
     }
-    if (room.gameState === 'WEAPON_UNLOCK') {
-      // Handled by ack_unlock messages
-    }
     broadcastState();
     return;
   }
 
-  const dt     = TICK_MS;
   const factor = dt / 16.67;
 
   // Detect just-pressed for attack/swap
@@ -549,8 +783,10 @@ setInterval(() => {
     if (inp.down)  vy =  spd;
     if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
 
-    p.x = Math.max(ARENA_X + 2, Math.min(ARENA_X + ARENA_W - p.w - 2, p.x + vx * factor));
-    p.y = Math.max(ARENA_Y + 2, Math.min(ARENA_Y + ARENA_H - p.h - 2, p.y + vy * factor));
+    p.x += vx * factor;
+    p.y += vy * factor;
+    applyPull(p, dt);
+    clampToArena(p, 2);
 
     // Decrement active effects
     if (p.effects) for (const k in p.effects) { p.effects[k] -= dt; if (p.effects[k] <= 0) delete p.effects[k]; }
@@ -563,8 +799,9 @@ setInterval(() => {
     if (p.hitFlash        > 0) p.hitFlash        -= dt;
     if (p.swingTimer      > 0) p.swingTimer      -= dt;
 
-    if (room.swapJustPressed[key]) {
+    if (room.swapJustPressed[key] && p.unlockedWeapons.length > 0) {
       p.weaponIdx = (p.weaponIdx + 1) % p.unlockedWeapons.length;
+      refreshWeapon(p);
     }
     if (room.attackJustPressed[key] && p.atkCooldown <= 0) {
       doAttack(p, key);
@@ -575,100 +812,54 @@ setInterval(() => {
     if (room.parryJustPressed[key] && p.parryCooldown <= 0) {
       p.parryTimer    = PARRY_WINDOW;
       p.parryCooldown = PARRY_COOLDOWN;
-      spawnParrySpark(p.x + p.w / 2, p.y + p.h / 2);
+      spawnParrySpark(cx(p), cy(p));
     }
   }
 
   // ── Monsters ──
-  for (const m of room.monsters) {
+  // Snapshot: a kill during this pass replaces room.monsters mid-iteration.
+  for (const m of room.monsters.slice()) {
+    if (m.dead) continue;
     let nearest = null, bestDist = Infinity;
     for (const p of [room.players.p1, room.players.p2]) {
       if (!p || p.dead) continue;
-      const d = Math.hypot(p.x - m.x, p.y - m.y);
+      const d = distBetween(p, m);
       if (d < bestDist) { bestDist = d; nearest = p; }
     }
-    if (!nearest) continue;
 
-    const dx = nearest.x - m.x, dy = nearest.y - m.y;
-    const dist = Math.hypot(dx, dy) || 1;
-    if (dist > m.atkRange) {
-      m.x += (dx / dist) * m.speed * factor;
-      m.y += (dy / dist) * m.speed * factor;
-      m.x = Math.max(ARENA_X + 1, Math.min(ARENA_X + ARENA_W - m.w - 1, m.x));
-      m.y = Math.max(ARENA_Y + 1, Math.min(ARENA_Y + ARENA_H - m.h - 1, m.y));
-    }
-
-    if (dist <= m.atkRange + 4 && m.atkCooldown <= 0) {
-      if (nearest.parryTimer > 0) {
-        // Parried: reflect the blow back onto the monster
-        applyDamage(m, Math.round(m.atkDamage * PARRY_REFLECT) + 10, playerKeyOf(nearest));
-        spawnParrySpark(nearest.x + nearest.w / 2, nearest.y + nearest.h / 2);
-      } else {
-        applyDamage(nearest, m.atkDamage, 'monster');
-      }
-      m.atkCooldown = 1200;
-    }
+    if (m.slowTimer > 0) m.slowTimer -= dt;
     if (m.atkCooldown > 0) m.atkCooldown -= dt;
     if (m.hitFlash    > 0) m.hitFlash    -= dt;
     if (m.invincible  > 0) m.invincible  -= dt;
-  }
 
-  // ── Projectiles ──
-  room.projectiles = room.projectiles.filter(proj => {
-    proj.x += proj.dx * factor;
-    proj.y += proj.dy * factor;
-    proj.traveled += Math.hypot(proj.dx, proj.dy) * factor;
-
-    if (proj.x < ARENA_X || proj.x > ARENA_X + ARENA_W ||
-        proj.y < ARENA_Y || proj.y > ARENA_Y + ARENA_H) {
-      if (proj.isAoe) detonateAoe(proj);
-      return false;
-    }
-    if (proj.traveled >= proj.maxRange) {
-      if (proj.isAoe) detonateAoe(proj);
-      return false;
-    }
-
-    const targets = [
-      ...(proj.owner !== 'p1' ? [room.players.p1] : []),
-      ...(proj.owner !== 'p2' ? [room.players.p2] : []),
-      ...room.monsters,
-    ].filter(t => t && !t.dead);
-
-    let shouldRemove = false;
-    for (const t of targets) {
-      if (aabb({ x: proj.x - 3, y: proj.y - 3, w: 6, h: 6 }, t)) {
-        const tk = playerKeyOf(t);
-        if (tk && t.parryTimer > 0) {
-          // Parried: bounce the projectile back at its owner
-          proj.dx = -proj.dx; proj.dy = -proj.dy;
-          proj.owner = tk;
-          proj.traveled = 0;
-          proj.damage = Math.round(proj.damage * PARRY_REFLECT);
-          if (proj.hitTargets) proj.hitTargets.clear();
-          spawnParrySpark(proj.x, proj.y);
-          shouldRemove = false;
-          break;
-        }
-        if (proj.isAoe) {
-          detonateAoe(proj);
-          shouldRemove = true;
-          break;
-        } else if (proj.pierce) {
-          const tId = t === room.players.p1 ? 'p1' : t === room.players.p2 ? 'p2' : t.id;
-          if (!proj.hitTargets.has(tId)) {
-            proj.hitTargets.add(tId);
-            applyDamage(t, proj.damage, proj.owner);
-          }
+    if (nearest) {
+      const dx = cx(nearest) - cx(m), dy = cy(nearest) - cy(m);
+      const dist = Math.hypot(dx, dy) || 1;
+      const reach = m.atkRange + (nearest.w + nearest.h) / 4;
+      if (dist > reach) {
+        const spd = m.speed * (m.slowTimer > 0 ? 0.4 : 1);
+        m.x += (dx / dist) * spd * factor;
+        m.y += (dy / dist) * spd * factor;
+      }
+      if (dist <= reach + 4 && m.atkCooldown <= 0) {
+        if (nearest.parryTimer > 0) {
+          // Parried: reflect the blow back onto the monster
+          applyDamage(m, Math.round(m.atkDamage * PARRY_REFLECT) + 10, playerKeyOf(nearest));
+          spawnParrySpark(cx(nearest), cy(nearest));
         } else {
-          applyDamage(t, proj.damage, proj.owner);
-          shouldRemove = true;
-          break;
+          applyDamage(nearest, m.atkDamage, 'monster');
         }
+        m.atkCooldown = 1200;
       }
     }
-    return !shouldRemove;
-  });
+
+    applyPull(m, dt);
+    clampToArena(m);
+  }
+  separateMonsters(factor);
+
+  // ── Projectiles ──
+  room.projectiles = room.projectiles.filter(proj => updateProjectile(proj, factor, dt));
 
   // ── Wave spawner ──
   if (room.gameMode !== 'pvp') {
@@ -680,7 +871,7 @@ setInterval(() => {
       if (room.wave.spawnTimer <= 0) {
         spawnMonster();
         room.wave.spawnQueue--;
-        room.wave.spawnTimer = 1200;
+        room.wave.spawnTimer = 1000;
       }
     } else if (room.wave.monstersLeft <= 0 && room.monsters.length === 0) {
       room.wave.betweenTimer = 3000;
@@ -726,13 +917,47 @@ setInterval(() => {
   room.items = room.items.filter(it => {
     for (const key of ['p1', 'p2']) {
       const p = room.players[key];
-      if (p && !p.dead && aabb(p, it) && (p.inventory.length < MAX_INVENTORY)) {
+      if (p && !p.dead && aabb(p, it) && p.inventory.length < MAX_INVENTORY) {
         p.inventory.push(it.type);
-        room.particles.push({ type: 'pickup', x: it.x + it.w / 2, y: it.y, timer: 600, max: 600, color: ITEM_TYPES[it.type].color });
+        room.particles.push({ type: 'pickup', x: cx(it), y: it.y, timer: 600, max: 600, color: ITEM_TYPES[it.type].color });
         return false;
       }
     }
     return true;
+  });
+
+  // ── Coins ──
+  room.coins = room.coins.filter(c => {
+    // Drift toward the nearest player, so a kill made at bow range isn't a chore
+    // to collect, then snap in once close enough.
+    let near = null, nearKey = null, nearDist = Infinity;
+    for (const key of ['p1', 'p2']) {
+      const p = room.players[key];
+      if (!p || p.dead) continue;
+      const d = Math.hypot(cx(p) - cx(c), cy(p) - cy(c));
+      if (d < nearDist) { nearDist = d; near = p; nearKey = key; }
+    }
+    if (near && nearDist <= COIN_MAGNET) {
+      addCoins(nearKey, c.value);
+      room.particles.push({ type: 'coin', x: cx(c), y: cy(c), text: '+' + c.value, timer: 700, max: 700 });
+      return false;
+    }
+    if (near && nearDist > 0.01) {
+      // Close by they snap in; after a few seconds on the floor they drift in from
+      // anywhere, so killing at bow range doesn't forfeit the reward.
+      const settled = COIN_LIFETIME - c.life > 2500;
+      if (nearDist < COIN_ATTRACT || settled) {
+        const pull = 0.35 * Math.max(settled ? 0.2 : 0, 1 - nearDist / COIN_ATTRACT);
+        c.vx += ((cx(near) - cx(c)) / nearDist) * pull;
+        c.vy += ((cy(near) - cy(c)) / nearDist) * pull;
+      }
+    }
+    c.x += c.vx * factor;
+    c.y += c.vy * factor;
+    c.vx *= 0.90; c.vy *= 0.90;
+    clampToArena(c, 2);
+    c.life -= dt;
+    return c.life > 0;
   });
 
   // ── Particles ──
@@ -741,6 +966,190 @@ setInterval(() => {
   checkRoundEnd();
   broadcastState();
 }, TICK_MS);
+
+// Nudge overlapping monsters apart so a wave doesn't collapse into one blob.
+function separateMonsters(factor) {
+  const ms = room.monsters;
+  for (let i = 0; i < ms.length; i++) {
+    for (let j = i + 1; j < ms.length; j++) {
+      const a = ms[i], b = ms[j];
+      const minDist = (a.w + b.w) / 2 + 1;
+      let dx = cx(b) - cx(a), dy = cy(b) - cy(a);
+      let d = Math.hypot(dx, dy);
+      if (d >= minDist) continue;
+      if (d < 0.01) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d = 0.5; }
+      const push = ((minDist - d) / 2) * 0.35 * factor;
+      const ux = dx / d, uy = dy / d;
+      a.x -= ux * push; a.y -= uy * push;
+      b.x += ux * push; b.y += uy * push;
+      clampToArena(a); clampToArena(b);
+    }
+  }
+}
+
+// Grapple pull: a short, smooth drag toward whoever hooked you. Velocity is per
+// millisecond so the drag covers the same ground whatever the tick rate.
+const PULL_MS = 320;
+function applyPull(e, dt) {
+  if (!e.pull) return;
+  const step = Math.min(dt, e.pull.timer);
+  e.x += e.pull.vx * step;
+  e.y += e.pull.vy * step;
+  e.pull.timer -= dt;
+  if (e.pull.timer <= 0) e.pull = null;
+}
+
+function startPull(target, ownerKey) {
+  const o = room.players[ownerKey];
+  if (!o || o.dead) return;
+  const tx = cx(target), ty = cy(target);
+  const ox = cx(o), oy = cy(o);
+  const d = Math.hypot(ox - tx, oy - ty) || 1;
+  const travel = Math.max(0, d - (o.w + target.w) / 2 - 8);
+  target.pull = {
+    vx: ((ox - tx) / d) * (travel / PULL_MS),
+    vy: ((oy - ty) / d) * (travel / PULL_MS),
+    timer: PULL_MS,
+    from: ownerKey,
+  };
+}
+
+// ─── Projectiles ──────────────────────────────────────────────────────────────
+
+// Fast projectiles (the grapple hook moves ~17 units a tick) would tunnel
+// straight through a small monster, so long steps are split into short ones.
+function updateProjectile(proj, factor, dt) {
+  const stepLen = Math.hypot(proj.dx, proj.dy) * factor;
+  const subs = Math.max(1, Math.ceil(stepLen / 5));
+  for (let i = 0; i < subs; i++) {
+    if (!advanceProjectile(proj, factor / subs, dt / subs)) return false;
+  }
+  return true;
+}
+
+function advanceProjectile(proj, factor, dt) {
+  const step = Math.hypot(proj.dx, proj.dy) * factor;
+  proj.x += proj.dx * factor;
+  proj.y += proj.dy * factor;
+  proj.traveled += step;
+
+  const outX = proj.x < ARENA_X || proj.x > ARENA_X + ARENA_W;
+  const outY = proj.y < ARENA_Y || proj.y > ARENA_Y + ARENA_H;
+
+  if (outX || outY) {
+    if (proj.boomerang && !proj.returning) {
+      // Bounce off the walls instead of dying.
+      if (outX) proj.dx = -proj.dx;
+      if (outY) proj.dy = -proj.dy;
+      proj.x = Math.max(ARENA_X + 1, Math.min(ARENA_X + ARENA_W - 1, proj.x));
+      proj.y = Math.max(ARENA_Y + 1, Math.min(ARENA_Y + ARENA_H - 1, proj.y));
+    } else {
+      const hx = Math.max(ARENA_X + 2, Math.min(ARENA_X + ARENA_W - 2, proj.x));
+      const hy = Math.max(ARENA_Y + 2, Math.min(ARENA_Y + ARENA_H - 2, proj.y));
+      if (proj.isAoe) detonateAoe(proj);
+      if (proj.teleport) doHookTeleport(proj, hx, hy);
+      return false;
+    }
+  }
+
+  if (proj.boomerang) {
+    proj.recycle = (proj.recycle || 0) + dt;
+    if (proj.recycle > 320 && proj.hitTargets) { proj.hitTargets.clear(); proj.recycle = 0; }
+    if (!proj.returning && proj.traveled >= proj.maxRange) {
+      proj.returning = true;
+      if (proj.hitTargets) proj.hitTargets.clear();
+    }
+    if (proj.returning) {
+      // Home back to the thrower; vanish once it's caught.
+      const o = room.players[proj.owner];
+      if (!o || o.dead) return false;
+      const dx = cx(o) - proj.x, dy = cy(o) - proj.y;
+      const d = Math.hypot(dx, dy) || 1;
+      if (d < 12) return false;
+      const sp = Math.hypot(proj.dx, proj.dy) || 1;
+      proj.dx = (dx / d) * sp;
+      proj.dy = (dy / d) * sp;
+      proj.life = (proj.life ?? 4000) - dt;
+      if (proj.life <= 0) return false;
+    }
+  } else if (proj.traveled >= proj.maxRange) {
+    if (proj.isAoe) detonateAoe(proj);
+    if (proj.teleport) doHookTeleport(proj, proj.x, proj.y);
+    return false;
+  }
+
+  const hitBox = { x: proj.x - 4, y: proj.y - 4, w: 8, h: 8 };
+  for (const t of enemyTargets(proj.owner)) {
+    if (!aabb(hitBox, t)) continue;
+    const tk = playerKeyOf(t);
+    if (tk && t.parryTimer > 0) {
+      // Parried: bounce the projectile back at its owner
+      proj.dx = -proj.dx; proj.dy = -proj.dy;
+      proj.owner = tk;
+      proj.traveled = 0;
+      proj.returning = false;
+      proj.damage = Math.round(proj.damage * PARRY_REFLECT);
+      // A deflected hook is just a projectile now — it reels nobody in and
+      // teleports nobody, so it should stop drawing a chain too.
+      proj.grapple = false;
+      proj.teleport = false;
+      proj.hook = false;
+      if (proj.hitTargets) proj.hitTargets.clear();
+      spawnParrySpark(proj.x, proj.y);
+      return true;
+    }
+    if (proj.teleport) {
+      applyDamage(t, proj.damage, proj.owner);
+      doHookTeleport(proj, proj.x, proj.y);
+      return false;
+    }
+    if (proj.isAoe) {
+      detonateAoe(proj);
+      return false;
+    }
+    if (proj.grapple) {
+      applyDamage(t, proj.damage, proj.owner);
+      startPull(t, proj.owner);
+      room.particles.push({ type: 'hookhit', x: proj.x, y: proj.y, timer: 300, max: 300, color: WEAPON_COLORS.grapple });
+      return false;
+    }
+    if (proj.pierce) {
+      const tId = tk || t.id;
+      if (proj.hitTargets && !proj.hitTargets.has(tId)) {
+        proj.hitTargets.add(tId);
+        applyDamage(t, proj.damage, proj.owner);
+      }
+      continue;
+    }
+    applyDamage(t, proj.damage, proj.owner);
+    return false;
+  }
+  return true;
+}
+
+function doHookTeleport(proj, hitX, hitY) {
+  const o = room.players[proj.owner];
+  if (!o || o.dead) return;
+  const from = { x: cx(o), y: cy(o) };
+  o.x = hitX - o.w / 2;
+  o.y = hitY - o.h / 2;
+  clampToArena(o, 2);
+  o.pull = null;
+  room.particles.push({ type: 'teleport', x: from.x, y: from.y, timer: 340, max: 340, color: WEAPON_COLORS.grapple });
+  room.particles.push({ type: 'teleport', x: cx(o), y: cy(o), timer: 340, max: 340, color: '#ffffff' });
+}
+
+function detonateAoe(proj) {
+  for (const t of enemyTargets(proj.owner)) {
+    if (Math.hypot(cx(t) - proj.x, cy(t) - proj.y) < proj.aoeRadius) {
+      applyDamage(t, proj.damage, proj.owner);
+    }
+  }
+  room.particles.push({
+    type: 'aoe', x: proj.x, y: proj.y, maxR: proj.aoeRadius,
+    radius: 2, timer: 320, max: 320, color: '#aa44ff',
+  });
+}
 
 // ─── Attack Logic ─────────────────────────────────────────────────────────────
 
@@ -752,20 +1161,13 @@ function doAttack(p, pKey) {
   p.swingTimer  = Math.min(w.atkSpd, 200);
 
   if (w.type === 'melee') {
-    const targets = [
-      ...(pKey !== 'p1' ? [room.players.p1] : []),
-      ...(pKey !== 'p2' ? [room.players.p2] : []),
-      ...room.monsters,
-    ].filter(t => t && !t.dead);
-
-    const cx = p.x + p.w / 2, cy = p.y + p.h / 2;
-    for (const t of targets) {
-      if (Math.hypot(t.x + t.w / 2 - cx, t.y + t.h / 2 - cy) <= w.range) {
+    for (const t of enemyTargets(pKey)) {
+      if (distBetween(t, p) <= w.range) {
         const tk = playerKeyOf(t);
         if (tk && t.parryTimer > 0) {
           // Parried: the attacker takes the (boosted) hit instead
           applyDamage(p, Math.round(w.damage * dmgMult * PARRY_REFLECT), tk);
-          spawnParrySpark(cx, cy);
+          spawnParrySpark(cx(p), cy(p));
         } else {
           applyDamage(t, Math.round(w.damage * dmgMult), pKey);
         }
@@ -774,10 +1176,10 @@ function doAttack(p, pKey) {
   } else {
     const aim = nearestTargetAngle(p, pKey);
     p.facing = Math.cos(aim) < 0 ? -1 : 1; // face the target so the weapon sprite points right way
-    const speed = 3.5;
+    const speed = w.grapple ? 6.5 : 4.4;
     room.projectiles.push({
-      x: p.x + p.w / 2,
-      y: p.y + p.h / 2,
+      id: nextId(),
+      x: cx(p), y: cy(p),
       dx: Math.cos(aim) * speed,
       dy: Math.sin(aim) * speed,
       damage: Math.round(w.damage * dmgMult),
@@ -788,25 +1190,24 @@ function doAttack(p, pKey) {
       isAoe: !!w.aoeRadius,
       aoeRadius: w.aoeRadius || 0,
       pierce: !!w.pierce,
-      hitTargets: w.pierce ? new Set() : null,
+      grapple: !!w.grapple,
+      boomerang: !!w.boomerang,
+      returning: false,
+      life: w.boomerang ? 4000 : 0,
+      hitTargets: (w.pierce || w.boomerang) ? new Set() : null,
     });
   }
 }
 
 function nearestTargetAngle(p, pKey) {
-  const cx = p.x + p.w / 2, cy = p.y + p.h / 2;
-  const cands = [
-    ...(pKey !== 'p1' ? [room.players.p1] : []),
-    ...(pKey !== 'p2' ? [room.players.p2] : []),
-    ...room.monsters,
-  ].filter(t => t && !t.dead);
+  const px = cx(p), py = cy(p);
   let best = null, bd = Infinity;
-  for (const t of cands) {
-    const d = Math.hypot(t.x + t.w / 2 - cx, t.y + t.h / 2 - cy);
+  for (const t of enemyTargets(pKey)) {
+    const d = Math.hypot(cx(t) - px, cy(t) - py);
     if (d < bd) { bd = d; best = t; }
   }
   if (!best) return p.facing === 1 ? 0 : Math.PI;
-  return Math.atan2(best.y + best.h / 2 - cy, best.x + best.w / 2 - cx);
+  return Math.atan2(cy(best) - py, cx(best) - px);
 }
 
 function doSpecial(p, pKey) {
@@ -817,82 +1218,108 @@ function doSpecial(p, pKey) {
   p.specialCooldown = sp.cd;
   p.swingTimer = Math.min(sp.cd, 300);
 
-  const cx = p.x + p.w / 2, cy = p.y + p.h / 2;
+  const px = cx(p), py = cy(p);
   const wc = WEAPON_COLORS[w.id] || '#ffffff';
   const spDmg = Math.round(sp.dmg * dmgMult);
 
   if (sp.kind === 'slam') {
-    const targets = [
-      ...(pKey !== 'p1' ? [room.players.p1] : []),
-      ...(pKey !== 'p2' ? [room.players.p2] : []),
-      ...room.monsters,
-    ].filter(t => t && !t.dead);
-    for (const t of targets) {
-      if (Math.hypot(t.x + t.w / 2 - cx, t.y + t.h / 2 - cy) <= sp.range) {
-        applyDamage(t, spDmg, pKey);
-      }
+    for (const t of enemyTargets(pKey)) {
+      if (Math.hypot(cx(t) - px, cy(t) - py) <= sp.range) applyDamage(t, spDmg, pKey);
     }
     room.particles.push({
-      type: 'shockwave', x: cx, y: cy, maxR: sp.range,
+      type: 'shockwave', x: px, y: py, maxR: sp.range,
       timer: 420, max: 420, color: wc,
     });
-  } else {
-    const aim = nearestTargetAngle(p, pKey);
-    p.facing = Math.cos(aim) < 0 ? -1 : 1;
-    const speed = 4.2;
-    const mkProj = (angle, extra = {}) => ({
-      x: cx, y: cy,
-      dx: Math.cos(angle) * speed,
-      dy: Math.sin(angle) * speed,
-      damage: spDmg,
-      owner: pKey,
-      traveled: 0,
-      maxRange: sp.range,
-      weaponId: w.id,
-      special: true,
-      isAoe: false,
-      aoeRadius: 0,
-      pierce: false,
-      hitTargets: null,
-      ...extra,
-    });
-
-    if (sp.kind === 'pierce') {
-      room.projectiles.push(mkProj(aim, { pierce: true, hitTargets: new Set() }));
-    } else if (sp.kind === 'aoeshot') {
-      room.projectiles.push(mkProj(aim, { isAoe: true, aoeRadius: sp.aoe || 40 }));
-    } else if (sp.kind === 'spread') {
-      const n = sp.count || 3;
-      const fan = 0.42;
-      for (let i = 0; i < n; i++) {
-        const a = aim + (i - (n - 1) / 2) * fan;
-        room.projectiles.push(mkProj(a));
-      }
-    }
+    return;
   }
-}
 
-function detonateAoe(proj) {
-  const targets = [room.players.p1, room.players.p2, ...room.monsters]
-    .filter(t => t && !t.dead && (t !== room.players[proj.owner === 'p1' ? 'p1' : 'p2']));
-
-  for (const t of targets) {
-    const cx = t.x + t.w / 2, cy = t.y + t.h / 2;
-    if (Math.hypot(cx - proj.x, cy - proj.y) < proj.aoeRadius) {
-      applyDamage(t, proj.damage, proj.owner);
-    }
-  }
-  room.particles.push({
-    type: 'aoe', x: proj.x, y: proj.y, maxR: proj.aoeRadius,
-    radius: 2, timer: 300, color: '#aa44ff',
+  const aim = nearestTargetAngle(p, pKey);
+  p.facing = Math.cos(aim) < 0 ? -1 : 1;
+  const speed = sp.kind === 'hook' ? 14 : 5.2;
+  const mkProj = (angle, extra = {}) => ({
+    id: nextId(),
+    x: px, y: py,
+    dx: Math.cos(angle) * speed,
+    dy: Math.sin(angle) * speed,
+    damage: spDmg,
+    owner: pKey,
+    traveled: 0,
+    maxRange: sp.range,
+    weaponId: w.id,
+    special: true,
+    isAoe: false,
+    aoeRadius: 0,
+    pierce: false,
+    grapple: false,
+    boomerang: false,
+    teleport: false,
+    returning: false,
+    life: 0,
+    hitTargets: null,
+    ...extra,
   });
+
+  if (sp.kind === 'pierce') {
+    room.projectiles.push(mkProj(aim, { pierce: true, hitTargets: new Set() }));
+  } else if (sp.kind === 'aoeshot') {
+    room.projectiles.push(mkProj(aim, { isAoe: true, aoeRadius: sp.aoe || 40 }));
+  } else if (sp.kind === 'hook') {
+    // Very fast hook — wherever it lands, the thrower goes with it.
+    room.projectiles.push(mkProj(aim, { teleport: true, hook: true }));
+  } else if (sp.kind === 'spread') {
+    const n = sp.count || 3;
+    const fan = 0.42;
+    for (let i = 0; i < n; i++) {
+      const a = aim + (i - (n - 1) / 2) * fan;
+      room.projectiles.push(mkProj(a, sp.boomerang
+        ? { boomerang: true, pierce: true, hitTargets: new Set(), life: 4000 }
+        : {}));
+    }
+  }
 }
 
 // ─── State Broadcast ──────────────────────────────────────────────────────────
 
+// Chains connect a live grapple/hook projectile — and anything currently being
+// dragged — back to the player holding the other end.
+function buildChains() {
+  const out = [];
+  for (const pr of room.projectiles) {
+    if (!pr.grapple && !pr.hook) continue;
+    const o = room.players[pr.owner];
+    if (!o) continue;
+    out.push({ x1: cx(o), y1: cy(o), x2: pr.x, y2: pr.y, kind: pr.hook ? 'hook' : 'grapple' });
+  }
+  for (const e of [room.players.p1, room.players.p2, ...room.monsters]) {
+    if (!e || e.dead || !e.pull || !e.pull.from) continue;
+    const o = room.players[e.pull.from];
+    if (!o || o.dead) continue;
+    out.push({ x1: cx(o), y1: cy(o), x2: cx(e), y2: cy(e), kind: 'grapple' });
+  }
+  return out;
+}
+
+// Positions go out 50×/s for every entity; full float precision is ~20 characters
+// each and 0.1 world units is well under a screen pixel, so round them.
+function r1(n) { return Math.round(n * 10) / 10; }
+
+function playerView(p) {
+  if (!p) return null;
+  const w = weapon(p);
+  return {
+    x: r1(p.x), y: r1(p.y), w: p.w, h: p.h, hp: p.hp, maxHp: p.maxHp,
+    lives: p.lives, facing: p.facing, weaponId: w.id, weaponIdx: p.weaponIdx,
+    atkSpd: w.atkSpd,
+    hitFlash: p.hitFlash, dead: p.dead, swingTimer: p.swingTimer,
+    unlockedWeapons: p.unlockedWeapons, skin: p.skin,
+    specialCd: Math.max(0, p.specialCooldown), specialMax: w.special?.cd || 0,
+    parryCd: Math.max(0, p.parryCooldown), parryMax: PARRY_COOLDOWN, parryActive: p.parryTimer > 0,
+    effects: p.effects,
+    pulled: !!p.pull,
+  };
+}
+
 function buildStateMsg(playerNum) {
-  const p1  = room.players.p1;
-  const p2  = room.players.p2;
   const key = playerNum === 1 ? 'p1' : 'p2';
   return {
     type: 'state',
@@ -900,30 +1327,19 @@ function buildStateMsg(playerNum) {
     gameState: room.gameState,
     gameMode: room.gameMode,
     playerNames: room.playerNames,
-    players: {
-      p1: p1 ? { x: p1.x, y: p1.y, w: p1.w, h: p1.h, hp: p1.hp, maxHp: p1.maxHp,
-                  lives: p1.lives, facing: p1.facing, weaponId: weapon(p1).id,
-                  hitFlash: p1.hitFlash, dead: p1.dead, swingTimer: p1.swingTimer,
-                  unlockedWeapons: p1.unlockedWeapons, skin: p1.skin,
-                  specialCd: Math.max(0, p1.specialCooldown), specialMax: weapon(p1).special?.cd || 0,
-                  parryCd: Math.max(0, p1.parryCooldown), parryMax: PARRY_COOLDOWN, parryActive: p1.parryTimer > 0,
-                  effects: p1.effects } : null,
-      p2: p2 ? { x: p2.x, y: p2.y, w: p2.w, h: p2.h, hp: p2.hp, maxHp: p2.maxHp,
-                  lives: p2.lives, facing: p2.facing, weaponId: weapon(p2).id,
-                  hitFlash: p2.hitFlash, dead: p2.dead, swingTimer: p2.swingTimer,
-                  unlockedWeapons: p2.unlockedWeapons, skin: p2.skin,
-                  specialCd: Math.max(0, p2.specialCooldown), specialMax: weapon(p2).special?.cd || 0,
-                  parryCd: Math.max(0, p2.parryCooldown), parryMax: PARRY_COOLDOWN, parryActive: p2.parryTimer > 0,
-                  effects: p2.effects } : null,
-    },
-    monsters:    room.monsters.map(m => ({ x: m.x, y: m.y, w: m.w, h: m.h, hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash })),
-    projectiles: room.projectiles.map(pr => ({ x: pr.x, y: pr.y, dx: pr.dx, dy: pr.dy, weaponId: pr.weaponId, isAoe: pr.isAoe, special: !!pr.special })),
-    traps:       room.traps.map(tr => ({ x: tr.x, y: tr.y, w: tr.w, h: tr.h, type: tr.type, state: tr.state, radius: tr.radius, color: tr.color,
-                  armRatio: tr.state === 'arming' ? 1 - tr.armTimer / (TRAP_TYPES[tr.type].armTime || 1) : 0 })),
-    items:       room.items.map(it => ({ x: it.x, y: it.y, w: it.w, h: it.h, type: it.type, color: ITEM_TYPES[it.type].color })),
-    particles:   room.particles,
+    players: { p1: playerView(room.players.p1), p2: playerView(room.players.p2) },
+    monsters:    room.monsters.map(m => ({ id: m.id, x: r1(m.x), y: r1(m.y), w: m.w, h: m.h, hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash, slowed: (m.slowTimer || 0) > 0 })),
+    projectiles: room.projectiles.map(pr => ({ id: pr.id, x: r1(pr.x), y: r1(pr.y), dx: r1(pr.dx), dy: r1(pr.dy), weaponId: pr.weaponId,
+                  isAoe: pr.isAoe, special: !!pr.special, grapple: !!pr.grapple, hook: !!pr.hook, boomerang: !!pr.boomerang })),
+    chains:      buildChains().map(c => ({ x1: r1(c.x1), y1: r1(c.y1), x2: r1(c.x2), y2: r1(c.y2), kind: c.kind })),
+    traps:       room.traps.map(tr => ({ x: r1(tr.x), y: r1(tr.y), w: tr.w, h: tr.h, type: tr.type, state: tr.state, radius: tr.radius, color: tr.color,
+                  armRatio: tr.state === 'arming' ? r1(1 - tr.armTimer / (TRAP_TYPES[tr.type].armTime || 1)) : 0 })),
+    items:       room.items.map(it => ({ x: r1(it.x), y: r1(it.y), w: it.w, h: it.h, type: it.type, color: ITEM_TYPES[it.type].color })),
+    coins:       room.coins.map(c => ({ id: c.id, x: r1(c.x), y: r1(c.y), w: c.w, h: c.h, value: c.value, fading: c.life < 4000 })),
+    particles:   room.particles.map(p => (p.x === undefined ? p : { ...p, x: r1(p.x), y: r1(p.y) })),
     wave:        room.wave,
     xp:          room.playerXp[key],
+    myCoins:     room.playerCoins[key],
     inventory:   room.players[key] ? room.players[key].inventory : [],
     round:       room.round,
     pendingUnlock: room.unlockQueues[key][0] || null,
@@ -937,11 +1353,140 @@ function broadcastState() {
   if (room.p2 && room.p2.readyState === 1) room.p2.send(JSON.stringify(buildStateMsg(2)));
 }
 
+// A waves run is solo and ends for good — send the client back to the menu
+// instead of dropping the socket and showing it a "disconnected" error.
+function endWavesRun() {
+  const ws = room.p1;
+  if (ws && ws.readyState === 1) {
+    try { ws.send(JSON.stringify({ type: 'to_menu', reason: 'run_over' })); } catch {}
+  }
+  if (ws) setTimeout(() => { try { ws.close(); } catch {} }, 250);
+  resetToLobby();
+}
+
+// ─── Weapon catalog for the client ────────────────────────────────────────────
+
+function weaponCatalog() {
+  return WEAPONS.map(w => ({
+    id: w.id, name: w.name, type: w.type, unlockXp: w.unlockXp,
+    damage: w.damage, range: w.range, atkSpd: w.atkSpd,
+    special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd } : null,
+  }));
+}
+
+function profileFor(pw, opts = {}) {
+  const admin = isAdminPw(pw);
+  const d = progress();
+
+  let xp = admin ? ADMIN_XP : (d.players[pw] || 0);
+  const localXp = Math.max(0, Math.floor(Number(opts.localXp) || 0));
+  if (!admin && localXp > xp) { xp = localXp; d.players[pw] = xp; markDirty(); }
+
+  let coins;
+  if (admin) {
+    coins = ADMIN_COINS;
+  } else if (d.coins[pw] === undefined) {
+    // No server record (e.g. the host's disk was wiped) — trust the client's mirror.
+    coins = Math.max(0, Math.floor(Number(opts.localCoins) || 0));
+    d.coins[pw] = coins;
+    markDirty();
+  } else {
+    coins = d.coins[pw];
+  }
+
+  const weapons = sortWeaponIds([...getUnlockedWeaponIds(xp), ...(d.weapons[pw] || [])]);
+  if (!admin) {
+    const prev = sortWeaponIds(d.weapons[pw] || []);
+    if (JSON.stringify(prev) !== JSON.stringify(weapons)) { d.weapons[pw] = weapons; markDirty(); }
+  }
+
+  const upgrades = normalizeUpgrades(d.upgrades[pw]);
+  return { xp, coins, weapons, upgrades };
+}
+
+// ─── HTTP API (shop / upgrades) ───────────────────────────────────────────────
+
+app.use(express.json({ limit: '8kb' }));
+
+app.get('/api/catalog', (_req, res) => {
+  res.json({ catalog: weaponCatalog(), upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS });
+});
+
+app.post('/api/profile', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'A password is required to save upgrades.' });
+  const p = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins });
+  res.json({ ...p, catalog: weaponCatalog(), upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS });
+});
+
+app.post('/api/upgrade', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'A password is required to save upgrades.' });
+  const weaponId = sanitizeText(req.body?.weaponId, 24);
+  const stat = sanitizeText(req.body?.stat, 8);
+  if (!WEAPON_BY_ID[weaponId]) return res.status(400).json({ error: 'Unknown weapon.' });
+  if (!UPGRADE_STATS[stat])    return res.status(400).json({ error: 'Unknown upgrade.' });
+
+  const admin = isAdminPw(pw);
+  const prof = profileFor(pw, {});
+  if (!prof.weapons.includes(weaponId)) {
+    return res.status(400).json({ error: 'Unlock that weapon first.' });
+  }
+
+  const d = progress();
+  const levels = prof.upgrades[weaponId] || {};
+  const cur = levels[stat] || 0;
+  if (cur >= UPGRADE_STATS[stat].max) {
+    return res.status(400).json({ error: 'Already at max level.' });
+  }
+  const cost = upgradeCost(stat, cur + 1);
+  if (!admin && prof.coins < cost) {
+    return res.status(400).json({ error: 'Not enough coins.' });
+  }
+
+  if (!d.upgrades[pw]) d.upgrades[pw] = {};
+  if (!d.upgrades[pw][weaponId]) d.upgrades[pw][weaponId] = {};
+  d.upgrades[pw][weaponId][stat] = cur + 1;
+  if (!admin) d.coins[pw] = prof.coins - cost;
+  markDirty();
+
+  // Push the new levels into a live game if this player is mid-match.
+  for (const key of ['p1', 'p2']) {
+    if (room.passwords[key] !== pw) continue;
+    const ups = normalizeUpgrades(d.upgrades[pw]);
+    room.playerUpgrades[key] = ups;
+    if (!admin) room.playerCoins[key] = d.coins[pw];
+    const p = room.players[key];
+    if (p) { p.upgrades = ups; refreshWeapon(p); }
+  }
+
+  const next = profileFor(pw, {});
+  res.json({ ...next, spent: cost });
+});
+
 // ─── WebSocket Connections ────────────────────────────────────────────────────
 
+function clearSlot(key) {
+  room[key] = null;
+  room[key + 'Joined'] = false;
+  room.playerNames[key] = key === 'p1' ? 'PLAYER 1' : 'PLAYER 2';
+  room.passwords[key] = '';
+  room.playerXp[key] = 0;
+  room.playerCoins[key] = 0;
+  room.playerSkins[key] = null;
+  room.playerUnlocks[key] = null;
+  room.playerUpgrades[key] = null;
+  room.unlockQueues[key] = [];
+  room.players[key] = null;
+  room.inputs[key] = { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false };
+  room.prevInputs[key] = { attack: false, swap: false, special: false, parry: false };
+}
+
 wss.on('connection', (ws) => {
-  if (room.p1 && room.p1.readyState !== 1) { room.p1 = null; room.p1Joined = false; room.playerNames.p1 = 'PLAYER 1'; }
-  if (room.p2 && room.p2.readyState !== 1) { room.p2 = null; room.p2Joined = false; room.playerNames.p2 = 'PLAYER 2'; }
+  // Reap slots whose socket died without a close event.
+  for (const key of ['p1', 'p2']) {
+    if (room[key] && room[key].readyState !== 1) clearSlot(key);
+  }
 
   if (room.p1 && room.p2) {
     ws.send(JSON.stringify({ type: 'full' }));
@@ -959,7 +1504,14 @@ wss.on('connection', (ws) => {
   else      room.p2 = ws;
 
   const myKey = isP1 ? 'p1' : 'p2';
-  ws.send(JSON.stringify({ type: 'welcome', num: isP1 ? 1 : 2, leaderboard: getLeaderboard() }));
+  ws.send(JSON.stringify({
+    type: 'welcome', num: isP1 ? 1 : 2,
+    leaderboard: getLeaderboard(),
+    world: { w: CANVAS_W, h: CANVAS_H, ax: ARENA_X, ay: ARENA_Y, aw: ARENA_W, ah: ARENA_H },
+    playerSpeed: PLAYER_SPEED,
+    catalog: weaponCatalog(),
+    colors: WEAPON_COLORS,
+  }));
 
   broadcastState();
 
@@ -968,44 +1520,33 @@ wss.on('connection', (ws) => {
       const msg = JSON.parse(data);
 
       if (msg.type === 'join') {
-        const rawName = String(msg.name || '').trim().replace(/[<>&"']/g, '').slice(0, 12);
-        room.playerNames[myKey] = rawName || (isP1 ? 'PLAYER 1' : 'PLAYER 2');
+        room.playerNames[myKey] = sanitizeText(msg.name, 12).toUpperCase() || (isP1 ? 'PLAYER 1' : 'PLAYER 2');
 
-        const pw = String(msg.password || '').trim().replace(/[<>&"']/g, '').slice(0, 32);
+        const pw = sanitizeText(msg.password, 32);
         room.passwords[myKey] = pw;
         const admin = isAdminPw(pw);
 
-        // Single progress read — merge server XP with client-cached XP (covers server restarts)
-        const progress = (pw && !admin) ? loadProgress() : null;
-        let progressDirty = false;
+        const prof = pw
+          ? profileFor(pw, { localXp: msg.localXp, localCoins: msg.localCoins })
+          : { xp: 0, coins: 0, weapons: getUnlockedWeaponIds(0), upgrades: {} };
 
-        const serverXp = progress?.players?.[pw] || 0;
-        const clientXp = Math.max(0, Math.floor(Number(msg.localXp) || 0));
-        const effectiveXp = admin ? ADMIN_XP : Math.max(serverXp, clientXp);
-        room.playerXp[myKey] = effectiveXp;
-        if (pw && !admin && effectiveXp > serverXp) {
-          if (!progress.players) progress.players = {};
-          progress.players[pw] = effectiveXp;
-          progressDirty = true;
-        }
+        room.playerXp[myKey]       = prof.xp;
+        room.playerCoins[myKey]    = prof.coins;
+        room.playerUnlocks[myKey]  = prof.weapons;
+        room.playerUpgrades[myKey] = prof.upgrades;
 
-        // Skin: if user explicitly changed it this session, save new skin; else restore saved
+        // Skin: if the user explicitly changed it this session, save the new skin;
+        // otherwise restore whatever this password had saved.
+        const d = pw && !admin ? progress() : null;
         const rawSkin = msg.skin && typeof msg.skin === 'object' ? msg.skin : null;
-        const skinModified = !!msg.skinModified;
-        const savedSkin = progress?.skins?.[pw];
-        const hasSavedSkin = savedSkin !== undefined;
-
+        const savedSkin = d?.skins?.[pw];
         let skin;
-        if (skinModified || !hasSavedSkin) {
+        if (msg.skinModified || savedSkin === undefined) {
           skin = rawSkin
             ? { colorIdx: Math.max(0, Math.min(7, Number(rawSkin.colorIdx) || 0)),
                 hatIdx:   Math.max(0, Math.min(4, Number(rawSkin.hatIdx)   || 0)) }
             : { colorIdx: 0, hatIdx: 0 };
-          if (pw && !admin) {
-            if (!progress.skins) progress.skins = {};
-            progress.skins[pw] = skin;
-            progressDirty = true;
-          }
+          if (d) { d.skins[pw] = skin; markDirty(); }
         } else {
           skin = {
             colorIdx: Math.max(0, Math.min(7, Number(savedSkin.colorIdx) || 0)),
@@ -1014,30 +1555,16 @@ wss.on('connection', (ws) => {
         }
         room.playerSkins[myKey] = skin;
 
-        // Weapon unlocks: union of XP-derived unlocks and any previously stored unlocks
-        const xpUnlocks = getUnlockedWeaponIds(effectiveXp);
-        const storedWeapons = progress?.weapons?.[pw] || [];
-        const unionWeapons = sortWeaponIds([...xpUnlocks, ...storedWeapons]);
-        room.playerUnlocks[myKey] = unionWeapons;
-        if (pw && !admin) {
-          const prevStored = sortWeaponIds(storedWeapons);
-          if (JSON.stringify(prevStored) !== JSON.stringify(unionWeapons)) {
-            if (!progress.weapons) progress.weapons = {};
-            progress.weapons[pw] = unionWeapons;
-            progressDirty = true;
-          }
-        }
-
-        if (pw && !admin && progressDirty) saveProgress(progress);
-
-        // Tell client which skin is active (may restore from password if not modified)
+        // Tell the client which skin is active (may have been restored from the password)
         ws.send(JSON.stringify({ type: 'skin_init', skin }));
 
         if (isP1 && msg.mode) {
-          room.gameMode = ['pvp', 'coop', 'waves'].includes(msg.mode) ? msg.mode : 'pvp';
+          let m = ['pvp', 'coop', 'waves'].includes(msg.mode) ? msg.mode : 'pvp';
+          // Waves is solo; don't strand a player who is already connected.
+          if (m === 'waves' && room.p2) m = 'pvp';
+          room.gameMode = m;
         }
-        if (myKey === 'p1') room.p1Joined = true;
-        else                room.p2Joined = true;
+        room[myKey + 'Joined'] = true;
 
         // Start game: waves = solo (P1 only), others = need both
         const canStart = room.gameMode === 'waves'
@@ -1048,8 +1575,12 @@ wss.on('connection', (ws) => {
         broadcastState();
       }
 
-      if (msg.type === 'input') {
-        room.inputs[myKey] = msg.keys;
+      if (msg.type === 'input' && msg.keys && typeof msg.keys === 'object') {
+        const k = msg.keys;
+        room.inputs[myKey] = {
+          up: !!k.up, down: !!k.down, left: !!k.left, right: !!k.right,
+          attack: !!k.attack, swap: !!k.swap, special: !!k.special, parry: !!k.parry,
+        };
       }
 
       if (msg.type === 'select_weapon') {
@@ -1058,6 +1589,7 @@ wss.on('connection', (ws) => {
           const idx = Number(msg.index);
           if (Number.isInteger(idx) && idx >= 0 && idx < p.unlockedWeapons.length) {
             p.weaponIdx = idx;
+            refreshWeapon(p);
           }
         }
       }
@@ -1066,7 +1598,7 @@ wss.on('connection', (ws) => {
         const p = room.players[myKey];
         if (p && !p.dead && Array.isArray(p.inventory)) {
           const idx = Number(msg.index);
-          if (idx >= 0 && idx < p.inventory.length) {
+          if (Number.isInteger(idx) && idx >= 0 && idx < p.inventory.length) {
             const type = p.inventory[idx];
             const def = ITEM_TYPES[type];
             if (def) {
@@ -1076,7 +1608,7 @@ wss.on('connection', (ws) => {
                 applyEffect(p, def.effect, def.dur);
               }
               p.inventory.splice(idx, 1);
-              room.particles.push({ type: 'useitem', x: p.x + p.w / 2, y: p.y, timer: 500, max: 500, color: def.color });
+              room.particles.push({ type: 'useitem', x: cx(p), y: p.y, timer: 500, max: 500, color: def.color });
             }
           }
         }
@@ -1084,31 +1616,25 @@ wss.on('connection', (ws) => {
 
       if (msg.type === 'ack_unlock' && room.gameState === 'WEAPON_UNLOCK') {
         room.unlockQueues[myKey].shift();
-        // Check if all active players are done
         const p1Done = room.unlockQueues.p1.length === 0;
         const p2Done = room.gameMode === 'waves' || !room.p2Joined || room.unlockQueues.p2.length === 0;
         if (p1Done && p2Done) {
-          if (room.gameMode === 'waves') {
-            if (room.p1) try { room.p1.close(); } catch {}
-          } else {
-            startGame();
-          }
+          if (room.gameMode === 'waves') endWavesRun();
+          else startGame();
         }
       }
     } catch {}
   });
 
   ws.on('close', () => {
-    if (room.p1 === ws) { room.p1 = null; room.p1Joined = false; room.playerNames.p1 = 'PLAYER 1'; room.passwords.p1 = ''; }
-    if (room.p2 === ws) { room.p2 = null; room.p2Joined = false; room.playerNames.p2 = 'PLAYER 2'; room.passwords.p2 = ''; }
-    room.gameState   = 'LOBBY';
-    room.gameMode    = 'pvp';
-    room.players     = { p1: null, p2: null };
-    room.playerXp    = { p1: 0, p2: 0 };
-    room.playerSkins = { p1: null, p2: null };
-    room.playerUnlocks = { p1: null, p2: null };
-    room.unlockQueues = { p1: [], p2: [] };
-    room.monsters = []; room.projectiles = []; room.traps = []; room.items = [];
+    const key = room.p1 === ws ? 'p1' : room.p2 === ws ? 'p2' : null;
+    if (!key) return;
+    const wasPlaying = room.gameState !== 'LOBBY';
+    clearSlot(key);
+    // A match can't continue a fighter down — drop back to the lobby, but keep
+    // whoever is still connected (and their progress) in place.
+    if (wasPlaying) resetToLobby();
+    if (!room.p1 && !room.p2) room.gameMode = 'pvp';
     broadcastState();
   });
 });

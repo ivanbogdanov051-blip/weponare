@@ -1,4 +1,5 @@
-zxxzxv  "appId": "com.weponare.game",
+{
+  "appId": "com.weponare.game",
   "appName": "Weponare",
   "webDir": "public",
   "server": {
