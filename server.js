@@ -37,7 +37,8 @@ const PARRY_COOLDOWN = 5000;  // ms before it can be used again
 const PARRY_REFLECT  = 1.5;   // reflected damage multiplier
 
 const PLAYER_SPEED  = 3.6;    // scaled up with the bigger arena
-const PLAYER_W = 12, PLAYER_H = 16;
+// Characters are drawn from a 16x22 pixel sprite, so the hitbox matches it.
+const PLAYER_W = 16, PLAYER_H = 22;
 
 // ── Traps: sparse, and big enough to be a real hazard on the larger map ──
 const MAX_TRAPS = 5;
@@ -89,6 +90,13 @@ const WEAPONS = [
   { id: 'boomerang',  name: 'BOOMERANG',  damage: 24, range: 200, atkSpd: 560,  type: 'ranged', unlockXp: 10000, pierce: true, boomerang: true, special: { kind: 'spread', dmg: 30, range: 215, cd: 6500, count: 3, boomerang: true } },
   { id: 'cannon',     name: 'CANNON',     damage: 60, range: 250, atkSpd: 1200, type: 'ranged', unlockXp: 11000, aoeRadius: 40, special: { kind: 'aoeshot', dmg: 150, range: 265, cd: 9000, aoe: 100 } },
   { id: 'reaper',     name: 'REAPER',     damage: 55, range: 86,  atkSpd: 920,  type: 'melee',  unlockXp: 13500, swing360: true, special: { kind: 'slam', dmg: 110, range: 110, cd: 9500 } },
+  // projSpeed: shot speed. chill: ms of slow on hit. pellets: shots per trigger
+  // pull, fanned. chain: how many extra foes a hit arcs on to.
+  { id: 'shuriken',    name: 'SHURIKEN',    damage: 12, range: 250, atkSpd: 260,  type: 'ranged', unlockXp: 15000, pierce: true, projSpeed: 6.4, special: { kind: 'ring',    dmg: 24,  range: 210, cd: 6000, count: 10 } },
+  { id: 'frostrod',    name: 'FROST ROD',   damage: 18, range: 260, atkSpd: 620,  type: 'ranged', unlockXp: 16500, chill: 1800,    special: { kind: 'aoeshot', dmg: 60,  range: 280, cd: 7500, aoe: 92, chill: 3200 } },
+  { id: 'blunderbuss', name: 'BLUNDERBUSS', damage: 11, range: 150, atkSpd: 900,  type: 'ranged', unlockXp: 18000, pellets: 5, projSpeed: 5.6, special: { kind: 'aoeshot', dmg: 120, range: 200, cd: 8000, aoe: 72 } },
+  { id: 'lance',       name: 'LANCE',       damage: 34, range: 96,  atkSpd: 650,  type: 'melee',  unlockXp: 20000, special: { kind: 'dash',    dmg: 70,  range: 140, cd: 6000 } },
+  { id: 'stormtome',   name: 'STORM TOME',  damage: 20, range: 240, atkSpd: 700,  type: 'ranged', unlockXp: 22000, chain: 2,  special: { kind: 'storm',   dmg: 65,  range: 260, cd: 8500, count: 5 } },
 ];
 
 const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
@@ -99,6 +107,7 @@ const WEAPON_COLORS = {
   crossbow: '#cc8844', flail: '#dd4444', greatsword: '#ddeeff',
   glaive: '#b0d8c0', katana: '#eef0ff', chakram: '#66e0c0', cannon: '#9a90a8', reaper: '#cc66aa',
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
+  shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
 };
 
 // ── Weapon upgrades bought with coins from the menu ──
@@ -108,6 +117,22 @@ const UPGRADE_STATS = {
   rng: { name: 'RANGE',  max: 6,  perLevel: 0.05,  baseCost: 16 },
 };
 const UPGRADE_KEYS = Object.keys(UPGRADE_STATS);
+
+// ── Skins bought with coins: full outfits drawn over the character ──
+// Ownership is saved per password; a skin can only be worn once it is owned.
+const SKIN_SHOP = [
+  { id: 'ninja',    name: 'NINJA',    price: 120 },
+  { id: 'knight',   name: 'KNIGHT',   price: 150 },
+  { id: 'pirate',   name: 'PIRATE',   price: 180 },
+  { id: 'wizard',   name: 'WIZARD',   price: 200 },
+  { id: 'viking',   name: 'VIKING',   price: 240 },
+  { id: 'skeleton', name: 'SKELETON', price: 280 },
+  { id: 'robot',    name: 'ROBOT',    price: 350 },
+  { id: 'shadow',   name: 'SHADOW',   price: 500 },
+  { id: 'inferno',  name: 'INFERNO',  price: 650 },
+  { id: 'golden',   name: 'GOLDEN',   price: 900 },
+];
+const SKIN_BY_ID = Object.fromEntries(SKIN_SHOP.map(s => [s.id, s]));
 
 // Cost of buying the `nextLevel`th level — later levels cost steeply more.
 function upgradeCost(stat, nextLevel) {
@@ -156,6 +181,9 @@ const MONSTER_TYPES = {
     color: '#8a3a6a', xp: 2.2, coins: 2.4, armor: 0.2,
   },
 };
+
+// Size of a baseline (1.0x) monster; every type scales from this.
+const MONSTER_BASE_W = 14, MONSTER_BASE_H = 17;
 
 // Length of a monster's attack animation; mirrored by the client.
 const MONSTER_SWING_MS = 320;
@@ -207,6 +235,7 @@ function progress() {
   if (!d.weapons)     d.weapons = {};
   if (!d.coins)       d.coins = {};
   if (!d.upgrades)    d.upgrades = {};
+  if (!d.ownedSkins)  d.ownedSkins = {};
   return d;
 }
 function markDirty() { progressDirty = true; }
@@ -335,7 +364,7 @@ function makePlayer(num, xp, upgrades) {
     hitFlash: 0,
     dead: false,
     respawnTimer: 0,
-    skin: { colorIdx: 0, hatIdx: 0 },
+    skin: { colorIdx: 0, hatIdx: 0, outfit: '' },
     inventory: [],
     effects: {},
     pull: null,
@@ -599,8 +628,8 @@ function spawnMonster() {
   const baseHp = hp / def.hp;                                     // this wave's baseline
   const waveGrowth = Math.min(1.7, Math.pow(Math.max(1, baseHp / 30), 0.28));
   const sizeScale = Math.max(0.6, Math.min(2.7, def.size * waveGrowth));
-  const w = Math.max(6, Math.round(10 * sizeScale));
-  const h = Math.max(8, Math.round(12 * sizeScale));
+  const w = Math.max(9, Math.round(MONSTER_BASE_W * sizeScale));
+  const h = Math.max(11, Math.round(MONSTER_BASE_H * sizeScale));
 
   // Damage follows the same shape — bulk, then type, then a slow wave ramp — and
   // is capped so even a late behemoth cannot one-shot a full-health player.
@@ -1266,10 +1295,12 @@ function advanceProjectile(proj, factor, dt) {
       if (proj.hitTargets && !proj.hitTargets.has(tId)) {
         proj.hitTargets.add(tId);
         applyDamage(t, proj.damage, proj.owner);
+        onHitExtras(proj, t);
       }
       continue;
     }
     applyDamage(t, proj.damage, proj.owner);
+    onHitExtras(proj, t);
     return false;
   }
   return true;
@@ -1291,12 +1322,66 @@ function detonateAoe(proj) {
   for (const t of enemyTargets(proj.owner)) {
     if (Math.hypot(cx(t) - proj.x, cy(t) - proj.y) < proj.aoeRadius) {
       applyDamage(t, proj.damage, proj.owner);
+      if (proj.chill) chillTarget(t, proj.chill);
     }
   }
   room.particles.push({
     type: 'aoe', x: proj.x, y: proj.y, maxR: proj.aoeRadius,
-    radius: 2, timer: 320, max: 320, color: '#aa44ff',
+    radius: 2, timer: 320, max: 320,
+    color: proj.chill ? '#8fe0ff' : (WEAPON_COLORS[proj.weaponId] || '#aa44ff'),
   });
+}
+
+// Slow a target: monsters through their slow timer, players through the same
+// 'slow' effect a snare trap applies.
+function chillTarget(t, ms) {
+  if (t.dead) return;
+  if (t.num) applyEffect(t, 'slow', ms);
+  else t.slowTimer = Math.max(t.slowTimer || 0, ms);
+}
+
+// A hit that ignores projectiles but still respects a parry: the parrying
+// player is untouched and the blow goes back to the attacker instead.
+function strikeTarget(t, dmg, ownerKey) {
+  const tk = playerKeyOf(t);
+  if (tk && t.parryTimer > 0) {
+    const o = room.players[ownerKey];
+    if (o) applyDamage(o, Math.round(dmg * PARRY_REFLECT), tk);
+    spawnParrySpark(cx(t), cy(t));
+    return;
+  }
+  applyDamage(t, dmg, ownerKey);
+}
+
+function distToSegment(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const L = dx * dx + dy * dy;
+  const k = L ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L)) : 0;
+  return Math.hypot(px - (ax + dx * k), py - (ay + dy * k));
+}
+
+// What a projectile does beyond its damage: frost slows, storm arcs onward.
+function onHitExtras(proj, t) {
+  if (proj.chill) chillTarget(t, proj.chill);
+  if (proj.chain > 0) {
+    const hit = new Set([t]);
+    let from = t;
+    const dmg = Math.max(1, Math.round(proj.damage * 0.7));
+    for (let i = 0; i < proj.chain; i++) {
+      let best = null, bd = 95;
+      for (const e of enemyTargets(proj.owner)) {
+        if (hit.has(e)) continue;
+        const d = distBetween(from, e);
+        if (d < bd) { bd = d; best = e; }
+      }
+      if (!best) break;
+      room.particles.push({ type: 'bolt', x: cx(from), y: cy(from), x2: cx(best), y2: cy(best),
+                            timer: 220, max: 220, color: WEAPON_COLORS[proj.weaponId] || '#ffe45a' });
+      strikeTarget(best, dmg, proj.owner);
+      hit.add(best);
+      from = best;
+    }
+  }
 }
 
 // ─── Attack Logic ─────────────────────────────────────────────────────────────
@@ -1324,12 +1409,16 @@ function doAttack(p, pKey) {
   } else {
     const aim = nearestTargetAngle(p, pKey);
     p.facing = Math.cos(aim) < 0 ? -1 : 1; // face the target so the weapon sprite points right way
-    const speed = w.grapple ? 6.5 : 4.4;
+    const speed = w.projSpeed || (w.grapple ? 6.5 : 4.4);
+    // A scattergun fires several pellets in a tight fan per trigger pull.
+    const pellets = w.pellets || 1;
+    for (let i = 0; i < pellets; i++) {
+    const a = aim + (i - (pellets - 1) / 2) * 0.13 + (pellets > 1 ? (Math.random() - 0.5) * 0.06 : 0);
     room.projectiles.push({
       id: nextId(),
       x: cx(p), y: cy(p),
-      dx: Math.cos(aim) * speed,
-      dy: Math.sin(aim) * speed,
+      dx: Math.cos(a) * speed,
+      dy: Math.sin(a) * speed,
       damage: Math.round(w.damage * dmgMult),
       owner: pKey,
       traveled: 0,
@@ -1344,7 +1433,10 @@ function doAttack(p, pKey) {
       returning: false,
       life: w.boomerang ? 4000 : 0,
       hitTargets: (w.pierce || w.boomerang) ? new Set() : null,
+      chill: w.chill || 0,
+      chain: w.chain || 0,
     });
+    }
   }
 }
 
@@ -1382,8 +1474,41 @@ function doSpecial(p, pKey) {
     return;
   }
 
+  if (sp.kind === 'storm') {
+    // Lightning from above on the nearest few foes in range.
+    const foes = enemyTargets(pKey)
+      .map(t => ({ t, d: Math.hypot(cx(t) - px, cy(t) - py) }))
+      .filter(e => e.d <= sp.range)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, sp.count || 5);
+    for (const { t } of foes) {
+      room.particles.push({ type: 'bolt', x: cx(t) + (Math.random() - 0.5) * 30, y: ARENA_Y + 4,
+                            x2: cx(t), y2: cy(t), timer: 320, max: 320, color: wc });
+      strikeTarget(t, spDmg, pKey);
+    }
+    room.particles.push({ type: 'shockwave', x: px, y: py, maxR: 26, timer: 300, max: 300, color: wc });
+    return;
+  }
+
   const aim = nearestTargetAngle(p, pKey);
   p.facing = Math.cos(aim) < 0 ? -1 : 1;
+
+  if (sp.kind === 'dash') {
+    // Lunge along the aim line, running through everything in the way.
+    const sx = p.x, sy = p.y;
+    p.x += Math.cos(aim) * sp.range;
+    p.y += Math.sin(aim) * sp.range;
+    clampToArena(p, 2);
+    p.pull = null;
+    const ax = sx + p.w / 2, ay = sy + p.h / 2, bx = cx(p), by = cy(p);
+    for (const t of enemyTargets(pKey)) {
+      if (distToSegment(cx(t), cy(t), ax, ay, bx, by) <= 12 + (t.w + t.h) / 4) strikeTarget(t, spDmg, pKey);
+    }
+    p.invincible = Math.max(p.invincible, 250);
+    room.particles.push({ type: 'streak', x: ax, y: ay, x2: bx, y2: by, timer: 300, max: 300, color: wc });
+    return;
+  }
+
   const speed = sp.kind === 'hook' ? 14 : 5.2;
   const mkProj = (angle, extra = {}) => ({
     id: nextId(),
@@ -1412,10 +1537,16 @@ function doSpecial(p, pKey) {
   if (sp.kind === 'pierce') {
     room.projectiles.push(mkProj(aim, { pierce: true, hitTargets: new Set() }));
   } else if (sp.kind === 'aoeshot') {
-    room.projectiles.push(mkProj(aim, { isAoe: true, aoeRadius: sp.aoe || 40 }));
+    room.projectiles.push(mkProj(aim, { isAoe: true, aoeRadius: sp.aoe || 40, chill: sp.chill || 0 }));
   } else if (sp.kind === 'hook') {
     // Very fast hook — wherever it lands, the thrower goes with it.
     room.projectiles.push(mkProj(aim, { teleport: true, hook: true }));
+  } else if (sp.kind === 'ring') {
+    // A full circle of piercing stars.
+    const n = sp.count || 8;
+    for (let i = 0; i < n; i++) {
+      room.projectiles.push(mkProj(aim + (i / n) * Math.PI * 2, { pierce: true, hitTargets: new Set() }));
+    }
   } else if (sp.kind === 'spread') {
     const n = sp.count || 3;
     const fan = 0.42;
@@ -1555,7 +1686,20 @@ function profileFor(pw, opts = {}) {
   }
 
   const upgrades = normalizeUpgrades(d.upgrades[pw]);
-  return { xp, coins, weapons, upgrades };
+  const ownedSkins = admin ? SKIN_SHOP.map(s => s.id)
+    : (Array.isArray(d.ownedSkins[pw]) ? d.ownedSkins[pw].filter(id => SKIN_BY_ID[id]) : []);
+  return { xp, coins, weapons, upgrades, ownedSkins };
+}
+
+// A skin is { colorIdx, hatIdx, outfit }. The outfit survives only if owned.
+function cleanSkin(raw, owned) {
+  const s = raw && typeof raw === 'object' ? raw : {};
+  const outfit = typeof s.outfit === 'string' && SKIN_BY_ID[s.outfit] && owned.includes(s.outfit) ? s.outfit : '';
+  return {
+    colorIdx: Math.max(0, Math.min(7, Number(s.colorIdx) || 0)),
+    hatIdx:   Math.max(0, Math.min(4, Number(s.hatIdx)   || 0)),
+    outfit,
+  };
 }
 
 // ─── HTTP API (shop / upgrades) ───────────────────────────────────────────────
@@ -1563,14 +1707,14 @@ function profileFor(pw, opts = {}) {
 app.use(express.json({ limit: '8kb' }));
 
 app.get('/api/catalog', (_req, res) => {
-  res.json({ catalog: weaponCatalog(), upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS });
+  res.json({ catalog: weaponCatalog(), upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP });
 });
 
 app.post('/api/profile', (req, res) => {
   const pw = sanitizeText(req.body?.password, 32);
   if (!pw) return res.status(400).json({ error: 'A password is required to save upgrades.' });
   const p = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins });
-  res.json({ ...p, catalog: weaponCatalog(), upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS });
+  res.json({ ...p, catalog: weaponCatalog(), upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP });
 });
 
 app.post('/api/upgrade', (req, res) => {
@@ -1616,6 +1760,31 @@ app.post('/api/upgrade', (req, res) => {
 
   const next = profileFor(pw, {});
   res.json({ ...next, spent: cost });
+});
+
+app.post('/api/buy_skin', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'A password is required to buy skins.' });
+  const skinId = sanitizeText(req.body?.skinId, 16);
+  const def = SKIN_BY_ID[skinId];
+  if (!def) return res.status(400).json({ error: 'Unknown skin.' });
+
+  const admin = isAdminPw(pw);
+  const prof = profileFor(pw, { localCoins: req.body?.localCoins });
+  if (prof.ownedSkins.includes(skinId)) return res.status(400).json({ error: 'You already own that skin.' });
+  if (!admin && prof.coins < def.price) return res.status(400).json({ error: 'Not enough coins.' });
+
+  const d = progress();
+  if (!admin) {
+    d.ownedSkins[pw] = [...prof.ownedSkins, skinId];
+    d.coins[pw] = prof.coins - def.price;
+    markDirty();
+    for (const key of ['p1', 'p2']) {
+      if (room.passwords[key] === pw) room.playerCoins[key] = d.coins[pw];
+    }
+  }
+  const next = profileFor(pw, {});
+  res.json({ ...next, spent: admin ? 0 : def.price, skinShop: SKIN_SHOP });
 });
 
 // ─── WebSocket Connections ────────────────────────────────────────────────────
@@ -1682,7 +1851,7 @@ wss.on('connection', (ws) => {
 
         const prof = pw
           ? profileFor(pw, { localXp: msg.localXp, localCoins: msg.localCoins })
-          : { xp: 0, coins: 0, weapons: getUnlockedWeaponIds(0), upgrades: {} };
+          : { xp: 0, coins: 0, weapons: getUnlockedWeaponIds(0), upgrades: {}, ownedSkins: [] };
 
         room.playerXp[myKey]       = prof.xp;
         room.playerCoins[myKey]    = prof.coins;
@@ -1694,18 +1863,13 @@ wss.on('connection', (ws) => {
         const d = pw && !admin ? progress() : null;
         const rawSkin = msg.skin && typeof msg.skin === 'object' ? msg.skin : null;
         const savedSkin = d?.skins?.[pw];
+        const owned = prof.ownedSkins || [];
         let skin;
         if (msg.skinModified || savedSkin === undefined) {
-          skin = rawSkin
-            ? { colorIdx: Math.max(0, Math.min(7, Number(rawSkin.colorIdx) || 0)),
-                hatIdx:   Math.max(0, Math.min(4, Number(rawSkin.hatIdx)   || 0)) }
-            : { colorIdx: 0, hatIdx: 0 };
+          skin = cleanSkin(rawSkin, owned);
           if (d) { d.skins[pw] = skin; markDirty(); }
         } else {
-          skin = {
-            colorIdx: Math.max(0, Math.min(7, Number(savedSkin.colorIdx) || 0)),
-            hatIdx:   Math.max(0, Math.min(4, Number(savedSkin.hatIdx)   || 0)),
-          };
+          skin = cleanSkin(savedSkin, owned);
         }
         room.playerSkins[myKey] = skin;
 

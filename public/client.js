@@ -30,6 +30,7 @@ let WEAPON_COLOR = {
   crossbow:'#cc8844', flail:'#dd4444', greatsword:'#ddeeff',
   glaive:'#b0d8c0', katana:'#eef0ff', chakram:'#66e0c0', cannon:'#9a90a8',
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
+  shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
 };
 const WEAPON_DESC = {
   sword:'Balanced blade', dagger:'Fast, low damage', axe:'Slow, heavy hit',
@@ -40,6 +41,9 @@ const WEAPON_DESC = {
   cannon:'Explosive shells', reaper:'Reaping 360° scythe',
   whip:'Long lashing sweep', grapple:'Hooks and reels foes in',
   boomerang:'Returns for a second hit',
+  shuriken:'Rapid piercing stars', frostrod:'Ice shots slow foes',
+  blunderbuss:'Close-range scattershot', lance:'Longest reach, dash special',
+  stormtome:'Lightning arcs between foes',
 };
 
 // Filled from the server catalog: { id: {type, atkSpd, ...} }
@@ -55,8 +59,8 @@ function lsGet(k)      { try { return localStorage.getItem(k); } catch { return 
 function lsSet(k, v)   { try { localStorage.setItem(k, v); } catch {} }
 
 function loadLocalSkin() {
-  try { return JSON.parse(lsGet('weponare_skin')) || { colorIdx: 0, hatIdx: 0 }; }
-  catch { return { colorIdx: 0, hatIdx: 0 }; }
+  try { return { colorIdx: 0, hatIdx: 0, outfit: '', ...(JSON.parse(lsGet('weponare_skin')) || {}) }; }
+  catch { return { colorIdx: 0, hatIdx: 0, outfit: '' }; }
 }
 function saveLocalSkin(s)  { lsSet('weponare_skin', JSON.stringify(s)); }
 function loadLocalXp(pw)   { return pw ? (parseInt(lsGet('weponare_xp_' + pw)) || 0) : 0; }
@@ -703,13 +707,56 @@ if (window.GameAudio) {
 }
 
 // ─── Skin Screen ──────────────────────────────────────────────────────────────
+// Colour and hat are free. Full-body skins are bought with coins against the
+// password; the server holds ownership and strips any skin you don't own.
 
-function openSkinsScreen() {
+let skinProfile = { coins: 0, owned: [], loaded: false };
+let skinBusy = false;
+
+function skinShopList() { return (window.Sprites && Sprites.SKIN_SHOP) || []; }
+function outfitHidesHat(id) { const o = window.Sprites && Sprites.OUTFITS[id]; return !!(o && o.hat === false); }
+
+function setSkinMsg(text, isError) {
+  const el = document.getElementById('skinShopMsg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'shop-msg' + (isError ? ' err' : '');
+}
+
+async function openSkinsScreen() {
+  readCredentials();
   showScreen('skinsScreen');
+  if (pendingSkin.outfit === undefined) pendingSkin.outfit = '';
+  skinProfile = { coins: 0, owned: [], loaded: false };
   buildSkinGrids();
   renderSkinPreview();
+  if (!pendingPass) {
+    setSkinMsg('Enter a password on the title screen to buy skins — they are saved against it.', true);
+    return;
+  }
+  setSkinMsg('Loading...');
+  try {
+    const res = await fetch('/api/profile', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pendingPass, localXp: loadLocalXp(pendingPass), localCoins: loadLocalCoins(pendingPass) }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setSkinMsg(data.error || 'Could not load your profile.', true); return; }
+    skinProfile = { coins: data.coins, owned: data.ownedSkins || [], loaded: true };
+    saveLocalCoins(pendingPass, data.coins);
+    // A skin that isn't owned on this password can't be worn.
+    if (pendingSkin.outfit && !skinProfile.owned.includes(pendingSkin.outfit)) {
+      pendingSkin.outfit = '';
+      saveLocalSkin(pendingSkin);
+    }
+    setSkinMsg('');
+    buildSkinGrids();
+    renderSkinPreview();
+  } catch {
+    setSkinMsg('Could not reach the server.', true);
+  }
 }
-function closeSkinsScreen() { showScreen('startScreen'); }
+function closeSkinsScreen() { showScreen('startScreen'); refreshSavedBanner(); }
 
 function selectSkinColor(idx) {
   pendingSkin.colorIdx = idx;
@@ -726,15 +773,85 @@ function selectSkinHat(idx) {
   renderSkinPreview();
 }
 
+// Owned (or the default look): wear it. Otherwise: buy it.
+function selectOutfit(id) {
+  if (id && !skinProfile.owned.includes(id)) { buySkin(id); return; }
+  pendingSkin.outfit = id;
+  skinModified = true;
+  saveLocalSkin(pendingSkin);
+  buildSkinGrids();
+  renderSkinPreview();
+}
+
+async function buySkin(id) {
+  if (skinBusy) return;
+  const def = skinShopList().find(s => s.id === id);
+  if (!def) return;
+  if (!pendingPass) { setSkinMsg('Enter a password on the title screen to buy skins.', true); return; }
+  if (skinProfile.loaded && skinProfile.coins < def.price) {
+    setSkinMsg(`Not enough coins — ${def.name} costs ${def.price}.`, true);
+    return;
+  }
+  skinBusy = true;
+  setSkinMsg('');
+  try {
+    const res = await fetch('/api/buy_skin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pendingPass, skinId: id, localCoins: loadLocalCoins(pendingPass) }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setSkinMsg(data.error || 'Purchase failed.', true); return; }
+    skinProfile = { coins: data.coins, owned: data.ownedSkins || [], loaded: true };
+    saveLocalCoins(pendingPass, data.coins);
+    if (window.GameAudio) { GameAudio.init(); GameAudio.sfx.unlock(); }
+    setSkinMsg(`${def.name} unlocked!`);
+    selectOutfit(id);   // wear it straight away
+  } catch {
+    setSkinMsg('Could not reach the server.', true);
+  } finally {
+    skinBusy = false;
+  }
+}
+
 function buildSkinGrids() {
   const cg = document.getElementById('colorGrid');
   if (cg) cg.innerHTML = SKIN_COLORS.map((c, i) =>
     `<div class="skin-color${i === pendingSkin.colorIdx ? ' selected' : ''}" style="background:${c}" onclick="selectSkinColor(${i})"></div>`
   ).join('');
   const hg = document.getElementById('hatGrid');
-  if (hg) hg.innerHTML = SKIN_HATS.map((h, i) =>
-    `<div class="skin-hat${i === pendingSkin.hatIdx ? ' selected' : ''}" onclick="selectSkinHat(${i})">${h}</div>`
-  ).join('');
+  const hatHidden = outfitHidesHat(pendingSkin.outfit);
+  if (hg) {
+    hg.style.opacity = hatHidden ? '0.4' : '';
+    hg.title = hatHidden ? 'This skin has its own headgear' : '';
+    hg.innerHTML = SKIN_HATS.map((h, i) =>
+      `<div class="skin-hat${i === pendingSkin.hatIdx ? ' selected' : ''}" onclick="selectSkinHat(${i})">${h}</div>`
+    ).join('');
+  }
+  const coinsEl = document.getElementById('skinCoins');
+  if (coinsEl) coinsEl.textContent = skinProfile.loaded ? `◆ ${skinProfile.coins.toLocaleString()}` : '';
+
+  const og = document.getElementById('outfitGrid');
+  if (!og) return;
+  const cur = pendingSkin.outfit || '';
+  const cards = [{ id: '', name: 'DEFAULT', price: 0 }, ...skinShopList()];
+  og.innerHTML = cards.map(s => {
+    const owned = !s.id || skinProfile.owned.includes(s.id);
+    const equipped = s.id === cur;
+    const poor = !owned && skinProfile.loaded && skinProfile.coins < s.price;
+    const tag = equipped ? 'WORN' : owned ? 'OWNED' : `◆${s.price}`;
+    return `<div class="outfit-card${owned ? ' owned' : ''}${equipped ? ' equipped' : ''}${poor ? ' poor' : ''}"
+      onclick="selectOutfit('${s.id}')" title="${owned ? 'Wear' : 'Buy'} ${s.name}">
+      <canvas data-outfit="${s.id}" width="20" height="31"></canvas>
+      <span>${s.name}</span><span class="outfit-tag">${tag}</span></div>`;
+  }).join('');
+  const color = SKIN_COLORS[pendingSkin.colorIdx] || '#4488ff';
+  for (const cv of og.querySelectorAll('canvas')) {
+    const g = cv.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    g.clearRect(0, 0, cv.width, cv.height);
+    const spr = playerSprite(color, pendingSkin.hatIdx, 1, false, cv.dataset.outfit);
+    if (spr) g.drawImage(spr, Math.floor((cv.width - spr.width) / 2), cv.height - spr.height);
+  }
 }
 
 function renderSkinPreview() {
@@ -745,7 +862,7 @@ function renderSkinPreview() {
   ux.clearRect(0, 0, uc.width, uc.height);
   ux.fillStyle = '#1a1a2e'; ux.fillRect(0, 0, uc.width, uc.height);
   const color = SKIN_COLORS[pendingSkin.colorIdx] || '#4488ff';
-  const cv = playerSprite(color, pendingSkin.hatIdx, 1, false);
+  const cv = playerSprite(color, pendingSkin.hatIdx, 1, false, pendingSkin.outfit || '');
   if (!cv) return;
   // Integer zoom keeps the preview as crisp as the in-game sprite.
   const z = Math.max(1, Math.floor(Math.min(uc.width / cv.width, uc.height / cv.height)));
@@ -1211,10 +1328,10 @@ function drawPlayer(p, baseColor, label) {
   ctx.fillStyle = 'rgba(0,0,0,0.32)';
   ctx.fillRect(x + 1, y + p.h, p.w - 2, 2);
 
-  const cv = playerSprite(skinCol, p.skin?.hatIdx || 0, p.facing, p.hitFlash > 0);
+  const cv = playerSprite(skinCol, p.skin?.hatIdx || 0, p.facing, p.hitFlash > 0, p.skin?.outfit || '');
   if (cv) ctx.drawImage(cv, x, y - PLAYER_PAD);
 
-  drawNametag(x + p.w / 2, y - 9, label, skinCol);
+  drawNametag(x + p.w / 2, y - 13, label, skinCol);
   drawWeaponSprite(p, x, y);
 
   if (p.parryActive) {
@@ -1244,18 +1361,22 @@ function drawNametag(cx, bottomY, label, color) {
 
 // ─── Weapon Sprite (held) ─────────────────────────────────────────────────────
 
+// Held weapons are drawn a size up so they stay in proportion with the bigger
+// 16x22 characters.
+const HELD_SCALE = 1.2;
+
 function drawWeaponSprite(p, px, py) {
   const wId = p.weaponId;
   if (!WEAPON_ART[wId]) return;
   const wc = WEAPON_COLOR[wId] || PAL.white;
   const d = p.facing;
-  const hx = d === 1 ? px + p.w - 1 : px + 1;   // hand attachment
-  const hy = py + 8;
+  const hx = d === 1 ? px + p.w - 2 : px + 2;   // hand attachment (the front glove)
+  const hy = py + 15;
   const prog = p.swingTimer > 0 ? 1 - Math.min(1, p.swingTimer / 200) : -1;
   const u = upgScale(p.upg);
   // Range upgrades lengthen the weapon itself, quantised so the sprite cache
   // does not grow a new bitmap for every possible level combination.
-  const scale = 1 + u.rng * 0.045;
+  const scale = HELD_SCALE * (1 + u.rng * 0.045);
 
   ctx.save();
   ctx.translate(hx, hy);
@@ -1513,6 +1634,56 @@ function drawProjectiles(projs) {
       ctx.fillStyle = '#ffffff';
       for (let i=0;i<4;i++){ const a=i*Math.PI/2; ctx.fillRect(Math.round(Math.cos(a)*5)-1, Math.round(Math.sin(a)*5)-1, 2, 2); }
       ctx.restore();
+    } else if (pr.weaponId === 'shuriken') {
+      // Four-point throwing star, spinning.
+      ctx.save();
+      ctx.translate(Math.round(pr.x), Math.round(pr.y)); ctx.rotate(now / 35);
+      ctx.fillStyle = '#6a7482';
+      ctx.fillRect(-1.5, -1.5, 3, 3);
+      ctx.fillStyle = wc;
+      for (let i = 0; i < 4; i++) {
+        ctx.rotate(Math.PI / 2);
+        ctx.beginPath(); ctx.moveTo(1, -1.5); ctx.lineTo(5.5 * u.size, 0); ctx.lineTo(1, 1.5); ctx.fill();
+      }
+      ctx.fillStyle = '#14141c'; ctx.fillRect(-0.5, -0.5, 1, 1);
+      ctx.restore();
+    } else if (pr.weaponId === 'frostrod') {
+      // Ice shard with a frosty trail.
+      ctx.save();
+      ctx.globalAlpha = 0.35; ctx.fillStyle = '#cfefff';
+      for (let i = 1; i <= 3; i++) ctx.fillRect(Math.round(pr.x - pr.dx * i * 1.4 * u.trail) - 1, Math.round(pr.y - pr.dy * i * 1.4 * u.trail) - 1, 2, 2);
+      ctx.globalAlpha = 1;
+      ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+      ctx.fillStyle = wc;
+      ctx.beginPath(); ctx.moveTo(6 * u.size, 0); ctx.lineTo(0, -2.6 * u.size); ctx.lineTo(-4, 0); ctx.lineTo(0, 2.6 * u.size); ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.moveTo(5 * u.size, 0); ctx.lineTo(0, -1.4 * u.size); ctx.lineTo(-1, 0); ctx.fill();
+      ctx.restore();
+    } else if (pr.weaponId === 'blunderbuss') {
+      // Small lead pellet with a short spark streak.
+      ctx.save();
+      ctx.globalAlpha = 0.55; ctx.strokeStyle = '#ffcf7a'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(pr.x, pr.y); ctx.lineTo(pr.x - pr.dx * 1.2 * u.trail, pr.y - pr.dy * 1.2 * u.trail); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.fillStyle = '#3a3a44';
+      ctx.fillRect(Math.round(pr.x) - 1, Math.round(pr.y) - 1, 3, 3);
+      ctx.fillStyle = '#8a8a96'; ctx.fillRect(Math.round(pr.x) - 1, Math.round(pr.y) - 1, 1, 1);
+      ctx.restore();
+    } else if (pr.weaponId === 'stormtome') {
+      // Crackling ball of lightning.
+      ctx.save();
+      ctx.globalAlpha = 0.35; ctx.fillStyle = wc;
+      ctx.beginPath(); ctx.arc(pr.x, pr.y, 6 * u.size, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1; ctx.strokeStyle = '#fff6b0'; ctx.lineWidth = 1;
+      for (let i = 0; i < 3; i++) {
+        const a = now / 60 + i * 2.1;
+        ctx.beginPath(); ctx.moveTo(pr.x, pr.y);
+        ctx.lineTo(pr.x + Math.cos(a) * 3, pr.y + Math.sin(a * 1.3) * 3);
+        ctx.lineTo(pr.x + Math.cos(a + 0.5) * 6, pr.y + Math.sin(a + 0.5) * 6);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(pr.x, pr.y, 2.2 * u.size, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
     } else if (pr.weaponId === 'cannon') {
       ctx.save();
       ctx.globalAlpha = 0.35; ctx.fillStyle = '#ffb066';
@@ -1571,6 +1742,33 @@ function drawParticles(particles) {
       ctx.fillStyle='#000'; ctx.fillText(p.text,p.x+2,p.y+2);
       ctx.fillStyle=PAL.xp; ctx.fillText(p.text,p.x,p.y);
       ctx.textAlign='left'; ctx.textBaseline='alphabetic'; ctx.globalAlpha=1;
+    } else if (p.type==='bolt') {
+      // Jagged lightning, re-rolled every frame so it flickers.
+      const m=p.max||300, a=Math.max(0,p.timer/m);
+      const segs = 7, dx=(p.x2-p.x)/segs, dy=(p.y2-p.y)/segs;
+      const len = Math.hypot(p.x2-p.x, p.y2-p.y) || 1, nx = -(p.y2-p.y)/len, ny = (p.x2-p.x)/len;
+      const pts = [[p.x, p.y]];
+      for (let i=1;i<segs;i++) { const j=(Math.random()-0.5)*9; pts.push([p.x+dx*i+nx*j, p.y+dy*i+ny*j]); }
+      pts.push([p.x2, p.y2]);
+      ctx.save();
+      for (const [w, c, al] of [[4, p.color||'#ffe45a', 0.35], [1.5, '#ffffff', 1]]) {
+        ctx.globalAlpha = a*al; ctx.strokeStyle = c; ctx.lineWidth = w;
+        ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+        for (const [x, y] of pts) ctx.lineTo(x, y);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = a; ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(p.x2, p.y2, 3 + (1-a)*5, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    } else if (p.type==='streak') {
+      // Lance dash: a fading wake along the charge line.
+      const m=p.max||300, a=Math.max(0,p.timer/m);
+      ctx.save();
+      ctx.globalAlpha = a*0.35; ctx.strokeStyle = p.color||'#ffffff'; ctx.lineWidth = 12*a + 2;
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x2, p.y2); ctx.stroke();
+      ctx.globalAlpha = a; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x2, p.y2); ctx.stroke();
+      ctx.restore();
     } else if (p.type==='shockwave') {
       const m=p.max||420, k=1-p.timer/m, r=(p.maxR||30)*k;
       ctx.globalAlpha=Math.max(0,p.timer/m)*0.9;

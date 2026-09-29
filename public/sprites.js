@@ -16,97 +16,421 @@ const { shade, ramp, MAT5, makeBuf, setPx, rect, ditherRect, poly, line, disc,
 const EDGE = '#0b0b14';   // shared outline colour for everything
 
 // ─── Player ───────────────────────────────────────────────────────────────────
-// 12x16, facing right. The chosen skin colour drives the tunic ramp; the face,
-// belt and boots are fixed so the character reads the same in every colour.
+// 16x22, facing right. The grid is authored without its outer outline — that is
+// traced on at the end, after hats and outfit parts are painted, so anything
+// sticking out of the silhouette (a plume, horns, a cape) is edged too.
 //
-//  o outline        H hair        F face      E eye
-//  3/2/1 tunic light/base/dark    B belt      b buckle
-//  G glove          T boot        t boot dark
+//  H/h hair           F/f face / shade   W eye white   E pupil
+//  3/2/1 tunic light / base / dark       k interior edge
+//  G/g glove          B belt  b buckle   P/p trousers  T/t boot
 
-const PLAYER_PAD = 5;   // headroom above the body for horns and spikes
+const PLAYER_PAD = 7;   // headroom above the head for tall hats, horns and flames
 
-const PLAYER_ROWS = [
-  '            ',
-  '            ',
-  '            ',
-  '            ',
-  '            ',
-  '    oooo    ',
-  '   oHHHHo   ',
-  '  oHHHHHHo  ',
-  '  oHFFFFHo  ',
-  '  oFFFEFFo  ',
-  '  ooFFFFoo  ',
-  ' o332222211o',
-  'oG33222221Go',
-  'oG33222221Go',
-  'oo332222110o',
-  ' oBBbBBBBBo ',
-  ' o11222111o ',
-  ' o11221110o ',
-  ' oTTo oTTo  ',
-  ' oTTo oTTo  ',
-  ' ottooottoo ',
+const HEAD_ROWS = [
+  '    hHHHHH      ',
+  '   hHHHHHHHH    ',
+  '  hHHHHHHHHHH   ',
+  '  hHHHHHHHHHHH  ',
+  '  hhHHHHFHFFH   ',
+  '  hhHHFFFFWEF   ',
+  '  hhHFFFFFWEF   ',
+  '  hhhFFFFFFFFF  ',
+  '   hhfFFFFFFf   ',
+  '    hffFFFff    ',
+  '     kffffk     ',
+];
+const BODY_ROWS = [
+  '   22333333222  ',
+  '  1k23333332k21 ',
+  '  1k22333322k21 ',
+  '  1k22233222k21 ',
+  '  Gk12222221kGG ',
+  '  gkBBBBbBBBkgg ',
+];
+const LEG_ROWS = [
+  '    PPPPPPPP    ',
+  '    PPp  PPp    ',
+  '    PPp  PPp    ',
+  '    TTT  TTTT   ',
+  '   tTTt  tTTTt  ',
+];
+const HEAD_Y = 0, BODY_Y = 11, LEG_Y = 17;
+
+// ── Outfits: the ten skins bought with coins ──
+// Each one may swap the head, torso or leg rows, recolour any key, and paint
+// extras. `hat: false` means it has its own headgear, so the free hat choice is
+// hidden under it. `c` is the ramp of the player's chosen colour, which some
+// outfits use as an accent (the knight's plume, the wizard's robe).
+const OUTFITS = {
+
+  knight: {
+    hat: false,
+    head: [
+      '    SSSSSS      ',
+      '   SSLLLSSSS    ',
+      '  sSSLLSSSSSS   ',
+      '  sSSSSSSSSSSS  ',
+      '  sSSSSSSSSSSS  ',
+      '  sSSSSSSkkkkk  ',
+      '  sSSSSSSSkSkS  ',
+      '  ssSSSSSSSSSS  ',
+      '   ssSSSSSSSs   ',
+      '    ssSSSSss    ',
+      '     kssssk     ',
+    ],
+    key: (c) => ({
+      S: MAT5.steel[2], s: MAT5.steel[1], L: MAT5.steel[4],
+      3: MAT5.steel[3], 2: MAT5.steel[2], 1: MAT5.steel[1],
+      G: MAT5.steel[2], g: MAT5.steel[1],
+      P: MAT5.iron[2], p: MAT5.iron[1], T: MAT5.iron[2], t: MAT5.iron[0],
+    }),
+    paint(b, T, c) {
+      // Tabard in the player's colour over the plate, and a plume.
+      rect(b, 6, T + 12, 4, 4, c[2]);
+      rect(b, 6, T + 12, 4, 1, c[3]);
+      setPx(b, 7, T + 13, MAT5.gold[3]);
+      poly(b, [[5, T + 1], [3, T - 3], [0, T - 2], [1, T], [4, T + 1]], c[2]);
+      setPx(b, 3, T - 2, c[4]); setPx(b, 2, T - 2, c[3]); setPx(b, 1, T - 1, c[1]);
+    },
+  },
+
+  ninja: {
+    hat: false,
+    head: [
+      '    NNNNNN      ',
+      '   NNNNNNNNN    ',
+      '  nNNNNNNNNNN   ',
+      '  nRRRRRRRRRRR  ',
+      '  nNNNNNNNNNNN  ',
+      '  nNNNNNFFWEF   ',
+      '  nNNNNNNNNNN   ',
+      '  nnNNNNNNNNNN  ',
+      '   nnNNNNNNN    ',
+      '    nnNNNNn     ',
+      '     knnnnk     ',
+    ],
+    key: () => ({
+      N: '#2a2a38', n: '#1b1b26', R: '#d0303a',
+      3: '#3a3a4c', 2: '#2a2a38', 1: '#1d1d28',
+      G: '#2a2a38', g: '#1b1b26', B: '#d0303a', b: '#ff6a6a',
+      P: '#2a2a38', p: '#1b1b26', T: '#1d1d28', t: '#121218',
+    }),
+    paint(b, T) {
+      // Headband tails streaming behind.
+      setPx(b, 1, T + 4, '#d0303a'); setPx(b, 0, T + 5, '#d0303a');
+      setPx(b, 1, T + 5, '#a82530'); setPx(b, 0, T + 6, '#a82530');
+      // Wrapped sash across the chest.
+      for (let i = 0; i < 5; i++) setPx(b, 5 + i, T + 11 + i, '#3f3f55');
+    },
+  },
+
+  wizard: {
+    hat: false,
+    key: (c) => ({
+      H: '#dcdce6', h: '#a8a8b8',
+      3: c[3], 2: c[2], 1: c[1],
+      B: MAT5.gold[2], b: MAT5.gold[4],
+    }),
+    legs: [
+      '    22333222    ',
+      '   2223332221   ',
+      '   2223332221   ',
+      '  122233322211  ',
+      '  1111111111111 ',
+    ],
+    paint(b, T, c) {
+      // Long white beard over the chin and chest.
+      poly(b, [[6, T + 7], [13, T + 7], [12, T + 10], [10, T + 14], [8, T + 12], [6, T + 9]], '#e8e8f0');
+      setPx(b, 11, T + 8, '#c4c4d4'); setPx(b, 10, T + 11, '#c4c4d4'); setPx(b, 9, T + 12, '#c4c4d4');
+      // Pointed hat in the robe colour, leaning back, with a star.
+      rect(b, 1, T + 1, 13, 2, c[1]);
+      rect(b, 2, T + 1, 11, 1, c[2]);
+      poly(b, [[3, T + 1], [11, T + 1], [6, T - 5], [2, T - 7]], c[2]);
+      poly(b, [[7, T + 1], [11, T + 1], [6, T - 5]], c[1]);
+      setPx(b, 6, T - 2, MAT5.gold[4]); setPx(b, 5, T - 2, MAT5.gold[2]);
+      setPx(b, 7, T - 2, MAT5.gold[2]); setPx(b, 6, T - 3, MAT5.gold[2]); setPx(b, 6, T - 1, MAT5.gold[2]);
+      // Stars on the robe.
+      setPx(b, 5, T + 13, MAT5.gold[4]); setPx(b, 9, T + 19, MAT5.gold[4]); setPx(b, 5, T + 20, MAT5.gold[3]);
+    },
+  },
+
+  pirate: {
+    hat: false,
+    key: () => ({
+      H: '#2b1a10', h: '#1c110a',
+      3: '#d6474a', 2: '#b02a30', 1: '#7c1c22',
+      G: MAT5.leather[3], g: MAT5.leather[2],
+      B: '#1c1c24', b: MAT5.gold[4],
+      P: '#e4dcc8', p: '#b4ab94', T: '#1c1c24', t: '#0f0f16',
+    }),
+    paint(b, T) {
+      // Tricorn with gold trim.
+      rect(b, 1, T + 1, 14, 2, '#1c1c24');
+      rect(b, 1, T + 2, 14, 1, MAT5.gold[2]);
+      poly(b, [[3, T + 1], [5, T - 3], [10, T - 3], [12, T + 1]], '#24242e');
+      setPx(b, 7, T - 1, '#e8e8f0'); setPx(b, 8, T - 1, '#e8e8f0');   // skull badge
+      setPx(b, 7, T, '#b8b8c4');
+      // Eyepatch and its strap.
+      rect(b, 10, T + 5, 2, 2, '#0f0f16');
+      for (let x = 4; x < 10; x++) setPx(b, x, T + 4, '#0f0f16');
+      // Gold coat buttons and cuffs.
+      for (const y of [12, 14]) setPx(b, 9, T + y, MAT5.gold[4]);
+      rect(b, 13, T + 14, 2, 1, MAT5.gold[3]);
+    },
+  },
+
+  skeleton: {
+    hat: true,
+    head: [
+      '    SSSSSS      ',
+      '   SSSSLLSSS    ',
+      '  sSSSSSLSSSS   ',
+      '  sSSSSSSSSSSS  ',
+      '  sSSSSSSSSSSS  ',
+      '  sSSSSSSkkSSS  ',
+      '  sSSSSSSkkSSk  ',
+      '  ssSSSSSSSSSS  ',
+      '   ssSkSkSkSs   ',
+      '    ssSSSSss    ',
+      '     kssssk     ',
+    ],
+    key: () => ({
+      S: MAT5.bone[3], s: MAT5.bone[1], L: MAT5.bone[4],
+      3: '#26262e', 2: '#1c1c24', 1: '#141419',
+      G: MAT5.bone[3], g: MAT5.bone[1], B: MAT5.bone[1], b: MAT5.bone[3],
+      P: MAT5.bone[2], p: MAT5.bone[1], T: MAT5.bone[3], t: MAT5.bone[1],
+    }),
+    paint(b, T) {
+      // Ribcage and spine over the dark torso.
+      for (const y of [11, 13, 15]) rect(b, 4, T + y, 8, 1, MAT5.bone[3]);
+      for (const y of [12, 14])     rect(b, 5, T + y, 6, 1, MAT5.bone[1]);
+      rect(b, 7, T + 11, 1, 5, MAT5.bone[4]);
+      // Glowing eye light in the socket.
+      setPx(b, 10, T + 5, '#6affc8');
+    },
+  },
+
+  robot: {
+    hat: false,
+    head: [
+      '     SSSSS      ',
+      '   SSSSSSSSS    ',
+      '  sSSSSSSSSSs   ',
+      '  sSSSSSSSSSSs  ',
+      '  sSSSVVVVVVVs  ',
+      '  sSSSVCCVCCVs  ',
+      '  sSSSVVVVVVVs  ',
+      '  sSSSSSSSSSSs  ',
+      '  ssSSkSkSkSSs  ',
+      '   ssssssssss   ',
+      '     kiiiik     ',
+    ],
+    key: () => ({
+      S: MAT5.steel[2], s: MAT5.steel[1], V: '#10313c', C: '#5ff0ff', i: MAT5.iron[1],
+      3: MAT5.iron[3], 2: MAT5.iron[2], 1: MAT5.iron[1],
+      G: MAT5.steel[1], g: MAT5.iron[0], B: MAT5.iron[0], b: '#ffcc33',
+      P: MAT5.iron[2], p: MAT5.iron[1], T: MAT5.steel[1], t: MAT5.iron[0],
+    }),
+    paint(b, T) {
+      rect(b, 7, T - 3, 1, 3, MAT5.iron[2]);            // antenna
+      setPx(b, 7, T - 4, '#ff4a4a'); setPx(b, 8, T - 4, '#ff9a9a');
+      rect(b, 6, T + 12, 3, 2, '#10313c');              // chest core
+      setPx(b, 7, T + 12, '#5ff0ff'); setPx(b, 7, T + 13, '#2aa8c0');
+      setPx(b, 5, T + 11, MAT5.steel[4]); setPx(b, 10, T + 11, MAT5.steel[4]);  // rivets
+    },
+  },
+
+  viking: {
+    hat: false,
+    key: () => ({
+      H: MAT5.iron[3], h: MAT5.iron[1],
+      3: '#9a6a3c', 2: '#7a5030', 1: '#553620',
+      G: MAT5.leather[2], g: MAT5.leather[1],
+      P: '#4a5a7a', p: '#34405a', T: MAT5.leather[2], t: MAT5.leather[0],
+    }),
+    paint(b, T) {
+      // Helmet band and horns.
+      rect(b, 2, T + 3, 12, 1, MAT5.gold[2]);
+      rect(b, 7, T + 3, 1, 4, MAT5.iron[2]);           // nose guard
+      poly(b, [[3, T + 1], [0, T - 3], [1, T - 5], [2, T - 2], [5, T]], MAT5.bone[2]);
+      poly(b, [[11, T + 1], [14, T - 3], [13, T - 5], [12, T - 2], [9, T]], MAT5.bone[2]);
+      setPx(b, 1, T - 4, MAT5.bone[4]); setPx(b, 13, T - 4, MAT5.bone[4]);
+      // Braided ginger beard.
+      poly(b, [[6, T + 7], [13, T + 7], [12, T + 10], [10, T + 13], [8, T + 10], [6, T + 9]], '#d0682a');
+      setPx(b, 10, T + 11, '#a04a1a'); setPx(b, 10, T + 12, '#e8904a'); setPx(b, 11, T + 8, '#e8904a');
+      // Shaggy fur on the vest.
+      ditherRect(b, 4, T + 11, 8, 4, '#7a5030', '#9a6a3c', 'sparse');
+      rect(b, 3, T + 11, 10, 1, '#c8b08a');            // fur collar
+    },
+  },
+
+  shadow: {
+    hat: true,
+    key: () => ({
+      H: '#2c1d48', h: '#1c1230', F: '#241838', f: '#1a1128', W: '#e070ff', E: '#ffffff',
+      3: '#3a2660', 2: '#2c1d48', 1: '#1c1230',
+      G: '#2c1d48', g: '#1c1230', B: '#150d24', b: '#a050e0',
+      P: '#241838', p: '#1a1128', T: '#1c1230', t: '#120b1e',
+    }),
+    paint(b, T) {
+      setPx(b, 11, T + 6, '#e070ff');                  // tall glowing eye
+      // The body frays into smoke toward the feet.
+      for (let y = T + 18; y <= T + 21; y++) {
+        for (let x = 0; x < b.w; x++) {
+          if (((x + y) & 1) && y > T + 19) b.data[(y * b.w + x) * 4 + 3] = 0;
+        }
+      }
+      for (const [x, y] of [[3, T + 12], [12, T + 16], [4, T + 18]]) setPx(b, x, y, '#6a3aa8');
+    },
+    edge: '#150b24',
+  },
+
+  inferno: {
+    hat: false,
+    key: () => ({
+      H: '#ff9a1a', h: '#e0461a', F: '#3a2420', f: '#2a1814', W: '#ffe066', E: '#ffffff',
+      3: '#4a2e26', 2: '#3a2420', 1: '#2a1814',
+      G: '#3a2420', g: '#2a1814', B: '#2a1814', b: '#ffcc33',
+      P: '#3a2420', p: '#2a1814', T: '#2a1814', t: '#1a0e0a',
+    }),
+    paint(b, T) {
+      // Flames licking up from the head.
+      for (const [x, h, c] of [[3, 3, '#e0461a'], [5, 6, '#ff9a1a'], [7, 4, '#ffcc33'],
+                               [9, 5, '#ff9a1a'], [11, 3, '#e0461a']]) {
+        rect(b, x, T - h + 1, 2, h, c);
+        setPx(b, x, T - h + 1, '#ffe8a0');
+      }
+      // Magma cracks glowing through the charred body.
+      for (const [x, y] of [[5, 12], [6, 13], [6, 14], [9, 12], [10, 13], [8, 15], [5, 18], [10, 19], [7, 8]]) {
+        setPx(b, x, T + y, '#ff7a1a');
+      }
+      setPx(b, 6, T + 13, '#ffcc33'); setPx(b, 10, T + 13, '#ffcc33');
+    },
+  },
+
+  golden: {
+    hat: false,
+    head: [
+      '    SSSSSS      ',
+      '   SSLLLSSSS    ',
+      '  sSSLLSSSSSS   ',
+      '  sSSSSSSSRSSS  ',
+      '  sSSSSSSSSSSS  ',
+      '  sSSSSSSkkkkk  ',
+      '  sSSSSSSSSSSS  ',
+      '  ssSSSSSSSSSS  ',
+      '   ssSSSSSSSs   ',
+      '    ssSSSSss    ',
+      '     kssssk     ',
+    ],
+    key: () => ({
+      S: MAT5.gold[2], s: MAT5.gold[1], L: MAT5.gold[4], R: '#e02a4a',
+      3: MAT5.gold[3], 2: MAT5.gold[2], 1: MAT5.gold[1],
+      G: MAT5.gold[3], g: MAT5.gold[1], B: '#8a1a2a', b: '#ff5a7a',
+      P: MAT5.gold[2], p: MAT5.gold[1], T: MAT5.gold[1], t: MAT5.gold[0],
+    }),
+    paint(b, T) {
+      // A white cape behind, and a white plume.
+      rect(b, 1, T + 11, 2, 10, '#e8e8f0');
+      rect(b, 1, T + 11, 1, 10, '#c4c4d4');
+      setPx(b, 0, T + 20, '#c4c4d4'); setPx(b, 2, T + 21, '#e8e8f0');
+      poly(b, [[5, T + 1], [3, T - 3], [0, T - 2], [1, T], [4, T + 1]], '#f4f4fa');
+      setPx(b, 2, T - 2, '#c4c4d4');
+      rect(b, 6, T + 12, 4, 1, MAT5.gold[4]);          // polished breastplate
+      setPx(b, 7, T + 13, '#e02a4a');
+    },
+  },
+};
+
+// The skin shop list: id, display name, coin price. The server owns the real
+// prices and ownership; this copy is for drawing previews before it answers.
+const SKIN_SHOP = [
+  { id: 'ninja',    name: 'NINJA',    price: 120 },
+  { id: 'knight',   name: 'KNIGHT',   price: 150 },
+  { id: 'pirate',   name: 'PIRATE',   price: 180 },
+  { id: 'wizard',   name: 'WIZARD',   price: 200 },
+  { id: 'viking',   name: 'VIKING',   price: 240 },
+  { id: 'skeleton', name: 'SKELETON', price: 280 },
+  { id: 'robot',    name: 'ROBOT',    price: 350 },
+  { id: 'shadow',   name: 'SHADOW',   price: 500 },
+  { id: 'inferno',  name: 'INFERNO',  price: 650 },
+  { id: 'golden',   name: 'GOLDEN',   price: 900 },
 ];
 
-function playerBuf(color, hatIdx, flash) {
+function playerBuf(color, hatIdx, flash, outfitId) {
   const c = ramp(color);
+  const fit = OUTFITS[outfitId] || null;
+  const hair = ramp('#4a3322');
   const key = {
-    o: EDGE,
-    H: shade('#3a2a1e', 0.05),
-    F: MAT5.flesh[2], E: '#1a1a24',
-    3: c[4], 2: c[2], 1: c[1],
+    k: EDGE,
+    H: hair[2], h: hair[1],
+    F: MAT5.flesh[2], f: MAT5.flesh[1], W: '#f4f4f4', E: '#1a1a24',
+    3: c[3], 2: c[2], 1: c[1],
+    G: MAT5.leather[3], g: MAT5.leather[2],
     B: MAT5.leather[1], b: MAT5.gold[3],
-    G: MAT5.leather[2],
+    P: '#3d4466', p: '#2a2f4a',
     T: MAT5.darkwood[2], t: MAT5.darkwood[0],
+    ...(fit && fit.key ? fit.key(c) : {}),
   };
-  const b = fromGrid(PLAYER_ROWS, key);
-  // Cloth weave, a lit shoulder, and a tabard stripe so the torso reads as
-  // clothing rather than one flat block of colour.
+  const pad = Array(PLAYER_PAD).fill(' '.repeat(16));
+  const rows = [
+    ...pad,
+    ...(fit && fit.head || HEAD_ROWS),
+    ...(fit && fit.body || BODY_ROWS),
+    ...(fit && fit.legs || LEG_ROWS),
+  ];
+  const b = fromGrid(rows, key);
   const T = PLAYER_PAD;
-  ditherRect(b, 3, T + 7, 5, 2, c[2], c[3], 'sparse');
-  setPx(b, 2, T + 6, c[4]); setPx(b, 2, T + 7, c[4]); setPx(b, 2, T + 8, c[4]);
-  rect(b, 5, T + 6, 2, 4, c[3]);
-  setPx(b, 5, T + 6, c[4]);
-  setPx(b, 4, T + 4, shade(MAT5.flesh[1], -0.15));    // brow shadow
-  drawHatPixels(b, hatIdx, c);
+
+  if (!fit) {
+    // Cloth weave and a lit shoulder so the tunic reads as fabric.
+    ditherRect(b, 5, T + 13, 4, 2, c[2], c[3], 'sparse');
+    setPx(b, 4, T + 11, c[4]); setPx(b, 5, T + 11, c[4]); setPx(b, 3, T + 12, c[4]);
+    setPx(b, 9, T + 3, hair[3]); setPx(b, 6, T + 2, hair[3]);   // hair shine
+  }
+  if (fit && fit.paint) fit.paint(b, T, c);
+  if (!fit || fit.hat) drawHatPixels(b, hatIdx, c);
+  outline(b, fit && fit.edge || EDGE);
   if (flash) tint(b, '#ffffff', 0.78);
   return b;
 }
 
 function drawHatPixels(b, hatIdx, c) {
   const hat = ['NONE', 'CAP', 'CROWN', 'HORNS', 'SPIKY'][hatIdx | 0] || 'NONE';
-  const T = PLAYER_PAD;   // the body's first row
+  const T = PLAYER_PAD;   // the head's first row
   if (hat === 'CAP') {
-    rect(b, 2, T + 0, 8, 2, '#27384d');
-    rect(b, 3, T + 0, 6, 1, '#375273');
-    rect(b, 1, T + 2, 11, 1, '#1d2937');          // brim
-    setPx(b, 11, T + 2, '#375273');
+    rect(b, 3, T - 1, 10, 3, '#27384d');
+    rect(b, 4, T - 1, 8, 1, '#375273');
+    rect(b, 3, T + 2, 12, 1, '#1d2937');          // brim, out over the face
+    setPx(b, 14, T + 2, '#375273');
+    setPx(b, 7, T, '#e8e8f0');                     // badge
   } else if (hat === 'CROWN') {
-    rect(b, 3, T - 1, 6, 3, MAT5.gold[1]);
-    rect(b, 3, T - 3, 1, 2, MAT5.gold[2]);        // points
-    rect(b, 5, T - 4, 2, 3, MAT5.gold[2]);
-    rect(b, 8, T - 3, 1, 2, MAT5.gold[2]);
-    setPx(b, 3, T - 3, MAT5.gold[4]);
-    setPx(b, 5, T - 4, MAT5.gold[4]);
-    setPx(b, 8, T - 3, MAT5.gold[4]);
-    setPx(b, 6, T + 1, '#d04a5a');                // set stone
+    rect(b, 4, T - 1, 8, 3, MAT5.gold[2]);
+    rect(b, 4, T - 1, 8, 1, MAT5.gold[3]);
+    for (const [x, h] of [[4, 2], [7, 3], [11, 2]]) {
+      rect(b, x, T - 1 - h, 1, h, MAT5.gold[2]);
+      setPx(b, x, T - 1 - h, MAT5.gold[4]);
+    }
+    rect(b, 6, T - 3, 3, 2, MAT5.gold[2]);
+    setPx(b, 7, T, '#d04a5a');                     // set stone
+    setPx(b, 5, T, '#4a8ad0'); setPx(b, 10, T, '#4a8ad0');
   } else if (hat === 'HORNS') {
-    poly(b, [[3, T + 2], [0, T - 4], [4, T + 1]], MAT5.blood[1]);
-    poly(b, [[8, T + 2], [11, T - 4], [7, T + 1]], MAT5.blood[1]);
-    setPx(b, 1, T - 3, MAT5.blood[3]);
-    setPx(b, 10, T - 3, MAT5.blood[3]);
+    poly(b, [[4, T + 2], [0, T - 5], [2, T - 5], [6, T + 1]], MAT5.blood[1]);
+    poly(b, [[10, T + 1], [13, T - 5], [15, T - 5], [12, T + 2]], MAT5.blood[1]);
+    setPx(b, 1, T - 4, MAT5.blood[3]);
+    setPx(b, 14, T - 4, MAT5.blood[3]);
   } else if (hat === 'SPIKY') {
-    for (const [x, hh] of [[3, 3], [5, 5], [7, 4], [9, 2]]) {
-      rect(b, x, T + 1 - hh, 1, hh, c[3]);
+    for (const [x, hh] of [[3, 3], [5, 5], [7, 6], [9, 5], [11, 3]]) {
+      rect(b, x, T + 1 - hh, 2, hh, c[3]);
       setPx(b, x, T + 1 - hh, c[4]);
     }
   }
 }
 
-function playerSprite(color, hatIdx, facing, flash) {
-  return sprite(`pl:${color}:${hatIdx}:${facing}:${flash ? 1 : 0}`, () => {
-    const b = playerBuf(color, hatIdx, flash);
+function playerSprite(color, hatIdx, facing, flash, outfitId) {
+  const fit = OUTFITS[outfitId] ? outfitId : '';
+  return sprite(`pl:${color}:${hatIdx}:${facing}:${flash ? 1 : 0}:${fit}`, () => {
+    const b = playerBuf(color, hatIdx, flash, fit);
     return facing === 1 ? b : mirror(b);
   });
 }
@@ -500,7 +824,7 @@ function trapSprite(type, size, armed) {
 }
 
 const Sprites = {
-  monsterPad, PLAYER_PAD,
+  monsterPad, PLAYER_PAD, OUTFITS, SKIN_SHOP,
   EDGE, playerBuf, playerSprite, monsterBuf, monsterSprite,
   itemSprite, ITEM_ROWS, itemSymbol, coinSprite, trapBuf, trapSprite, mirror,
   MONSTER_SKIN,
@@ -511,7 +835,7 @@ const Sprites = {
 // script's top-level names.
 if (typeof window !== 'undefined') {
   window.Sprites = Sprites;
-  for (const k of ['playerSprite', 'monsterSprite', 'monsterPad', 'PLAYER_PAD',
+  for (const k of ['playerSprite', 'monsterSprite', 'monsterPad', 'PLAYER_PAD', 'SKIN_SHOP',
                    'itemSprite', 'coinSprite', 'trapSprite']) {
     window[k] = Sprites[k];
   }

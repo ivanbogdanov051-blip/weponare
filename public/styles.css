@@ -284,7 +284,39 @@ body {
 }
 .skin-btn:hover { border-color: var(--c-accent); color: var(--c-accent); }
 
-.skins-box { min-width: min(280px, 92vw); }
+.skins-box { min-width: min(280px, 92vw); max-width: min(560px, 96vw); margin: auto; }
+#skinsScreen { align-items: safe center; }
+
+/* Skin shop: one card per outfit, bought with coins then equipped. */
+.skin-coins { color: var(--c-gold); letter-spacing: 1px; margin-left: 6px; }
+.outfit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 6px;
+}
+.outfit-card {
+  background: #0a0a18;
+  border: 2px solid #2a2a4a;
+  color: #888;
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  letter-spacing: 1px;
+  padding: 4px 2px 5px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transition: border-color 0.1s, color 0.1s;
+}
+.outfit-card canvas { image-rendering: pixelated; width: 40px; height: 62px; }
+.outfit-card:hover { border-color: #555; color: #ccc; }
+.outfit-card.owned { color: #aab; }
+.outfit-card.equipped { border-color: var(--c-accent); color: var(--c-accent); box-shadow: 0 0 6px #aa44ff55; }
+.outfit-card.poor { opacity: 0.55; }
+.outfit-tag { color: var(--c-gold); }
+.outfit-card.owned .outfit-tag { color: #6fbf85; }
+.outfit-card.equipped .outfit-tag { color: var(--c-accent); }
 
 #skinPreviewCanvas {
   display: block;

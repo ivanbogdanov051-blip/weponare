@@ -314,6 +314,68 @@ const WEAPON_ART = {
     k.circ(2, 0, 2.2, '#e8e2d2');                      // skull charm
     k.r(1.2, -0.4, 0.7, 0.7, MAT.dark); k.r(2.5, -0.4, 0.7, 0.7, MAT.dark);
   }},
+
+  // Held fanned between the fingers, ready to throw.
+  shuriken: { draw(k, wc) {
+    for (const [x, y] of [[9, -5], [5, 3]]) {
+      k.poly([[x, y - 6], [x + 1.4, y - 1.4], [x + 6, y], [x + 1.4, y + 1.4],
+              [x, y + 6], [x - 1.4, y + 1.4], [x - 6, y], [x - 1.4, y - 1.4]], wc);
+      k.poly([[x, y - 6], [x + 1.4, y - 1.4], [x, y], [x - 6, y], [x - 1.4, y - 1.4]], MAT.steelLight);
+      k.circ(x, y, 1.3, MAT.steelDark);
+      k.circ(x, y, 0.6, MAT.dark);
+    }
+    k.r(-1, -1.5, 3, 3, MAT.leather);                  // wrapped fist
+  }},
+
+  frostrod: { draw(k, wc) {
+    k.r(0, -1.3, 16, 2.6, '#3c4a66');
+    k.r(0, -1.3, 16, 0.9, '#5a6c90');
+    k.r(3, -1.8, 1.2, 3.6, MAT.steelLight);           // silver bands
+    k.r(10, -1.8, 1.2, 3.6, MAT.steelLight);
+    // Cluster of ice crystals.
+    k.glow(21, 0, 7, wc, 0.3);
+    k.poly([[15.5, -1.5], [19, -7.5], [21, -2]], '#cfefff');
+    k.poly([[15.5, 1.5], [19, 7], [21, 2]], '#6ab8e0');
+    k.poly([[16, -2.4], [26, 0], [16, 2.4]], wc);
+    k.poly([[16, -2.4], [26, 0], [17, -0.4]], '#ffffff');
+  }},
+
+  blunderbuss: { draw(k, wc) {
+    k.poly([[-3, -1.8], [4, -2.2], [4, 3], [-1, 5.5], [-4, 4]], MAT.wood);   // stock
+    k.poly([[-3, -1.8], [4, -2.2], [4, -0.8], [-3, -0.4]], MAT.woodLight);
+    k.r(3, -2.4, 14, 4, MAT.iron);                     // barrel
+    k.r(3, -2.4, 14, 1.2, MAT.ironLight);
+    k.poly([[16, -2.4], [22, -5.5], [22, 5.5], [16, 1.6]], wc);             // bell mouth
+    k.poly([[16, -2.4], [22, -5.5], [22, -3.6], [16, -1.2]], MAT.goldLight);
+    k.poly([[19, -3], [22, -4.2], [22, 4.2], [19, 2.2]], MAT.dark);
+    k.r(6, 1.6, 4, 1.2, MAT.gold);                     // trigger guard
+    k.r(7, -3.2, 2, 1, MAT.iron);                      // hammer
+  }},
+
+  lance: { draw(k, wc) {
+    haft(k, 10, 2.6);
+    k.r(1, -1.6, 4, 3.2, MAT.leather);
+    k.poly([[9, -5.5], [12, -5.5], [12, 5.5], [9, 5.5]], MAT.steel);       // vamplate
+    k.poly([[9, -5.5], [12, -5.5], [12, -3.5], [9, -3.5]], MAT.steelLight);
+    // Long tapering spike.
+    k.poly([[12, -3.2], [33, 0], [12, 3.2]], wc);
+    k.poly([[12, -3.2], [33, 0], [12, -0.6]], '#fff4cc');
+    k.r(14, -0.3, 11, 0.6, MAT.woodDark);
+    k.poly([[14, 3], [19, 2.2], [19, 5.5], [15, 6]], '#c83a3a');           // pennant
+  }},
+
+  stormtome: { draw(k, wc) {
+    // A spellbook held open, lightning crackling from its pages.
+    k.poly([[0, -6], [8, -7], [8, 7], [0, 6]], '#3a2a6a');
+    k.poly([[8, -7], [16, -6], [16, 6], [8, 7]], '#4a3a8a');
+    k.poly([[1, -5], [7.6, -6], [7.6, 5.8], [1, 5]], '#efe6cf');
+    k.poly([[8.4, -6], [15, -5], [15, 5], [8.4, 5.8]], '#fffaea');
+    k.r(7.6, -7, 0.8, 14, MAT.dark);                   // spine
+    k.r(2, -3, 4.5, 0.6, '#b8ab88'); k.r(2, -1, 4, 0.6, '#b8ab88'); k.r(2, 1, 4.5, 0.6, '#b8ab88');
+    k.glow(12, -1, 7, wc, 0.35);
+    k.poly([[11, -9], [13.5, -4], [11.8, -3.6], [14, 2], [10, -3], [11.8, -3.4]], wc);
+    k.circ(1, 0, 1.1, MAT.gold);                       // clasp
+  }},
 };
 
 // Run a definition through a kit that records geometry instead of painting, to
