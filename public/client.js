@@ -86,6 +86,12 @@ const wsUrl = isLocal
 let ws = null, myNum = null, connected = false;
 let prevState = null, currState = null, stateRecvTime = 0;
 const SERVER_TICK_MS = 20;
+// Measured, not assumed: the real gap between state messages (a 20 ms server
+// timer lands every ~28 ms on Windows) and the network round-trip. Smoothing
+// and prediction both key off these.
+let stateIntervalMs = SERVER_TICK_MS;
+let rttMs = 60;
+let pingTimer = null;
 
 let pendingName = 'PLAYER', pendingMode = 'pvp', pendingPass = '';
 let roomWasFull = false;
@@ -212,9 +218,22 @@ function connect() {
   roomWasFull = false;
   returningToMenu = false;
   ws = new WebSocket(wsUrl);
-  ws.onopen = () => { connected = true; };
+  ws.onopen = () => {
+    connected = true;
+    clearInterval(pingTimer);
+    const sock = ws;
+    pingTimer = setInterval(() => {
+      if (sock.readyState === 1) sock.send(JSON.stringify({ type: 'ping', t: performance.now() }));
+      else clearInterval(pingTimer);
+    }, 1000);
+  };
   ws.onmessage = (e) => {
     const msg = JSON.parse(e.data);
+    if (msg.type === 'pong') {
+      const sample = performance.now() - msg.t;
+      if (sample >= 0 && sample < 2000) rttMs = rttMs * 0.7 + sample * 0.3;
+      return;
+    }
     if (msg.type === 'skin_init') {
       pendingSkin = msg.skin;
       saveLocalSkin(msg.skin);
@@ -264,18 +283,29 @@ function connect() {
         if (msg.xp !== undefined) saveLocalXp(pendingPass, msg.xp);
         if (msg.myCoins !== undefined) saveLocalCoins(pendingPass, msg.myCoins);
       }
+      // The server only sends a player's unlock list when it changes.
+      for (const k of ['p1', 'p2']) {
+        const np = msg.players?.[k], op = currState?.players?.[k];
+        if (np && !np.unlockedWeapons && op?.unlockedWeapons) np.unlockedWeapons = op.unlockedWeapons;
+      }
       if (currState && msg.gameState === 'GAMEPLAY') detectSlashes(currState, msg);
       if (currState) detectAudioEvents(currState, msg);
       else if (window.GameAudio) GameAudio.syncMusic(msg.gameState === 'GAMEPLAY');
       prevState = currState;
       currState = msg;
-      stateRecvTime = performance.now();
+      const nowT = performance.now();
+      if (stateRecvTime) {
+        const gap = nowT - stateRecvTime;
+        if (gap > 0 && gap < 250) stateIntervalMs = stateIntervalMs * 0.9 + gap * 0.1;
+      }
+      stateRecvTime = nowT;
       updateScreens(msg);
     }
   };
   ws.onclose = () => {
     connected = false;
-    currState = null; prevState = null; pred = null;
+    currState = null; prevState = null; pred = null; stateRecvTime = 0;
+    clearInterval(pingTimer);
     if (window.GameAudio) GameAudio.stopMusic();
     showGameControls(false);
     if (leaving) {
@@ -332,32 +362,60 @@ function interpState(prev, curr, t) {
 
 // ─── Client-side Prediction (local player) ──────────────────────────────────────
 // Renders the local player using locally-applied input immediately, instead of
-// waiting for the server round-trip + interpolation buffer. Reconciles toward the
-// authoritative server position each frame to correct drift.
+// waiting for the server round-trip.
+//
+// Reconciliation compares like with like. A server position describes where our
+// inputs had taken us about one round-trip ago, so it is checked against our own
+// predicted position from that moment (kept in a short history), and only the
+// difference is corrected. Pulling toward the raw server position instead — as
+// this used to — dragged the player back onto a stale spot every frame, which is
+// exactly what made movement feel delayed.
 
 let pred = null; // { x, y, facing }
+const predHist = [];          // [{ t, x, y }] — our predicted path, last second
+let reconciledState = null;   // the state message last reconciled against
 
-function updatePrediction(frameDt) {
-  if (!currState || currState.gameState !== 'GAMEPLAY' || !myNum) { pred = null; return; }
+function predictedAt(t) {
+  if (!predHist.length) return null;
+  if (t <= predHist[0].t) return predHist[0];
+  for (let i = predHist.length - 1; i > 0; i--) {
+    const a = predHist[i - 1], b = predHist[i];
+    if (t >= a.t) {
+      const k = b.t > a.t ? (t - a.t) / (b.t - a.t) : 1;
+      return { x: lerp(a.x, b.x, k), y: lerp(a.y, b.y, k) };
+    }
+  }
+  return predHist[predHist.length - 1];
+}
+
+function updatePrediction(frameDt, now) {
+  if (!currState || currState.gameState !== 'GAMEPLAY' || !myNum) { pred = null; predHist.length = 0; return; }
   const key = myNum === 1 ? 'p1' : 'p2';
   const me = currState.players?.[key];
-  if (!me || me.dead) { pred = null; return; }
-  if (!pred) pred = { x: me.x, y: me.y, facing: me.facing };
+  if (!me || me.dead) { pred = null; predHist.length = 0; return; }
+  if (!pred) { pred = { x: me.x, y: me.y, facing: me.facing }; predHist.length = 0; }
 
   const inp = currentInputs();
   const moving = inp.left || inp.right || inp.up || inp.down;
 
-  // Reconcile toward the authoritative position. While moving we only nudge very
-  // gently — the server position lags by the round-trip, so pulling hard toward it
-  // causes a draggy / rubber-band feel. When idle we settle firmly onto it.
-  const dx = me.x - pred.x, dy = me.y - pred.y;
-  const gap = Math.hypot(dx, dy);
-  if (gap > 36 || me.pulled) {   // knockback / grapple / teleport / respawn → snap
-    pred.x = me.x; pred.y = me.y;
-  } else if (!moving) {
-    pred.x += dx * 0.30; pred.y += dy * 0.30;
-  } else {
-    pred.x += dx * 0.05; pred.y += dy * 0.05;
+  // Once per new server state: how far is the server from where we predicted
+  // ourselves to be when it computed that position?
+  if (currState !== reconciledState) {
+    reconciledState = currState;
+    const past = predictedAt(now - (rttMs + stateIntervalMs * 0.5));
+    const ex = past ? me.x - past.x : me.x - pred.x;
+    const ey = past ? me.y - past.y : me.y - pred.y;
+    const err = Math.hypot(ex, ey);
+    if (err > 40 || me.pulled) {
+      // Knockback / grapple / dash / teleport: the server moved us — take it.
+      pred.x = me.x; pred.y = me.y;
+      predHist.length = 0;
+    } else if (err > 0.4) {
+      // Shift the whole predicted path, so the same error isn't corrected twice.
+      const k = moving ? 0.2 : 0.4;
+      pred.x += ex * k; pred.y += ey * k;
+      for (const h of predHist) { h.x += ex * k; h.y += ey * k; }
+    }
   }
 
   // Mirror server speed modifiers so prediction matches authoritative movement.
@@ -375,6 +433,9 @@ function updatePrediction(frameDt) {
   const f = frameDt / 16.67;
   pred.x = Math.max(ARENA_X + 2, Math.min(ARENA_X + ARENA_W - me.w - 2, pred.x + vx * f));
   pred.y = Math.max(ARENA_Y + 2, Math.min(ARENA_Y + ARENA_H - me.h - 2, pred.y + vy * f));
+
+  predHist.push({ t: now, x: pred.x, y: pred.y });
+  while (predHist.length && now - predHist[0].t > 1000) predHist.shift();
 }
 
 function applyPrediction(state) {
@@ -1108,8 +1169,10 @@ function renderLoop(now) {
   tickSlashes(dt);
   if (localAtkCd > 0) localAtkCd -= dt;
   if (currState && currState.gameState === 'GAMEPLAY') {
-    updatePrediction(dt);
-    const t = Math.min(1, (now - stateRecvTime) / SERVER_TICK_MS);
+    updatePrediction(dt, now);
+    // Blend over the real gap between states, so others move smoothly instead
+    // of finishing early and stalling until the next message.
+    const t = Math.min(1, (now - stateRecvTime) / Math.max(SERVER_TICK_MS, stateIntervalMs));
     draw(applyPrediction(interpState(prevState, currState, t)));
   } else {
     pred = null;
@@ -1145,29 +1208,44 @@ function draw(state) {
   ctx.restore();
 }
 
+// The floor never changes, so it is painted once into an offscreen canvas and
+// blitted each frame instead of re-issuing ~300 fills and line strokes.
+let arenaCache = null;
 function drawArena() {
-  ctx.fillStyle = PAL.arena; ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
+  if (!arenaCache) {
+    const cv = document.createElement('canvas');
+    cv.width = CANVAS_W; cv.height = CANVAS_H;
+    const g = cv.getContext('2d');
+    if (!g) { paintArena(ctx); return; }
+    paintArena(g);
+    arenaCache = cv;
+  }
+  ctx.drawImage(arenaCache, 0, 0);
+}
+
+function paintArena(g) {
+  g.fillStyle = PAL.arena; g.fillRect(0,0,CANVAS_W,CANVAS_H);
   // Floor tiles, slightly chequered so the bigger arena reads as a space.
   const T = 24;
-  ctx.fillStyle = 'rgba(255,255,255,0.016)';
+  g.fillStyle = 'rgba(255,255,255,0.016)';
   for (let ty = 0; ty * T < ARENA_H; ty++) {
     for (let tx = (ty % 2); tx * T < ARENA_W; tx += 2) {
-      ctx.fillRect(ARENA_X + tx*T, ARENA_Y + ty*T,
+      g.fillRect(ARENA_X + tx*T, ARENA_Y + ty*T,
                    Math.min(T, ARENA_W - tx*T), Math.min(T, ARENA_H - ty*T));
     }
   }
-  ctx.strokeStyle='rgba(255,255,255,0.028)'; ctx.lineWidth=1;
-  for(let x=ARENA_X;x<=ARENA_X+ARENA_W;x+=T){ctx.beginPath();ctx.moveTo(x+0.5,ARENA_Y);ctx.lineTo(x+0.5,ARENA_Y+ARENA_H);ctx.stroke();}
-  for(let y=ARENA_Y;y<=ARENA_Y+ARENA_H;y+=T){ctx.beginPath();ctx.moveTo(ARENA_X,y+0.5);ctx.lineTo(ARENA_X+ARENA_W,y+0.5);ctx.stroke();}
+  g.strokeStyle='rgba(255,255,255,0.028)'; g.lineWidth=1;
+  for(let x=ARENA_X;x<=ARENA_X+ARENA_W;x+=T){g.beginPath();g.moveTo(x+0.5,ARENA_Y);g.lineTo(x+0.5,ARENA_Y+ARENA_H);g.stroke();}
+  for(let y=ARENA_Y;y<=ARENA_Y+ARENA_H;y+=T){g.beginPath();g.moveTo(ARENA_X,y+0.5);g.lineTo(ARENA_X+ARENA_W,y+0.5);g.stroke();}
   // Walls
-  ctx.fillStyle = PAL.wall;
-  ctx.fillRect(0,0,CANVAS_W,ARENA_Y); ctx.fillRect(0,CANVAS_H-ARENA_Y,CANVAS_W,ARENA_Y);
-  ctx.fillRect(0,0,ARENA_X,CANVAS_H); ctx.fillRect(CANVAS_W-ARENA_X,0,ARENA_X,CANVAS_H);
-  ctx.fillStyle = 'rgba(140,140,200,0.18)';
-  ctx.fillRect(ARENA_X-1,ARENA_Y-1,ARENA_W+2,1);
-  ctx.fillRect(ARENA_X-1,ARENA_Y+ARENA_H,ARENA_W+2,1);
-  ctx.fillRect(ARENA_X-1,ARENA_Y-1,1,ARENA_H+2);
-  ctx.fillRect(ARENA_X+ARENA_W,ARENA_Y-1,1,ARENA_H+2);
+  g.fillStyle = PAL.wall;
+  g.fillRect(0,0,CANVAS_W,ARENA_Y); g.fillRect(0,CANVAS_H-ARENA_Y,CANVAS_W,ARENA_Y);
+  g.fillRect(0,0,ARENA_X,CANVAS_H); g.fillRect(CANVAS_W-ARENA_X,0,ARENA_X,CANVAS_H);
+  g.fillStyle = 'rgba(140,140,200,0.18)';
+  g.fillRect(ARENA_X-1,ARENA_Y-1,ARENA_W+2,1);
+  g.fillRect(ARENA_X-1,ARENA_Y+ARENA_H,ARENA_W+2,1);
+  g.fillRect(ARENA_X-1,ARENA_Y-1,1,ARENA_H+2);
+  g.fillRect(ARENA_X+ARENA_W,ARENA_Y-1,1,ARENA_H+2);
 }
 
 // ─── Traps & Items ──────────────────────────────────────────────────────────────
@@ -1244,13 +1322,17 @@ let itemSlotRects = [];   // HUD-space hit boxes for tap-to-use
 function drawItemBar(inv) {
   itemSlotRects = [];
   if (!inv || !inv.length) return;
+  // A single row under the ability bars, on your side of the screen — up and
+  // out of the way of the touch d-pad and the weapon rack.
   const onRight = myNum === 2;
-  const x = onRight ? HUD_W - INV_X - INV_SLOT : INV_X;
+  const rowW = inv.length * (INV_SLOT + INV_GAP) - INV_GAP;
+  const x0 = onRight ? HUD_W - INV_X - rowW : INV_X;
+  const y = INV_Y;
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.fillRect(x - 2, INV_Y - 2, INV_SLOT + 4, inv.length * (INV_SLOT + INV_GAP) - INV_GAP + 4);
+  ctx.fillRect(x0 - 2, y - 2, rowW + 4, INV_SLOT + 4);
   inv.forEach((type, i) => {
-    const y = INV_Y + i * (INV_SLOT + INV_GAP);
+    const x = x0 + i * (INV_SLOT + INV_GAP);
     const col = ITEM_COLOR[type] || '#888';
     itemSlotRects.push({ x, y, w: INV_SLOT, h: INV_SLOT, index: i });
     ctx.fillStyle = 'rgba(8,8,18,0.9)';
@@ -1928,14 +2010,24 @@ function drawHUD(state) {
     ctx.font = '10px "Courier New",monospace';
   }
 
-  ctx.textBaseline = 'bottom';
-  ctx.fillStyle = '#000'; ctx.fillText('XP:' + state.xp, 5, HUD_H - 15);
-  ctx.fillStyle = PAL.xp; ctx.fillText('XP:' + state.xp, 4, HUD_H - 16);
+  // XP and coins live in the top bar beside your own health, so the bottom edge
+  // belongs to the weapon rack alone.
+  const right = myNum === 2;
+  const ax = right ? HUD_W - 86 : 86;
+  ctx.font = '8px "Courier New",monospace';
+  ctx.textBaseline = 'top';
+  ctx.textAlign = right ? 'right' : 'left';
+  const xpT = 'XP ' + (state.xp || 0).toLocaleString();
+  ctx.fillStyle = '#000'; ctx.fillText(xpT, ax + 1, 4);
+  ctx.fillStyle = PAL.xp; ctx.fillText(xpT, ax, 3);
   // A drawn coin rather than a glyph — Courier has no dependable coin character.
-  drawCoinIcon(8, HUD_H - 8, 3.5);
-  const cn = String(state.myCoins || 0);
-  ctx.fillStyle = '#000';      ctx.fillText(cn, 15, HUD_H - 3);
-  ctx.fillStyle = PAL.coin;    ctx.fillText(cn, 14, HUD_H - 4);
+  const cn = (state.myCoins || 0).toLocaleString();
+  const cw = ctx.measureText(cn).width;
+  const coinX = right ? ax - cw - 6 : ax + 3;
+  drawCoinIcon(coinX, 18, 3);
+  ctx.fillStyle = '#000';   ctx.fillText(cn, (right ? ax : ax + 9) + 1, 15);
+  ctx.fillStyle = PAL.coin; ctx.fillText(cn, right ? ax : ax + 9, 14);
+  ctx.textAlign = 'left'; ctx.font = '10px "Courier New",monospace';
 }
 
 function drawCoinIcon(x, y, r) {
@@ -1959,22 +2051,43 @@ function drawWeaponPanel(state) {
   const weapons = mp.unlockedWeapons;
   const n = weapons.length;
 
-  // The panel has to hold every unlocked weapon on any screen, so the slots
-  // shrink to fit and wrap to a second row only if they'd get unusably small.
-  const avail = HUD_W - 20, gap = 2, slotH = 22;
-  let rows = 1;
-  let slotW = Math.min(26, Math.floor((avail + gap) / n) - gap);
-  if (slotW < 17) {
-    rows = 2;
-    const perRow = Math.ceil(n / rows);
-    slotW = Math.max(12, Math.min(26, Math.floor((avail + gap) / perRow) - gap));
+  // The rack must fit the free strip along the bottom: the whole width on a
+  // desktop, or the gap between the d-pad and the action buttons on a phone.
+  // Slots shrink to fit, and wrap onto more rows only if they'd get too small.
+  let L = 6, R = HUD_W - 6;
+  for (const z of hudTouchZones()) {
+    if (z.y + z.h < HUD_H - 70) continue;               // not down at the bottom edge
+    if (z.x + z.w / 2 < HUD_W / 2) L = Math.max(L, z.x + z.w + 2);
+    else                           R = Math.min(R, z.x - 2);
   }
+  if (R - L < 120) { L = 6; R = HUD_W - 6; }           // nowhere sensible: use full width
+  const avail = R - L, gap = 2, slotH = 22;
+  let rows = 1, slotW = 0;
+  for (; rows <= 4; rows++) {
+    slotW = Math.min(26, Math.floor((avail + gap) / Math.ceil(n / rows)) - gap);
+    if (slotW >= 18) break;
+  }
+  rows = Math.min(rows, 4);
+  slotW = Math.max(14, slotW);
   const perRow = Math.ceil(n / rows);
   const rowW = (cnt) => cnt * (slotW + gap) - gap;
   const panelW = rowW(Math.min(n, perRow));
   const panelH = rows * slotH + (rows - 1) * gap;
-  const panelX = Math.round((HUD_W - panelW) / 2);
+  const midX = (L + R) / 2;
+  const panelX = Math.round(midX - panelW / 2);
   const panelY = HUD_H - panelH - 4;
+
+  // Never hide your own character: if you walk behind the rack, it turns
+  // see-through.
+  const me = myNum === 1 ? state.players?.p1 : state.players?.p2;
+  let alpha = 1;
+  if (me && !me.dead) {
+    const px = me.x / HUD_SCALE, py = (me.y - PLAYER_PAD) / HUD_SCALE;
+    const pw = me.w / HUD_SCALE, ph = (me.h + PLAYER_PAD) / HUD_SCALE;
+    if (px + pw > panelX - 6 && px < panelX + panelW + 6 && py + ph > panelY - 6) alpha = 0.3;
+  }
+  ctx.save();
+  ctx.globalAlpha = alpha;
 
   ctx.fillStyle='rgba(0,0,0,0.72)';
   ctx.fillRect(panelX-4, panelY-3, panelW+8, panelH+6);
@@ -1984,7 +2097,7 @@ function drawWeaponPanel(state) {
   for (let i = 0; i < n; i++) {
     const row = Math.floor(i / perRow), col = i % perRow;
     const cnt = Math.min(perRow, n - row * perRow);
-    const rx = Math.round((HUD_W - rowW(cnt)) / 2);
+    const rx = Math.round(midX - rowW(cnt) / 2);
     const sx = rx + col * (slotW + gap);
     const sy = panelY + row * (slotH + gap);
     const wId = weapons[i], sel = i === mp.weaponIdx;
@@ -2009,6 +2122,30 @@ function drawWeaponPanel(state) {
     ctx.fillText(label, sx + slotW/2, sy + slotH - 1);
     ctx.restore();
   }
+  ctx.restore();
+}
+
+// Where the on-screen touch buttons sit, in HUD space, measured from the live
+// page layout (refreshed twice a second) so the HUD can keep clear of them on
+// any phone and in any orientation.
+let touchZones = [], touchZonesAt = -1e9;
+function hudTouchZones() {
+  const now = performance.now();
+  if (now - touchZonesAt < 500) return touchZones;
+  touchZonesAt = now;
+  touchZones = [];
+  const tc = document.getElementById('touchControls');
+  if (!tc || !tc.classList.contains('visible')) return touchZones;
+  const cr = canvas.getBoundingClientRect();
+  if (!cr.width || !cr.height) return touchZones;
+  const sx = HUD_W / cr.width, sy = HUD_H / cr.height;
+  for (const el of tc.querySelectorAll('.dpad, .action-btns')) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) continue;
+    touchZones.push({ x: (r.left - cr.left) * sx - 3, y: (r.top - cr.top) * sy - 3,
+                      w: r.width * sx + 6, h: r.height * sy + 6 });
+  }
+  return touchZones;
 }
 
 function drawControlHints(panelX, panelY, panelW) {
