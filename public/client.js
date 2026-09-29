@@ -1320,6 +1320,30 @@ function paintArena(g) {
 function drawTraps(traps) {
   for (const tr of traps) {
     const cx = tr.x + tr.w / 2, cy = tr.y + tr.h / 2;
+    if (tr.state === 'firing' && tr.type === 'poison') {
+      // A lingering toxic cloud: drifting dithered puffs over the pool.
+      const cv0 = trapSprite(tr.type, tr.w, true);
+      if (cv0) ctx.drawImage(cv0, Math.round(tr.x) - 2, Math.round(tr.y) - 2);
+      const t = performance.now() / 1000;
+      ctx.save();
+      ctx.globalAlpha = 0.16; ctx.fillStyle = tr.color;
+      ctx.beginPath(); ctx.arc(cx, cy, tr.radius, 0, Math.PI*2); ctx.fill();
+      for (let i = 0; i < 9; i++) {
+        const a = i * 0.7 + t * (0.3 + (i % 3) * 0.15);
+        const rr = tr.radius * (0.25 + (i % 4) * 0.18);
+        const px = cx + Math.cos(a) * rr, py = cy + Math.sin(a * 1.3) * rr * 0.7 - (t * 8 + i * 5) % 10;
+        ctx.globalAlpha = 0.28;
+        ctx.fillStyle = i % 2 ? '#8ad048' : '#b8f070';
+        ctx.fillRect(Math.round(px) - 5, Math.round(py) - 3, 10, 6);
+        ctx.fillRect(Math.round(px) - 3, Math.round(py) - 5, 6, 10);
+      }
+      ctx.globalAlpha = 0.7; ctx.strokeStyle = tr.color; ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.arc(cx, cy, tr.radius, 0, Math.PI*2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+      continue;
+    }
     if (tr.state === 'firing') {
       ctx.save();
       ctx.globalAlpha = 0.45; ctx.fillStyle = tr.color;
@@ -1538,7 +1562,23 @@ function drawChains(chains) {
 
 // ─── Players ──────────────────────────────────────────────────────────────────
 
-const EFFECT_GLOW = { speed:'#44ddee', strength:'#ff5544', shield:'#ffdd44', haste:'#aa66ff', slow:'#3366aa' };
+const EFFECT_GLOW = { speed:'#44ddee', strength:'#ff5544', shield:'#ffdd44', haste:'#aa66ff', slow:'#3366aa',
+                      burn:'#ff6a1a', poison:'#8ad048', magnet:'#ffc24a', regen:'#ff7ac8', vampire:'#d8304a' };
+
+// Flickering pixel flames over something that's on fire.
+function drawFlames(x, y, w, h) {
+  const t = performance.now() / 90;
+  ctx.save();
+  for (let i = 0; i < 5; i++) {
+    const fx = x + (w * (i + 0.5)) / 5 + Math.sin(t + i * 1.7) * 1.5;
+    const fh = 4 + ((Math.sin(t * 1.3 + i * 2.1) + 1) * 3);
+    const fy = y + h * 0.35 - (i % 2) * 3;
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = '#ff5a1a'; ctx.fillRect(Math.round(fx) - 1, Math.round(fy - fh), 3, Math.round(fh));
+    ctx.fillStyle = '#ffc030'; ctx.fillRect(Math.round(fx), Math.round(fy - fh * 0.6), 1, Math.round(fh * 0.6));
+  }
+  ctx.restore();
+}
 
 function drawPlayer(p, baseColor, label) {
   if (p.dead) return;
@@ -1565,6 +1605,7 @@ function drawPlayer(p, baseColor, label) {
 
   drawNametag(x + p.w / 2, y - 13, label, skinCol);
   drawWeaponSprite(p, x, y);
+  if (p.effects && p.effects.burn > 0) drawFlames(x, y, p.w, p.h);
 
   if (p.parryActive) {
     const t = performance.now() / 60;
@@ -1662,6 +1703,7 @@ function drawMonster(m) {
     ctx.drawImage(cv, x - pad, y - pad);
   }
   drawMonsterArms(m, x, y);
+  if (m.burning) drawFlames(x, y, m.w, m.h);
 
   drawHpBar(x - 1, y - 5, m.w + 2, 2, m.hp / m.maxHp, '#44ff44', '#003300');
   // Armoured types get a marker on the bar, since their health drains slowly.
@@ -2037,6 +2079,18 @@ function drawParticles(particles) {
       ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.fill();
       ctx.globalAlpha=Math.max(0,p.timer/m); ctx.strokeStyle='#ffffff'; ctx.lineWidth=2;
       ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.stroke();
+      // Name the trap as it goes off.
+      if (p.text) {
+        ctx.globalAlpha = Math.min(1, (p.timer/m) * 2);
+        ctx.font = 'bold 12px "Courier New",monospace';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.lineJoin = 'round';
+        const ty = Math.round(p.y - 22 - k * 14);
+        ctx.strokeText(p.text + '!', Math.round(p.x), ty);
+        ctx.fillStyle = p.color || '#fff';
+        ctx.fillText(p.text + '!', Math.round(p.x), ty);
+        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      }
       ctx.globalAlpha=1;
     } else if (p.type==='teleport') {
       const m=p.max||340, a=Math.max(0,p.timer/m), k=1-a;

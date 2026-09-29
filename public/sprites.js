@@ -844,6 +844,87 @@ function trapBuf(type, size, armed) {
     const cx2 = o + s / 2, cy2 = o + s / 2;
     ringPx(b, cx2, cy2, Math.max(2, s * 0.14), 1.6, MAT5.iron[3]);
     disc(b, cx2, cy2, Math.max(1, s * 0.06), armed ? '#9be7ff' : MAT5.iron[1]);
+  } else if (type === 'fire') {
+    // Stone grate over a vent, embers glowing through; flames when arming.
+    const st = MAT5.stone, cx2 = o + s / 2, cy2 = o + s / 2;
+    rect(b, o, o, s, s, st[1]);
+    ditherRect(b, o + 1, o + 1, s - 2, s - 2, st[1], st[2], 'sparse');
+    rect(b, o, o, s, 1, st[3]); rect(b, o, o, 1, s, st[3]);
+    const inner = Math.round(s * 0.64), io = o + Math.round((s - inner) / 2);
+    rect(b, io, io, inner, inner, '#2a0e06');
+    ditherRect(b, io + 1, io + 1, inner - 2, inner - 2, '#7a2008', armed ? '#ff8a1a' : '#b83a0c', 'checker');
+    for (let i = 0; i < 4; i++) {                       // iron grate bars
+      const x = io + Math.round((i + 0.5) * inner / 4);
+      rect(b, x, io, 1, inner, MAT5.iron[1]);
+    }
+    rect(b, io, io, inner, 1, MAT5.iron[3]);
+    if (armed) {
+      for (const [dx, h, c] of [[-0.22, 0.5, '#ff5a1a'], [0, 0.72, '#ffb030'], [0.22, 0.46, '#ff5a1a']]) {
+        const fx = cx2 + dx * s, top = cy2 - h * s * 0.7;
+        poly(b, [[fx - 3, cy2 + 2], [fx, top], [fx + 3, cy2 + 2]], c);
+        setPx(b, Math.round(fx), Math.round(top) + 1, '#fff0a0');
+      }
+    }
+  } else if (type === 'poison') {
+    // A bubbling pool of venom in a cracked stone ring.
+    const v = MAT5.venom, cx2 = o + s / 2, cy2 = o + s / 2, r = s * 0.46;
+    disc(b, cx2, cy2, r, MAT5.stone[1]);
+    disc(b, cx2, cy2, r - 2, v[0]);
+    disc(b, cx2 - 1, cy2 - 1, r - 3.5, v[1]);
+    ditherRect(b, cx2 - r * 0.5, cy2 - r * 0.5, r, r * 0.8, v[1], v[2], 'sparse');
+    for (const [dx, dy, rr] of [[-0.25, -0.2, 0.14], [0.2, 0.05, 0.1], [-0.05, 0.28, 0.08], [0.28, -0.25, 0.07]]) {
+      ringPx(b, cx2 + dx * s, cy2 + dy * s, Math.max(1.2, rr * s), 1, armed ? v[4] : v[3]);
+    }
+    // Skull warning mark.
+    rect(b, Math.round(cx2) - 2, Math.round(cy2) - 2, 5, 3, MAT5.bone[3]);
+    rect(b, Math.round(cx2) - 1, Math.round(cy2) + 1, 3, 1, MAT5.bone[2]);
+    setPx(b, Math.round(cx2) - 1, Math.round(cy2) - 1, '#14141c'); setPx(b, Math.round(cx2) + 1, Math.round(cy2) - 1, '#14141c');
+  } else if (type === 'spring') {
+    // Metal launch pad with a coiled spring and chevrons.
+    const ir = MAT5.iron, cx2 = o + s / 2, cy2 = o + s / 2;
+    rect(b, o, o, s, s, ir[1]);
+    rect(b, o + 1, o + 1, s - 2, s - 2, ir[2]);
+    ditherRect(b, o + 2, o + 2, s - 4, s - 4, ir[2], ir[3], 'checker');
+    // Yellow/black hazard border.
+    for (let i = 0; i < s; i += 4) {
+      rect(b, o + i, o, 2, 2, MAT5.gold[3]); rect(b, o + i, o + s - 2, 2, 2, MAT5.gold[3]);
+      rect(b, o, o + i, 2, 2, MAT5.gold[3]); rect(b, o + s - 2, o + i, 2, 2, MAT5.gold[3]);
+    }
+    const coil = armed ? 0.55 : 0.32;
+    for (let i = 0; i < 4; i++) {
+      const y = cy2 + s * 0.2 - i * s * coil * 0.3;
+      rect(b, Math.round(cx2 - s * 0.2), Math.round(y), Math.round(s * 0.4), 2, MAT5.steel[i % 2 ? 2 : 4]);
+    }
+    rect(b, Math.round(cx2 - s * 0.26), Math.round(cy2 + s * 0.22), Math.round(s * 0.52), 3, ir[0]);
+    rect(b, Math.round(cx2 - s * 0.28), Math.round(cy2 + s * 0.2 - 3 * s * coil * 0.3 - 3), Math.round(s * 0.56), 3, '#d83a3a');
+  } else if (type === 'tesla') {
+    // Copper coil on a stone base, crackling when charged.
+    const cx2 = o + s / 2, cy2 = o + s / 2, cu = ['#4a2412', '#7a3c1a', '#b8642c', '#e0924a', '#ffc890'];
+    disc(b, cx2, cy2, s * 0.46, MAT5.stone[1]);
+    disc(b, cx2, cy2, s * 0.40, MAT5.stone[2]);
+    ditherRect(b, cx2 - s * 0.3, cy2 - s * 0.3, s * 0.6, s * 0.6, MAT5.stone[2], MAT5.stone[1], 'sparse');
+    for (let i = 0; i < 5; i++) ringPx(b, cx2, cy2, s * (0.1 + i * 0.055), 1, cu[(i % 3) + 1]);
+    disc(b, cx2, cy2, Math.max(2, s * 0.1), armed ? '#e8fbff' : '#6a8ab0');
+    if (armed) {
+      for (let a = 0; a < 4; a++) {
+        const an = a * Math.PI / 2 + 0.4;
+        line(b, cx2, cy2, cx2 + Math.cos(an) * s * 0.3, cy2 + Math.sin(an) * s * 0.3, '#9fe8ff');
+      }
+    }
+  } else if (type === 'warp') {
+    // A glowing rune circle.
+    const cx2 = o + s / 2, cy2 = o + s / 2, pu = ['#1a0a30', '#3a1a6a', '#7a3ad0', '#b07aff', '#e8d0ff'];
+    disc(b, cx2, cy2, s * 0.47, pu[0]);
+    ditherRect(b, cx2 - s * 0.4, cy2 - s * 0.4, s * 0.8, s * 0.8, pu[0], pu[1], 'sparse');
+    ringPx(b, cx2, cy2, s * 0.42, 1.5, pu[armed ? 4 : 3]);
+    ringPx(b, cx2, cy2, s * 0.26, 1, pu[2]);
+    for (let a = 0; a < 6; a++) {                      // rune ticks
+      const an = a * Math.PI / 3;
+      line(b, cx2 + Math.cos(an) * s * 0.28, cy2 + Math.sin(an) * s * 0.28,
+               cx2 + Math.cos(an) * s * 0.4, cy2 + Math.sin(an) * s * 0.4, pu[3]);
+    }
+    poly(b, [[cx2, cy2 - s * 0.14], [cx2 + s * 0.12, cy2 + s * 0.08], [cx2 - s * 0.12, cy2 + s * 0.08]], pu[armed ? 4 : 3]);
+    disc(b, cx2, cy2, 1.2, '#ffffff');
   }
 
   outline(b, EDGE);

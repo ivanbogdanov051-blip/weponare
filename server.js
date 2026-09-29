@@ -43,11 +43,28 @@ const PLAYER_W = 16, PLAYER_H = 22;
 // ── Traps: sparse, and big enough to be a real hazard on the larger map ──
 const MAX_TRAPS = 5;
 const TRAP_SPAWN_MIN = 5000, TRAP_SPAWN_MAX = 11000;
+// `name` floats up when a trap goes off, so players learn what hit them.
 const TRAP_TYPES = {
-  spike: { mode: 'delayed', armTime: 750, size: 34, radius: 52, damage: 30, color: '#ff8822' },
-  mine:  { mode: 'instant',              size: 30, radius: 60, damage: 46, color: '#ff3333' },
-  snare: { mode: 'instant',              size: 32, radius: 46, effect: 'slow', dur: 2800, color: '#66ccff' },
+  spike:  { mode: 'delayed', armTime: 750, size: 34, radius: 52, damage: 30, color: '#ff8822', name: 'SPIKES' },
+  mine:   { mode: 'instant',              size: 30, radius: 60, damage: 46, color: '#ff3333', name: 'MINE' },
+  snare:  { mode: 'instant',              size: 32, radius: 46, effect: 'slow', dur: 2800, color: '#66ccff', name: 'SNARE' },
+  // Erupts after a beat and sets everything nearby on fire (4 damage / 0.5 s).
+  fire:   { mode: 'delayed', armTime: 600, size: 32, radius: 50, damage: 16, effect: 'burn', dur: 3000, color: '#ff6a1a', name: 'FIRE VENT' },
+  // Leaves a toxic cloud that keeps hurting anyone standing in it.
+  poison: { mode: 'instant',              size: 36, radius: 58, damage: 3, effect: 'poison', linger: 4000, tick: 400, color: '#8ad048', name: 'POISON POOL' },
+  // Flings everyone nearby away from the pad.
+  spring: { mode: 'instant',              size: 30, radius: 46, damage: 6, effect: 'launch', force: 150, color: '#ffd24a', name: 'SPRING PAD' },
+  // Charges, then arcs lightning into the nearest few targets (and jolts them slow).
+  tesla:  { mode: 'delayed', armTime: 900, size: 32, radius: 115, damage: 24, effect: 'shock', count: 3, color: '#9fe8ff', name: 'TESLA COIL' },
+  // Teleports whoever steps on it somewhere random.
+  warp:   { mode: 'instant',              size: 34, radius: 24, effect: 'warp', color: '#b07aff', name: 'WARP RUNE' },
 };
+
+// Dev hook: limit which traps spawn (comma list). Unset in production.
+const TRAP_POOL = (() => {
+  const want = String(process.env.WEPONARE_TRAPS || '').split(',').map(t => t.trim()).filter(t => TRAP_TYPES[t]);
+  return want.length ? want : Object.keys(TRAP_TYPES);
+})();
 
 // ── Items: collectible, grant an activatable buff ──
 const MAX_ITEMS = 4;
@@ -574,7 +591,7 @@ function overlapsAny(list, box, pad = 4) {
 
 // ── Traps ──
 function spawnTrap() {
-  const types = Object.keys(TRAP_TYPES);
+  const types = TRAP_POOL;
   const type = types[Math.floor(Math.random() * types.length)];
   const def = TRAP_TYPES[type];
   const size = def.size;
@@ -594,22 +611,67 @@ function spawnTrap() {
   });
 }
 
-function fireTrap(tr) {
+// `trigger` is the player who stepped on it (used by the warp rune).
+function fireTrap(tr, trigger) {
+  const def = TRAP_TYPES[tr.type];
   tr.state = 'firing';
   tr.fireTimer = 280;
   const tx = tr.x + tr.w / 2, ty = tr.y + tr.h / 2;
   const targets = [room.players.p1, room.players.p2, ...room.monsters].filter(t => t && !t.dead);
-  for (const t of targets) {
-    if (Math.hypot(cx(t) - tx, cy(t) - ty) <= tr.radius) {
-      if (tr.effect === 'slow') {
-        if (t.num) applyEffect(t, 'slow', tr.dur);
-        else t.slowTimer = Math.max(t.slowTimer || 0, tr.dur);
-      } else {
-        applyDamage(t, tr.damage, 'trap');
-      }
+  const inRange = targets.filter(t => Math.hypot(cx(t) - tx, cy(t) - ty) <= tr.radius);
+  room.particles.push({ type: 'trapburst', x: tx, y: ty, maxR: tr.radius, timer: 340, max: 340, color: tr.color, text: def.name });
+
+  if (tr.effect === 'warp') {
+    if (trigger && !trigger.dead) warpPlayer(trigger);
+    return;
+  }
+  if (tr.effect === 'poison') {
+    // The cloud lingers; its damage ticks come from the trap update.
+    tr.fireTimer = def.linger;
+    tr.tickTimer = 0;
+    return;
+  }
+  if (tr.effect === 'shock') {
+    const hits = inRange
+      .sort((a, b) => Math.hypot(cx(a) - tx, cy(a) - ty) - Math.hypot(cx(b) - tx, cy(b) - ty))
+      .slice(0, def.count || 3);
+    for (const t of hits) {
+      room.particles.push({ type: 'bolt', x: tx, y: ty - 6, x2: cx(t), y2: cy(t), timer: 300, max: 300, color: tr.color });
+      applyDamage(t, tr.damage, 'trap');
+      chillTarget(t, 700);
+    }
+    return;
+  }
+  for (const t of inRange) {
+    if (tr.effect === 'slow') {
+      chillTarget(t, tr.dur);
+    } else if (tr.effect === 'launch') {
+      applyDamage(t, tr.damage, 'trap');
+      let dx = cx(t) - tx, dy = cy(t) - ty, d = Math.hypot(dx, dy);
+      if (d < 1) { const a = Math.random() * Math.PI * 2; dx = Math.cos(a); dy = Math.sin(a); d = 1; }
+      const PULL = 300;   // ms the fling lasts; applyPull carries it
+      t.pull = { vx: (dx / d) * def.force / PULL, vy: (dy / d) * def.force / PULL, timer: PULL, from: null };
+    } else {
+      applyDamage(t, tr.damage, 'trap');
+      if (tr.effect === 'burn') ignite(t, tr.dur);
     }
   }
-  room.particles.push({ type: 'trapburst', x: tx, y: ty, maxR: tr.radius, timer: 340, max: 340, color: tr.color });
+}
+
+// Somewhere random on the map, away from monsters.
+function warpPlayer(p) {
+  const from = { x: cx(p), y: cy(p) };
+  let pos = randArenaPos(p.w, p.h);
+  for (let i = 0; i < 16; i++) {
+    pos = randArenaPos(p.w, p.h);
+    const px = pos.x + p.w / 2, py = pos.y + p.h / 2;
+    if (Math.hypot(px - from.x, py - from.y) > 150
+        && !room.monsters.some(m => Math.hypot(cx(m) - px, cy(m) - py) < 90)) break;
+  }
+  p.x = pos.x; p.y = pos.y; p.pull = null;
+  clampToArena(p, 2);
+  room.particles.push({ type: 'teleport', x: from.x, y: from.y, timer: 340, max: 340, color: TRAP_TYPES.warp.color });
+  room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 340, max: 340, color: '#ffffff' });
 }
 
 // ── Items ──
@@ -910,6 +972,8 @@ function handleKill(target, attackerKey) {
   if (isPlayer) {
     target.dead = true;
     target.pull = null;
+    // Don't respawn still on fire, poisoned or snared.
+    if (target.effects) { delete target.effects.burn; delete target.effects.poison; delete target.effects.slow; }
     target.lives--;
     target.hp = 0;
     if (target.lives > 0) target.respawnTimer = 2000;
@@ -1033,6 +1097,12 @@ setInterval(() => {
     applyPull(p, dt);
     clampToArena(p, 2);
 
+    // Burning: 4 damage every half second while it lasts.
+    if (hasEffect(p, 'burn')) {
+      p.burnAcc = (p.burnAcc || 0) + dt;
+      while (p.burnAcc >= 500 && !p.dead) { p.burnAcc -= 500; dotDamage(p, 4); }
+    }
+
     // Regeneration: +1 HP every 200 ms while it lasts.
     if (hasEffect(p, 'regen') && p.hp < p.maxHp) {
       p.regenAcc = (p.regenAcc || 0) + dt;
@@ -1079,6 +1149,11 @@ setInterval(() => {
     }
 
     if (m.slowTimer > 0) m.slowTimer -= dt;
+    if (m.burnTimer > 0) {
+      m.burnTimer -= dt;
+      m.burnAcc = (m.burnAcc || 0) + dt;
+      while (m.burnAcc >= 500 && !m.dead) { m.burnAcc -= 500; dotDamage(m, 4); }
+    }
     if (m.atkCooldown > 0) m.atkCooldown -= dt;
     if (m.hitFlash    > 0) m.hitFlash    -= dt;
     if (m.invincible  > 0) m.invincible  -= dt;
@@ -1161,15 +1236,27 @@ setInterval(() => {
       for (const key of ['p1', 'p2']) {
         const p = room.players[key];
         if (p && !p.dead && aabb(p, tr)) {
-          if (tr.mode === 'instant') fireTrap(tr);
-          else { tr.state = 'arming'; tr.armTimer = TRAP_TYPES[tr.type].armTime; }
+          if (tr.mode === 'instant') fireTrap(tr, p);
+          else { tr.state = 'arming'; tr.armTimer = TRAP_TYPES[tr.type].armTime; tr.trigger = key; }
           break;
         }
       }
     } else if (tr.state === 'arming') {
       tr.armTimer -= dt;
-      if (tr.armTimer <= 0) fireTrap(tr);
+      if (tr.armTimer <= 0) fireTrap(tr, room.players[tr.trigger]);
     } else if (tr.state === 'firing') {
+      if (tr.effect === 'poison') {
+        tr.tickTimer -= dt;
+        if (tr.tickTimer <= 0) {
+          tr.tickTimer = TRAP_TYPES.poison.tick;
+          const tx = tr.x + tr.w / 2, ty = tr.y + tr.h / 2;
+          for (const t of [room.players.p1, room.players.p2, ...room.monsters]) {
+            if (!t || t.dead || Math.hypot(cx(t) - tx, cy(t) - ty) > tr.radius) continue;
+            dotDamage(t, tr.damage);
+            if (t.num) applyEffect(t, 'poison', 500);
+          }
+        }
+      }
       tr.fireTimer -= dt;
       if (tr.fireTimer <= 0) return false;
     }
@@ -1429,6 +1516,23 @@ function detonateAoe(proj) {
 
 // Slow a target: monsters through their slow timer, players through the same
 // 'slow' effect a snare trap applies.
+// Damage over time (fire, poison): ignores the brief invulnerability after a
+// hit — otherwise ticks would simply bounce off — and credits nobody.
+function dotDamage(t, dmg) {
+  if (t.dead) return;
+  if (t.num && hasEffect(t, 'shield')) return;
+  if (t.armor) dmg = Math.max(1, Math.round(dmg * (1 - t.armor)));
+  t.hp -= dmg;
+  t.hitFlash = Math.max(t.hitFlash || 0, 90);
+  if (t.hp <= 0) handleKill(t, 'trap');
+}
+
+function ignite(t, ms) {
+  if (t.dead) return;
+  if (t.num) applyEffect(t, 'burn', ms);
+  else t.burnTimer = Math.max(t.burnTimer || 0, ms);
+}
+
 function chillTarget(t, ms) {
   if (t.dead) return;
   if (t.num) applyEffect(t, 'slow', ms);
@@ -1706,7 +1810,7 @@ function buildStateMsg(playerNum) {
     playerNames: room.playerNames,
     players: { p1: playerView(room.players.p1), p2: playerView(room.players.p2) },
     monsters:    room.monsters.map(m => ({ id: m.id, type: m.type, x: r1(m.x), y: r1(m.y), w: m.w, h: m.h,
-                  hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash, slowed: (m.slowTimer || 0) > 0, armor: m.armor || 0,
+                  hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash, slowed: (m.slowTimer || 0) > 0, burning: (m.burnTimer || 0) > 0, armor: m.armor || 0,
                   face: m.face, swing: m.swing > 0 ? Math.round(m.swing) : 0 })),
     projectiles: room.projectiles.map(pr => ({ id: pr.id, x: r1(pr.x), y: r1(pr.y), dx: r1(pr.dx), dy: r1(pr.dy), weaponId: pr.weaponId,
                   upg: pr.upg || null, isAoe: pr.isAoe, special: !!pr.special, grapple: !!pr.grapple,
