@@ -32,7 +32,7 @@ const ADMIN_XP = 1000000000000000000; // 1e18 — unlocks everything
 const ADMIN_COINS = 999999999;
 function isAdminPw(pw) { return pw === ADMIN_PASSWORD; }
 
-const PARRY_WINDOW   = 350;   // ms the parry is "active" and reflects
+const PARRY_WINDOW   = 1200;  // ms the parry is "active" and reflects
 const PARRY_COOLDOWN = 5000;  // ms before it can be used again
 const PARRY_REFLECT  = 1.5;   // reflected damage multiplier
 
@@ -1672,18 +1672,6 @@ function playerView(p) {
   };
 }
 
-// What each recipient last received as a player's unlock list, so unchanged
-// lists can be left out of the state message (the client keeps its copy).
-const sentUnlocks = { 1: {}, 2: {} };
-function trimPlayerView(view, playerNum, key) {
-  const memo = sentUnlocks[playerNum];
-  if (!view) { delete memo[key]; return view; }
-  const sig = view.unlockedWeapons ? view.unlockedWeapons.join(',') : '';
-  if (memo[key] === sig) { const { unlockedWeapons, ...rest } = view; return rest; }
-  memo[key] = sig;
-  return view;
-}
-
 function buildStateMsg(playerNum) {
   const key = playerNum === 1 ? 'p1' : 'p2';
   return {
@@ -1692,8 +1680,7 @@ function buildStateMsg(playerNum) {
     gameState: room.gameState,
     gameMode: room.gameMode,
     playerNames: room.playerNames,
-    players: { p1: trimPlayerView(playerView(room.players.p1), playerNum, 'p1'),
-               p2: trimPlayerView(playerView(room.players.p2), playerNum, 'p2') },
+    players: { p1: playerView(room.players.p1), p2: playerView(room.players.p2) },
     monsters:    room.monsters.map(m => ({ id: m.id, type: m.type, x: r1(m.x), y: r1(m.y), w: m.w, h: m.h,
                   hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash, slowed: (m.slowTimer || 0) > 0, armor: m.armor || 0,
                   face: m.face, swing: m.swing > 0 ? Math.round(m.swing) : 0 })),
@@ -1928,7 +1915,6 @@ wss.on('connection', (ws) => {
   else      room.p2 = ws;
 
   const myKey = isP1 ? 'p1' : 'p2';
-  sentUnlocks[isP1 ? 1 : 2] = {};
   ws.send(JSON.stringify({
     type: 'welcome', num: isP1 ? 1 : 2,
     leaderboard: getLeaderboard(),
@@ -2066,6 +2052,10 @@ wss.on('connection', (ws) => {
 
 // ─── Static Files ─────────────────────────────────────────────────────────────
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders(res, file) {
+    if (/\.(js|css|html)$/.test(file)) res.setHeader('Cache-Control', 'no-cache');
+  },
+}));
 
 server.listen(PORT, () => console.log('Weponare running on port', PORT));

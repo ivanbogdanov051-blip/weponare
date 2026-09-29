@@ -2056,7 +2056,8 @@ function drawWeaponPanel(state) {
   // Slots shrink to fit, and wrap onto more rows only if they'd get too small.
   let L = 6, R = HUD_W - 6;
   for (const z of hudTouchZones()) {
-    if (z.y + z.h < HUD_H - 70) continue;               // not down at the bottom edge
+    if (z.y + z.h < HUD_H - 70 || z.y > HUD_H) continue; // not over the bottom edge
+    if (z.x > HUD_W || z.x + z.w < 0) continue;          // beside the canvas, not on it
     if (z.x + z.w / 2 < HUD_W / 2) L = Math.max(L, z.x + z.w + 2);
     else                           R = Math.min(R, z.x - 2);
   }
