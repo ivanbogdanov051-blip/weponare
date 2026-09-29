@@ -1000,19 +1000,16 @@ function renderShop() {
     const col = WEAPON_COLOR[id] || '#ccc';
     // Each weapon has its own three upgrades, listed in the server catalog.
     const stats = (WEAPON_META[id]?.upgrades || ['dmg', 'spd', 'rng']).filter(k => upgradeDefs[k]);
+    // One tap = one level (counted instantly, sent in batches); MAX buys every
+    // level the coins cover. Button contents are refreshed in place by
+    // refreshShopButtons, so a button is never swapped out under a finger.
     const rows = stats.map(stat => {
       const def = upgradeDefs[stat];
-      const cur = lv[stat] || 0;
-      const maxed = cur >= def.max;
-      const cost = maxed ? 0 : costs[stat][cur];
-      const afford = !maxed && coins >= cost;
-      const pips = Array.from({ length: def.max },
-        (_, i) => `<i class="${i < cur ? 'on' : ''}"></i>`).join('');
-      return `<button class="up-btn${maxed ? ' maxed' : afford ? '' : ' poor'}"
-        ${maxed ? 'disabled' : ''} onclick="buyUpgrade('${id}','${stat}')" title="${def.name}: ${def.desc || ''} per level">
-        <span class="up-name">${def.short || def.name.slice(0, 3)}</span>
-        <span class="up-pips">${pips}</span>
-        <span class="up-cost">${maxed ? 'MAX' : '◆' + cost}</span></button>`;
+      return `<span class="up-grp">
+        <button class="up-btn" data-w="${id}" data-s="${stat}" onclick="tapUpgrade('${id}','${stat}',1)"
+          title="${def.name}: ${def.desc || ''} per level"></button>
+        <button class="up-max" data-w="${id}" data-s="${stat}" onclick="tapUpgrade('${id}','${stat}','max')"
+          title="Buy every ${def.name} level you can afford">MAX</button></span>`;
     }).join('');
     const desc = stats.map(k => `<b>${upgradeDefs[k].short}</b> ${upgradeDefs[k].desc || ''}`).join(' · ');
     return `<div class="shop-row">
@@ -1033,28 +1030,97 @@ function renderShop() {
     drawWeaponPixelsFitted(g, id, cv.width / 2, cv.height / 2, cv.width - 8, cv.height - 8,
                            WEAPON_COLOR[id] || '#ccc');
   }
+  refreshShopButtons();
 }
 
-async function buyUpgrade(weaponId, stat) {
-  if (shopBusy || !pendingPass) return;
-  shopBusy = true;
+// Update every upgrade button's pips, price and state in place.
+function refreshShopButtons() {
+  if (!shopData) return;
+  const { coins, upgrades, upgradeDefs, costs } = shopData;
+  document.getElementById('shopCoins').innerHTML =
+    `<span class="coin-ic">◆</span> ${coins.toLocaleString()} COINS`;
+  for (const b of document.querySelectorAll('#shopList .up-btn, #shopList .up-max')) {
+    const id = b.dataset.w, stat = b.dataset.s, def = upgradeDefs[stat];
+    if (!def) continue;
+    const cur = upgrades[id]?.[stat] || 0;
+    const maxed = cur >= def.max;
+    const cost = maxed ? 0 : costs[stat][cur];
+    const afford = !maxed && coins >= cost;
+    b.disabled = maxed;
+    b.classList.toggle('maxed', maxed);
+    b.classList.toggle('poor', !maxed && !afford);
+    if (b.classList.contains('up-max')) { b.style.display = maxed ? 'none' : ''; continue; }
+    const pips = Array.from({ length: def.max }, (_, i) => `<i class="${i < cur ? 'on' : ''}"></i>`).join('');
+    b.innerHTML = `<span class="up-name">${def.short || def.name.slice(0, 3)}</span>`
+      + `<span class="up-pips">${pips}</span>`
+      + `<span class="up-cost">${maxed ? 'MAX' : '◆' + cost}</span>`;
+  }
+}
+
+// Taps are applied to the display at once and queued; the queue goes to the
+// server as one request per upgrade, so fast tapping never loses a tap.
+const upgradeQueue = new Map();   // "weapon|stat" -> levels still to send
+
+function tapUpgrade(weaponId, stat, count) {
+  if (!pendingPass || !shopData) return;
+  const def = shopData.upgradeDefs[stat];
+  if (!def) return;
+  const lv = shopData.upgrades[weaponId] || (shopData.upgrades[weaponId] = {});
+  const want = count === 'max' ? def.max : count;
+  let bought = 0;
+  while ((lv[stat] || 0) < def.max && bought < want) {
+    const cost = shopData.costs[stat][lv[stat] || 0];
+    if (shopData.coins < cost) break;
+    shopData.coins -= cost;
+    lv[stat] = (lv[stat] || 0) + 1;
+    bought++;
+  }
+  if (!bought) {
+    setShopMsg((lv[stat] || 0) >= def.max ? 'Already at max level.' : 'Not enough coins.', true);
+    return;
+  }
   setShopMsg('');
+  if (window.GameAudio) { GameAudio.init(); GameAudio.sfx.unlock(); }
+  refreshShopButtons();
+  const key = weaponId + '|' + stat;
+  upgradeQueue.set(key, (upgradeQueue.get(key) || 0) + bought);
+  flushUpgrades();
+}
+
+async function flushUpgrades() {
+  if (shopBusy) return;
+  const next = upgradeQueue.entries().next();
+  if (next.done) return;
+  const [key, count] = next.value;
+  upgradeQueue.delete(key);
+  const [weaponId, stat] = key.split('|');
+  shopBusy = true;
+  let server = null;
   try {
     const res = await fetch('/api/upgrade', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: pendingPass, weaponId, stat }),
+      body: JSON.stringify({ password: pendingPass, weaponId, stat, count }),
     });
     const data = await res.json();
-    if (!res.ok) { setShopMsg(data.error || 'Upgrade failed.', true); return; }
-    shopData = { ...shopData, ...data };
-    saveLocalCoins(pendingPass, data.coins);
-    if (window.GameAudio) { GameAudio.init(); GameAudio.sfx.unlock(); }
-    renderShop();
+    if (!res.ok) setShopMsg(data.error || 'Upgrade failed.', true);
+    else server = data;
   } catch {
     setShopMsg('Could not reach the server.', true);
   } finally {
     shopBusy = false;
+  }
+  if (server) saveLocalCoins(pendingPass, server.coins);
+  if (upgradeQueue.size) { flushUpgrades(); return; }
+  // Queue drained: adopt the server's numbers (they only differ if something
+  // failed or coins changed elsewhere).
+  if (server) {
+    const same = server.coins === shopData.coins
+      && JSON.stringify(server.upgrades) === JSON.stringify(shopData.upgrades);
+    shopData = { ...shopData, ...server };
+    if (!same) refreshShopButtons();
+  } else {
+    openShop();   // something went wrong: reload the true state
   }
 }
 
@@ -1399,7 +1465,7 @@ function drawPickupBanners(particles) {
     // Pop in, hold, then fade.
     const a = k < 0.1 ? k / 0.1 : k > 0.75 ? Math.max(0, (1 - k) / 0.25) : 1;
     const pop = k < 0.12 ? 1 + (0.12 - k) * 3 : 1;
-    const cy = 86 + i * 34;
+    const cy = 112 + i * 34;   // below the weapon rack at the top
     ctx.save();
     ctx.globalAlpha = a;
     ctx.translate(HUD_W / 2, cy);
@@ -2153,20 +2219,12 @@ function drawWeaponPanel(state) {
   const weapons = mp.unlockedWeapons;
   const n = weapons.length;
 
-  // The rack must fit the free strip along the bottom: the whole width on a
-  // desktop, or the gap between the d-pad and the action buttons on a phone.
+  // The rack sits at the top, just under the top bar, where no touch button
+  // ever reaches. It keeps clear of your own ability bars and power-up row
+  // (left for player 1, right for player 2) and of the music / leave buttons.
   // Slots shrink to fit, and wrap onto more rows only if they'd get too small.
-  let L = 6, R = HUD_W - 6, bottom = HUD_H, lowestTop = HUD_H;
-  for (const z of hudTouchZones()) {
-    if (z.y + z.h < HUD_H - 70 || z.y > HUD_H) continue; // not over the bottom edge
-    if (z.x > HUD_W || z.x + z.w < 0) continue;          // beside the canvas, not on it
-    if (z.x + z.w / 2 < HUD_W / 2) L = Math.max(L, z.x + z.w + 2);
-    else                           R = Math.min(R, z.x - 2);
-    lowestTop = Math.min(lowestTop, z.y - 2);
-  }
-  // Too little room between the buttons: go full width, but sit above them
-  // rather than underneath.
-  if (R - L < 150) { L = 6; R = HUD_W - 6; bottom = lowestTop; }
+  const TOP = 29, SIDE = 156;
+  let L = myNum === 2 ? 6 : SIDE, R = myNum === 2 ? HUD_W - SIDE : HUD_W - 6;
   const avail = R - L, gap = 2, slotH = 22;
   let rows = 1, slotW = 0;
   for (; rows <= 4; rows++) {
@@ -2179,9 +2237,10 @@ function drawWeaponPanel(state) {
   const rowW = (cnt) => cnt * (slotW + gap) - gap;
   const panelW = rowW(Math.min(n, perRow));
   const panelH = rows * slotH + (rows - 1) * gap;
-  const midX = (L + R) / 2;
-  const panelX = Math.round(midX - panelW / 2);
-  const panelY = bottom - panelH - 4;
+  // Centred on the screen when it fits there, otherwise inside its lane.
+  const panelX = Math.round(Math.max(L, Math.min(R - panelW, HUD_W / 2 - panelW / 2)));
+  const midX = panelX + panelW / 2;
+  const panelY = clearOfButtons(panelX - 4, TOP - 3, panelW + 8, panelH + 6) + 3;
 
   // Never hide your own character: if you walk behind the rack, it turns
   // see-through.
@@ -2190,7 +2249,8 @@ function drawWeaponPanel(state) {
   if (me && !me.dead) {
     const px = me.x / HUD_SCALE, py = (me.y - PLAYER_PAD) / HUD_SCALE;
     const pw = me.w / HUD_SCALE, ph = (me.h + PLAYER_PAD) / HUD_SCALE;
-    if (px + pw > panelX - 6 && px < panelX + panelW + 6 && py + ph > panelY - 6) alpha = 0.3;
+    if (px + pw > panelX - 6 && px < panelX + panelW + 6 &&
+        py < panelY + panelH + 6 && py + ph > panelY - 6) alpha = 0.3;
   }
   ctx.save();
   ctx.globalAlpha = alpha;
@@ -2198,7 +2258,7 @@ function drawWeaponPanel(state) {
   ctx.fillStyle='rgba(0,0,0,0.72)';
   ctx.fillRect(panelX-4, panelY-3, panelW+8, panelH+6);
 
-  if (!isTouchDevice) drawControlHints(panelX, panelY, panelW);
+  if (!isTouchDevice) drawControlHints();
 
   for (let i = 0; i < n; i++) {
     const row = Math.floor(i / perRow), col = i % perRow;
@@ -2259,26 +2319,19 @@ function hudTouchZones() {
   return touchZones;
 }
 
-function drawControlHints(panelX, panelY, panelW) {
+// Keyboard legend: one faint line along the bottom edge, now that the weapon
+// rack lives at the top.
+function drawControlHints() {
   ctx.save();
   ctx.font = '8px "Courier New",monospace';
-  const hx = panelX + panelW + 10;
-  if (hx + 62 <= HUD_W) {
-    // Room beside the panel: the full stacked legend.
-    ctx.textBaseline = 'top'; ctx.textAlign = 'left';
-    [['ARROWS MOVE', '#505060'], ['SPACE  ATK', '#505060'], ['ENTER  SWAP', '#505060'],
-     ['SHIFT  SPECIAL', '#8866aa'], ['P      PARRY', '#3399cc'], ['1-4    ITEMS', '#505060']]
-      .forEach(([t, c], i) => { ctx.fillStyle = c; ctx.fillText(t, hx, panelY - 9 + i * 9); });
-  } else {
-    // A full weapon rack leaves no side room — one compact line above it.
-    ctx.textBaseline = 'bottom'; ctx.textAlign = 'center';
-    const t = 'ARROWS MOVE · SPACE ATK · ENTER SWAP · SHIFT SPECIAL · P PARRY · 1-4 ITEMS';
-    const w = ctx.measureText(t).width;
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(HUD_W/2 - w/2 - 3, panelY - 14, w + 6, 11);
-    ctx.fillStyle = '#6a6a80';
-    ctx.fillText(t, HUD_W/2, panelY - 5);
-  }
+  ctx.textBaseline = 'bottom'; ctx.textAlign = 'center';
+  const t = 'ARROWS MOVE · SPACE ATK · ENTER SWAP · SHIFT SPECIAL · P PARRY · 1-4 ITEMS';
+  const w = ctx.measureText(t).width;
+  ctx.globalAlpha = 0.8;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(HUD_W/2 - w/2 - 3, HUD_H - 12, w + 6, 11);
+  ctx.fillStyle = '#6a6a80';
+  ctx.fillText(t, HUD_W/2, HUD_H - 3);
   ctx.restore();
 }
 

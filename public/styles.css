@@ -253,6 +253,25 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 .up-btn:hover:not(:disabled) { border-color: var(--c-gold); color: var(--c-gold); }
+/* Upgrade + its MAX button sit together; both respond to a light, quick tap. */
+.up-grp { display: inline-flex; gap: 2px; }
+.up-btn, .up-max { touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.up-btn:active:not(:disabled) { transform: translateY(1px); border-color: var(--c-gold); }
+.up-max {
+  background: #1a1408;
+  border: 1px solid #5a4a1a;
+  color: var(--c-gold);
+  font-family: 'Courier New', monospace;
+  font-size: 8px;
+  letter-spacing: 1px;
+  padding: 5px 5px;
+  cursor: pointer;
+  border-radius: 4px;
+  -webkit-tap-highlight-color: transparent;
+}
+.up-max:hover:not(:disabled) { border-color: var(--c-gold); }
+.up-max:active:not(:disabled) { transform: translateY(1px); background: #2a200c; }
+.up-max.poor { opacity: 0.45; }
 .up-btn.poor { opacity: 0.5; }
 .up-btn.maxed { border-color: #2d5a3a; color: #6fbf85; cursor: default; }
 .up-pips { display: flex; gap: 1.5px; }

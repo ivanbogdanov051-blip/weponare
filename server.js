@@ -1843,21 +1843,33 @@ app.post('/api/upgrade', (req, res) => {
     return res.status(400).json({ error: 'Unlock that weapon first.' });
   }
 
+  // `count`: how many levels to buy in one go (queued taps), or 'max' for as
+  // many as the coins cover. Stops early at the level cap or when coins run out.
   const d = progress();
   const levels = prof.upgrades[weaponId] || {};
-  const cur = levels[stat] || 0;
-  if (cur >= UPGRADE_STATS[stat].max) {
+  const start = levels[stat] || 0;
+  const max = UPGRADE_STATS[stat].max;
+  if (start >= max) {
     return res.status(400).json({ error: 'Already at max level.' });
   }
-  const cost = upgradeCost(stat, cur + 1);
-  if (!admin && prof.coins < cost) {
+  const want = req.body?.count === 'max' ? max
+    : Math.max(1, Math.min(max, Math.floor(Number(req.body?.count) || 1)));
+  let lv = start, coins = prof.coins, cost = 0;
+  while (lv < max && lv - start < want) {
+    const c = upgradeCost(stat, lv + 1);
+    if (!admin && coins < c) break;
+    if (!admin) coins -= c;
+    cost += c;
+    lv++;
+  }
+  if (lv === start) {
     return res.status(400).json({ error: 'Not enough coins.' });
   }
 
   if (!d.upgrades[pw]) d.upgrades[pw] = {};
   if (!d.upgrades[pw][weaponId]) d.upgrades[pw][weaponId] = {};
-  d.upgrades[pw][weaponId][stat] = cur + 1;
-  if (!admin) d.coins[pw] = prof.coins - cost;
+  d.upgrades[pw][weaponId][stat] = lv;
+  if (!admin) d.coins[pw] = coins;
   markDirty();
 
   // Push the new levels into a live game if this player is mid-match.
@@ -1871,7 +1883,7 @@ app.post('/api/upgrade', (req, res) => {
   }
 
   const next = profileFor(pw, {});
-  res.json({ ...next, spent: cost });
+  res.json({ ...next, spent: admin ? 0 : cost, bought: lv - start });
 });
 
 app.post('/api/buy_skin', (req, res) => {
