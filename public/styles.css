@@ -230,6 +230,8 @@ body {
   flex-wrap: wrap;
 }
 .shop-row:last-child { border-bottom: none; }
+.shop-desc { flex: 1 1 100%; font-size: 9px; letter-spacing: 1px; color: #6a6a88; line-height: 1.5; }
+.shop-desc b { color: #a8a8c8; font-weight: normal; }
 .shop-head { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; min-width: 132px; }
 .shop-ic { width: 56px; height: 32px; image-rendering: pixelated; }
 .shop-name { font-size: 11px; letter-spacing: 2px; }

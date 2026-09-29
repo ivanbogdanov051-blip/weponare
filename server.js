@@ -111,12 +111,51 @@ const WEAPON_COLORS = {
 };
 
 // ── Weapon upgrades bought with coins from the menu ──
+// Every weapon draws three upgrades from this pool, picked to suit how it
+// fights (see WEAPON_UPGRADES). `short` is the shop button label and `desc`
+// the per-level effect shown under it.
 const UPGRADE_STATS = {
-  dmg: { name: 'DAMAGE', max: 10, perLevel: 0.06,  baseCost: 12 },
-  spd: { name: 'SPEED',  max: 10, perLevel: 0.045, baseCost: 14 },
-  rng: { name: 'RANGE',  max: 6,  perLevel: 0.05,  baseCost: 16 },
+  dmg:   { name: 'DAMAGE',    short: 'DMG', max: 10, perLevel: 0.06,  baseCost: 12, desc: '+6% damage' },
+  spd:   { name: 'SPEED',     short: 'SPD', max: 10, perLevel: 0.045, baseCost: 14, desc: '-4.5% attack delay' },
+  rng:   { name: 'RANGE',     short: 'RNG', max: 6,  perLevel: 0.05,  baseCost: 16, desc: '+5% range' },
+  crit:  { name: 'CRITICAL',  short: 'CRT', max: 8,  perLevel: 0.04,  baseCost: 15, desc: '+4% chance of a double-damage hit' },
+  life:  { name: 'LIFESTEAL', short: 'LIF', max: 6,  perLevel: 0.03,  baseCost: 18, desc: 'heal 3% of damage dealt' },
+  cdr:   { name: 'COOLDOWN',  short: 'CDR', max: 8,  perLevel: 0.06,  baseCost: 14, desc: '-6% special cooldown' },
+  aoe:   { name: 'BLAST',     short: 'AOE', max: 6,  perLevel: 0.10,  baseCost: 16, desc: '+10% blast / slam radius' },
+  multi: { name: 'MULTISHOT', short: 'MLT', max: 3,  perLevel: 1,     baseCost: 60, desc: '+1 projectile per shot' },
+  chill: { name: 'FROST',     short: 'FRZ', max: 5,  perLevel: 0.25,  baseCost: 14, desc: '+25% slow duration' },
+  chain: { name: 'CHAIN',     short: 'CHN', max: 3,  perLevel: 1,     baseCost: 55, desc: 'lightning jumps to +1 foe' },
+  knock: { name: 'KNOCKBACK', short: 'KNK', max: 5,  perLevel: 5,     baseCost: 12, desc: 'hits push foes +5px' },
 };
 const UPGRADE_KEYS = Object.keys(UPGRADE_STATS);
+
+const WEAPON_UPGRADES = {
+  sword:       ['dmg', 'crit', 'cdr'],
+  dagger:      ['spd', 'crit', 'life'],
+  axe:         ['dmg', 'knock', 'crit'],
+  spear:       ['rng', 'dmg', 'cdr'],
+  bow:         ['dmg', 'multi', 'rng'],
+  staff:       ['dmg', 'aoe', 'cdr'],
+  hammer:      ['dmg', 'knock', 'aoe'],
+  wand:        ['spd', 'multi', 'dmg'],
+  whip:        ['rng', 'spd', 'life'],
+  crossbow:    ['dmg', 'rng', 'crit'],
+  flail:       ['dmg', 'knock', 'rng'],
+  greatsword:  ['dmg', 'crit', 'knock'],
+  glaive:      ['rng', 'dmg', 'life'],
+  grapple:     ['dmg', 'rng', 'cdr'],
+  katana:      ['spd', 'crit', 'life'],
+  chakram:     ['multi', 'spd', 'dmg'],
+  boomerang:   ['dmg', 'multi', 'rng'],
+  cannon:      ['dmg', 'aoe', 'knock'],
+  reaper:      ['life', 'dmg', 'rng'],
+  shuriken:    ['multi', 'spd', 'crit'],
+  frostrod:    ['chill', 'aoe', 'dmg'],
+  blunderbuss: ['multi', 'dmg', 'knock'],
+  lance:       ['dmg', 'rng', 'crit'],
+  stormtome:   ['chain', 'dmg', 'cdr'],
+};
+function upgradesFor(weaponId) { return WEAPON_UPGRADES[weaponId] || ['dmg', 'spd', 'rng']; }
 
 // ── Skins bought with coins: full outfits drawn over the character ──
 // Ownership is saved per password; a skin can only be worn once it is owned.
@@ -290,7 +329,7 @@ function normalizeUpgrades(raw) {
     if (!WEAPON_BY_ID[wid] || !lv || typeof lv !== 'object') continue;
     const e = {};
     let any = false;
-    for (const k of UPGRADE_KEYS) {
+    for (const k of upgradesFor(wid)) {
       const n = Math.max(0, Math.min(UPGRADE_STATS[k].max, Math.floor(Number(lv[k]) || 0)));
       if (n > 0) { e[k] = n; any = true; }
     }
@@ -303,21 +342,36 @@ function normalizeUpgrades(raw) {
 
 function applyUpgrades(w, levels) {
   if (!levels) return w;
-  const dmgM = 1 + (levels.dmg || 0) * UPGRADE_STATS.dmg.perLevel;
-  const spdM = 1 - (levels.spd || 0) * UPGRADE_STATS.spd.perLevel;
-  const rngM = 1 + (levels.rng || 0) * UPGRADE_STATS.rng.perLevel;
+  const L = k => levels[k] || 0, per = k => UPGRADE_STATS[k].perLevel;
+  const dmgM  = 1 + L('dmg') * per('dmg');
+  const spdM  = 1 - L('spd') * per('spd');
+  const rngM  = 1 + L('rng') * per('rng');
+  const cdM   = spdM * (1 - L('cdr') * per('cdr'));
+  const aoeM  = rngM * (1 + L('aoe') * per('aoe'));
+  const chillM = 1 + L('chill') * per('chill');
+  const multi = L('multi');
+  const sp = w.special;
   return {
     ...w,
     damage: Math.max(1, Math.round(w.damage * dmgM)),
     range: Math.round(w.range * rngM),
     atkSpd: Math.max(70, Math.round(w.atkSpd * spdM)),
-    aoeRadius: w.aoeRadius ? Math.round(w.aoeRadius * rngM) : w.aoeRadius,
-    special: w.special ? {
-      ...w.special,
-      dmg: Math.max(1, Math.round(w.special.dmg * dmgM)),
-      range: Math.round(w.special.range * rngM),
-      cd: Math.max(500, Math.round(w.special.cd * spdM)),
-      aoe: w.special.aoe ? Math.round(w.special.aoe * rngM) : w.special.aoe,
+    aoeRadius: w.aoeRadius ? Math.round(w.aoeRadius * aoeM) : w.aoeRadius,
+    crit: L('crit') * per('crit'),
+    lifesteal: L('life') * per('life'),
+    knock: L('knock') * per('knock'),
+    multi,
+    chill: w.chill ? Math.round(w.chill * chillM) : w.chill,
+    chain: (w.chain || 0) + L('chain'),
+    special: sp ? {
+      ...sp,
+      dmg: Math.max(1, Math.round(sp.dmg * dmgM)),
+      // A slam's range is its blast radius, so BLAST widens it too.
+      range: Math.round(sp.range * (sp.kind === 'slam' ? aoeM : rngM)),
+      cd: Math.max(500, Math.round(sp.cd * cdM)),
+      aoe: sp.aoe ? Math.round(sp.aoe * aoeM) : sp.aoe,
+      chill: sp.chill ? Math.round(sp.chill * chillM) : sp.chill,
+      count: sp.count ? sp.count + multi * (sp.kind === 'ring' ? 2 : 1) : sp.count,
     } : null,
   };
 }
@@ -762,9 +816,26 @@ function applyDamage(target, dmg, attackerKey) {
     return;
   }
   if (room.gameMode === 'coop' && target.num && (attackerKey === 'p1' || attackerKey === 'p2')) return;
+  // Weapon upgrades on the attacking player: critical hits, lifesteal, knockback.
+  const atk = (attackerKey === 'p1' || attackerKey === 'p2') ? room.players[attackerKey] : null;
+  const aw = atk && atk !== target ? weapon(atk) : null;
+  if (aw && aw.crit && Math.random() < aw.crit) {
+    dmg *= 2;
+    room.particles.push({ type: 'crit', x: cx(target), y: target.y - 4, text: 'CRIT', timer: 600, max: 600 });
+  }
   // Armoured monsters shrug off a share of every hit, but never all of it.
   if (target.armor) dmg = Math.max(1, Math.round(dmg * (1 - target.armor)));
   target.hp -= dmg;
+  if (aw && aw.lifesteal && !atk.dead) {
+    const heal = Math.round(dmg * aw.lifesteal);
+    if (heal > 0) atk.hp = Math.min(atk.maxHp, atk.hp + heal);
+  }
+  if (aw && aw.knock && target.hp > 0) {
+    const dx = cx(target) - cx(atk), dy = cy(target) - cy(atk), d = Math.hypot(dx, dy) || 1;
+    target.x += (dx / d) * aw.knock;
+    target.y += (dy / d) * aw.knock;
+    clampToArena(target);
+  }
   target.hitFlash  = 200;
   target.invincible = target.num ? 500 : 300;
   if (target.hp <= 0) handleKill(target, attackerKey);
@@ -1411,7 +1482,7 @@ function doAttack(p, pKey) {
     p.facing = Math.cos(aim) < 0 ? -1 : 1; // face the target so the weapon sprite points right way
     const speed = w.projSpeed || (w.grapple ? 6.5 : 4.4);
     // A scattergun fires several pellets in a tight fan per trigger pull.
-    const pellets = w.pellets || 1;
+    const pellets = (w.pellets || 1) + (w.multi || 0);
     for (let i = 0; i < pellets; i++) {
     const a = aim + (i - (pellets - 1) / 2) * 0.13 + (pellets > 1 ? (Math.random() - 0.5) * 0.06 : 0);
     room.projectiles.push({
@@ -1656,6 +1727,7 @@ function weaponCatalog() {
     id: w.id, name: w.name, type: w.type, unlockXp: w.unlockXp,
     damage: w.damage, range: w.range, atkSpd: w.atkSpd,
     special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd } : null,
+    upgrades: upgradesFor(w.id),
   }));
 }
 
@@ -1685,10 +1757,24 @@ function profileFor(pw, opts = {}) {
     if (JSON.stringify(prev) !== JSON.stringify(weapons)) { d.weapons[pw] = weapons; markDirty(); }
   }
 
+  let refunded = 0;
+  if (!admin && d.upgrades[pw] && typeof d.upgrades[pw] === 'object') {
+    for (const [wid, lv] of Object.entries(d.upgrades[pw])) {
+      if (!lv || typeof lv !== 'object') continue;
+      const allowed = upgradesFor(wid);
+      for (const k of Object.keys(lv)) {
+        if (allowed.includes(k)) continue;
+        const n = Math.max(0, Math.min(UPGRADE_STATS[k]?.max || 0, Math.floor(Number(lv[k]) || 0)));
+        for (let i = 1; i <= n; i++) refunded += upgradeCost(k, i);
+        delete lv[k];
+      }
+    }
+    if (refunded) { coins += refunded; d.coins[pw] = coins; markDirty(); }
+  }
   const upgrades = normalizeUpgrades(d.upgrades[pw]);
   const ownedSkins = admin ? SKIN_SHOP.map(s => s.id)
     : (Array.isArray(d.ownedSkins[pw]) ? d.ownedSkins[pw].filter(id => SKIN_BY_ID[id]) : []);
-  return { xp, coins, weapons, upgrades, ownedSkins };
+  return { xp, coins, weapons, upgrades, ownedSkins, refunded };
 }
 
 // A skin is { colorIdx, hatIdx, outfit }. The outfit survives only if owned.
@@ -1723,7 +1809,9 @@ app.post('/api/upgrade', (req, res) => {
   const weaponId = sanitizeText(req.body?.weaponId, 24);
   const stat = sanitizeText(req.body?.stat, 8);
   if (!WEAPON_BY_ID[weaponId]) return res.status(400).json({ error: 'Unknown weapon.' });
-  if (!UPGRADE_STATS[stat])    return res.status(400).json({ error: 'Unknown upgrade.' });
+  if (!UPGRADE_STATS[stat] || !upgradesFor(weaponId).includes(stat)) {
+    return res.status(400).json({ error: 'That weapon has no such upgrade.' });
+  }
 
   const admin = isAdminPw(pw);
   const prof = profileFor(pw, {});

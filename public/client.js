@@ -148,7 +148,9 @@ async function refreshSavedBanner() {
       + `<span style="color:var(--c-gold)">${d.coins.toLocaleString()} coins</span>`
       + ` <span style="color:#555">|</span> <span style="color:#c8c8dc">${d.xp.toLocaleString()} XP</span>`
       + ` <span style="color:#555">|</span> <span style="color:#c8c8dc">${d.weapons.length} weapons</span>`
-      + (upgCount ? ` <span style="color:#555">|</span> <span style="color:#8fd8a0">${upgCount} upgrades</span>` : '');
+      + (upgCount ? ` <span style="color:#555">|</span> <span style="color:#8fd8a0">${upgCount} upgrades</span>` : '')
+      + (d.refunded ? `<br><span style="color:#8fd8a0">Weapons now have their own upgrades. `
+                    + `Old ones were refunded: +${d.refunded.toLocaleString()} coins</span>` : '');
   } catch {
     el.innerHTML = '<span style="color:#555">Save unavailable (offline)</span>';
   }
@@ -909,7 +911,9 @@ async function openShop() {
     shopData = data;
     applyCatalog(data.catalog, data.colors);
     saveLocalCoins(pendingPass, data.coins);
-    setShopMsg('');
+    setShopMsg(data.refunded
+      ? `Weapons now have their own upgrades. Old ones were refunded: +${data.refunded.toLocaleString()} coins.`
+      : '');
     renderShop();
   } catch {
     setShopMsg('Could not reach the server.', true);
@@ -933,7 +937,9 @@ function renderShop() {
     const lv = upgrades[id] || {};
     const name = WEAPON_META[id]?.name || id.toUpperCase();
     const col = WEAPON_COLOR[id] || '#ccc';
-    const rows = Object.keys(upgradeDefs).map(stat => {
+    // Each weapon has its own three upgrades, listed in the server catalog.
+    const stats = (WEAPON_META[id]?.upgrades || ['dmg', 'spd', 'rng']).filter(k => upgradeDefs[k]);
+    const rows = stats.map(stat => {
       const def = upgradeDefs[stat];
       const cur = lv[stat] || 0;
       const maxed = cur >= def.max;
@@ -942,17 +948,19 @@ function renderShop() {
       const pips = Array.from({ length: def.max },
         (_, i) => `<i class="${i < cur ? 'on' : ''}"></i>`).join('');
       return `<button class="up-btn${maxed ? ' maxed' : afford ? '' : ' poor'}"
-        ${maxed ? 'disabled' : ''} onclick="buyUpgrade('${id}','${stat}')">
-        <span class="up-name">${def.name.slice(0, 3)}</span>
+        ${maxed ? 'disabled' : ''} onclick="buyUpgrade('${id}','${stat}')" title="${def.name}: ${def.desc || ''} per level">
+        <span class="up-name">${def.short || def.name.slice(0, 3)}</span>
         <span class="up-pips">${pips}</span>
         <span class="up-cost">${maxed ? 'MAX' : '◆' + cost}</span></button>`;
     }).join('');
+    const desc = stats.map(k => `<b>${upgradeDefs[k].short}</b> ${upgradeDefs[k].desc || ''}`).join(' · ');
     return `<div class="shop-row">
       <div class="shop-head">
         <canvas class="shop-ic" data-weapon="${id}" width="56" height="32"></canvas>
         <span class="shop-name" style="color:${col}">${name}</span>
       </div>
       <div class="shop-stats">${rows}</div>
+      <div class="shop-desc">${desc}</div>
     </div>`;
   }).join('');
 
@@ -1742,6 +1750,11 @@ function drawParticles(particles) {
       ctx.fillStyle='#000'; ctx.fillText(p.text,p.x+2,p.y+2);
       ctx.fillStyle=PAL.xp; ctx.fillText(p.text,p.x,p.y);
       ctx.textAlign='left'; ctx.textBaseline='alphabetic'; ctx.globalAlpha=1;
+    } else if (p.type==='crit') {
+      const m=p.max||600, a=Math.max(0,p.timer/m), rise=(1-a)*12;
+      ctx.globalAlpha=a; ctx.fillStyle='#ff5a3a';
+      pixelText(p.text||'CRIT', Math.round(p.x-8), Math.round(p.y-rise));
+      ctx.globalAlpha=1;
     } else if (p.type==='bolt') {
       // Jagged lightning, re-rolled every frame so it flickers.
       const m=p.max||300, a=Math.max(0,p.timer/m);
