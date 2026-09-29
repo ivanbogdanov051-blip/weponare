@@ -683,6 +683,37 @@ function itemSymbol(b, type, c) {
     rect(b, cx - 1, cy - 5, 3, 11, ink);
     rect(b, cx - 5, cy - 1, 11, 3, ink);
     rect(b, cx - 1, cy - 5, 1, 4, hi);
+  } else if (type === 'magnet') {
+    // Horseshoe magnet with bright poles.
+    rect(b, cx - 4, cy - 4, 3, 7, ink);
+    rect(b, cx + 2, cy - 4, 3, 7, ink);
+    rect(b, cx - 3, cy + 2, 7, 3, ink);
+    rect(b, cx - 4, cy - 5, 3, 2, hi);
+    rect(b, cx + 2, cy - 5, 3, 2, hi);
+  } else if (type === 'regen') {
+    // Heart with a small plus.
+    poly(b, [[cx - 5, cy - 2], [cx - 3, cy - 5], [cx, cy - 3], [cx + 3, cy - 5], [cx + 5, cy - 2], [cx, cy + 5]], ink);
+    rect(b, cx - 3, cy - 3, 1, 2, hi);
+    rect(b, cx, cy - 1, 1, 3, hi); rect(b, cx - 1, cy, 3, 1, hi);
+  } else if (type === 'vampire') {
+    // Two fangs.
+    rect(b, cx - 5, cy - 5, 11, 3, ink);
+    poly(b, [[cx - 4, cy - 2], [cx - 1, cy - 2], [cx - 2.5, cy + 4]], ink);
+    poly(b, [[cx + 1, cy - 2], [cx + 4, cy - 2], [cx + 2.5, cy + 4]], ink);
+    setPx(b, cx - 3, cy - 1, hi); setPx(b, cx + 2, cy - 1, hi);
+  } else if (type === 'bomb') {
+    // Round bomb with a lit fuse.
+    disc(b, cx - 0.5, cy + 1, 4.2, ink);
+    rect(b, cx + 1, cy - 4, 2, 2, ink);
+    line(b, cx + 3, cy - 5, cx + 4, cy - 6, '#ffe070');
+    setPx(b, cx - 2, cy - 1, hi); setPx(b, cx - 3, cy, hi);
+  } else if (type === 'frost') {
+    // Snowflake.
+    rect(b, cx, cy - 5, 1, 11, ink);
+    rect(b, cx - 5, cy, 11, 1, ink);
+    line(b, cx - 3, cy - 3, cx + 3, cy + 3, ink);
+    line(b, cx + 3, cy - 3, cx - 3, cy + 3, ink);
+    setPx(b, cx, cy, hi); setPx(b, cx, cy - 5, hi); setPx(b, cx - 5, cy, hi);
   }
 }
 

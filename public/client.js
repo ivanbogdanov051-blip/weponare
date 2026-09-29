@@ -1203,8 +1203,9 @@ function draw(state) {
   ctx.save();
   ctx.scale(HUD_SCALE, HUD_SCALE);
   drawHUD(state);
-  drawItemBar(state.inventory || []);
+  drawItemBar(state.inventory || [], myNum === 1 ? state.players.p1 : myNum === 2 ? state.players.p2 : null);
   drawWeaponPanel(state);
+  drawPickupBanners(state.particles);
   ctx.restore();
 }
 
@@ -1315,42 +1316,117 @@ function drawCoins(coins) {
 }
 
 // ── Inventory (drawn inside the HUD so it always fits, whatever the screen) ──
-const ITEM_COLOR = { speed:'#44ddee', strength:'#ff5544', shield:'#ffdd44', haste:'#aa66ff', heal:'#44ff66' };
-const INV_SLOT = 22, INV_GAP = 3, INV_X = 4, INV_Y = 44;
+const ITEM_COLOR = {
+  speed:'#44ddee', strength:'#ff5544', shield:'#ffdd44', haste:'#aa66ff', heal:'#44ff66',
+  magnet:'#ffc24a', regen:'#ff7ac8', vampire:'#d8304a', bomb:'#ff8a2a', frost:'#9fe8ff',
+};
+// Timed effects that come from a power-up, so the active ones can show their icon.
+const EFFECT_ITEM = { speed:'speed', strength:'strength', shield:'shield', haste:'haste',
+                      magnet:'magnet', regen:'regen', vampire:'vampire' };
+const EFFECT_MAX = { speed:6000, strength:6000, shield:4500, haste:6000, magnet:10000, regen:8000, vampire:7000 };
+// Slots are 32 HUD px and the 18px icon is drawn at 24 (exactly 2x on the
+// 1.5x-scaled canvas), so collected power-ups are big, crisp and easy to tap.
+const INV_SLOT = 32, INV_ICON = 24, INV_GAP = 4, INV_X = 4, INV_Y = 44;
 let itemSlotRects = [];   // HUD-space hit boxes for tap-to-use
 
-function drawItemBar(inv) {
+// First y at or below `y` where a box of this size overlaps no on-screen button.
+function clearOfButtons(x, y, w, h) {
+  for (const z of hudTouchZones()) {
+    if (x < z.x + z.w && x + w > z.x && y < z.y + z.h && y + h > z.y) y = z.y + z.h + 2;
+  }
+  return y;
+}
+
+function drawItemBar(inv, me) {
   itemSlotRects = [];
-  if (!inv || !inv.length) return;
-  // A single row under the ability bars, on your side of the screen — up and
-  // out of the way of the touch d-pad and the weapon rack.
   const onRight = myNum === 2;
-  const rowW = inv.length * (INV_SLOT + INV_GAP) - INV_GAP;
+  const active = me && me.effects
+    ? Object.keys(me.effects).filter(k => EFFECT_ITEM[k] && me.effects[k] > 0) : [];
+  if ((!inv || !inv.length) && !active.length) return;
+
+  // A row under the ability bars on your side of the screen, nudged down if an
+  // on-screen button (music / leave) happens to sit there.
+  const rowW = Math.max(1, inv.length) * (INV_SLOT + INV_GAP) - INV_GAP;
   const x0 = onRight ? HUD_W - INV_X - rowW : INV_X;
-  const y = INV_Y;
+  const y = clearOfButtons(x0 - 2, INV_Y - 2, rowW + 4, INV_SLOT + 4) + 2;
   ctx.save();
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.fillRect(x0 - 2, y - 2, rowW + 4, INV_SLOT + 4);
+  if (inv.length) {
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(x0 - 2, y - 2, rowW + 4, INV_SLOT + 4);
+  }
   inv.forEach((type, i) => {
     const x = x0 + i * (INV_SLOT + INV_GAP);
     const col = ITEM_COLOR[type] || '#888';
     itemSlotRects.push({ x, y, w: INV_SLOT, h: INV_SLOT, index: i });
     ctx.fillStyle = 'rgba(8,8,18,0.9)';
     ctx.fillRect(x, y, INV_SLOT, INV_SLOT);
-    ctx.strokeStyle = col; ctx.lineWidth = 1;
-    ctx.strokeRect(x + 0.5, y + 0.5, INV_SLOT - 1, INV_SLOT - 1);
-    const cv = itemSprite(type, ITEM_COLOR[type] || '#888');
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+    ctx.strokeRect(x + 0.75, y + 0.75, INV_SLOT - 1.5, INV_SLOT - 1.5);
+    const cv = itemSprite(type, col);
     if (cv) {
-      ctx.drawImage(cv, Math.round(x + (INV_SLOT - cv.width) / 2),
-                        Math.round(y + (INV_SLOT - cv.height) / 2));
+      const o = (INV_SLOT - INV_ICON) / 2;
+      ctx.drawImage(cv, x + o, y + o - 1, INV_ICON, INV_ICON);
     }
-    ctx.font = '7px "Courier New",monospace';
+    ctx.font = 'bold 8px "Courier New",monospace';
     ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-    ctx.fillStyle = '#8a8aa0';
-    ctx.fillText(String(i + 1), x + INV_SLOT - 1.5, y + INV_SLOT - 0.5);
+    ctx.fillStyle = '#000'; ctx.fillText(String(i + 1), x + INV_SLOT - 1, y + INV_SLOT);
+    ctx.fillStyle = '#d8d8ea'; ctx.fillText(String(i + 1), x + INV_SLOT - 1.5, y + INV_SLOT - 0.5);
+  });
+
+  // Active power-ups: an icon each with a draining timer bar underneath.
+  const B = 16, by = y + (inv.length ? INV_SLOT + 5 : 0);
+  active.forEach((k, i) => {
+    const bx = onRight ? HUD_W - INV_X - (i + 1) * (B + 3) + 3 : INV_X + i * (B + 3);
+    const type = EFFECT_ITEM[k], col = ITEM_COLOR[type];
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(bx - 1, by - 1, B + 2, B + 5);
+    const cv = itemSprite(type, col);
+    if (cv) ctx.drawImage(cv, bx, by, B, B);
+    const left = Math.max(0, Math.min(1, me.effects[k] / (EFFECT_MAX[k] || 6000)));
+    ctx.fillStyle = '#222'; ctx.fillRect(bx, by + B + 1, B, 2);
+    ctx.fillStyle = col;    ctx.fillRect(bx, by + B + 1, Math.round(B * left), 2);
   });
   ctx.restore();
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
+
+// Big "you got X" banner for the local player's pickups, in HUD space.
+function drawPickupBanners(particles) {
+  const myKey = myNum === 1 ? 'p1' : myNum === 2 ? 'p2' : null;
+  const mine = (particles || []).filter(p => p.type === 'pickup' && p.text && p.who === myKey);
+  mine.slice(-3).forEach((p, i) => {
+    const m = p.max || 1800, k = 1 - p.timer / m;
+    // Pop in, hold, then fade.
+    const a = k < 0.1 ? k / 0.1 : k > 0.75 ? Math.max(0, (1 - k) / 0.25) : 1;
+    const pop = k < 0.12 ? 1 + (0.12 - k) * 3 : 1;
+    const cy = 86 + i * 34;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.translate(HUD_W / 2, cy);
+    ctx.scale(pop, pop);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const title = p.text + '!';
+    const hint = isTouchDevice ? 'TAP THE ICON TO USE' : 'PRESS ' + (p.slot || 1) + ' TO USE';
+    const sub = (p.sub ? p.sub + ' · ' : '') + hint;
+    ctx.font = '8px "Courier New",monospace';
+    const subW = ctx.measureText(sub).width;
+    ctx.font = 'bold 17px "Courier New",monospace';
+    const w = Math.min(HUD_W - 8, Math.max(ctx.measureText(title).width + 44, subW + 44, 160));
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.fillRect(-w / 2, -14, w, 30);
+    ctx.fillStyle = p.color || '#fff';
+    ctx.fillRect(-w / 2, -14, w, 2); ctx.fillRect(-w / 2, 14, w, 2);
+    const cv = p.item ? itemSprite(p.item, p.color || '#888') : null;
+    if (cv) ctx.drawImage(cv, -w / 2 + 6, -12, 24, 24);
+    ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.lineJoin = 'round';
+    ctx.strokeText(title, 12, -3);
+    ctx.fillStyle = p.color || '#fff';
+    ctx.fillText(title, 12, -3);
+    ctx.font = '8px "Courier New",monospace';
+    ctx.fillStyle = '#e8e8f4';
+    ctx.fillText(sub, 12, 9);
+    ctx.restore();
+  });
 }
 
 function useItem(idx) {
@@ -1929,6 +2005,18 @@ function drawParticles(particles) {
       ctx.beginPath(); ctx.arc(Math.round(p.x),yy,3.5,0,Math.PI*2); ctx.fill();
       ctx.globalAlpha=a*0.5;
       ctx.beginPath(); ctx.arc(Math.round(p.x),yy,7,0,Math.PI*2); ctx.fill();
+      // The power-up's name floats up from where it was picked up / used.
+      if (p.text) {
+        ctx.globalAlpha = Math.min(1, a * 1.6);
+        ctx.font = 'bold 13px "Courier New",monospace';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.lineJoin = 'round';
+        const ty = Math.round(p.y - 26 - (1 - a) * 22);   // clear of the name tag
+        ctx.strokeText(p.text, Math.round(p.x), ty);
+        ctx.fillStyle = p.color || '#fff';
+        ctx.fillText(p.text, Math.round(p.x), ty);
+        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      }
       ctx.globalAlpha=1;
     }
   }
@@ -1939,6 +2027,9 @@ function drawParticles(particles) {
 function drawHUD(state) {
   const p1 = state.players.p1, p2 = state.players.p2;
   const names = state.playerNames || {};
+  // The right-hand readout stops short of the music / leave buttons.
+  let RX = HUD_W;
+  for (const z of hudTouchZones()) if (z.y < 40 && z.x > HUD_W / 2) RX = Math.min(RX, Math.max(HUD_W - 120, z.x - 2));
 
   ctx.fillStyle = 'rgba(0,0,0,0.70)';
   ctx.fillRect(0, 0, HUD_W, 26);
@@ -1958,11 +2049,11 @@ function drawHUD(state) {
   if (p2) {
     const col = getSkinColor(p2, PAL.p2);
     ctx.textAlign = 'right';
-    ctx.fillStyle = '#000'; ctx.fillText(names.p2 || 'P2', HUD_W - 3, 3);
-    ctx.fillStyle = col;    ctx.fillText(names.p2 || 'P2', HUD_W - 4, 2);
+    ctx.fillStyle = '#000'; ctx.fillText(names.p2 || 'P2', RX - 3, 3);
+    ctx.fillStyle = col;    ctx.fillText(names.p2 || 'P2', RX - 4, 2);
     ctx.textAlign = 'left';
-    drawHpBar(HUD_W - 80, 15, 74, 5, p2.hp / p2.maxHp, col, '#330000');
-    for (let i = 0; i < (p2.lives || 0); i++) { ctx.fillStyle = col; ctx.fillRect(HUD_W - 9 - i*7, 21, 5, 3); }
+    drawHpBar(RX - 80, 15, 74, 5, p2.hp / p2.maxHp, col, '#330000');
+    for (let i = 0; i < (p2.lives || 0); i++) { ctx.fillStyle = col; ctx.fillRect(RX - 9 - i*7, 21, 5, 3); }
   }
 
   const w = state.wave;
@@ -1980,7 +2071,7 @@ function drawHUD(state) {
   const mp = myNum === 1 ? p1 : (myNum === 2 ? p2 : null);
   if (mp) {
     const barW = 60, barH = 4;
-    const bx = myNum === 1 ? 4 : HUD_W - 4 - barW;
+    const bx = myNum === 1 ? 4 : RX - 4 - barW;
     const lx = myNum === 1 ? bx + barW + 3 : bx - 3;
     const align = myNum === 1 ? 'left' : 'right';
     ctx.textBaseline = 'top';
@@ -2013,21 +2104,32 @@ function drawHUD(state) {
   // XP and coins live in the top bar beside your own health, so the bottom edge
   // belongs to the weapon rack alone.
   const right = myNum === 2;
-  const ax = right ? HUD_W - 86 : 86;
+  const ax = right ? RX - 86 : 86;
   ctx.font = '8px "Courier New",monospace';
   ctx.textBaseline = 'top';
   ctx.textAlign = right ? 'right' : 'left';
-  const xpT = 'XP ' + (state.xp || 0).toLocaleString();
+  const xpT = 'XP ' + shortNum(state.xp || 0);
   ctx.fillStyle = '#000'; ctx.fillText(xpT, ax + 1, 4);
   ctx.fillStyle = PAL.xp; ctx.fillText(xpT, ax, 3);
   // A drawn coin rather than a glyph — Courier has no dependable coin character.
-  const cn = (state.myCoins || 0).toLocaleString();
+  const cn = shortNum(state.myCoins || 0);
   const cw = ctx.measureText(cn).width;
   const coinX = right ? ax - cw - 6 : ax + 3;
   drawCoinIcon(coinX, 18, 3);
   ctx.fillStyle = '#000';   ctx.fillText(cn, (right ? ax : ax + 9) + 1, 15);
   ctx.fillStyle = PAL.coin; ctx.fillText(cn, right ? ax : ax + 9, 14);
   ctx.textAlign = 'left'; ctx.font = '10px "Courier New",monospace';
+}
+
+// Compact numbers for the HUD (12,345 · 1.2M · 3.4B ...), so a huge XP total
+// can't run into the wave counter.
+function shortNum(n) {
+  if (n < 100000) return Math.floor(n).toLocaleString();
+  const units = [[1e18, 'Qi'], [1e15, 'Q'], [1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K']];
+  for (const [v, u] of units) {
+    if (n >= v) { const x = n / v; return (x >= 100 ? Math.floor(x) : x.toFixed(1).replace(/\.0$/, '')) + u; }
+  }
+  return String(Math.floor(n));
 }
 
 function drawCoinIcon(x, y, r) {
@@ -2054,14 +2156,17 @@ function drawWeaponPanel(state) {
   // The rack must fit the free strip along the bottom: the whole width on a
   // desktop, or the gap between the d-pad and the action buttons on a phone.
   // Slots shrink to fit, and wrap onto more rows only if they'd get too small.
-  let L = 6, R = HUD_W - 6;
+  let L = 6, R = HUD_W - 6, bottom = HUD_H, lowestTop = HUD_H;
   for (const z of hudTouchZones()) {
     if (z.y + z.h < HUD_H - 70 || z.y > HUD_H) continue; // not over the bottom edge
     if (z.x > HUD_W || z.x + z.w < 0) continue;          // beside the canvas, not on it
     if (z.x + z.w / 2 < HUD_W / 2) L = Math.max(L, z.x + z.w + 2);
     else                           R = Math.min(R, z.x - 2);
+    lowestTop = Math.min(lowestTop, z.y - 2);
   }
-  if (R - L < 120) { L = 6; R = HUD_W - 6; }           // nowhere sensible: use full width
+  // Too little room between the buttons: go full width, but sit above them
+  // rather than underneath.
+  if (R - L < 150) { L = 6; R = HUD_W - 6; bottom = lowestTop; }
   const avail = R - L, gap = 2, slotH = 22;
   let rows = 1, slotW = 0;
   for (; rows <= 4; rows++) {
@@ -2076,7 +2181,7 @@ function drawWeaponPanel(state) {
   const panelH = rows * slotH + (rows - 1) * gap;
   const midX = (L + R) / 2;
   const panelX = Math.round(midX - panelW / 2);
-  const panelY = HUD_H - panelH - 4;
+  const panelY = bottom - panelH - 4;
 
   // Never hide your own character: if you walk behind the rack, it turns
   // see-through.
@@ -2135,17 +2240,22 @@ function hudTouchZones() {
   if (now - touchZonesAt < 500) return touchZones;
   touchZonesAt = now;
   touchZones = [];
-  const tc = document.getElementById('touchControls');
-  if (!tc || !tc.classList.contains('visible')) return touchZones;
   const cr = canvas.getBoundingClientRect();
   if (!cr.width || !cr.height) return touchZones;
   const sx = HUD_W / cr.width, sy = HUD_H / cr.height;
-  for (const el of tc.querySelectorAll('.dpad, .action-btns')) {
-    const r = el.getBoundingClientRect();
-    if (!r.width || !r.height) continue;
+  const add = (el) => {
+    const r = el && el.getBoundingClientRect();
+    if (!r || !r.width || !r.height) return;
     touchZones.push({ x: (r.left - cr.left) * sx - 3, y: (r.top - cr.top) * sy - 3,
                       w: r.width * sx + 6, h: r.height * sy + 6 });
+  };
+  // The touch pads and action buttons (phones), and the music / leave buttons.
+  const tc = document.getElementById('touchControls');
+  if (tc && tc.classList.contains('visible')) {
+    for (const el of tc.querySelectorAll('.dpad, .action-btns')) add(el);
   }
+  const gc = document.getElementById('gameControls');
+  if (gc && gc.classList.contains('visible')) add(gc);
   return touchZones;
 }
 

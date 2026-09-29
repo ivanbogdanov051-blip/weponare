@@ -54,13 +54,26 @@ const MAX_ITEMS = 4;
 const ITEM_SPAWN_MIN = 6000, ITEM_SPAWN_MAX = 13000;
 const MAX_INVENTORY = 4;
 const ITEM_SIZE = 18;
+// `name` and `desc` are what the pickup banner tells the player.
 const ITEM_TYPES = {
-  speed:    { effect: 'speed',    dur: 6000, color: '#44ddee' },
-  strength: { effect: 'strength', dur: 6000, color: '#ff5544' },
-  shield:   { effect: 'shield',   dur: 4500, color: '#ffdd44' },
-  haste:    { effect: 'haste',    dur: 6000, color: '#aa66ff' },
-  heal:     { effect: 'heal',     instant: true, amount: 50, color: '#44ff66' },
+  speed:    { effect: 'speed',    dur: 6000, color: '#44ddee', name: 'SPEED BOOST',  desc: 'Move 70% faster' },
+  strength: { effect: 'strength', dur: 6000, color: '#ff5544', name: 'STRENGTH',     desc: 'Hit 80% harder' },
+  shield:   { effect: 'shield',   dur: 4500, color: '#ffdd44', name: 'SHIELD',       desc: 'Take no damage' },
+  haste:    { effect: 'haste',    dur: 6000, color: '#aa66ff', name: 'HASTE',        desc: 'Attack twice as fast' },
+  heal:     { effect: 'heal',     instant: true, amount: 50, color: '#44ff66', name: 'HEAL', desc: 'Restore 50 HP' },
+  magnet:   { effect: 'magnet',   dur: 10000, color: '#ffc24a', name: 'COIN MAGNET', desc: 'Pull in coins from afar' },
+  regen:    { effect: 'regen',    dur: 8000, color: '#ff7ac8', name: 'REGENERATION', desc: 'Heal 5 HP every second' },
+  vampire:  { effect: 'vampire',  dur: 7000, color: '#d8304a', name: 'VAMPIRE',      desc: 'Heal 25% of damage dealt' },
+  bomb:     { effect: 'bomb',     instant: true, amount: 70, radius: 110, color: '#ff8a2a', name: 'BOMB', desc: 'Blast everything nearby' },
+  frost:    { effect: 'frost',    instant: true, radius: 160, dur: 3500, color: '#9fe8ff', name: 'FROST NOVA', desc: 'Freeze nearby foes' },
 };
+
+// Dev hook: limit which power-ups spawn (comma list), for testing one at a
+// time. Unset in production.
+const ITEM_POOL = (() => {
+  const want = String(process.env.WEPONARE_ITEMS || '').split(',').map(t => t.trim()).filter(t => ITEM_TYPES[t]);
+  return want.length ? want : Object.keys(ITEM_TYPES);
+})();
 
 // ── Coins: drop from every kill, spent on weapon upgrades in the menu ──
 const COIN_SIZE = 10;
@@ -601,7 +614,7 @@ function fireTrap(tr) {
 
 // ── Items ──
 function spawnItem() {
-  const types = Object.keys(ITEM_TYPES);
+  const types = ITEM_POOL;
   const type = types[Math.floor(Math.random() * types.length)];
   let pos = randArenaPos(ITEM_SIZE, ITEM_SIZE);
   for (let i = 0; i < 16; i++) {
@@ -826,8 +839,9 @@ function applyDamage(target, dmg, attackerKey) {
   // Armoured monsters shrug off a share of every hit, but never all of it.
   if (target.armor) dmg = Math.max(1, Math.round(dmg * (1 - target.armor)));
   target.hp -= dmg;
-  if (aw && aw.lifesteal && !atk.dead) {
-    const heal = Math.round(dmg * aw.lifesteal);
+  const steal = (aw ? aw.lifesteal || 0 : 0) + (atk && atk !== target && hasEffect(atk, 'vampire') ? 0.25 : 0);
+  if (steal && !atk.dead) {
+    const heal = Math.round(dmg * steal);
     if (heal > 0) atk.hp = Math.min(atk.maxHp, atk.hp + heal);
   }
   if (aw && aw.knock && target.hp > 0) {
@@ -1019,6 +1033,12 @@ setInterval(() => {
     applyPull(p, dt);
     clampToArena(p, 2);
 
+    // Regeneration: +1 HP every 200 ms while it lasts.
+    if (hasEffect(p, 'regen') && p.hp < p.maxHp) {
+      p.regenAcc = (p.regenAcc || 0) + dt;
+      while (p.regenAcc >= 200) { p.regenAcc -= 200; p.hp = Math.min(p.maxHp, p.hp + 1); }
+    }
+
     // Decrement active effects
     if (p.effects) for (const k in p.effects) { p.effects[k] -= dt; if (p.effects[k] <= 0) delete p.effects[k]; }
 
@@ -1167,7 +1187,9 @@ setInterval(() => {
       const p = room.players[key];
       if (p && !p.dead && aabb(p, it) && p.inventory.length < MAX_INVENTORY) {
         p.inventory.push(it.type);
-        room.particles.push({ type: 'pickup', x: cx(it), y: it.y, timer: 600, max: 600, color: ITEM_TYPES[it.type].color });
+        const def = ITEM_TYPES[it.type];
+        room.particles.push({ type: 'pickup', x: cx(it), y: it.y, timer: 1800, max: 1800, color: def.color,
+                              text: def.name, sub: def.desc, item: it.type, who: key, slot: p.inventory.length });
         return false;
       }
     }
@@ -1185,7 +1207,8 @@ setInterval(() => {
       const d = Math.hypot(cx(p) - cx(c), cy(p) - cy(c));
       if (d < nearDist) { nearDist = d; near = p; nearKey = key; }
     }
-    if (near && nearDist <= COIN_MAGNET) {
+    const magnet = near && hasEffect(near, 'magnet');
+    if (near && nearDist <= COIN_MAGNET * (magnet ? 1.6 : 1)) {
       addCoins(nearKey, c.value);
       room.particles.push({ type: 'coin', x: cx(c), y: cy(c), text: '+' + c.value, timer: 700, max: 700 });
       return false;
@@ -1194,8 +1217,9 @@ setInterval(() => {
       // Close by they snap in; after a few seconds on the floor they drift in from
       // anywhere, so killing at bow range doesn't forfeit the reward.
       const settled = COIN_LIFETIME - c.life > 2500;
-      if (nearDist < COIN_ATTRACT || settled) {
-        const pull = 0.35 * Math.max(settled ? 0.2 : 0, 1 - nearDist / COIN_ATTRACT);
+      const reach = magnet ? COIN_ATTRACT * 5 : COIN_ATTRACT;
+      if (nearDist < reach || settled) {
+        const pull = (magnet ? 0.8 : 0.35) * Math.max(settled ? 0.2 : 0, 1 - nearDist / reach);
         c.vx += ((cx(near) - cx(c)) / nearDist) * pull;
         c.vy += ((cy(near) - cy(c)) / nearDist) * pull;
       }
@@ -2015,11 +2039,22 @@ wss.on('connection', (ws) => {
             if (def) {
               if (def.instant && def.effect === 'heal') {
                 p.hp = Math.min(p.maxHp, p.hp + def.amount);
+              } else if (def.effect === 'bomb') {
+                for (const t of enemyTargets(myKey)) {
+                  if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) <= def.radius) strikeTarget(t, def.amount, myKey);
+                }
+                room.particles.push({ type: 'aoe', x: cx(p), y: cy(p), maxR: def.radius, radius: 2, timer: 420, max: 420, color: def.color });
+                room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: def.radius, timer: 420, max: 420, color: '#ffe0a0' });
+              } else if (def.effect === 'frost') {
+                for (const t of enemyTargets(myKey)) {
+                  if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) <= def.radius) chillTarget(t, def.dur);
+                }
+                room.particles.push({ type: 'aoe', x: cx(p), y: cy(p), maxR: def.radius, radius: 2, timer: 520, max: 520, color: def.color });
               } else {
                 applyEffect(p, def.effect, def.dur);
               }
               p.inventory.splice(idx, 1);
-              room.particles.push({ type: 'useitem', x: cx(p), y: p.y, timer: 500, max: 500, color: def.color });
+              room.particles.push({ type: 'useitem', x: cx(p), y: p.y, timer: 900, max: 900, color: def.color, text: def.name });
             }
           }
         }
