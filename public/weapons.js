@@ -390,6 +390,19 @@ const WEAPON_ART = {
     k.poly([[13.5, -3.8], [20, -5.5], [17, -1.5], [22, 0], [17, 1.5], [19.5, 5], [13.5, 3.8]], wc);
     k.poly([[13.5, -2], [18, -2.6], [16.2, 0], [18, 2.4], [13.5, 2]], '#ffd84a');
   }},
+
+  vortex: { draw(k, wc) {
+    // A round buckler held by its grip, a charged spiral set into its face.
+    grip(k, 4, MAT.leather, MAT.leatherLt, 2);
+    k.circ(11, 0, 8, '#2a3a58');                       // rim
+    k.circ(11, 0, 6.8, '#3e5a86');
+    k.circ(10.2, -1, 5.2, '#4e74aa');
+    k.glow(11, 0, 9, wc, 0.3);
+    k.ring(11, 0, 4.2, 1.2, wc, -0.4, 2.4);            // spiral arms
+    k.ring(11, 0, 2.4, 1.1, '#e8fbff', 2.2, 5.2);
+    k.circ(11, 0, 1.2, '#ffffff');
+    for (const [x, y] of [[11, -7.2], [18.2, 0], [11, 7.2], [3.8, 0]]) k.r(x - 0.6, y - 0.6, 1.2, 1.2, MAT.steelLight);   // studs
+  }},
 };
 
 // Run a definition through a kit that records geometry instead of painting, to

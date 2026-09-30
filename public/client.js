@@ -31,7 +31,7 @@ let WEAPON_COLOR = {
   glaive:'#b0d8c0', katana:'#eef0ff', chakram:'#66e0c0', cannon:'#9a90a8',
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
-  fireglove:'#ff6a1a',
+  fireglove:'#ff6a1a', vortex:'#7ad8ff',
 };
 const WEAPON_DESC = {
   sword:'Balanced blade', dagger:'Fast, low damage', axe:'Slow, heavy hit',
@@ -46,6 +46,7 @@ const WEAPON_DESC = {
   blunderbuss:'Close-range scattershot', lance:'Longest reach, dash special',
   stormtome:'Lightning arcs between foes',
   fireglove:'Rings of fire, exploding fire hands and a SUPER inferno',
+  vortex:'Banks the damage you take, then pays it back',
 };
 
 // Filled from the server catalog: { id: {type, atkSpd, ...} }
@@ -505,10 +506,10 @@ const ATTACK_ANIM = {
   bow: 'draw', crossbow: 'recoil', grapple: 'recoil', cannon: 'heavy', blunderbuss: 'heavy',
   staff: 'cast', frostrod: 'cast', wand: 'flick', stormtome: 'tome',
   chakram: 'throw', boomerang: 'throw', shuriken: 'throw',
-  fireglove: 'punch',
+  fireglove: 'punch', vortex: 'shieldup',
 };
 const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
-                  heavy: 300, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240 };
+                  heavy: 300, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
 
 function attackKind(wId) {
   if (ATTACK_ANIM[wId]) return ATTACK_ANIM[wId];
@@ -565,6 +566,7 @@ function weaponPose(kind, e) {
     case 'punch':  // cock the fist back, then drive it forward in a blaze
       return e < 0.3 ? { rot: 0.2, dx: -(e / 0.3) * 4, glow: e }
                      : { rot: 0, dx: -4 + Math.sin(((e - 0.3) / 0.7) * Math.PI) * 12, glow: Math.sin(((e - 0.3) / 0.7) * Math.PI) };
+    case 'shieldup': return { rot: -0.25 - s * 0.9, dy: -s * 4, glow: s };   // hoist the shield high
     default:       return { rot: -s * 0.16, dx: -s * 3 };   // recoil
   }
 }
@@ -578,7 +580,7 @@ function pushSlash(cp, angle, key) {
   const tipR = cp.w + 12;
   if (key) startAttackAnim(key, cp);
   // The glove's ring of fire comes from the server; no swing arc to draw.
-  if (attackKind(cp.weaponId) === 'punch') return;
+  if (attackKind(cp.weaponId) === 'punch' || attackKind(cp.weaponId) === 'shieldup') return;
   slashes.push({
     px: cp.x + cp.w / 2,
     py: cp.y + cp.h / 2,
@@ -800,7 +802,8 @@ function drawFireRings(fires) {
   if (!fires.length) return;
   const now = performance.now() / 1000;
   for (const f of fires) {
-    if (f.kind === 'hand' || f.r <= 0) continue;
+    if (f.kind === 'vortexfield') { drawVortexField(f, now); continue; }
+    if ((f.kind !== 'ring' && f.kind !== 'inferno') || f.r <= 0) continue;
     const inferno = f.kind === 'inferno';
     const fade = inferno ? 1 : Math.max(0, 1 - Math.pow(f.k, 3));
     const band = inferno ? 13 : 8;
@@ -875,6 +878,77 @@ function drawFireHands(fires) {
     ctx.beginPath(); ctx.ellipse(-1, 0, 4, 3.5, 0, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
+}
+
+// ─── Vortex Shield ────────────────────────────────────────────────────────────
+
+// While the shield is up: a spinning ring of charge around the player that
+// grows brighter as it banks damage. The bank floats above their head.
+function drawVortexShield(p, x, y) {
+  const up = p.vShield > 0, bank = p.vStore || 0;
+  if (!up && !(bank > 0 && p.weaponId === 'vortex')) return;
+  const cxp = x + p.w / 2, cyp = y + p.h / 2;
+  const now = performance.now() / 1000;
+  ctx.save();
+  if (up) {
+    const R = p.w + 6, fade = Math.min(1, p.vShield / 400);
+    const charge = Math.min(1, bank / 150);
+    ctx.globalAlpha = 0.14 * fade + charge * 0.12;
+    ctx.fillStyle = '#7ad8ff';
+    ctx.beginPath(); ctx.arc(cxp, cyp, R, 0, Math.PI * 2); ctx.fill();
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 3; i++) {
+      const a0 = now * 4 + i * (Math.PI * 2 / 3);
+      ctx.globalAlpha = (0.55 + charge * 0.4) * fade;
+      ctx.strokeStyle = i ? '#7ad8ff' : '#e8fbff';
+      ctx.lineWidth = 1.6 + charge * 1.4;
+      ctx.beginPath(); ctx.arc(cxp, cyp, R, a0, a0 + 1.4); ctx.stroke();
+    }
+    ctx.globalAlpha = 0.35 * fade;
+    ctx.strokeStyle = '#7ad8ff'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cxp, cyp, R - 3, 0, Math.PI * 2); ctx.stroke();
+  }
+  if (bank > 0) {
+    ctx.globalAlpha = 1;
+    ctx.font = 'bold 9px "Courier New",monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.lineJoin = 'round';
+    const t = '⚡' + bank;
+    ctx.strokeText(t, cxp, y - 25);
+    ctx.fillStyle = '#9fe8ff'; ctx.fillText(t, cxp, y - 25);
+  }
+  ctx.restore();
+}
+
+// The special: a force field of stored energy around the player — a charged
+// sphere with spiral arms turning inside it, fading as its 3 s run out.
+function drawVortexField(f, now) {
+  const R = f.r || 42, fade = Math.min(1, (1 - (f.k || 0)) * 4);
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.globalAlpha = 0.16 * fade; ctx.fillStyle = '#2a8ad0';
+  ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.8 * fade; ctx.strokeStyle = '#7ad8ff'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.stroke();
+  ctx.globalAlpha = 0.5 * fade; ctx.strokeStyle = '#e8fbff'; ctx.lineWidth = 1;
+  ctx.setLineDash([4, 5]); ctx.lineDashOffset = -now * 30;
+  ctx.beginPath(); ctx.arc(0, 0, R - 4, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 4; i++) {
+    const a = now * 5 + i * Math.PI / 2;
+    ctx.globalAlpha = 0.55 * fade;
+    ctx.strokeStyle = i % 2 ? '#7ad8ff' : '#e8fbff';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    for (let k = 0; k <= 10; k++) {
+      const r = 6 + (k / 10) * (R - 8), aa = a + (k / 10) * 2.4;
+      const px = Math.cos(aa) * r, py = Math.sin(aa) * r;
+      if (k) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 // An open, grasping hand pointing along +X: palm, thumb, four clawed fingers.
@@ -1357,6 +1431,14 @@ function renderShop() {
   refreshShopButtons();
 }
 
+const LEGEND_MOVES = {
+  fireglove: '<b>ATK</b> a ring of fire that grows for 1s · <b>SPECIAL</b> a fire hand that hunts your foe and explodes'
+           + ' (hit or parry it to break it) · <b>SUPER</b> an inferno ring that keeps growing until parried',
+  vortex: '<b>ATK</b> a 3s shield that doesn\'t block hits but banks the damage you take · <b>SPECIAL</b> a 3s lightning'
+        + ' force field around you: anything that touches it takes the whole bank · <b>SUPER</b> heals 1.5x the bank · special and super empty it.'
+        + ' No other weapons needed.',
+};
+
 // Shop-only weapons (the fire glove) you don't own yet: bought with coins,
 // and only once every other weapon is unlocked.
 function legendaryCards(weapons, coins) {
@@ -1364,7 +1446,7 @@ function legendaryCards(weapons, coins) {
   const xpIds = all.filter(w => !w.shopOnly).map(w => w.id);
   const have = xpIds.filter(id => weapons.includes(id)).length;
   return all.filter(w => w.shopOnly && !weapons.includes(w.id)).map(w => {
-    const ready = have >= xpIds.length;
+    const ready = w.noRequirement || have >= xpIds.length;
     const afford = coins >= w.price;
     const col = WEAPON_COLOR[w.id] || '#ff6a1a';
     const need = ready ? (afford ? 'Ready to buy!' : `Need ${(w.price - coins).toLocaleString()} more coins`)
@@ -1375,9 +1457,7 @@ function legendaryCards(weapons, coins) {
         <span class="shop-name" style="color:${col}">${w.name}</span>
         <span class="legend-tag">LEGENDARY</span>
       </div>
-      <div class="shop-desc">${WEAPON_DESC[w.id] || ''}.
-        <b>ATK</b> a ring of fire that grows for 1s · <b>SPECIAL</b> a fire hand that hunts your foe and explodes (hit or parry it to break it) ·
-        <b>SUPER</b> an inferno ring that keeps growing until parried</div>
+      <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>
       <div class="legend-buy">
         <button class="buy-weapon${ready && afford ? '' : ' poor'}" onclick="buyWeapon('${w.id}')"
           ${ready ? '' : 'disabled'}>BUY ◆${w.price.toLocaleString()}</button>
@@ -1405,7 +1485,7 @@ async function buyWeapon(id) {
     saveLocalCoins(pendingPass, data.coins);
     if (window.GameAudio) { GameAudio.init(); GameAudio.sfx.unlock(); }
     renderShop();
-    setShopMsg(`${w.name} unlocked! Press R (or SUPER) in game for its inferno.`);
+    setShopMsg(`${w.name} unlocked! Press R (or the SUPER button) in game for its super.`);
   } catch {
     setShopMsg('Could not reach the server.', true);
   } finally {
@@ -1994,6 +2074,7 @@ function drawPlayer(p, baseColor, label, key) {
 
   drawNametag(x + p.w / 2, y - 13, label, skinCol);
   drawWeaponSprite(p, x, y, key);
+  drawVortexShield(p, x, y);
   if (p.effects && p.effects.burn > 0) drawFlames(x, y, p.w, p.h);
 
   if (p.parryActive) {
@@ -2632,8 +2713,9 @@ function drawHUD(state) {
 
     if (mp.specialMax > 0) {
       const ready = (mp.specialCd || 0) <= 0;
+      const vx = mp.weaponId === 'vortex';
       drawBar(28, ready ? 1 : Math.max(0, 1 - mp.specialCd / mp.specialMax), ready,
-              ready ? 'SPECIAL' : 'SP', '#dd88ff', '#6a3a99', '#1a0a2a');
+              vx ? 'BANK ' + (mp.vStore || 0) : ready ? 'SPECIAL' : 'SP', '#dd88ff', '#6a3a99', '#1a0a2a');
     }
     if (mp.parryMax > 0) {
       const ready = (mp.parryCd || 0) <= 0;

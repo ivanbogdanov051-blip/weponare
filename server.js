@@ -134,6 +134,13 @@ const WEAPONS = [
   { id: 'fireglove',   name: 'FIRE GLOVE',  damage: 16, range: 78,  atkSpd: 650,  type: 'melee',  unlockXp: 0, shopOnly: true, price: 5000, fireRing: true,
     special: { kind: 'firehand', dmg: 20, range: 420, cd: 800, aoe: 40, blast: 14 },
     super:   { kind: 'inferno',  dmg: 50, cd: 18000 } },
+  // Shop-only, but with no unlock requirement (noRequirement). Attack raises a
+  // 3 s shield that doesn't block anything — it banks the damage you take.
+  // Special throws that bank back as a lightning vortex; SUPER heals 1.5x the
+  // bank. Both empty the bank. special.dmg / super.dmg are percentages of it.
+  { id: 'vortex',      name: 'VORTEX SHIELD', damage: 1, range: 60, atkSpd: 3300, type: 'melee', unlockXp: 0, shopOnly: true, noRequirement: true, price: 20000, vortexShield: true,
+    special: { kind: 'vortex',     dmg: 100, range: 420, cd: 2500 },
+    super:   { kind: 'absorbheal', dmg: 150, cd: 12000 } },
 ];
 
 const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
@@ -145,7 +152,7 @@ const WEAPON_COLORS = {
   glaive: '#b0d8c0', katana: '#eef0ff', chakram: '#66e0c0', cannon: '#9a90a8', reaper: '#cc66aa',
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
   shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
-  fireglove: '#ff6a1a',
+  fireglove: '#ff6a1a', vortex: '#7ad8ff',
 };
 
 // ── Weapon upgrades bought with coins from the menu ──
@@ -193,6 +200,7 @@ const WEAPON_UPGRADES = {
   lance:       ['dmg', 'rng', 'crit'],
   stormtome:   ['chain', 'dmg', 'cdr'],
   fireglove:   ['dmg', 'rng', 'life', 'cdr', 'aoe'],
+  vortex:      ['dmg', 'spd', 'cdr'],
 };
 function upgradesFor(weaponId) { return WEAPON_UPGRADES[weaponId] || ['dmg', 'spd', 'rng']; }
 
@@ -491,6 +499,8 @@ function makePlayer(num, xp, upgrades) {
     atkCooldown: 0,
     specialCooldown: 0,
     superCooldown: 0,
+    vortexShield: 0,     // ms the vortex shield stays up
+    vortexStore: 0,      // damage banked while it was up
     parryCooldown: 0,
     parryTimer: 0,
     swingTimer: 0,
@@ -976,6 +986,7 @@ function applyDamage(target, dmg, attackerKey) {
   }
   // Armoured monsters shrug off a share of every hit, but never all of it.
   if (target.armor) dmg = Math.max(1, Math.round(dmg * (1 - target.armor)));
+  if (target.num && target.vortexShield > 0) bankVortex(target, dmg);
   target.hp -= dmg;
   const steal = (aw ? aw.lifesteal || 0 : 0) + (atk && atk !== target && hasEffect(atk, 'vampire') ? 0.25 : 0);
   if (steal && !atk.dead) {
@@ -1195,6 +1206,7 @@ function tickRoom(dt) {
     if (p.atkCooldown     > 0) p.atkCooldown     -= dt;
     if (p.specialCooldown > 0) p.specialCooldown -= dt;
     if (p.superCooldown   > 0) p.superCooldown   -= dt;
+    if (p.vortexShield    > 0) p.vortexShield    -= dt;
     if (p.parryCooldown   > 0) p.parryCooldown   -= dt;
     if (p.parryTimer      > 0) p.parryTimer      -= dt;
     if (p.invincible      > 0) p.invincible      -= dt;
@@ -1634,6 +1646,7 @@ function dotDamage(t, dmg) {
   if (t.dead) return;
   if (t.num && hasEffect(t, 'shield')) return;
   if (t.armor) dmg = Math.max(1, Math.round(dmg * (1 - t.armor)));
+  if (t.num && t.vortexShield > 0) bankVortex(t, dmg);
   t.hp -= dmg;
   t.hitFlash = Math.max(t.hitFlash || 0, 90);
   if (t.hp <= 0) handleKill(t, 'trap');
@@ -1711,6 +1724,11 @@ function doAttack(p, pKey) {
   // Any attack can swat an enemy's fire hand out of the air.
   swatFireHands(p, pKey, w.type === 'melee' ? w.range : 48);
 
+  if (w.vortexShield) {
+    p.vortexShield = VORTEX_SHIELD_MS;
+    room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 22, timer: 300, max: 300, color: WEAPON_COLORS.vortex });
+    return;
+  }
   if (w.fireRing) {
     const aim = nearestTargetAngle(p, pKey);
     p.facing = Math.cos(aim) < 0 ? -1 : 1;
@@ -1831,12 +1849,81 @@ function doSuper(p, pKey) {
   p.superCooldown = su.cd;
   p.swingTimer = 300;
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
+  if (su.kind === 'absorbheal') {
+    // Nothing banked: nothing to heal, and the cooldown isn't spent.
+    const bank = p.vortexStore || 0;
+    if (bank <= 0) { p.superCooldown = 0; p.swingTimer = 0; emptyBank(p); return; }
+    const heal = Math.round(bank * su.dmg / 100);
+    p.hp = Math.min(p.maxHp, p.hp + heal);
+    p.vortexStore = 0;
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 40, timer: 700, max: 700,
+                          color: '#7affb0', text: '+' + heal + ' HP' });
+    return;
+  }
   if (su.kind === 'inferno') {
     room.fires.push({ id: nextId(), kind: 'inferno', owner: pKey, x: cx(p), y: cy(p), r: INFERNO_START,
                       t: 0, life: 60000, dmg: Math.round(su.dmg * dmgMult), hit: new Set() });
     room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 50, timer: 700, max: 700,
                           color: WEAPON_COLORS.fireglove, text: 'INFERNO' });
   }
+}
+
+// ─── Vortex Shield ────────────────────────────────────────────────────────────
+const VORTEX_SHIELD_MS = 3000;
+const VORTEX_BANK_MAX  = 300;    // so a long waves run can't bank a one-shot
+const VORTEX_FIELD_MS  = 3000;   // how long the force field lasts
+const VORTEX_FIELD_R   = 42;     // its radius
+
+function bankVortex(p, dmg) {
+  p.vortexStore = Math.min(VORTEX_BANK_MAX, (p.vortexStore || 0) + Math.max(0, dmg));
+}
+
+function emptyBank(p) {
+  room.particles.push({ type: 'useitem', x: cx(p), y: p.y, timer: 900, max: 900, color: '#7ad8ff', text: 'NOTHING STORED' });
+}
+
+// Release the bank as a force field around the player for 3 s. Every foe that
+// touches it is struck by lightning for the whole bank (once per field).
+// Returns false (and spends nothing) if the bank is empty.
+function castVortex(p, pKey, sp, dmgMult) {
+  const bank = p.vortexStore || 0;
+  if (bank <= 0) { emptyBank(p); return false; }
+  room.fires.push({ id: nextId(), kind: 'vortexfield', owner: pKey, x: cx(p), y: cy(p), r: VORTEX_FIELD_R,
+                    t: 0, life: VORTEX_FIELD_MS, hit: new Set(),
+                    dmg: Math.max(1, Math.round(bank * (sp.dmg / 100) * dmgMult)) });
+  room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: VORTEX_FIELD_R, timer: 360, max: 360, color: WEAPON_COLORS.vortex });
+  p.vortexStore = 0;
+  return true;
+}
+
+function updateVortexField(f, factor) {
+  const o = room.players[f.owner];
+  if (!o || o.dead) return false;
+  f.x = cx(o); f.y = cy(o);            // the field moves with its owner
+  // Idle crackle round the rim so it reads as charged.
+  if (Math.random() < 0.35 * factor) {
+    const a = Math.random() * Math.PI * 2, a2 = a + (Math.random() - 0.5) * 1.2;
+    room.particles.push({ type: 'bolt', x: f.x + Math.cos(a) * f.r, y: f.y + Math.sin(a) * f.r,
+                          x2: f.x + Math.cos(a2) * f.r * 0.6, y2: f.y + Math.sin(a2) * f.r * 0.6,
+                          timer: 120, max: 120, color: WEAPON_COLORS.vortex });
+  }
+  for (const t of enemyTargets(f.owner)) {
+    const id = playerKeyOf(t) || t.id;
+    if (f.hit.has(id)) continue;
+    if (Math.hypot(cx(t) - f.x, cy(t) - f.y) > f.r + t.w / 2) continue;
+    f.hit.add(id);
+    // Lightning forks from the field's edge into whoever touched it.
+    const a = Math.atan2(cy(t) - f.y, cx(t) - f.x);
+    for (let i = 0; i < 4; i++) {
+      const aa = a + (i - 1.5) * 0.35;
+      room.particles.push({ type: 'bolt', x: f.x + Math.cos(aa) * f.r * 0.8, y: f.y + Math.sin(aa) * f.r * 0.8,
+                            x2: cx(t), y2: cy(t), timer: 320, max: 320, color: i % 2 ? '#ffffff' : WEAPON_COLORS.vortex });
+    }
+    if (t.invincible > 0 && t.invincible <= 500) t.invincible = 0;
+    applyDamage(t, f.dmg, f.owner);
+    room.particles.push({ type: 'crit', x: cx(t), y: t.y - 6, text: String(f.dmg), timer: 800, max: 800 });
+  }
+  return true;
 }
 
 // Hands hostile to pKey (only another player's, and only in PvP) within reach
@@ -1862,6 +1949,7 @@ function updateFires(factor, dt) {
     f.t += dt;
     if (f.t >= f.life) { if (f.kind === 'hand') explodeHand(f); return false; }
     if (f.kind === 'hand') return updateFireHand(f, factor);
+    if (f.kind === 'vortexfield') return updateVortexField(f, factor);
 
     if (f.kind === 'ring') {
       const k = f.t / f.life;
@@ -1949,6 +2037,10 @@ function doSpecial(p, pKey) {
 
   if (sp.kind === 'firehand') {
     castFireHand(p, pKey, sp, dmgMult);
+    return;
+  }
+  if (sp.kind === 'vortex') {
+    if (!castVortex(p, pKey, sp, dmgMult)) { p.specialCooldown = 0; p.swingTimer = 0; }
     return;
   }
   if (sp.kind === 'slam') {
@@ -2084,6 +2176,7 @@ function playerView(p) {
     unlockedWeapons: p.unlockedWeapons, skin: p.skin,
     specialCd: Math.max(0, p.specialCooldown), specialMax: w.special?.cd || 0,
     superCd: Math.max(0, p.superCooldown || 0), superMax: w.super?.cd || 0,
+    vShield: p.vortexShield > 0 ? Math.round(p.vortexShield) : 0, vStore: Math.round(p.vortexStore || 0),
     parryCd: Math.max(0, p.parryCooldown), parryMax: PARRY_COOLDOWN, parryActive: p.parryTimer > 0,
     effects: p.effects,
     pulled: !!p.pull,
@@ -2146,7 +2239,7 @@ function weaponCatalog() {
   return WEAPONS.map(w => ({
     id: w.id, name: w.name, type: w.type, unlockXp: w.unlockXp,
     damage: w.damage, range: w.range, atkSpd: w.atkSpd, spin: !!w.swing360,
-    shopOnly: !!w.shopOnly, price: w.price || 0,
+    shopOnly: !!w.shopOnly, noRequirement: !!w.noRequirement, price: w.price || 0,
     special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd } : null,
     super: w.super ? { kind: w.super.kind, dmg: w.super.dmg, cd: w.super.cd } : null,
     upgrades: upgradesFor(w.id),
@@ -2318,7 +2411,7 @@ app.post('/api/buy_weapon', (req, res) => {
   const admin = isAdminPw(pw);
   const prof = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins });
   if (prof.weapons.includes(weaponId)) return res.status(400).json({ error: 'You already own that weapon.' });
-  const missing = XP_WEAPON_IDS.filter(id => !prof.weapons.includes(id)).length;
+  const missing = def.noRequirement ? 0 : XP_WEAPON_IDS.filter(id => !prof.weapons.includes(id)).length;
   if (missing) return res.status(400).json({ error: `Unlock every other weapon first (${missing} to go).` });
   if (!admin && prof.coins < def.price) return res.status(400).json({ error: 'Not enough coins.' });
 
