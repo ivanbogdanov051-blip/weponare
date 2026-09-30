@@ -130,9 +130,9 @@ const WEAPONS = [
   // Shop-only: never unlocked by XP. Bought for `price` coins once every other
   // weapon is unlocked. Attack = a growing ring of fire (range = its final
   // radius), special = a homing hand of fire, and it alone has a SUPER.
-  { id: 'fireglove',   name: 'FIRE GLOVE',  damage: 22, range: 78,  atkSpd: 650,  type: 'melee',  unlockXp: 0, shopOnly: true, price: 5000, fireRing: true,
-    special: { kind: 'firehand', dmg: 34, range: 420, cd: 1400 },
-    super:   { kind: 'inferno',  dmg: 70, cd: 18000 } },
+  { id: 'fireglove',   name: 'FIRE GLOVE',  damage: 16, range: 78,  atkSpd: 650,  type: 'melee',  unlockXp: 0, shopOnly: true, price: 5000, fireRing: true,
+    special: { kind: 'firehand', dmg: 20, range: 420, cd: 800, count: 3 },
+    super:   { kind: 'inferno',  dmg: 50, cd: 18000 } },
 ];
 
 const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
@@ -1700,17 +1700,29 @@ const HAND_SPEED     = 5.2;    // quicker than anyone can run
 const HAND_TURN      = 0.14;   // rad per 16.67 ms, so a sharp sidestep can still make it overshoot
 const HAND_RADIUS    = 18;
 const HAND_LIFE      = 4000;
+const HAND_MAX       = 6;      // per player
 
 function castFireRing(p, pKey, w, dmgMult) {
   room.fires.push({ id: nextId(), kind: 'ring', owner: pKey, x: cx(p), y: cy(p), r: 6, maxR: w.range,
                     t: 0, life: FIRE_RING_MS, dmg: Math.round(w.damage * dmgMult), hit: new Set() });
 }
 
-function castFireHand(p, pKey, dmg) {
-  const a = nearestTargetAngle(p, pKey);
-  p.facing = Math.cos(a) < 0 ? -1 : 1;
-  room.fires.push({ id: nextId(), kind: 'hand', owner: pKey, x: cx(p) + Math.cos(a) * 12, y: cy(p) + Math.sin(a) * 12,
-                    a, t: 0, life: HAND_LIFE, dmg });
+// A volley of hands fans out, then each curls in on its prey. `slot` spreads
+// them over different foes when there are several.
+function castFireHand(p, pKey, dmg, count) {
+  const aim = nearestTargetAngle(p, pKey);
+  p.facing = Math.cos(aim) < 0 ? -1 : 1;
+  for (let i = 0; i < count; i++) {
+    const a = aim + (i - (count - 1) / 2) * 0.75;
+    room.fires.push({ id: nextId(), kind: 'hand', owner: pKey, x: cx(p) + Math.cos(a) * 12, y: cy(p) + Math.sin(a) * 12,
+                      a, t: 0, life: HAND_LIFE, dmg, slot: i });
+  }
+  // Never more than two volleys alive at once: the oldest hands burn out first.
+  const mine = room.fires.filter(f => f.kind === 'hand' && f.owner === pKey);
+  if (mine.length > HAND_MAX) {
+    const drop = new Set(mine.slice(0, mine.length - HAND_MAX));
+    room.fires = room.fires.filter(f => !drop.has(f));
+  }
 }
 
 function doSuper(p, pKey) {
@@ -1777,11 +1789,11 @@ function updateFires(factor, dt) {
 }
 
 function updateFireHand(f, factor) {
-  let best = null, bd = Infinity;
-  for (const t of enemyTargets(f.owner)) {
-    const d = Math.hypot(cx(t) - f.x, cy(t) - f.y);
-    if (d < bd) { bd = d; best = t; }
-  }
+  // Each hand of a volley takes a different foe, nearest first.
+  const foes = enemyTargets(f.owner)
+    .map(t => ({ t, d: Math.hypot(cx(t) - f.x, cy(t) - f.y) }))
+    .sort((a, b) => a.d - b.d);
+  const best = foes.length ? foes[(f.slot || 0) % foes.length].t : null;
   if (best) {
     // Steer toward the prey, turning hard but not instantly.
     let diff = Math.atan2(cy(best) - f.y, cx(best) - f.x) - f.a;
@@ -1792,7 +1804,9 @@ function updateFireHand(f, factor) {
   f.x = Math.max(ARENA_X, Math.min(ARENA_X + ARENA_W, f.x + Math.cos(f.a) * HAND_SPEED * factor));
   f.y = Math.max(ARENA_Y, Math.min(ARENA_Y + ARENA_H, f.y + Math.sin(f.a) * HAND_SPEED * factor));
 
-  if (best && Math.hypot(cx(best) - f.x, cy(best) - f.y) <= HAND_RADIUS + best.w / 2) {
+  // A foe still flashing from the last hit can't be caught yet — the hand keeps
+  // circling, so a volley lands as three separate hits instead of fizzling.
+  if (best && !(best.invincible > 0) && Math.hypot(cx(best) - f.x, cy(best) - f.y) <= HAND_RADIUS + best.w / 2) {
     if (playerKeyOf(best) && best.parryTimer > 0) {
       spawnParrySpark(f.x, f.y);
       fizzleFire(f.x, f.y, 'PARRIED');
@@ -1830,9 +1844,7 @@ function doSpecial(p, pKey) {
   const spDmg = Math.round(sp.dmg * dmgMult);
 
   if (sp.kind === 'firehand') {
-    // One hand hunts at a time; the short cooldown starts over once it is gone.
-    if (room.fires.some(f => f.kind === 'hand' && f.owner === pKey)) { p.specialCooldown = 0; return; }
-    castFireHand(p, pKey, spDmg);
+    castFireHand(p, pKey, spDmg, sp.count || 3);
     return;
   }
   if (sp.kind === 'slam') {

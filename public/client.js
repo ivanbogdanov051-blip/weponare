@@ -45,7 +45,7 @@ const WEAPON_DESC = {
   shuriken:'Rapid piercing stars', frostrod:'Ice shots slow foes',
   blunderbuss:'Close-range scattershot', lance:'Longest reach, dash special',
   stormtome:'Lightning arcs between foes',
-  fireglove:'Rings of fire, a hunting fire hand and a SUPER inferno',
+  fireglove:'Rings of fire, hunting fire hands and a SUPER inferno',
 };
 
 // Filled from the server catalog: { id: {type, atkSpd, ...} }
@@ -1364,7 +1364,7 @@ function legendaryCards(weapons, coins) {
         <span class="legend-tag">LEGENDARY</span>
       </div>
       <div class="shop-desc">${WEAPON_DESC[w.id] || ''}.
-        <b>ATK</b> a ring of fire that grows for 1s · <b>SPECIAL</b> a giant fire hand that hunts your foe (hit or parry it to break it) ·
+        <b>ATK</b> a ring of fire that grows for 1s · <b>SPECIAL</b> three giant fire hands that hunt your foes (hit or parry them to break them) ·
         <b>SUPER</b> an inferno ring that keeps growing until parried</div>
       <div class="legend-buy">
         <button class="buy-weapon${ready && afford ? '' : ' poor'}" onclick="buyWeapon('${w.id}')"
