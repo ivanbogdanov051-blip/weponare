@@ -458,6 +458,10 @@ const MONSTER_SKIN = {
   spitter:  { base: '#a65cd0', eye: '#d6ff5c', eyes: 3 },
   warden:   { base: '#7f93b8', eye: '#8ee8ff', eyes: 2 },
   behemoth: { base: '#8a3a6a', eye: '#ff4466', eyes: 4 },
+  // EXTREME only
+  titan:    { base: '#5a6a7a', eye: '#8ee8ff', eyes: 2 },
+  wraith:   { base: '#3a2a5a', eye: '#c8f0ff', eyes: 2 },
+  infernal: { base: '#b8340e', eye: '#ffd84a', eyes: 2 },
 };
 
 // Body outlines in normalised 0..1 space, scaled to whatever size the wave asks
@@ -492,6 +496,21 @@ const MONSTER_SHAPE = {
     // Hunched slab with horns and heavy arms.
     body: [[0.30,0.08],[0.70,0.08],[0.84,0.18],[1.00,0.32],[0.96,0.62],[0.84,0.76],[0.16,0.76],[0.04,0.62],[0.00,0.32],[0.16,0.18]],
     legs: [[0.12,0.30],[0.58,0.30]], legTop: 0.74, headV: 0.32,
+  },
+  titan: {
+    // A walking fortress: squared helm over a huge armoured chest.
+    body: [[0.28,0.02],[0.72,0.02],[0.80,0.14],[1.00,0.24],[1.00,0.70],[0.88,0.80],[0.12,0.80],[0.00,0.70],[0.00,0.24],[0.20,0.14]],
+    legs: [[0.14,0.24],[0.62,0.24]], legTop: 0.78, headV: 0.20,
+  },
+  wraith: {
+    // A hooded shroud that thins to a ragged tail instead of legs.
+    body: [[0.50,0.00],[0.78,0.10],[0.92,0.34],[0.90,0.62],[0.80,0.86],[0.66,0.76],[0.56,1.00],[0.44,0.80],[0.30,0.96],[0.20,0.72],[0.10,0.60],[0.08,0.34],[0.22,0.10]],
+    legs: [], legTop: 1, headV: 0.30,
+  },
+  infernal: {
+    // A lean, horned demon.
+    body: [[0.30,0.06],[0.70,0.06],[0.80,0.22],[0.92,0.34],[0.86,0.66],[0.72,0.80],[0.28,0.80],[0.14,0.66],[0.08,0.34],[0.20,0.22]],
+    legs: [[0.22,0.22],[0.60,0.22]], legTop: 0.78, headV: 0.30,
   },
 };
 
@@ -596,6 +615,39 @@ function monsterBuf(type, w, h) {
     line(b, X(0.52), Y(0.60), X(0.42), Y(0.74), '#ff9a4c');
     line(b, X(0.70), Y(0.38), X(0.64), Y(0.56), '#ff7a3c');
     K.ditherRect(b, X(0.10), Y(0.52), w * 0.80, h * 0.20, c[1], c[0], 'checker');
+  } else if (type === 'titan') {
+    // Crown of spikes on the helm, a visor slit, plated chest and a glowing rune.
+    for (const u of [0.32, 0.46, 0.60]) {
+      poly(b, [[X(u), Y(0.03)], [X(u + 0.04), Y(0.03) - Math.max(3, h * 0.12)], [X(u + 0.08), Y(0.03)]], MAT5.steel[3]);
+    }
+    rect(b, X(0.26), Y(0.16), w * 0.48, Math.max(1, h * 0.05), MAT5.iron[0]);     // visor
+    for (let i = 0; i < 3; i++) {
+      const y = Y(0.34 + i * 0.13);
+      rect(b, X(0.06), y, w * 0.88, 1, MAT5.steel[3]);
+      rect(b, X(0.06), y + 1, w * 0.88, 1, MAT5.iron[1]);
+    }
+    rect(b, X(0.00) - 1, Y(0.24), Math.max(2, w * 0.14), Math.max(3, h * 0.12), MAT5.steel[2]);   // pauldrons
+    rect(b, X(0.86) + 1, Y(0.24), Math.max(2, w * 0.14), Math.max(3, h * 0.12), MAT5.steel[2]);
+    const rs = Math.max(2, Math.round(w * 0.12));
+    rect(b, X(0.5) - rs / 2, Y(0.46), rs, rs * 1.6, '#8ee8ff');                  // rune
+    setPx(b, X(0.5), Y(0.46) + 1, '#ffffff');
+  } else if (type === 'wraith') {
+    // Dark hood framing the face, and ghostly wisps trailing off the shroud.
+    poly(b, P([[0.50,0.00],[0.78,0.10],[0.86,0.40],[0.72,0.46],[0.28,0.46],[0.14,0.40],[0.22,0.10]]), c[0]);
+    poly(b, P([[0.32,0.18],[0.68,0.18],[0.70,0.40],[0.30,0.40]]), '#0c0816');                      // void face
+    K.ditherRect(b, X(0.14), Y(0.62), w * 0.72, h * 0.30, c[2], '#8a6aff', 'sparse');
+    setPx(b, X(0.30), Y(0.96), '#c8b8ff');
+    setPx(b, X(0.56), Y(1.00) - 1, '#c8b8ff');
+  } else if (type === 'infernal') {
+    // Swept horns, molten cracks, and a flame licking off the crown.
+    const hornH = Math.max(3, h * 0.24), hy = Y(0.10);
+    poly(b, [[X(0.30), hy], [X(0.18), hy - hornH * 0.6], [X(0.10), hy - hornH], [X(0.26), hy - hornH * 0.4], [X(0.36), hy]], '#2a1410');
+    poly(b, [[X(0.70), hy], [X(0.82), hy - hornH * 0.6], [X(0.90), hy - hornH], [X(0.74), hy - hornH * 0.4], [X(0.64), hy]], '#2a1410');
+    line(b, X(0.34), Y(0.42), X(0.50), Y(0.62), '#ffb030');
+    line(b, X(0.50), Y(0.62), X(0.40), Y(0.76), '#ffd84a');
+    line(b, X(0.66), Y(0.40), X(0.58), Y(0.60), '#ffb030');
+    poly(b, [[X(0.42), Y(0.06)], [X(0.50), Y(0.06) - Math.max(3, h * 0.18)], [X(0.58), Y(0.06)]], '#ffb030');
+    setPx(b, X(0.50), Y(0.06) - 1, '#fff2b0');
   }
 
   // Eyes last, so they stay the brightest thing on the sprite.

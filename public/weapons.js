@@ -539,6 +539,54 @@ const MONSTER_ARMS_ART = {
     k.r(15.5, -1.4, 3, 2.8, MAT.ironLight);
     k.circ(19, 0, 1.4, wc);
   }},
+
+  // ── EXTREME monsters ──
+  // Titan: a steel warhammer the size of a door, runes glowing on the face.
+  m_warhammer: { draw(k, wc) {
+    haft(k, 20, 3.2);
+    k.r(1, -2, 5, 4, MAT.leather);
+    k.r(2.2, -2, 0.9, 4, MAT.leatherLt);
+    k.r(4.2, -2, 0.9, 4, MAT.leatherLt);
+    collar(k, 15.5, 7);
+    k.poly([[17, -9], [27, -9], [28.5, -7.5], [28.5, 7.5], [27, 9], [17, 9], [16, 7.5], [16, -7.5]], wc);
+    k.poly([[17, -9], [27, -9], [28.5, -7.5], [16, -7.5]], MAT.steelLight);
+    k.poly([[16, 6], [28.5, 6], [28.5, 7.5], [27, 9], [17, 9], [16, 7.5]], MAT.steelDark);
+    k.r(18.5, -6.5, 1.4, 13, MAT.iron);                  // banding
+    k.r(25, -6.5, 1.4, 13, MAT.iron);
+    k.glow(22, 0, 5, '#8ee8ff', 0.35);
+    k.r(21.2, -3.5, 1.6, 7, '#8ee8ff');                  // rune
+    k.r(20, -0.8, 4, 1.6, '#8ee8ff');
+    k.poly([[20, -9], [22, -12.5], [24, -9]], MAT.steel); // crown spike
+  }},
+
+  // Wraith: a long, thin spectral scythe.
+  m_scythe: { draw(k, wc) {
+    k.r(0, -1, 22, 2, '#2a2238');
+    k.r(0, -1, 22, 0.7, '#4a3a60');
+    k.r(4, -1.4, 1, 2.8, '#6a5a8a');
+    k.r(11, -1.4, 1, 2.8, '#6a5a8a');
+    k.glow(22, -6, 8, wc, 0.3);
+    // Hooked blade sweeping back down from the tip.
+    k.poly([[20.5, -1.2], [23, -8], [21, -14], [15, -16.5], [9, -15.5], [16, -13.2], [20.5, -9.5], [21.2, -2]], wc);
+    k.poly([[21, -14], [15, -16.5], [9, -15.5], [15.5, -15.2], [20, -12.5]], '#e8e0ff');
+    k.circ(22, -0.2, 1.5, '#c8b8ff');
+  }},
+
+  // Infernal: a blackened staff crowned with a burning skull.
+  m_hellstaff: { draw(k, wc) {
+    k.r(0, -1.2, 16, 2.4, '#2a1a14');
+    k.r(0, -1.2, 16, 0.8, '#4a2e22');
+    k.r(4, -1.7, 1.2, 3.4, MAT.iron);
+    k.r(8, -1.7, 1.2, 3.4, MAT.iron);
+    k.poly([[15, -1.6], [17, -5], [18.5, -4], [17, -1]], MAT.iron);   // claws
+    k.poly([[15, 1.6], [17, 5], [18.5, 4], [17, 1]], MAT.iron);
+    k.glow(21, 0, 8, wc, 0.4);
+    k.poly([[18.5, -5.5], [22, -8.5], [21, -5], [25, -7], [23, -2.5]], wc);   // flames
+    k.circ(21.5, 0, 3.6, MON_MAT.bone);                                     // skull
+    k.r(19.5, 2.4, 4, 1.8, MON_MAT.boneDark);
+    k.r(20, -0.8, 1.3, 1.3, '#ffd84a');                                     // burning eyes
+    k.r(22.4, -0.8, 1.3, 1.3, '#ffd84a');
+  }},
 };
 for (const art of Object.values(MONSTER_ARMS_ART)) art.box = measureArt(art.draw);
 

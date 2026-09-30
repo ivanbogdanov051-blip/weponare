@@ -169,6 +169,16 @@ body {
 .btn-pvp:hover   { border-color: var(--c-p2);  color: var(--c-p2);  }
 .btn-coop:hover  { border-color: var(--c-p1);  color: var(--c-p1);  }
 .btn-waves:hover { border-color: var(--c-gold); color: var(--c-gold); }
+/* Full-width under the other three, glowing red so it reads as the hard mode. */
+.mode-btn.btn-extreme {
+  flex: 1 1 100%;
+  border-color: #7a1a10;
+  color: #ff7a5a;
+  background: linear-gradient(180deg, #2a0806, #120404);
+  box-shadow: 0 0 10px rgba(255, 60, 30, 0.25);
+  letter-spacing: 4px;
+}
+.mode-btn.btn-extreme:hover { border-color: #ff4a2a; color: #ffd0b0; background: #3a0c08; }
 .mode-btn:active { transform: translate(1px,1px); }
 
 /* ── Leaderboard ── */

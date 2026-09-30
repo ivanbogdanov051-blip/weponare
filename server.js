@@ -132,7 +132,7 @@ const WEAPONS = [
   // weapon is unlocked. Attack = a growing ring of fire (range = its final
   // radius), special = a homing hand of fire, and it alone has a SUPER.
   { id: 'fireglove',   name: 'FIRE GLOVE',  damage: 16, range: 78,  atkSpd: 650,  type: 'melee',  unlockXp: 0, shopOnly: true, price: 5000, fireRing: true,
-    special: { kind: 'firehand', dmg: 20, range: 420, cd: 800, count: 3 },
+    special: { kind: 'firehand', dmg: 20, range: 420, cd: 800, aoe: 40, blast: 14 },
     super:   { kind: 'inferno',  dmg: 50, cd: 18000 } },
 ];
 
@@ -192,7 +192,7 @@ const WEAPON_UPGRADES = {
   blunderbuss: ['multi', 'dmg', 'knock'],
   lance:       ['dmg', 'rng', 'crit'],
   stormtome:   ['chain', 'dmg', 'cdr'],
-  fireglove:   ['dmg', 'rng', 'life'],
+  fireglove:   ['dmg', 'rng', 'life', 'cdr', 'aoe'],
 };
 function upgradesFor(weaponId) { return WEAPON_UPGRADES[weaponId] || ['dmg', 'spd', 'rng']; }
 
@@ -258,7 +258,39 @@ const MONSTER_TYPES = {
     name: 'BEHEMOTH', minWave: 10, weight: 2,  hp: 7.0,  dmg: 2.8, speed: 0.5,  size: 1.9,
     color: '#8a3a6a', xp: 2.2, coins: 2.4, armor: 0.2,
   },
+  // ── EXTREME only (extremeOnly: never in normal waves) ──
+  // A walking fortress: the most health and armour in the game.
+  titan: {
+    name: 'TITAN',    minWave: 1, weight: 2, hp: 9.0, dmg: 3.2, speed: 0.55, size: 2.1,
+    color: '#5a6a7a', xp: 3.0, coins: 3.2, armor: 0.35, extremeOnly: true,
+  },
+  // Blinks next to you from across the arena, then slashes fast.
+  wraith: {
+    name: 'WRAITH',   minWave: 1, weight: 4, hp: 1.8, dmg: 1.7, speed: 1.9, size: 1.0,
+    color: '#3a2a5a', xp: 2.0, coins: 2.2, extremeOnly: true, blink: 2600,
+  },
+  // Keeps its distance and hurls fireballs that set you alight.
+  infernal: {
+    name: 'INFERNAL', minWave: 1, weight: 3, hp: 2.2, dmg: 1.5, speed: 0.8, size: 1.15,
+    color: '#b8340e', xp: 2.2, coins: 2.4, extremeOnly: true,
+    ranged: true, shotRange: 270, shotSpeed: 4.4, reload: 1500, shotId: 'hellfire', shotBurn: 1800,
+  },
 };
+
+// EXTREME mode fields only the strongest monsters, starts as hard as a deep
+// normal run (EXTREME_LEVEL_OFFSET waves in) and pays far more.
+const EXTREME_ROSTER = { brute: 2, warden: 3, behemoth: 3, titan: 2, wraith: 4, infernal: 3 };
+const EXTREME_LEVEL_OFFSET = 9;
+const EXTREME_COIN_MULT = 3;        // on top of the normal kill payout
+const EXTREME_WAVE_BONUS = 120;     // coins per wave number, paid on every clear
+
+function pickExtremeType() {
+  const entries = Object.entries(EXTREME_ROSTER);
+  let roll = Math.random() * entries.reduce((s, [, w]) => s + w, 0);
+  for (const [id, w] of entries) { roll -= w; if (roll <= 0) return id; }
+  return entries[0][0];
+}
+function modeLevel(num) { return num + (room.gameMode === 'extreme' ? EXTREME_LEVEL_OFFSET : 0); }
 
 // Size of a baseline (1.0x) monster; every type scales from this.
 const MONSTER_BASE_W = 14, MONSTER_BASE_H = 17;
@@ -273,7 +305,7 @@ function pickMonsterType(wave) {
   const pool = [];
   let total = 0;
   for (const [id, def] of Object.entries(MONSTER_TYPES)) {
-    if (wave < def.minWave) continue;
+    if (def.extremeOnly || wave < def.minWave) continue;
     // The further past a type's debut, the more it crowds out the weaker ones.
     const maturity = 1 + Math.min(2.2, (wave - def.minWave) * 0.16);
     const toughness = Math.max(1, def.hp);
@@ -329,13 +361,16 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
 }
 process.on('exit', flushProgress);
 
-function addLeaderboardEntry(name, waves) {
+// Waves and EXTREME keep separate top-10 boards.
+function addLeaderboardEntry(name, waves, mode) {
   const d = progress();
-  d.leaderboard.push({ name, waves, date: new Date().toISOString().split('T')[0] });
-  d.leaderboard.sort((a, b) => b.waves - a.waves);
-  d.leaderboard = d.leaderboard.slice(0, 10);
+  const k = mode === 'extreme' ? 'extremeLeaderboard' : 'leaderboard';
+  if (!Array.isArray(d[k])) d[k] = [];
+  d[k].push({ name, waves, date: new Date().toISOString().split('T')[0] });
+  d[k].sort((a, b) => b.waves - a.waves);
+  d[k] = d[k].slice(0, 10);
   markDirty();
-  return d.leaderboard;
+  return d[k];
 }
 function getLeaderboard() { return progress().leaderboard; }
 
@@ -412,6 +447,7 @@ function applyUpgrades(w, levels) {
       range: Math.round(sp.range * (sp.kind === 'slam' ? aoeM : rngM)),
       cd: Math.max(500, Math.round(sp.cd * cdM)),
       aoe: sp.aoe ? Math.round(sp.aoe * aoeM) : sp.aoe,
+      blast: sp.blast ? Math.max(1, Math.round(sp.blast * dmgM)) : sp.blast,
       chill: sp.chill ? Math.round(sp.chill * chillM) : sp.chill,
       count: sp.count ? sp.count + multi * (sp.kind === 'ring' ? 2 : 1) : sp.count,
     } : null,
@@ -473,7 +509,10 @@ function makePlayer(num, xp, upgrades) {
 
 function emptyWave() { return { num: 0, monstersLeft: 0, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 }; }
 
-const room = {
+// Every game runs in its own room. The game code works on `room`, which the
+// loop and the socket handlers point at the right one before running
+// (single-threaded, so it can never be caught half-switched).
+function makeRoom() { return {
   p1: null, p2: null,
   gameState: 'LOBBY',
   gameMode: 'pvp',
@@ -516,7 +555,20 @@ const room = {
     p1: { attack: false, swap: false, special: false, parry: false, super: false },
     p2: { attack: false, swap: false, special: false, parry: false, super: false },
   },
-};
+}; }
+
+const rooms = [];
+let room = makeRoom();   // the room being worked on right now
+
+const SOLO_MODES = ['waves', 'extreme'];
+function isSolo() { return SOLO_MODES.includes(room.gameMode); }
+
+// Seats (room + slot) held by a password, for pushing shop changes into live games.
+function liveSeats(pw) {
+  const out = [];
+  for (const r of rooms) for (const key of ['p1', 'p2']) if (r[key] && r.passwords[key] === pw) out.push([r, key]);
+  return out;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -708,7 +760,8 @@ function spawnItem() {
 function coinsForKill(target, isPlayer) {
   if (isPlayer) return 10 * COIN_KILL_MULT;
   const def = MONSTER_TYPES[target.type] || MONSTER_TYPES.grunt;
-  return Math.max(1, Math.round((2 + Math.floor((target.maxHp || 30) / 30)) * (def.coins || 1) * COIN_KILL_MULT));
+  const mode = room.gameMode === 'extreme' ? EXTREME_COIN_MULT : 1;
+  return Math.max(1, Math.round((2 + Math.floor((target.maxHp || 30) / 30)) * (def.coins || 1) * COIN_KILL_MULT * mode));
 }
 
 function dropCoins(x, y, total) {
@@ -748,13 +801,14 @@ function broadcast(msg) {
 }
 
 function spawnMonster() {
-  const type = pickMonsterType(room.wave.num);
+  const type = room.gameMode === 'extreme' ? pickExtremeType() : pickMonsterType(room.wave.num);
   const def = MONSTER_TYPES[type];
+  const lvl = modeLevel(room.wave.num);
 
   // Call out a type the first time it appears in this run.
   if (!room.seenTypes.has(type)) {
     room.seenTypes.add(type);
-    if (room.wave.num > 1) {
+    if (room.wave.num > 1 || room.gameMode === 'extreme') {
       room.particles.push({
         type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
         text: def.name + 'S INCOMING', color: def.color, timer: 2200, max: 2200,
@@ -764,7 +818,7 @@ function spawnMonster() {
 
   // Base health grows with the wave config multiplier and the wave reached, then
   // the type's own multiplier is applied on top.
-  const waveBonus = 1 + Math.max(0, room.wave.num - 1) * 0.12;
+  const waveBonus = 1 + Math.max(0, lvl - 1) * 0.12;
   const hp = Math.max(1, Math.round(30 * room.waveHpMult * waveBonus * def.hp));
 
   // Bulk follows health, but on a flattening curve inside hard limits: deep waves
@@ -778,7 +832,7 @@ function spawnMonster() {
 
   // Damage follows the same shape — bulk, then type, then a slow wave ramp — and
   // is capped so even a late behemoth cannot one-shot a full-health player.
-  const waveDmg = Math.min(1.8, 1 + Math.max(0, room.wave.num - 1) * 0.025);
+  const waveDmg = Math.min(1.8, 1 + Math.max(0, lvl - 1) * 0.025);
   const atkDamage = Math.max(1, Math.min(45,
     Math.round(8 * (1 + (sizeScale - 1) * 0.7) * def.dmg * waveDmg)));
 
@@ -813,6 +867,7 @@ function spawnMonster() {
     atkDamage,
     armor: def.armor || 0,
     ranged: !!def.ranged,
+    blinkTimer: def.blink ? def.blink * (0.5 + Math.random() * 0.5) : 0,
     hitFlash: 0,
     invincible: 0,
     slowTimer: 0,
@@ -835,7 +890,8 @@ function monsterShoot(m, target) {
     owner: 'monster',
     traveled: 0,
     maxRange: def.shotRange || 210,
-    weaponId: 'spit',
+    weaponId: def.shotId || 'spit',
+    burn: def.shotBurn || 0,
     isAoe: false, aoeRadius: 0,
     pierce: false, grapple: false, boomerang: false, teleport: false,
     returning: false, life: 0, hitTargets: null,
@@ -844,8 +900,9 @@ function monsterShoot(m, target) {
 
 function startWave(num) {
   let cfg;
-  if (num > WAVE_CONFIG.length) {
-    const extra = num - WAVE_CONFIG.length;
+  const lvl = modeLevel(num);
+  if (lvl > WAVE_CONFIG.length) {
+    const extra = lvl - WAVE_CONFIG.length;
     const base  = WAVE_CONFIG[WAVE_CONFIG.length - 1];
     cfg = {
       monsters:   Math.min(base.monsters + Math.floor(extra * 0.7), 28),
@@ -853,8 +910,10 @@ function startWave(num) {
       speedMult:  Math.min(base.speedMult * (1 + extra * 0.04), 2.8),
     };
   } else {
-    cfg = WAVE_CONFIG[num - 1];
+    cfg = WAVE_CONFIG[lvl - 1];
   }
+  // Extreme sends fewer monsters at a time than its level would — each one is a handful.
+  if (room.gameMode === 'extreme') cfg = { ...cfg, monsters: Math.min(cfg.monsters, 4 + num) };
   room.wave = { num, monstersLeft: cfg.monsters, spawnQueue: cfg.monsters, spawnTimer: 500, betweenTimer: 0 };
   room.waveHpMult    = cfg.hpMult;
   room.waveSpeedMult = cfg.speedMult;
@@ -876,7 +935,7 @@ function clearField() {
 function startGame() {
   if (room.round.matchWinner) room.round = { p1Wins: 0, p2Wins: 0, maxWins: 3, matchWinner: 0 };
   room.players.p1 = makePlayer(1, room.playerXp.p1, room.playerUpgrades.p1);
-  room.players.p2 = (room.gameMode !== 'waves') ? makePlayer(2, room.playerXp.p2, room.playerUpgrades.p2) : null;
+  room.players.p2 = !isSolo() ? makePlayer(2, room.playerXp.p2, room.playerUpgrades.p2) : null;
   for (const key of ['p1', 'p2']) {
     const p = room.players[key];
     if (!p) continue;
@@ -943,7 +1002,7 @@ function handleKill(target, attackerKey) {
     const def = MONSTER_TYPES[target.type] || MONSTER_TYPES.grunt;
     baseGain = Math.round(baseGain * Math.max(1, (target.maxHp || 30) / 30) * (def.xp || 1));
   }
-  const xpGain = room.gameMode === 'waves' ? baseGain * 2 : baseGain;
+  const xpGain = room.gameMode === 'extreme' ? baseGain * 3 : room.gameMode === 'waves' ? baseGain * 2 : baseGain;
 
   // Credit XP to attacking player
   if (attackerKey === 'p1' || attackerKey === 'p2') {
@@ -1016,9 +1075,9 @@ function checkRoundEnd() {
   const p1 = room.players.p1;
   const p2 = room.players.p2;
 
-  if (room.gameMode === 'waves') {
+  if (isSolo()) {
     if (p1 && p1.dead && p1.lives <= 0) {
-      room.lastLeaderboard = addLeaderboardEntry(room.playerNames.p1, room.wave.num);
+      room.lastLeaderboard = addLeaderboardEntry(room.playerNames.p1, room.wave.num, room.gameMode);
       room.gameState      = 'ROUND_OVER';
       room.roundOverTimer = 6000;
     }
@@ -1057,16 +1116,19 @@ setInterval(() => {
   const nowMs = Date.now();
   const dt = Math.max(1, Math.min(80, nowMs - lastTickAt));
   lastTickAt = nowMs;
+  for (const r of rooms.slice()) { room = r; tickRoom(dt); }
+}, TICK_MS);
 
+function tickRoom(dt) {
   if (room.gameState !== 'GAMEPLAY') {
     if (room.gameState === 'ROUND_OVER') {
       room.roundOverTimer -= dt;
       if (room.roundOverTimer <= 0) {
         const hasUnlocks = room.unlockQueues.p1.length > 0 ||
-                           (room.gameMode !== 'waves' && room.unlockQueues.p2.length > 0);
+                           (!isSolo() && room.unlockQueues.p2.length > 0);
         if (hasUnlocks) {
           room.gameState = 'WEAPON_UNLOCK';
-        } else if (room.gameMode === 'waves') {
+        } else if (isSolo()) {
           endWavesRun();
         } else {
           startGame();
@@ -1188,6 +1250,22 @@ setInterval(() => {
       if (Math.abs(dx) > 2) m.face = dx > 0 ? 1 : -1;
       const spd = m.speed * (m.slowTimer > 0 ? 0.4 : 1);
 
+      // Wraiths blink: every few seconds, if you're far off, they reappear at
+      // your side (a flash marks both ends so it can be read and dodged).
+      if (def.blink) {
+        m.blinkTimer -= dt;
+        if (m.blinkTimer <= 0 && dist > 90) {
+          m.blinkTimer = def.blink;
+          const a = Math.random() * Math.PI * 2;
+          room.particles.push({ type: 'teleport', x: cx(m), y: cy(m), timer: 340, max: 340, color: '#8a6aff' });
+          m.x = cx(nearest) + Math.cos(a) * 46 - m.w / 2;
+          m.y = cy(nearest) + Math.sin(a) * 46 - m.h / 2;
+          clampToArena(m);
+          m.atkCooldown = Math.max(m.atkCooldown, 450);   // a beat to react after it lands
+          room.particles.push({ type: 'teleport', x: cx(m), y: cy(m), timer: 340, max: 340, color: '#c8b8ff' });
+        } else if (m.blinkTimer <= 0) m.blinkTimer = 400;
+      }
+
       if (m.ranged) {
         // Hold a firing line: close if out of range, back off if crowded.
         const want = m.atkRange * 0.7;
@@ -1245,6 +1323,16 @@ setInterval(() => {
         type: 'waveclear', x: CANVAS_W / 2, y: CANVAS_H / 2 - 10,
         text: 'WAVE ' + room.wave.num + ' CLEAR!', timer: 2500,
       });
+      // Extreme pays a coin bonus for every wave survived, straight to the player.
+      if (room.gameMode === 'extreme') {
+        const bonus = EXTREME_WAVE_BONUS * room.wave.num;
+        for (const key of ['p1', 'p2']) {
+          const p = room.players[key];
+          if (!p) continue;
+          addCoins(key, bonus);
+          room.particles.push({ type: 'coin', x: cx(p), y: p.y - 10, text: '+' + bonus + ' WAVE BONUS', timer: 1800, max: 1800 });
+        }
+      }
     }
   }
 
@@ -1347,7 +1435,8 @@ setInterval(() => {
 
   checkRoundEnd();
   broadcastState();
-}, TICK_MS);
+}
+
 
 // Nudge overlapping monsters apart so a wave doesn't collapse into one blob.
 function separateMonsters(factor) {
@@ -1585,6 +1674,7 @@ function distToSegment(px, py, ax, ay, bx, by) {
 // What a projectile does beyond its damage: frost slows, storm arcs onward.
 function onHitExtras(proj, t) {
   if (proj.chill) chillTarget(t, proj.chill);
+  if (proj.burn) ignite(t, proj.burn);
   if (proj.chain > 0) {
     const hit = new Set([t]);
     let from = t;
@@ -1705,30 +1795,34 @@ const HAND_SPEED_MAX = 6.8;    // well past a running player (3.6)
 const HAND_ACCEL     = 0.1;
 const HAND_TURN      = 0.13;   // at launch speed; shrinks as it speeds up
 const HAND_RADIUS    = 10;
-const HAND_LIFE      = 4000;
-const HAND_MAX       = 6;      // per player
+const HAND_LIFE      = 3000;
 
 function castFireRing(p, pKey, w, dmgMult) {
   room.fires.push({ id: nextId(), kind: 'ring', owner: pKey, x: cx(p), y: cy(p), r: 6, maxR: w.range,
                     t: 0, life: FIRE_RING_MS, dmg: Math.round(w.damage * dmgMult), hit: new Set() });
 }
 
-// A volley of hands fans out, then each curls in on its prey. `slot` spreads
-// them over different foes when there are several.
-function castFireHand(p, pKey, dmg, count) {
-  const aim = nearestTargetAngle(p, pKey);
-  p.facing = Math.cos(aim) < 0 ? -1 : 1;
-  for (let i = 0; i < count; i++) {
-    const a = aim + (i - (count - 1) / 2) * 0.75;
-    room.fires.push({ id: nextId(), kind: 'hand', owner: pKey, x: cx(p) + Math.cos(a) * 12, y: cy(p) + Math.sin(a) * 12,
-                      a, v: HAND_SPEED0, t: 0, life: HAND_LIFE, dmg, slot: i });
+// One hand per cast, with no cap on how many can be out. However a hand ends —
+// catching someone, being swatted or parried, or burning out after 3 s — it
+// explodes (see explodeHand).
+function castFireHand(p, pKey, sp, dmgMult) {
+  const a = nearestTargetAngle(p, pKey);
+  p.facing = Math.cos(a) < 0 ? -1 : 1;
+  room.fires.push({ id: nextId(), kind: 'hand', owner: pKey, x: cx(p) + Math.cos(a) * 12, y: cy(p) + Math.sin(a) * 12,
+                    a, v: HAND_SPEED0, t: 0, life: HAND_LIFE, dmg: Math.round(sp.dmg * dmgMult),
+                    aoe: sp.aoe || 40, blast: Math.round((sp.blast || 14) * dmgMult) });
+}
+
+// The blast hurts the caster's enemies nearby — except anyone mid-parry.
+function explodeHand(f) {
+  for (const t of enemyTargets(f.owner)) {
+    if (Math.hypot(cx(t) - f.x, cy(t) - f.y) > f.aoe + t.w / 2) continue;
+    if (playerKeyOf(t) && t.parryTimer > 0) continue;
+    applyDamage(t, f.blast, f.owner);
+    ignite(t, 1200);
   }
-  // Never more than two volleys alive at once: the oldest hands burn out first.
-  const mine = room.fires.filter(f => f.kind === 'hand' && f.owner === pKey);
-  if (mine.length > HAND_MAX) {
-    const drop = new Set(mine.slice(0, mine.length - HAND_MAX));
-    room.fires = room.fires.filter(f => !drop.has(f));
-  }
+  room.particles.push({ type: 'aoe', x: f.x, y: f.y, maxR: f.aoe, radius: 2, timer: 420, max: 420, color: WEAPON_COLORS.fireglove });
+  room.particles.push({ type: 'shockwave', x: f.x, y: f.y, maxR: f.aoe, timer: 380, max: 380, color: '#ffc23a' });
 }
 
 function doSuper(p, pKey) {
@@ -1753,6 +1847,7 @@ function swatFireHands(p, pKey, reach) {
     if (f.kind !== 'hand' || f.owner === pKey) return true;
     if (Math.hypot(f.x - cx(p), f.y - cy(p)) > reach + HAND_RADIUS) return true;
     fizzleFire(f.x, f.y, 'SWATTED');
+    explodeHand(f);
     return false;
   });
 }
@@ -1765,7 +1860,7 @@ function updateFires(factor, dt) {
   if (!room.fires.length) return;
   room.fires = room.fires.filter(f => {
     f.t += dt;
-    if (f.t >= f.life) return false;
+    if (f.t >= f.life) { if (f.kind === 'hand') explodeHand(f); return false; }
     if (f.kind === 'hand') return updateFireHand(f, factor);
 
     if (f.kind === 'ring') {
@@ -1795,11 +1890,10 @@ function updateFires(factor, dt) {
 }
 
 function updateFireHand(f, factor) {
-  // Each hand of a volley takes a different foe, nearest first.
   const foes = enemyTargets(f.owner)
     .map(t => ({ t, d: Math.hypot(cx(t) - f.x, cy(t) - f.y) }))
     .sort((a, b) => a.d - b.d);
-  const best = foes.length ? foes[(f.slot || 0) % foes.length].t : null;
+  const best = foes.length ? foes[0].t : null;
   if (best) {
     // Steer toward the prey, turning hard but not instantly.
     let diff = Math.atan2(cy(best) - f.y, cx(best) - f.x) - f.a;
@@ -1815,6 +1909,7 @@ function updateFireHand(f, factor) {
     if (playerKeyOf(best) && best.parryTimer > 0) {
       spawnParrySpark(f.x, f.y);
       fizzleFire(f.x, f.y, 'PARRIED');
+      explodeHand(f);
       return false;
     }
     // Each hand is its own missile: it lands even on a foe still flashing from
@@ -1823,7 +1918,7 @@ function updateFireHand(f, factor) {
     if (best.invincible > 0 && best.invincible <= 500) best.invincible = 0;
     applyDamage(best, f.dmg, f.owner);
     ignite(best, 2000);
-    room.particles.push({ type: 'aoe', x: f.x, y: f.y, maxR: 30, radius: 2, timer: 380, max: 380, color: WEAPON_COLORS.fireglove });
+    explodeHand(f);
     return false;
   }
   return true;
@@ -1853,7 +1948,7 @@ function doSpecial(p, pKey) {
   const spDmg = Math.round(sp.dmg * dmgMult);
 
   if (sp.kind === 'firehand') {
-    castFireHand(p, pKey, spDmg, sp.count || 3);
+    castFireHand(p, pKey, sp, dmgMult);
     return;
   }
   if (sp.kind === 'slam') {
@@ -2025,7 +2120,7 @@ function buildStateMsg(playerNum) {
     round:       room.round,
     pendingUnlock: room.unlockQueues[key][0] || null,
     otherHasUnlocks: room.unlockQueues[key === 'p1' ? 'p2' : 'p1'].length > 0,
-    leaderboard: room.gameMode === 'waves' && room.gameState === 'ROUND_OVER' ? room.lastLeaderboard : null,
+    leaderboard: isSolo() && room.gameState === 'ROUND_OVER' ? room.lastLeaderboard : null,
   };
 }
 
@@ -2177,8 +2272,7 @@ app.post('/api/upgrade', (req, res) => {
   markDirty();
 
   // Push the new levels into a live game if this player is mid-match.
-  for (const key of ['p1', 'p2']) {
-    if (room.passwords[key] !== pw) continue;
+  for (const [room, key] of liveSeats(pw)) {
     const ups = normalizeUpgrades(d.upgrades[pw]);
     room.playerUpgrades[key] = ups;
     if (!admin) room.playerCoins[key] = d.coins[pw];
@@ -2207,9 +2301,7 @@ app.post('/api/buy_skin', (req, res) => {
     d.ownedSkins[pw] = [...prof.ownedSkins, skinId];
     d.coins[pw] = prof.coins - def.price;
     markDirty();
-    for (const key of ['p1', 'p2']) {
-      if (room.passwords[key] === pw) room.playerCoins[key] = d.coins[pw];
-    }
+    for (const [room, key] of liveSeats(pw)) room.playerCoins[key] = d.coins[pw];
   }
   const next = profileFor(pw, {});
   res.json({ ...next, spent: admin ? 0 : def.price, skinShop: SKIN_SHOP });
@@ -2238,8 +2330,7 @@ app.post('/api/buy_weapon', (req, res) => {
     markDirty();
   }
   // Hand it over in a live match straight away.
-  for (const key of ['p1', 'p2']) {
-    if (room.passwords[key] !== pw) continue;
+  for (const [room, key] of liveSeats(pw)) {
     room.playerUnlocks[key] = weapons;
     if (!admin) room.playerCoins[key] = d.coins[pw];
     const p = room.players[key];
@@ -2272,30 +2363,36 @@ function clearSlot(key) {
   room.prevInputs[key] = { attack: false, swap: false, special: false, parry: false, super: false };
 }
 
+// Drop slots whose socket died without a close event, and rooms left empty.
+function reapRooms() {
+  for (const r of rooms.slice()) {
+    room = r;
+    for (const key of ['p1', 'p2']) if (r[key] && r[key].readyState !== 1) clearSlot(key);
+    if (!r.p1 && !r.p2) rooms.splice(rooms.indexOf(r), 1);
+  }
+}
+
+// Seat a player who picked a mode. WAVES and EXTREME are solo, so they always
+// get a room of their own; PvP and co-op pair up with someone waiting for the
+// same mode, or open a new room and wait.
+function findSeat(mode) {
+  if (!SOLO_MODES.includes(mode)) {
+    for (const r of rooms) {
+      if (r.gameState !== 'LOBBY' || r.gameMode !== mode) continue;
+      const free = !r.p1 ? 'p1' : !r.p2 ? 'p2' : null;
+      if (free && (r.p1 || r.p2)) return [r, free];
+    }
+  }
+  const r = makeRoom();
+  r.gameMode = mode;
+  rooms.push(r);
+  return [r, 'p1'];
+}
+
 wss.on('connection', (ws) => {
-  // Reap slots whose socket died without a close event.
-  for (const key of ['p1', 'p2']) {
-    if (room[key] && room[key].readyState !== 1) clearSlot(key);
-  }
-
-  if (room.p1 && room.p2) {
-    ws.send(JSON.stringify({ type: 'full' }));
-    ws.close();
-    return;
-  }
-
-  const isP1 = !room.p1;
-  if (!isP1 && room.p1Joined && room.gameMode === 'waves') {
-    ws.send(JSON.stringify({ type: 'full' }));
-    ws.close();
-    return;
-  }
-  if (isP1) room.p1 = ws;
-  else      room.p2 = ws;
-
-  const myKey = isP1 ? 'p1' : 'p2';
+  // Not seated until the player picks a mode (the join message).
   ws.send(JSON.stringify({
-    type: 'welcome', num: isP1 ? 1 : 2,
+    type: 'welcome', num: 0,
     leaderboard: getLeaderboard(),
     world: { w: CANVAS_W, h: CANVAS_H, ax: ARENA_X, ay: ARENA_Y, aw: ARENA_W, ah: ARENA_H },
     playerSpeed: PLAYER_SPEED,
@@ -2303,11 +2400,25 @@ wss.on('connection', (ws) => {
     colors: WEAPON_COLORS,
   }));
 
-  broadcastState();
-
   ws.on('message', (data) => {
     try {
       const msg = JSON.parse(data);
+
+      if (msg.type === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong', t: msg.t }));
+        return;
+      }
+      if (msg.type === 'join' && !ws.room) {
+        const mode = ['pvp', 'coop', 'waves', 'extreme'].includes(msg.mode) ? msg.mode : 'pvp';
+        reapRooms();
+        const [r, key] = findSeat(mode);
+        ws.room = r; ws.key = key;
+        r[key] = ws;
+        ws.send(JSON.stringify({ type: 'seat', num: key === 'p1' ? 1 : 2, mode }));
+      }
+      if (!ws.room) return;
+      room = ws.room;
+      const myKey = ws.key, isP1 = myKey === 'p1';
 
       if (msg.type === 'join') {
         room.playerNames[myKey] = sanitizeText(msg.name, 12).toUpperCase() || (isP1 ? 'PLAYER 1' : 'PLAYER 2');
@@ -2343,26 +2454,15 @@ wss.on('connection', (ws) => {
         // Tell the client which skin is active (may have been restored from the password)
         ws.send(JSON.stringify({ type: 'skin_init', skin }));
 
-        if (isP1 && msg.mode) {
-          let m = ['pvp', 'coop', 'waves'].includes(msg.mode) ? msg.mode : 'pvp';
-          // Waves is solo; don't strand a player who is already connected.
-          if (m === 'waves' && room.p2) m = 'pvp';
-          room.gameMode = m;
-        }
         room[myKey + 'Joined'] = true;
 
-        // Start game: waves = solo (P1 only), others = need both
-        const canStart = room.gameMode === 'waves'
+        // Start game: solo modes at once, the others once both have joined.
+        const canStart = isSolo()
           ? room.p1Joined
           : (room.p1Joined && room.p2Joined);
 
         if (canStart && room.gameState === 'LOBBY') startGame();
         broadcastState();
-      }
-
-      if (msg.type === 'ping') {
-        ws.send(JSON.stringify({ type: 'pong', t: msg.t }));
-        return;
       }
 
       if (msg.type === 'input' && msg.keys && typeof msg.keys === 'object') {
@@ -2418,9 +2518,9 @@ wss.on('connection', (ws) => {
       if (msg.type === 'ack_unlock' && room.gameState === 'WEAPON_UNLOCK') {
         room.unlockQueues[myKey].shift();
         const p1Done = room.unlockQueues.p1.length === 0;
-        const p2Done = room.gameMode === 'waves' || !room.p2Joined || room.unlockQueues.p2.length === 0;
+        const p2Done = isSolo() || !room.p2Joined || room.unlockQueues.p2.length === 0;
         if (p1Done && p2Done) {
-          if (room.gameMode === 'waves') endWavesRun();
+          if (isSolo()) endWavesRun();
           else startGame();
         }
       }
@@ -2428,14 +2528,15 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    const key = room.p1 === ws ? 'p1' : room.p2 === ws ? 'p2' : null;
-    if (!key) return;
+    const r = ws.room;
+    if (!r || r[ws.key] !== ws) return;
+    room = r;
     const wasPlaying = room.gameState !== 'LOBBY';
-    clearSlot(key);
+    clearSlot(ws.key);
     // A match can't continue a fighter down — drop back to the lobby, but keep
     // whoever is still connected (and their progress) in place.
     if (wasPlaying) resetToLobby();
-    if (!room.p1 && !room.p2) room.gameMode = 'pvp';
+    if (!room.p1 && !room.p2) { rooms.splice(rooms.indexOf(r), 1); return; }
     broadcastState();
   });
 });

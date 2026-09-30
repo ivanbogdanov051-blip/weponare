@@ -45,7 +45,7 @@ const WEAPON_DESC = {
   shuriken:'Rapid piercing stars', frostrod:'Ice shots slow foes',
   blunderbuss:'Close-range scattershot', lance:'Longest reach, dash special',
   stormtome:'Lightning arcs between foes',
-  fireglove:'Rings of fire, hunting fire hands and a SUPER inferno',
+  fireglove:'Rings of fire, exploding fire hands and a SUPER inferno',
 };
 
 // Filled from the server catalog: { id: {type, atkSpd, ...} }
@@ -254,15 +254,24 @@ function connect() {
       }));
       skinModified = false;
       showGameControls(true);
-      const modeLabel = pendingMode === 'coop' ? 'CO-OP' : pendingMode === 'waves' ? 'WAVES' : 'PvP';
-      if (pendingMode === 'waves') {
+      setLobbyMsg('Finding a game...');
+      document.getElementById('xpDisplay').textContent = '';
+    }
+    // The server seats us once we've picked a mode: solo modes get a room of
+    // their own; PvP / co-op pair us with someone who picked the same mode.
+    if (msg.type === 'seat') {
+      myNum = msg.num;
+      const mode = msg.mode || pendingMode;
+      const modeLabel = mode === 'coop' ? 'CO-OP' : 'PvP';
+      if (mode === 'waves') {
         setLobbyMsg(`<span class="p1-color">WAVES MODE</span><br><span style="color:#888">SOLO ENDLESS</span><br>Loading...`);
+      } else if (mode === 'extreme') {
+        setLobbyMsg(`<span style="color:#ff5a3a">EXTREME MODE</span><br><span style="color:#888">SOLO · STRONGEST MONSTERS · HUGE REWARDS</span><br>Loading...`);
       } else {
         setLobbyMsg(myNum === 1
           ? `<span class="p1-color">YOU ARE PLAYER 1</span><br><span style="color:#888">${modeLabel} MODE</span><br>Waiting for opponent...`
           : `<span class="p2-color">YOU ARE PLAYER 2</span><br><span style="color:#888">${modeLabel} MODE</span><br>Game starting!`);
       }
-      document.getElementById('xpDisplay').textContent = '';
     }
     if (msg.type === 'full') {
       roomWasFull = true;
@@ -617,8 +626,9 @@ function detectAudioEvents(prev, curr) {
   if (curr.gameState !== 'GAMEPLAY') return;
 
   // A spitter loosing a shot — the tell for incoming ranged damage.
-  const pSpit = (prev.projectiles || []).filter(p => p.weaponId === 'spit').length;
-  const cSpit = (curr.projectiles || []).filter(p => p.weaponId === 'spit').length;
+  const monShot = p => p.weaponId === 'spit' || p.weaponId === 'hellfire';
+  const pSpit = (prev.projectiles || []).filter(monShot).length;
+  const cSpit = (curr.projectiles || []).filter(monShot).length;
   if (cSpit > pSpit) GameAudio.sfx.shoot();
 
   // Monster killed (array shrank)
@@ -1366,7 +1376,7 @@ function legendaryCards(weapons, coins) {
         <span class="legend-tag">LEGENDARY</span>
       </div>
       <div class="shop-desc">${WEAPON_DESC[w.id] || ''}.
-        <b>ATK</b> a ring of fire that grows for 1s · <b>SPECIAL</b> three giant fire hands that hunt your foes (hit or parry them to break them) ·
+        <b>ATK</b> a ring of fire that grows for 1s · <b>SPECIAL</b> a fire hand that hunts your foe and explodes (hit or parry it to break it) ·
         <b>SUPER</b> an inferno ring that keeps growing until parried</div>
       <div class="legend-buy">
         <button class="buy-weapon${ready && afford ? '' : ' poor'}" onclick="buyWeapon('${w.id}')"
@@ -1505,6 +1515,8 @@ function updateScreens(state) {
   if (state.gameState === 'LOBBY') {
     if (state.gameMode === 'waves') {
       setLobbyMsg(`<span style="color:#ffcc00">WAVES MODE</span><br><span style="color:#888">SOLO ENDLESS</span><br>Loading...`);
+    } else if (state.gameMode === 'extreme') {
+      setLobbyMsg(`<span style="color:#ff5a3a">EXTREME MODE</span><br><span style="color:#888">SOLO · STRONGEST MONSTERS</span><br>Loading...`);
     } else {
       const modeStr = state.gameMode === 'coop' ? 'CO-OP MODE' : 'PvP MODE';
       setLobbyMsg(myNum
@@ -1542,15 +1554,18 @@ function updateScreens(state) {
     const r = state.round;
     const lb = document.getElementById('leaderboardBox');
     const hint = document.getElementById('roundHint');
-    if (state.gameMode === 'waves') {
+    if (state.gameMode === 'waves' || state.gameMode === 'extreme') {
+      const ext = state.gameMode === 'extreme';
       hint.textContent = 'RETURNING TO MENU...';
-      document.getElementById('roundTitle').innerHTML = '<span style="color:#ffcc00">WAVES OVER</span>';
+      document.getElementById('roundTitle').innerHTML = ext
+        ? '<span style="color:#ff5a3a">EXTREME OVER</span>'
+        : '<span style="color:#ffcc00">WAVES OVER</span>';
       document.getElementById('roundStats').innerHTML =
         `WAVE <span style="color:#ffcc00">${state.wave?.num||0}</span> REACHED<br>`
         + `XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`;
       if (state.leaderboard && state.leaderboard.length > 0) {
         lb.classList.remove('hidden');
-        lb.innerHTML = '<div class="leaderboard-title">TOP SCORES</div>' +
+        lb.innerHTML = `<div class="leaderboard-title">${ext ? 'EXTREME TOP SCORES' : 'TOP SCORES'}</div>` +
           state.leaderboard.map((e,i) =>
             `<div class="lb-row${i===0?' lb-top':''}">`+
             `<span>${i+1}. ${e.name}</span>`+
@@ -2108,6 +2123,10 @@ const MONSTER_ARMS = {
   spitter:  { art: 'm_venom',    color: '#8ee04a', size: 0.68, rest: -1.15, move: 'cast'   },
   warden:   { art: 'm_pike',     color: '#c9d4e2', size: 0.6,  rest: -0.85, move: 'thrust', shield: '#7f93b8' },
   behemoth: { art: 'm_greataxe', color: '#b3203a', size: 0.64, rest: -1.05, move: 'slam'   },
+  // EXTREME only
+  titan:    { art: 'm_warhammer', color: '#8fa0b4', size: 0.62, rest: -1.1,  move: 'slam'   },
+  wraith:   { art: 'm_scythe',    color: '#9a7aff', size: 0.78, rest: -0.7,  move: 'chop'   },
+  infernal: { art: 'm_hellstaff', color: '#ff6a1a', size: 0.68, rest: -1.1,  move: 'cast'   },
 };
 // Weapons grow slower than bodies, so a giant's axe stays a weapon, not scenery.
 const monsterArmScale = (h, size) => Math.max(0.5, Math.round(Math.pow(h / 12, 0.65) * size * 10) / 10);
@@ -2192,6 +2211,26 @@ function drawProjectiles(projs) {
       ctx.beginPath(); ctx.arc(pr.x, pr.y, 4, 0, Math.PI*2); ctx.fill();
       ctx.fillStyle = '#d6ff5c';
       ctx.beginPath(); ctx.arc(pr.x - 0.8, pr.y - 1, 1.8, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+      continue;
+    }
+    // Infernal fireball: a burning core with a flickering tail (it sets you alight).
+    if (pr.weaponId === 'hellfire') {
+      const t = performance.now() / 60;
+      ctx.save();
+      for (let i = 3; i >= 1; i--) {
+        ctx.globalAlpha = 0.18 * (4 - i);
+        ctx.fillStyle = i === 1 ? '#ffb030' : '#ff4a10';
+        ctx.beginPath();
+        ctx.arc(pr.x - pr.dx * i * 1.3, pr.y - pr.dy * i * 1.3 + Math.sin(t + i) * 0.8, 6 - i, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1; ctx.fillStyle = '#ff5a14';
+      ctx.beginPath(); ctx.arc(pr.x, pr.y, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffd84a';
+      ctx.beginPath(); ctx.arc(pr.x, pr.y, 2.8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff6d0';
+      ctx.beginPath(); ctx.arc(pr.x - 0.8, pr.y - 0.8, 1.2, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
       continue;
     }
@@ -2562,8 +2601,9 @@ function drawHUD(state) {
   const w = state.wave;
   ctx.textAlign = 'center';
   if (w && state.gameMode !== 'pvp') {
-    ctx.fillStyle = '#000'; ctx.fillText('WAVE ' + w.num, HUD_W/2 + 1, 3);
-    ctx.fillStyle = PAL.text; ctx.fillText('WAVE ' + w.num, HUD_W/2, 2);
+    const wl = (state.gameMode === 'extreme' ? 'EXTREME ' : '') + 'WAVE ' + w.num;
+    ctx.fillStyle = '#000'; ctx.fillText(wl, HUD_W/2 + 1, 3);
+    ctx.fillStyle = state.gameMode === 'extreme' ? '#ff6a4a' : PAL.text; ctx.fillText(wl, HUD_W/2, 2);
     ctx.font = '8px "Courier New",monospace';
     ctx.fillStyle = '#999'; ctx.fillText(Math.max(0, w.monstersLeft) + ' LEFT', HUD_W/2, 15);
     ctx.font = '10px "Courier New",monospace';
