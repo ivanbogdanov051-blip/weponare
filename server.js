@@ -301,7 +301,7 @@ const MONSTER_TYPES = {
   // for a club. No ordinary attacks — see updateGiant.
   giant: {
     name: 'GIANT', minWave: 1, weight: 0, hp: 16, dmg: 3.2, speed: 0.55, size: 2.7,
-    color: '#6a8a4a', xp: 8, coins: 3, armor: 0.25, boss: true, fixedW: 58, fixedH: 72,
+    color: '#6a8a4a', xp: 8, coins: 3, armor: 0.25, boss: true, fixedW: 84, fixedH: 104,
   },
   // ── EXTREME only (extremeOnly: never in normal waves) ──
   // A walking fortress: the most health and armour in the game.
@@ -908,6 +908,14 @@ function spawnMonster(forceType) {
     else                 { mx = maxX;             my = rand(minY, maxY); }
     if (!tooCloseToPlayers(mx + w / 2, my + h / 2, 100)) break;
   }
+  // A boss makes an entrance from the side away from the players, halfway
+  // down — never from the top, where the HUD would hide it.
+  if (def.boss) {
+    const ps = [room.players.p1, room.players.p2].filter(p => p && !p.dead);
+    const avgX = ps.length ? ps.reduce((s, p) => s + cx(p), 0) / ps.length : 0;
+    mx = avgX < CANVAS_W / 2 ? maxX : minX;
+    my = Math.round((minY + maxY) / 2);
+  }
 
   room.monsters.push({
     id: nextId(),
@@ -976,9 +984,10 @@ function startWave(num) {
   room.wave = { num, monstersLeft: cfg.monsters, spawnQueue: cfg.monsters, spawnTimer: 500, betweenTimer: 0 };
   room.waveHpMult    = cfg.hpMult;
   room.waveSpeedMult = cfg.speedMult;
-  // Boss wave: the Giant arrives with the first of the pack.
+  // Boss wave: the Giant is the whole wave — no pack alongside him.
   if (isBossWave(num)) {
-    room.wave.monstersLeft++;
+    room.wave.spawnQueue = 0;
+    room.wave.monstersLeft = 1;
     spawnMonster('giant');
     room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
                           text: 'THE GIANT APPROACHES', color: '#c8e07a', timer: 3200, max: 3200 });
@@ -2100,7 +2109,7 @@ function updateFireHand(f, factor) {
 //   slam  – from range, it smashes the tree into the ground and a sound wave
 //           rolls outward.
 // Parrying either one stuns it for 3 s (no moving, no attacking) and hurts it.
-const GIANT_SWIPE_REACH = 70;      // past the edge of its body
+const GIANT_SWIPE_REACH = 85;      // past the edge of its body (roughly the tree's length)
 const GIANT_SWIPE_WIND  = 650;
 const GIANT_SLAM_WIND   = 900;
 const GIANT_STUN_MS     = 3000;
@@ -2140,7 +2149,7 @@ function updateGiant(m, target, dist, dx, dy, spd, factor, dt) {
 }
 
 // Where the tree comes down: just ahead of the Giant, on the side it faces.
-function giantImpact(m) { return { x: cx(m) + m.face * (m.w / 2 + 34), y: m.y + m.h * 0.8 }; }
+function giantImpact(m) { return { x: cx(m) + m.face * (m.w / 2 + m.h * 0.45), y: m.y + m.h * 0.8 }; }
 
 function giantSwipe(m) {
   const reach = m.w / 2 + GIANT_SWIPE_REACH;
