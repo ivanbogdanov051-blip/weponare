@@ -376,6 +376,20 @@ const WEAPON_ART = {
     k.poly([[11, -9], [13.5, -4], [11.8, -3.6], [14, 2], [10, -3], [11.8, -3.4]], wc);
     k.circ(1, 0, 1.1, MAT.gold);                       // clasp
   }},
+
+  fireglove: { draw(k, wc) {
+    // A flared leather cuff, an armoured fist, and fire bursting off the knuckles.
+    k.poly([[-3, -5], [4, -4], [4, 4], [-3, 5]], '#5a1c0c');           // cuff
+    k.poly([[-3, -5], [4, -4], [4, -2.6], [-3, -3.4]], '#8a3418');
+    k.r(-1, -4.6, 1, 9.2, MAT.gold); k.r(2.2, -4.2, 1, 8.4, MAT.gold);  // gold bands
+    k.poly([[4, -4.2], [11, -4.6], [13.5, -3], [13.5, 3.4], [11, 4.6], [4, 4.2]], '#b8360e');   // fist
+    k.poly([[4, -4.2], [11, -4.6], [13.5, -3], [13.5, -1.6], [4, -2.2]], '#e25a1c');
+    for (let i = 0; i < 4; i++) k.r(11.6, -3.6 + i * 2, 2.4, 1.3, MAT.goldLight);   // knuckle plates
+    k.poly([[5, 3.2], [8.5, 2], [9.5, 4.2], [6, 5.2]], '#8a260a');     // thumb
+    k.glow(16, 0, 7, wc, 0.35);
+    k.poly([[13.5, -3.8], [20, -5.5], [17, -1.5], [22, 0], [17, 1.5], [19.5, 5], [13.5, 3.8]], wc);
+    k.poly([[13.5, -2], [18, -2.6], [16.2, 0], [18, 2.4], [13.5, 2]], '#ffd84a');
+  }},
 };
 
 // Run a definition through a kit that records geometry instead of painting, to

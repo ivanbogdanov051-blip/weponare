@@ -127,6 +127,12 @@ const WEAPONS = [
   { id: 'blunderbuss', name: 'BLUNDERBUSS', damage: 11, range: 150, atkSpd: 900,  type: 'ranged', unlockXp: 18000, pellets: 5, projSpeed: 5.6, special: { kind: 'aoeshot', dmg: 120, range: 200, cd: 8000, aoe: 72 } },
   { id: 'lance',       name: 'LANCE',       damage: 34, range: 96,  atkSpd: 650,  type: 'melee',  unlockXp: 20000, special: { kind: 'dash',    dmg: 70,  range: 140, cd: 6000 } },
   { id: 'stormtome',   name: 'STORM TOME',  damage: 20, range: 240, atkSpd: 700,  type: 'ranged', unlockXp: 22000, chain: 2,  special: { kind: 'storm',   dmg: 65,  range: 260, cd: 8500, count: 5 } },
+  // Shop-only: never unlocked by XP. Bought for `price` coins once every other
+  // weapon is unlocked. Attack = a growing ring of fire (range = its final
+  // radius), special = a homing hand of fire, and it alone has a SUPER.
+  { id: 'fireglove',   name: 'FIRE GLOVE',  damage: 22, range: 78,  atkSpd: 650,  type: 'melee',  unlockXp: 0, shopOnly: true, price: 5000, fireRing: true,
+    special: { kind: 'firehand', dmg: 34, range: 420, cd: 1400 },
+    super:   { kind: 'inferno',  dmg: 70, cd: 18000 } },
 ];
 
 const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
@@ -138,6 +144,7 @@ const WEAPON_COLORS = {
   glaive: '#b0d8c0', katana: '#eef0ff', chakram: '#66e0c0', cannon: '#9a90a8', reaper: '#cc66aa',
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
   shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
+  fireglove: '#ff6a1a',
 };
 
 // ── Weapon upgrades bought with coins from the menu ──
@@ -184,6 +191,7 @@ const WEAPON_UPGRADES = {
   blunderbuss: ['multi', 'dmg', 'knock'],
   lance:       ['dmg', 'rng', 'crit'],
   stormtome:   ['chain', 'dmg', 'cdr'],
+  fireglove:   ['dmg', 'rng', 'life'],
 };
 function upgradesFor(weaponId) { return WEAPON_UPGRADES[weaponId] || ['dmg', 'spd', 'rng']; }
 
@@ -331,8 +339,11 @@ function addLeaderboardEntry(name, waves) {
 function getLeaderboard() { return progress().leaderboard; }
 
 function getUnlockedWeaponIds(xp) {
-  return WEAPONS.filter(w => w.unlockXp <= xp).map(w => w.id);
+  return WEAPONS.filter(w => !w.shopOnly && w.unlockXp <= xp).map(w => w.id);
 }
+// Everything XP can unlock — owning all of these is what opens the shop-only weapons.
+const XP_WEAPON_IDS = WEAPONS.filter(w => !w.shopOnly).map(w => w.id);
+const SHOP_WEAPONS = WEAPONS.filter(w => w.shopOnly);
 
 // Order a weapon-id list by their position in WEAPONS (stable, canonical order)
 function sortWeaponIds(ids) {
@@ -403,6 +414,7 @@ function applyUpgrades(w, levels) {
       chill: sp.chill ? Math.round(sp.chill * chillM) : sp.chill,
       count: sp.count ? sp.count + multi * (sp.kind === 'ring' ? 2 : 1) : sp.count,
     } : null,
+    super: w.super ? { ...w.super, dmg: Math.max(1, Math.round(w.super.dmg * dmgM)) } : w.super,
   };
 }
 
@@ -441,6 +453,7 @@ function makePlayer(num, xp, upgrades) {
     upgrades: upgrades || {},
     atkCooldown: 0,
     specialCooldown: 0,
+    superCooldown: 0,
     parryCooldown: 0,
     parryTimer: 0,
     swingTimer: 0,
@@ -473,11 +486,12 @@ const room = {
   p1Joined: false, p2Joined: false,
   players: { p1: null, p2: null },
   inputs: {
-    p1: { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false },
-    p2: { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false },
+    p1: { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false },
+    p2: { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false },
   },
   monsters: [],
   projectiles: [],
+  fires: [],
   particles: [],
   traps: [],
   items: [],
@@ -496,9 +510,10 @@ const room = {
   swapJustPressed: { p1: false, p2: false },
   specialJustPressed: { p1: false, p2: false },
   parryJustPressed: { p1: false, p2: false },
+  superJustPressed: { p1: false, p2: false },
   prevInputs: {
-    p1: { attack: false, swap: false, special: false, parry: false },
-    p2: { attack: false, swap: false, special: false, parry: false },
+    p1: { attack: false, swap: false, special: false, parry: false, super: false },
+    p2: { attack: false, swap: false, special: false, parry: false, super: false },
   },
 };
 
@@ -848,6 +863,7 @@ function clearField() {
   room.seenTypes   = new Set();
   room.monsters    = [];
   room.projectiles = [];
+  room.fires       = [];
   room.particles   = [];
   room.traps       = [];
   room.items       = [];
@@ -1070,7 +1086,8 @@ setInterval(() => {
     room.swapJustPressed[key]    = inp.swap    && !prev.swap;
     room.specialJustPressed[key] = inp.special && !prev.special;
     room.parryJustPressed[key]   = inp.parry   && !prev.parry;
-    room.prevInputs[key] = { attack: inp.attack, swap: inp.swap, special: inp.special, parry: inp.parry };
+    room.superJustPressed[key]   = inp.super   && !prev.super;
+    room.prevInputs[key] = { attack: inp.attack, swap: inp.swap, special: inp.special, parry: inp.parry, super: inp.super };
   }
 
   // ── Move players ──
@@ -1114,6 +1131,7 @@ setInterval(() => {
 
     if (p.atkCooldown     > 0) p.atkCooldown     -= dt;
     if (p.specialCooldown > 0) p.specialCooldown -= dt;
+    if (p.superCooldown   > 0) p.superCooldown   -= dt;
     if (p.parryCooldown   > 0) p.parryCooldown   -= dt;
     if (p.parryTimer      > 0) p.parryTimer      -= dt;
     if (p.invincible      > 0) p.invincible      -= dt;
@@ -1129,6 +1147,9 @@ setInterval(() => {
     }
     if (room.specialJustPressed[key] && p.specialCooldown <= 0) {
       doSpecial(p, key);
+    }
+    if (room.superJustPressed[key] && p.superCooldown <= 0 && weapon(p).super) {
+      doSuper(p, key);
     }
     if (room.parryJustPressed[key] && p.parryCooldown <= 0) {
       p.parryTimer    = PARRY_WINDOW;
@@ -1203,6 +1224,7 @@ setInterval(() => {
 
   // ── Projectiles ──
   room.projectiles = room.projectiles.filter(proj => updateProjectile(proj, factor, dt));
+  updateFires(factor, dt);
 
   // ── Wave spawner ──
   if (room.gameMode !== 'pvp') {
@@ -1585,24 +1607,45 @@ function onHitExtras(proj, t) {
 
 // ─── Attack Logic ─────────────────────────────────────────────────────────────
 
+// Half-width of a normal melee swing (a little over 90°, so a target at your
+// side still gets clipped). Matches the crescent the client draws.
+const MELEE_HALF_ARC = Math.PI * 0.55;
+
 function doAttack(p, pKey) {
   const w = weapon(p);
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
   const cdMult  = hasEffect(p, 'haste') ? 0.5 : 1;
   p.atkCooldown = w.atkSpd * cdMult;
   p.swingTimer  = Math.min(w.atkSpd, 200);
+  // Any attack can swat an enemy's fire hand out of the air.
+  swatFireHands(p, pKey, w.type === 'melee' ? w.range : 48);
 
+  if (w.fireRing) {
+    const aim = nearestTargetAngle(p, pKey);
+    p.facing = Math.cos(aim) < 0 ? -1 : 1;
+    castFireRing(p, pKey, w, dmgMult);
+    return;
+  }
   if (w.type === 'melee') {
+    // Ordinary blades cut a half-circle toward the nearest foe; 360 weapons
+    // (whip, flail, reaper) whirl around and hit everything in reach.
+    const aim = nearestTargetAngle(p, pKey);
+    p.facing = Math.cos(aim) < 0 ? -1 : 1;
     for (const t of enemyTargets(pKey)) {
-      if (distBetween(t, p) <= w.range) {
-        const tk = playerKeyOf(t);
-        if (tk && t.parryTimer > 0) {
-          // Parried: the attacker takes the (boosted) hit instead
-          applyDamage(p, Math.round(w.damage * dmgMult * PARRY_REFLECT), tk);
-          spawnParrySpark(cx(p), cy(p));
-        } else {
-          applyDamage(t, Math.round(w.damage * dmgMult), pKey);
-        }
+      const d = distBetween(t, p);
+      if (d > w.range) continue;
+      if (!w.swing360 && d > 14) {
+        let diff = Math.abs(Math.atan2(cy(t) - cy(p), cx(t) - cx(p)) - aim) % (Math.PI * 2);
+        if (diff > Math.PI) diff = Math.PI * 2 - diff;
+        if (diff > MELEE_HALF_ARC) continue;
+      }
+      const tk = playerKeyOf(t);
+      if (tk && t.parryTimer > 0) {
+        // Parried: the attacker takes the (boosted) hit instead
+        applyDamage(p, Math.round(w.damage * dmgMult * PARRY_REFLECT), tk);
+        spawnParrySpark(cx(p), cy(p));
+      } else {
+        applyDamage(t, Math.round(w.damage * dmgMult), pKey);
       }
     }
   } else {
@@ -1639,6 +1682,130 @@ function doAttack(p, pKey) {
   }
 }
 
+// ─── Fire Glove ───────────────────────────────────────────────────────────────
+// room.fires holds the glove's three flames:
+//   ring    – the attack: a ring that grows out from the glove for 1 s.
+//   hand    – the special: a big fiery hand that hunts the nearest foe. It
+//             vanishes when it catches someone, or when its target hits
+//             (or parries) it.
+//   inferno – the SUPER: a huge ring that keeps growing until it has swept the
+//             whole arena. A parry smothers it completely.
+const FIRE_RING_MS   = 1000;
+const FIRE_BAND      = 8;      // half-thickness of a ring's burning edge
+const INFERNO_BAND   = 13;
+const INFERNO_START  = 26;
+const INFERNO_GROWTH = 2.3;    // px per 16.67 ms
+const INFERNO_MAX_R  = Math.hypot(ARENA_W, ARENA_H) + 40;
+const HAND_SPEED     = 5.2;    // quicker than anyone can run
+const HAND_TURN      = 0.14;   // rad per 16.67 ms, so a sharp sidestep can still make it overshoot
+const HAND_RADIUS    = 18;
+const HAND_LIFE      = 4000;
+
+function castFireRing(p, pKey, w, dmgMult) {
+  room.fires.push({ id: nextId(), kind: 'ring', owner: pKey, x: cx(p), y: cy(p), r: 6, maxR: w.range,
+                    t: 0, life: FIRE_RING_MS, dmg: Math.round(w.damage * dmgMult), hit: new Set() });
+}
+
+function castFireHand(p, pKey, dmg) {
+  const a = nearestTargetAngle(p, pKey);
+  p.facing = Math.cos(a) < 0 ? -1 : 1;
+  room.fires.push({ id: nextId(), kind: 'hand', owner: pKey, x: cx(p) + Math.cos(a) * 12, y: cy(p) + Math.sin(a) * 12,
+                    a, t: 0, life: HAND_LIFE, dmg });
+}
+
+function doSuper(p, pKey) {
+  const su = weapon(p).super;
+  if (!su) return;
+  p.superCooldown = su.cd;
+  p.swingTimer = 300;
+  const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
+  if (su.kind === 'inferno') {
+    room.fires.push({ id: nextId(), kind: 'inferno', owner: pKey, x: cx(p), y: cy(p), r: INFERNO_START,
+                      t: 0, life: 60000, dmg: Math.round(su.dmg * dmgMult), hit: new Set() });
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 50, timer: 700, max: 700,
+                          color: WEAPON_COLORS.fireglove, text: 'INFERNO' });
+  }
+}
+
+// Hands hostile to pKey (only another player's, and only in PvP) within reach
+// of p are knocked out of the air.
+function swatFireHands(p, pKey, reach) {
+  if (room.gameMode !== 'pvp' || !room.fires.length) return;
+  room.fires = room.fires.filter(f => {
+    if (f.kind !== 'hand' || f.owner === pKey) return true;
+    if (Math.hypot(f.x - cx(p), f.y - cy(p)) > reach + HAND_RADIUS) return true;
+    fizzleFire(f.x, f.y, 'SWATTED');
+    return false;
+  });
+}
+
+function fizzleFire(x, y, text) {
+  room.particles.push({ type: 'trapburst', x, y, maxR: 34, timer: 600, max: 600, color: '#66ccff', text });
+}
+
+function updateFires(factor, dt) {
+  if (!room.fires.length) return;
+  room.fires = room.fires.filter(f => {
+    f.t += dt;
+    if (f.t >= f.life) return false;
+    if (f.kind === 'hand') return updateFireHand(f, factor);
+
+    if (f.kind === 'ring') {
+      const k = f.t / f.life;
+      f.r = 6 + (f.maxR - 6) * (1 - (1 - k) * (1 - k));   // bursts out, then slows
+    } else {
+      f.r += INFERNO_GROWTH * factor;
+      if (f.r > INFERNO_MAX_R) return false;
+    }
+    const band = f.kind === 'ring' ? FIRE_BAND : INFERNO_BAND;
+    for (const t of enemyTargets(f.owner)) {
+      const id = playerKeyOf(t) || t.id;
+      if (f.hit.has(id)) continue;
+      const d = Math.hypot(cx(t) - f.x, cy(t) - f.y);
+      if (Math.abs(d - f.r) > band + t.w / 2) continue;
+      f.hit.add(id);
+      if (playerKeyOf(t) && t.parryTimer > 0) {
+        spawnParrySpark(cx(t), cy(t));
+        if (f.kind === 'inferno') { fizzleFire(cx(t), cy(t), 'INFERNO PARRIED'); return false; }
+        continue;   // a parry simply blocks the small ring
+      }
+      applyDamage(t, f.dmg, f.owner);
+      ignite(t, f.kind === 'inferno' ? 3000 : 1500);
+    }
+    return true;
+  });
+}
+
+function updateFireHand(f, factor) {
+  let best = null, bd = Infinity;
+  for (const t of enemyTargets(f.owner)) {
+    const d = Math.hypot(cx(t) - f.x, cy(t) - f.y);
+    if (d < bd) { bd = d; best = t; }
+  }
+  if (best) {
+    // Steer toward the prey, turning hard but not instantly.
+    let diff = Math.atan2(cy(best) - f.y, cx(best) - f.x) - f.a;
+    diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+    const turn = HAND_TURN * factor;
+    f.a += Math.max(-turn, Math.min(turn, diff));
+  }
+  f.x = Math.max(ARENA_X, Math.min(ARENA_X + ARENA_W, f.x + Math.cos(f.a) * HAND_SPEED * factor));
+  f.y = Math.max(ARENA_Y, Math.min(ARENA_Y + ARENA_H, f.y + Math.sin(f.a) * HAND_SPEED * factor));
+
+  if (best && Math.hypot(cx(best) - f.x, cy(best) - f.y) <= HAND_RADIUS + best.w / 2) {
+    if (playerKeyOf(best) && best.parryTimer > 0) {
+      spawnParrySpark(f.x, f.y);
+      fizzleFire(f.x, f.y, 'PARRIED');
+      return false;
+    }
+    applyDamage(best, f.dmg, f.owner);
+    ignite(best, 2000);
+    room.particles.push({ type: 'aoe', x: f.x, y: f.y, maxR: 30, radius: 2, timer: 380, max: 380, color: WEAPON_COLORS.fireglove });
+    return false;
+  }
+  return true;
+}
+
 function nearestTargetAngle(p, pKey) {
   const px = cx(p), py = cy(p);
   let best = null, bd = Infinity;
@@ -1662,6 +1829,12 @@ function doSpecial(p, pKey) {
   const wc = WEAPON_COLORS[w.id] || '#ffffff';
   const spDmg = Math.round(sp.dmg * dmgMult);
 
+  if (sp.kind === 'firehand') {
+    // One hand hunts at a time; the short cooldown starts over once it is gone.
+    if (room.fires.some(f => f.kind === 'hand' && f.owner === pKey)) { p.specialCooldown = 0; return; }
+    castFireHand(p, pKey, spDmg);
+    return;
+  }
   if (sp.kind === 'slam') {
     for (const t of enemyTargets(pKey)) {
       if (Math.hypot(cx(t) - px, cy(t) - py) <= sp.range) applyDamage(t, spDmg, pKey);
@@ -1794,6 +1967,7 @@ function playerView(p) {
     hitFlash: p.hitFlash, dead: p.dead, swingTimer: p.swingTimer,
     unlockedWeapons: p.unlockedWeapons, skin: p.skin,
     specialCd: Math.max(0, p.specialCooldown), specialMax: w.special?.cd || 0,
+    superCd: Math.max(0, p.superCooldown || 0), superMax: w.super?.cd || 0,
     parryCd: Math.max(0, p.parryCooldown), parryMax: PARRY_COOLDOWN, parryActive: p.parryTimer > 0,
     effects: p.effects,
     pulled: !!p.pull,
@@ -1815,6 +1989,8 @@ function buildStateMsg(playerNum) {
     projectiles: room.projectiles.map(pr => ({ id: pr.id, x: r1(pr.x), y: r1(pr.y), dx: r1(pr.dx), dy: r1(pr.dy), weaponId: pr.weaponId,
                   upg: pr.upg || null, isAoe: pr.isAoe, special: !!pr.special, grapple: !!pr.grapple,
                   hook: !!pr.hook, boomerang: !!pr.boomerang })),
+    fires:       room.fires.map(f => ({ id: f.id, kind: f.kind, x: r1(f.x), y: r1(f.y), r: r1(f.r || 0),
+                                    a: Math.round((f.a || 0) * 100) / 100, k: Math.round(f.t / f.life * 100) / 100 })),
     chains:      buildChains().map(c => ({ x1: r1(c.x1), y1: r1(c.y1), x2: r1(c.x2), y2: r1(c.y2), kind: c.kind })),
     traps:       room.traps.map(tr => ({ x: r1(tr.x), y: r1(tr.y), w: tr.w, h: tr.h, type: tr.type, state: tr.state, radius: tr.radius, color: tr.color,
                   armRatio: tr.state === 'arming' ? r1(1 - tr.armTimer / (TRAP_TYPES[tr.type].armTime || 1)) : 0 })),
@@ -1853,8 +2029,10 @@ function endWavesRun() {
 function weaponCatalog() {
   return WEAPONS.map(w => ({
     id: w.id, name: w.name, type: w.type, unlockXp: w.unlockXp,
-    damage: w.damage, range: w.range, atkSpd: w.atkSpd,
+    damage: w.damage, range: w.range, atkSpd: w.atkSpd, spin: !!w.swing360,
+    shopOnly: !!w.shopOnly, price: w.price || 0,
     special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd } : null,
+    super: w.super ? { kind: w.super.kind, dmg: w.super.dmg, cd: w.super.cd } : null,
     upgrades: upgradesFor(w.id),
   }));
 }
@@ -1879,7 +2057,8 @@ function profileFor(pw, opts = {}) {
     coins = d.coins[pw];
   }
 
-  const weapons = sortWeaponIds([...getUnlockedWeaponIds(xp), ...(d.weapons[pw] || [])]);
+  const weapons = sortWeaponIds([...getUnlockedWeaponIds(xp), ...(d.weapons[pw] || []),
+                                 ...(admin ? SHOP_WEAPONS.map(w => w.id) : [])]);
   if (!admin) {
     const prev = sortWeaponIds(d.weapons[pw] || []);
     if (JSON.stringify(prev) !== JSON.stringify(weapons)) { d.weapons[pw] = weapons; markDirty(); }
@@ -2015,6 +2194,45 @@ app.post('/api/buy_skin', (req, res) => {
   res.json({ ...next, spent: admin ? 0 : def.price, skinShop: SKIN_SHOP });
 });
 
+// Shop-only weapons: bought with coins, and only once every XP weapon is unlocked.
+app.post('/api/buy_weapon', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'A password is required to buy weapons.' });
+  const weaponId = sanitizeText(req.body?.weaponId, 24);
+  const def = WEAPON_BY_ID[weaponId];
+  if (!def || !def.shopOnly) return res.status(400).json({ error: 'That weapon is not for sale.' });
+
+  const admin = isAdminPw(pw);
+  const prof = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins });
+  if (prof.weapons.includes(weaponId)) return res.status(400).json({ error: 'You already own that weapon.' });
+  const missing = XP_WEAPON_IDS.filter(id => !prof.weapons.includes(id)).length;
+  if (missing) return res.status(400).json({ error: `Unlock every other weapon first (${missing} to go).` });
+  if (!admin && prof.coins < def.price) return res.status(400).json({ error: 'Not enough coins.' });
+
+  const d = progress();
+  const weapons = sortWeaponIds([...prof.weapons, weaponId]);
+  if (!admin) {
+    d.weapons[pw] = weapons;
+    d.coins[pw] = prof.coins - def.price;
+    markDirty();
+  }
+  // Hand it over in a live match straight away.
+  for (const key of ['p1', 'p2']) {
+    if (room.passwords[key] !== pw) continue;
+    room.playerUnlocks[key] = weapons;
+    if (!admin) room.playerCoins[key] = d.coins[pw];
+    const p = room.players[key];
+    if (p) {
+      const cur = p.unlockedWeapons[p.weaponIdx];
+      p.unlockedWeapons = weapons;
+      p.weaponIdx = Math.max(0, weapons.indexOf(cur));
+      refreshWeapon(p);
+    }
+  }
+  const next = profileFor(pw, {});
+  res.json({ ...next, spent: admin ? 0 : def.price });
+});
+
 // ─── WebSocket Connections ────────────────────────────────────────────────────
 
 function clearSlot(key) {
@@ -2029,8 +2247,8 @@ function clearSlot(key) {
   room.playerUpgrades[key] = null;
   room.unlockQueues[key] = [];
   room.players[key] = null;
-  room.inputs[key] = { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false };
-  room.prevInputs[key] = { attack: false, swap: false, special: false, parry: false };
+  room.inputs[key] = { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false };
+  room.prevInputs[key] = { attack: false, swap: false, special: false, parry: false, super: false };
 }
 
 wss.on('connection', (ws) => {
@@ -2130,7 +2348,7 @@ wss.on('connection', (ws) => {
         const k = msg.keys;
         room.inputs[myKey] = {
           up: !!k.up, down: !!k.down, left: !!k.left, right: !!k.right,
-          attack: !!k.attack, swap: !!k.swap, special: !!k.special, parry: !!k.parry,
+          attack: !!k.attack, swap: !!k.swap, special: !!k.special, parry: !!k.parry, super: !!k.super,
         };
       }
 

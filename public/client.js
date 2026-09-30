@@ -31,6 +31,7 @@ let WEAPON_COLOR = {
   glaive:'#b0d8c0', katana:'#eef0ff', chakram:'#66e0c0', cannon:'#9a90a8',
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
+  fireglove:'#ff6a1a',
 };
 const WEAPON_DESC = {
   sword:'Balanced blade', dagger:'Fast, low damage', axe:'Slow, heavy hit',
@@ -44,6 +45,7 @@ const WEAPON_DESC = {
   shuriken:'Rapid piercing stars', frostrod:'Ice shots slow foes',
   blunderbuss:'Close-range scattershot', lance:'Longest reach, dash special',
   stormtome:'Lightning arcs between foes',
+  fireglove:'Rings of fire, a hunting fire hand and a SUPER inferno',
 };
 
 // Filled from the server catalog: { id: {type, atkSpd, ...} }
@@ -357,7 +359,19 @@ function interpState(prev, curr, t) {
     monsters:    interpById(prev.monsters, curr.monsters || [], t),
     projectiles: interpById(prev.projectiles, curr.projectiles || [], t),
     coins:       interpById(prev.coins, curr.coins || [], t),
+    fires:       interpFires(prev.fires, curr.fires || [], t),
   };
+}
+
+// Fire-glove flames also grow (r) and burn down (k) between updates.
+function interpFires(prevList, currList, t) {
+  if (!prevList || !prevList.length) return currList;
+  const byId = new Map();
+  for (const e of prevList) byId.set(e.id, e);
+  return currList.map(e => {
+    const p = byId.get(e.id);
+    return p ? { ...e, x: lerp(p.x, e.x, t), y: lerp(p.y, e.y, t), r: lerp(p.r, e.r, t), k: lerp(p.k, e.k, t) } : e;
+  });
 }
 
 // ─── Client-side Prediction (local player) ──────────────────────────────────────
@@ -471,13 +485,91 @@ function nearestEnemyAngle(cp, state, playerKey) {
   return Math.atan2(nearest.y + nearest.h / 2 - py, nearest.x + nearest.w / 2 - px);
 }
 
+// ─── Attack animations ────────────────────────────────────────────────────────
+
+// How each weapon moves when it attacks. Anything unlisted falls back to a
+// slash (melee) or a recoil (ranged).
+const ATTACK_ANIM = {
+  sword: 'slash', katana: 'slash', dagger: 'stab', spear: 'stab', lance: 'stab',
+  axe: 'chop', hammer: 'chop', greatsword: 'chop', glaive: 'sweep',
+  whip: 'spin', flail: 'spin', reaper: 'spin',
+  bow: 'draw', crossbow: 'recoil', grapple: 'recoil', cannon: 'heavy', blunderbuss: 'heavy',
+  staff: 'cast', frostrod: 'cast', wand: 'flick', stormtome: 'tome',
+  chakram: 'throw', boomerang: 'throw', shuriken: 'throw',
+  fireglove: 'punch',
+};
+const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
+                  heavy: 300, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240 };
+
+function attackKind(wId) {
+  if (ATTACK_ANIM[wId]) return ATTACK_ANIM[wId];
+  if (WEAPON_META[wId]?.spin) return 'spin';
+  return isRanged(wId) ? 'recoil' : 'slash';
+}
+
+// Per-player animation clock, started when the swing is shown (locally
+// predicted for you, on the server echo for the other player) so it runs
+// smoothly at frame rate instead of stepping with state updates.
+const attackAnims = {};
+function startAttackAnim(key, cp) {
+  const kind = attackKind(cp.weaponId);
+  const haste = cp.effects && cp.effects.haste > 0;
+  const cd = (cp.atkSpd || WEAPON_META[cp.weaponId]?.atkSpd || 400) * (haste ? 0.5 : 1);
+  // Never longer than the gap between attacks, or fast weapons would never rest.
+  const dur = Math.max(90, Math.min(ANIM_MS[kind], cd * 0.9));
+  attackAnims[key] = { t0: performance.now(), dur, kind, wId: cp.weaponId };
+}
+function attackProgress(key, wId) {
+  const a = attackAnims[key];
+  if (!a || a.wId !== wId) return null;
+  const e = (performance.now() - a.t0) / a.dur;
+  if (e >= 1) { delete attackAnims[key]; return null; }
+  return { e, kind: a.kind };
+}
+
+const easeOut = t => 1 - (1 - t) * (1 - t);
+const easeIn  = t => t * t;
+
+// Where the weapon sits (in hand space, art pointing +X) at progress e.
+// Returns { rot, dx, dy, alpha, glow }.
+function weaponPose(kind, e) {
+  const s = Math.sin(e * Math.PI);
+  switch (kind) {
+    case 'slash':  return { rot: -1.35 + easeOut(e) * 2.6 };
+    case 'sweep':  return { rot: -1.7 + easeOut(e) * 3.3, dx: s * 3 };
+    case 'chop':   // wind up high, then slam down hard
+      return e < 0.35 ? { rot: 0.12 - (e / 0.35) * 2.0 }
+                      : { rot: -1.88 + easeIn((e - 0.35) / 0.65) * 3.0, dy: e > 0.85 ? 1 : 0 };
+    case 'stab':   // small draw-back, then a straight thrust
+      return e < 0.25 ? { rot: 0, dx: -(e / 0.25) * 3 }
+                      : { rot: 0, dx: -3 + Math.sin(((e - 0.25) / 0.75) * Math.PI) * 14 };
+    case 'spin':   return { rot: 0.12 + easeOut(e) * Math.PI * 2 };
+    case 'draw':   // pull the string back, release with a snap
+      return e < 0.6 ? { rot: -0.08, dx: -(e / 0.6) * 4 } : { rot: -0.08 + (e - 0.6) * 0.3, dx: -4 + ((e - 0.6) / 0.4) * 4 };
+    case 'heavy':  return { rot: -s * 0.55, dx: -s * 7, dy: -s * 1.5 };
+    case 'cast':   return { rot: 0.12 - s * 1.25, dy: -s * 2, glow: s };
+    case 'flick':  return { rot: 0.12 - Math.sin(e * Math.PI * 2) * 0.6, glow: s * 0.8 };
+    case 'tome':   return { rot: -s * 0.3, dy: -s * 5, glow: s };
+    case 'throw':  // wind back overhead, then whip forward and let go
+      return e < 0.4 ? { rot: 0.12 - (e / 0.4) * 2.3 }
+                     : { rot: -2.18 + easeOut((e - 0.4) / 0.6) * 3.0, alpha: e > 0.55 ? 0.25 : 1 };
+    case 'punch':  // cock the fist back, then drive it forward in a blaze
+      return e < 0.3 ? { rot: 0.2, dx: -(e / 0.3) * 4, glow: e }
+                     : { rot: 0, dx: -4 + Math.sin(((e - 0.3) / 0.7) * Math.PI) * 12, glow: Math.sin(((e - 0.3) / 0.7) * Math.PI) };
+    default:       return { rot: -s * 0.16, dx: -s * 3 };   // recoil
+  }
+}
+
 // A melee swing is drawn as an arc pivoting on the player at the weapon's real
 // reach, so a range upgrade is immediately visible as a wider sweep. Ranged shots
 // keep their burst at the muzzle.
-function pushSlash(cp, angle) {
+function pushSlash(cp, angle, key) {
   const melee = !isRanged(cp.weaponId);
   const reach = cp.reach || 44;
   const tipR = cp.w + 12;
+  if (key) startAttackAnim(key, cp);
+  // The glove's ring of fire comes from the server; no swing arc to draw.
+  if (attackKind(cp.weaponId) === 'punch') return;
   slashes.push({
     px: cp.x + cp.w / 2,
     py: cp.y + cp.h / 2,
@@ -488,8 +580,11 @@ function pushSlash(cp, angle) {
     weaponId: cp.weaponId,
     reach,
     melee,
+    kind: attackKind(cp.weaponId),
     upg: cp.upg || null,
-    timer: 220, maxTimer: 220,
+    // A whirl needs a beat longer to read as a full circle.
+    timer: melee && attackKind(cp.weaponId) === 'spin' ? 340 : 220,
+    maxTimer: melee && attackKind(cp.weaponId) === 'spin' ? 340 : 220,
     color: WEAPON_COLOR[cp.weaponId] || PAL.white,
   });
 }
@@ -505,7 +600,7 @@ function detectSlashes(prev, curr) {
     // skip the (delayed) server echo so we don't draw / hear it twice.
     if (key === myKey && performance.now() - lastLocalSlashTime < 350) continue;
     if (window.GameAudio) GameAudio.sfx[isRanged(cp.weaponId) ? 'shoot' : 'swing']();
-    pushSlash(cp, nearestEnemyAngle(cp, curr, key) ?? (cp.facing === 1 ? 0 : Math.PI));
+    pushSlash(cp, nearestEnemyAngle(cp, curr, key) ?? (cp.facing === 1 ? 0 : Math.PI), key);
   }
 }
 
@@ -566,13 +661,34 @@ function drawSlashes() {
     ctx.save();
     ctx.lineCap = 'round';
 
-    if (sl.melee) {
-      // The crescent sweeps out to the weapon's actual reach.
+    if (sl.melee && sl.kind === 'spin') {
+      drawSpinSlash(sl, alpha, prog, u);
+    } else if (sl.melee && sl.kind === 'stab') {
+      drawStabSlash(sl, alpha, prog, u);
+    } else if (sl.melee) {
+      // The crescent sweeps out to the weapon's actual reach, over the same
+      // half-circle the server hits (a chop is thicker and lands with a thud).
       const cx = Math.round(sl.px), cy = Math.round(sl.py);
       const r = sl.reach * (0.6 + 0.35 * prog);
       const aim = sl.angle ?? (sl.facing === 1 ? 0 : Math.PI);
-      const span = Math.PI * 0.8;
-      const heft = 2.5 * u.weight;
+      const chop = sl.kind === 'chop';
+      const span = Math.PI * (sl.kind === 'sweep' ? 1.15 : 1.05);
+      const heft = (chop ? 3.6 : 2.5) * u.weight;
+      if (chop && prog > 0.45) {
+        // Impact: a burst of chips where the blade lands.
+        const ix = cx + Math.cos(aim) * r, iy = cy + Math.sin(aim) * r;
+        const k = (prog - 0.45) / 0.55;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = sl.color;
+        for (let i = 0; i < 6; i++) {
+          const a = aim + Math.PI + (i - 2.5) * 0.5;
+          ctx.fillRect(Math.round(ix + Math.cos(a) * k * 9), Math.round(iy + Math.sin(a) * k * 9), 2, 2);
+        }
+        ctx.strokeStyle = '#ffffff';
+        ctx.globalAlpha = alpha * 0.6;
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(ix, iy, 2 + k * 7, 0, Math.PI * 2); ctx.stroke();
+      }
 
       ctx.globalAlpha = alpha * 0.85;
       ctx.strokeStyle = sl.color;
@@ -623,11 +739,206 @@ function drawSlashes() {
   }
 }
 
+// 360 weapons: a full ring at the weapon's reach, with a bright head racing
+// around it — everything inside the circle gets hit.
+function drawSpinSlash(sl, alpha, prog, u) {
+  const cx = Math.round(sl.px), cy = Math.round(sl.py);
+  const R = sl.reach;
+  const aim = sl.angle ?? (sl.facing === 1 ? 0 : Math.PI);
+  const dir = sl.facing === -1 ? -1 : 1;
+  const sweep = Math.min(1, prog * 1.35) * Math.PI * 2;
+  const head = aim + sweep * dir;
+  const heft = 3 * u.weight;
+
+  // The area: a faint disc and rim covering the whole reach.
+  ctx.globalAlpha = alpha * 0.16;
+  ctx.fillStyle = sl.color;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = alpha * 0.45;
+  ctx.strokeStyle = sl.color;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // The swept trail, thick near the head and thinning behind it.
+  const segs = 10;
+  for (let i = 0; i < segs; i++) {
+    const a0 = aim + sweep * dir * (i / segs), a1 = aim + sweep * dir * ((i + 1) / segs);
+    const k = (i + 1) / segs;
+    ctx.globalAlpha = alpha * (0.2 + 0.7 * k);
+    ctx.lineWidth = Math.max(0.8, heft * k);
+    ctx.beginPath(); ctx.arc(cx, cy, R * 0.9, Math.min(a0, a1), Math.max(a0, a1)); ctx.stroke();
+  }
+  for (let i = 1; i <= u.rng; i++) {
+    ctx.globalAlpha = alpha * (0.28 - i * 0.03);
+    ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 0.9 - i * 2.4, 0, Math.PI * 2); ctx.stroke();
+  }
+  // Head of the whirl.
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(cx + Math.cos(head) * R * 0.9, cy + Math.sin(head) * R * 0.9, 1.5 + heft * 0.4, 0, Math.PI * 2); ctx.fill();
+}
+
+// ─── Fire Glove flames ────────────────────────────────────────────────────────
+
+// Rings of fire: the attack's quick ring (k = how burnt-out it is) and the
+// SUPER's inferno, which just keeps growing. Flame tongues lick outward
+// along the edge and flicker over time.
+function drawFireRings(fires) {
+  if (!fires.length) return;
+  const now = performance.now() / 1000;
+  for (const f of fires) {
+    if (f.kind === 'hand' || f.r <= 0) continue;
+    const inferno = f.kind === 'inferno';
+    const fade = inferno ? 1 : Math.max(0, 1 - Math.pow(f.k, 3));
+    const band = inferno ? 13 : 8;
+    ctx.save();
+    ctx.lineCap = 'round';
+    // Heat haze inside the band.
+    ctx.globalAlpha = fade * (inferno ? 0.35 : 0.25);
+    ctx.strokeStyle = '#8a1a04';
+    ctx.lineWidth = band * 2.2;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.stroke();
+    // Core flame bands, dark to bright.
+    ctx.globalAlpha = fade * 0.85;
+    ctx.strokeStyle = '#ff5a14';
+    ctx.lineWidth = band * 1.2;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = fade * 0.9;
+    ctx.strokeStyle = '#ffc23a';
+    ctx.lineWidth = band * 0.45;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.stroke();
+    // Tongues of flame along the rim (capped so a huge inferno stays cheap).
+    const n = Math.min(inferno ? 160 : 48, Math.max(10, Math.round(f.r * Math.PI * 2 / 9)));
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + (inferno ? now * 0.3 : 0);
+      const flick = 0.55 + 0.45 * Math.sin(now * 14 + i * 2.7);
+      const len = band * (inferno ? 1.6 : 1.3) * flick;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const bx = f.x + ca * (f.r + band * 0.3), by = f.y + sa * (f.r + band * 0.3);
+      const w = Math.max(1.5, band * 0.45);
+      ctx.globalAlpha = fade * (0.55 + 0.45 * flick);
+      ctx.fillStyle = (i % 3) ? '#ff8a2a' : '#ffd84a';
+      ctx.beginPath();
+      ctx.moveTo(bx - sa * w, by + ca * w);
+      ctx.lineTo(bx + ca * len, by + sa * len);
+      ctx.lineTo(bx + sa * w, by - ca * w);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+// The special: a giant hand of fire reaching for its prey (a = heading).
+function drawFireHands(fires) {
+  const now = performance.now() / 1000;
+  for (const f of fires) {
+    if (f.kind !== 'hand') continue;
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    ctx.rotate(f.a || 0);
+    ctx.scale(1.7, 1.7);   // a giant hand: several times a player's size
+    // Flame trail streaming back from the wrist.
+    for (let i = 0; i < 7; i++) {
+      const flick = 0.6 + 0.4 * Math.sin(now * 18 + i * 1.9);
+      ctx.globalAlpha = 0.55 - i * 0.06;
+      ctx.fillStyle = i % 2 ? '#ff6a1a' : '#ffb030';
+      ctx.beginPath();
+      ctx.arc(-12 - i * 5, Math.sin(now * 11 + i) * 2.5, (7 - i * 0.8) * flick, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = '#ff3a0a';
+    ctx.beginPath(); ctx.arc(4, 0, 20, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.95;
+    fireHandShape(1.12, '#b8260a', now);
+    ctx.globalAlpha = 0.95;
+    fireHandShape(1, '#ff6a1a', now);
+    ctx.globalAlpha = 0.95;
+    fireHandShape(0.62, '#ffc23a', now);
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = '#fff4c0';
+    ctx.beginPath(); ctx.ellipse(-1, 0, 4, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+// An open, grasping hand pointing along +X: palm, thumb, four clawed fingers.
+function fireHandShape(s, color, now) {
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.ellipse(-1, 0, 8.5 * s, 9 * s, 0, 0, Math.PI * 2); ctx.fill();
+  // Four fingers fanned wide open, each bending into a claw at the tip.
+  const fingers = [[-6.6, -0.42, 13], [-2.2, -0.14, 16], [2.2, 0.14, 16], [6.6, 0.42, 13]];
+  ctx.lineWidth = 4.4 * s;
+  fingers.forEach(([y, spread, len], i) => {
+    const a1 = spread + Math.sin(now * 9 + i * 1.3) * 0.07;
+    const x0 = 5, x1 = x0 + Math.cos(a1) * len * 0.62, y1 = y + Math.sin(a1) * len * 0.62;
+    const a2 = a1 + (y < 0 ? 0.55 : -0.55);
+    const x2 = x1 + Math.cos(a2) * len * 0.42, y2 = y1 + Math.sin(a2) * len * 0.42;
+    ctx.beginPath(); ctx.moveTo(x0, y * 0.8); ctx.lineTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  });
+  // Thumb, splayed out to the side.
+  ctx.lineWidth = 4.8 * s;
+  ctx.beginPath(); ctx.moveTo(-3, -6); ctx.lineTo(1, -14); ctx.lineTo(7, -16.5); ctx.stroke();
+}
+
+// The SUPER touch button appears only while holding a weapon that has one,
+// and dims while it recharges.
+let superBtnShown = null, superBtnCooling = null;
+function syncSuperButton(me) {
+  const el = document.getElementById('btn-super');
+  if (!el) return;
+  const show = !!(me && me.superMax > 0);
+  if (show !== superBtnShown) {
+    superBtnShown = show;
+    el.classList.toggle('hidden-btn', !show);
+    touchZonesAt = -1e9;   // the button column changed size: re-measure
+    if (!show) touchKeys.super = false;
+  }
+  const cooling = show && (me.superCd || 0) > 0;
+  if (cooling !== superBtnCooling) { superBtnCooling = cooling; el.classList.toggle('cooling', cooling); }
+}
+
+// Thrusting weapons: a straight lunge along the aim to the weapon's reach.
+function drawStabSlash(sl, alpha, prog, u) {
+  const cx = sl.px, cy = sl.py;
+  const aim = sl.angle ?? (sl.facing === 1 ? 0 : Math.PI);
+  const ca = Math.cos(aim), sa = Math.sin(aim);
+  const r0 = 8, r1 = sl.reach * (0.55 + 0.45 * easeOut(Math.min(1, prog * 1.6)));
+  const heft = 2.4 * u.weight;
+  ctx.strokeStyle = sl.color;
+  ctx.globalAlpha = alpha * 0.8;
+  ctx.lineWidth = heft;
+  ctx.beginPath(); ctx.moveTo(cx + ca * r0, cy + sa * r0); ctx.lineTo(cx + ca * r1, cy + sa * r1); ctx.stroke();
+  // Side streaks give it speed.
+  ctx.globalAlpha = alpha * 0.4;
+  ctx.lineWidth = 1;
+  for (const off of [-4, 4]) {
+    const ox = -sa * off, oy = ca * off;
+    ctx.beginPath();
+    ctx.moveTo(cx + ca * (r0 + 6) + ox, cy + sa * (r0 + 6) + oy);
+    ctx.lineTo(cx + ca * (r1 - 6) + ox, cy + sa * (r1 - 6) + oy);
+    ctx.stroke();
+  }
+  // Glinting point.
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(cx + ca * (r1 + 5), cy + sa * (r1 + 5));
+  ctx.lineTo(cx + ca * r1 - sa * 3, cy + sa * r1 + ca * 3);
+  ctx.lineTo(cx + ca * r1 + sa * 3, cy + sa * r1 - ca * 3);
+  ctx.closePath(); ctx.fill();
+}
+
 // ─── Input ────────────────────────────────────────────────────────────────────
 
 const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 const keys = {};
-const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false };
+const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false };
 
 window.addEventListener('keydown', (e) => {
   if (!keys[e.code]) { keys[e.code] = true; sendInput(); }
@@ -657,6 +968,7 @@ function currentInputs() {
     swap:    !!keys['Enter']      || touchKeys.swap,
     special: !!keys['ShiftLeft'] || !!keys['ShiftRight'] || touchKeys.special,
     parry:   !!keys['KeyP'] || !!keys['ControlLeft'] || !!keys['ControlRight'] || touchKeys.parry,
+    super:   !!keys['KeyR'] || touchKeys.super,
   };
 }
 
@@ -689,7 +1001,7 @@ function spawnLocalSlash(me, key) {
   const facing = pred ? pred.facing : me.facing;
   const cp = { ...me, x: px, y: py, facing };
   if (window.GameAudio) GameAudio.sfx[isRanged(me.weaponId) ? 'shoot' : 'swing']();
-  pushSlash(cp, nearestEnemyAngle(cp, currState, key) ?? (facing === 1 ? 0 : Math.PI));
+  pushSlash(cp, nearestEnemyAngle(cp, currState, key) ?? (facing === 1 ? 0 : Math.PI), key);
   lastLocalSlashTime = performance.now();
 }
 function sendAckUnlock() { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type:'ack_unlock' })); }
@@ -736,7 +1048,7 @@ function setupTouchControls() {
   const btnMap = [
     ['btn-up','up'], ['btn-down','down'], ['btn-left','left'],
     ['btn-right','right'], ['btn-attack','attack'], ['btn-swap','swap'],
-    ['btn-special','special'], ['btn-parry','parry'],
+    ['btn-special','special'], ['btn-parry','parry'], ['btn-super','super'],
   ];
   for (const [id, key] of btnMap) {
     const el = document.getElementById(id);
@@ -994,7 +1306,7 @@ function renderShop() {
     return;
   }
 
-  list.innerHTML = weapons.map(id => {
+  list.innerHTML = legendaryCards(weapons, coins) + weapons.map(id => {
     const lv = upgrades[id] || {};
     const name = WEAPON_META[id]?.name || id.toUpperCase();
     const col = WEAPON_COLOR[id] || '#ccc';
@@ -1031,6 +1343,62 @@ function renderShop() {
                            WEAPON_COLOR[id] || '#ccc');
   }
   refreshShopButtons();
+}
+
+// Shop-only weapons (the fire glove) you don't own yet: bought with coins,
+// and only once every other weapon is unlocked.
+function legendaryCards(weapons, coins) {
+  const all = Object.values(WEAPON_META);
+  const xpIds = all.filter(w => !w.shopOnly).map(w => w.id);
+  const have = xpIds.filter(id => weapons.includes(id)).length;
+  return all.filter(w => w.shopOnly && !weapons.includes(w.id)).map(w => {
+    const ready = have >= xpIds.length;
+    const afford = coins >= w.price;
+    const col = WEAPON_COLOR[w.id] || '#ff6a1a';
+    const need = ready ? (afford ? 'Ready to buy!' : `Need ${(w.price - coins).toLocaleString()} more coins`)
+                       : `Unlock every other weapon first: ${have}/${xpIds.length}`;
+    return `<div class="shop-row legendary">
+      <div class="shop-head">
+        <canvas class="shop-ic" data-weapon="${w.id}" width="56" height="32"></canvas>
+        <span class="shop-name" style="color:${col}">${w.name}</span>
+        <span class="legend-tag">LEGENDARY</span>
+      </div>
+      <div class="shop-desc">${WEAPON_DESC[w.id] || ''}.
+        <b>ATK</b> a ring of fire that grows for 1s · <b>SPECIAL</b> a giant fire hand that hunts your foe (hit or parry it to break it) ·
+        <b>SUPER</b> an inferno ring that keeps growing until parried</div>
+      <div class="legend-buy">
+        <button class="buy-weapon${ready && afford ? '' : ' poor'}" onclick="buyWeapon('${w.id}')"
+          ${ready ? '' : 'disabled'}>BUY ◆${w.price.toLocaleString()}</button>
+        <span class="legend-need">${need}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function buyWeapon(id) {
+  if (!pendingPass || !shopData || shopBusy) return;
+  const w = WEAPON_META[id];
+  if (!w) return;
+  if (shopData.coins < w.price) { setShopMsg(`Not enough coins — ${w.name} costs ${w.price.toLocaleString()}.`, true); return; }
+  shopBusy = true;
+  try {
+    const res = await fetch('/api/buy_weapon', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pendingPass, weaponId: id,
+                             localXp: loadLocalXp(pendingPass), localCoins: loadLocalCoins(pendingPass) }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setShopMsg(data.error || 'Purchase failed.', true); return; }
+    shopData = { ...shopData, ...data };
+    saveLocalCoins(pendingPass, data.coins);
+    if (window.GameAudio) { GameAudio.init(); GameAudio.sfx.unlock(); }
+    renderShop();
+    setShopMsg(`${w.name} unlocked! Press R (or SUPER) in game for its inferno.`);
+  } catch {
+    setShopMsg('Could not reach the server.', true);
+  } finally {
+    shopBusy = false;
+  }
 }
 
 // Update every upgrade button's pips, price and state in place.
@@ -1259,12 +1627,15 @@ function draw(state) {
   drawItems(state.items || []);
   drawCoins(state.coins || []);
   drawSlashes();
+  drawFireRings(state.fires || []);
   drawChains(state.chains || []);
   drawProjectiles(state.projectiles || []);
   drawMonsters(state.monsters || []);
   const names = state.playerNames || {};
-  if (state.players.p1) drawPlayer(state.players.p1, PAL.p1, names.p1 || 'P1');
-  if (state.players.p2) drawPlayer(state.players.p2, PAL.p2, names.p2 || 'P2');
+  if (state.players.p1) drawPlayer(state.players.p1, PAL.p1, names.p1 || 'P1', 'p1');
+  if (state.players.p2) drawPlayer(state.players.p2, PAL.p2, names.p2 || 'P2', 'p2');
+  drawFireHands(state.fires || []);
+  syncSuperButton(myNum === 1 ? state.players.p1 : myNum === 2 ? state.players.p2 : null);
   drawParticles(state.particles || []);
   ctx.save();
   ctx.scale(HUD_SCALE, HUD_SCALE);
@@ -1438,7 +1809,8 @@ function drawItemBar(inv, me) {
   // on-screen button (music / leave) happens to sit there.
   const rowW = Math.max(1, inv.length) * (INV_SLOT + INV_GAP) - INV_GAP;
   const x0 = onRight ? HUD_W - INV_X - rowW : INV_X;
-  const y = clearOfButtons(x0 - 2, INV_Y - 2, rowW + 4, INV_SLOT + 4) + 2;
+  const top = INV_Y + (me && me.superMax > 0 ? 7 : 0);   // below the SUPER bar
+  const y = clearOfButtons(x0 - 2, top - 2, rowW + 4, INV_SLOT + 4) + 2;
   ctx.save();
   if (inv.length) {
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
@@ -1580,7 +1952,7 @@ function drawFlames(x, y, w, h) {
   ctx.restore();
 }
 
-function drawPlayer(p, baseColor, label) {
+function drawPlayer(p, baseColor, label, key) {
   if (p.dead) return;
   const skinCol = getSkinColor(p, baseColor);
   const x = Math.round(p.x), y = Math.round(p.y);
@@ -1604,7 +1976,7 @@ function drawPlayer(p, baseColor, label) {
   if (cv) ctx.drawImage(cv, x, y - PLAYER_PAD);
 
   drawNametag(x + p.w / 2, y - 13, label, skinCol);
-  drawWeaponSprite(p, x, y);
+  drawWeaponSprite(p, x, y, key);
   if (p.effects && p.effects.burn > 0) drawFlames(x, y, p.w, p.h);
 
   if (p.parryActive) {
@@ -1638,31 +2010,40 @@ function drawNametag(cx, bottomY, label, color) {
 // 16x22 characters.
 const HELD_SCALE = 1.2;
 
-function drawWeaponSprite(p, px, py) {
+function drawWeaponSprite(p, px, py, key) {
   const wId = p.weaponId;
   if (!WEAPON_ART[wId]) return;
   const wc = WEAPON_COLOR[wId] || PAL.white;
   const d = p.facing;
   const hx = d === 1 ? px + p.w - 2 : px + 2;   // hand attachment (the front glove)
   const hy = py + 15;
-  const prog = p.swingTimer > 0 ? 1 - Math.min(1, p.swingTimer / 200) : -1;
   const u = upgScale(p.upg);
   // Range upgrades lengthen the weapon itself, quantised so the sprite cache
   // does not grow a new bitmap for every possible level combination.
   const scale = HELD_SCALE * (1 + u.rng * 0.045);
 
+  // Each weapon has its own move (see ATTACK_ANIM); at rest it tilts slightly.
+  const anim = attackProgress(key, wId);
+  const pose = anim ? weaponPose(anim.kind, anim.e) : { rot: 0.12 };
+
   ctx.save();
-  ctx.translate(hx, hy);
+  ctx.translate(hx + (pose.dx || 0) * d, hy + (pose.dy || 0));
   ctx.scale(d, 1);   // art is authored pointing +X; mirroring handles facing
-  if (prog >= 0) {
-    if (isRanged(wId)) {
-      ctx.translate(-Math.sin(prog * Math.PI) * 3, 0);           // recoil kick
-      ctx.rotate(-Math.sin(prog * Math.PI) * 0.16);
-    } else {
-      ctx.rotate(-0.95 + prog * 1.55);                            // overhead chop
-    }
-  } else {
-    ctx.rotate(0.12);  // resting tilt
+  ctx.rotate(pose.rot);
+  if (pose.alpha != null) ctx.globalAlpha = pose.alpha;
+
+  // Spell-casters light up at the tip as they cast.
+  if (pose.glow > 0.05) {
+    const box = WEAPON_ART[wId].box;
+    const tip = (box.x + box.w) * scale;
+    ctx.save();
+    ctx.globalAlpha = pose.glow * 0.55;
+    ctx.fillStyle = wc;
+    ctx.beginPath(); ctx.arc(tip, 0, 3 + pose.glow * 4, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = pose.glow * 0.9;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(tip, 0, 1 + pose.glow * 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
   }
 
   // A damage-upgraded weapon carries a hot sheen along its length.
@@ -2217,6 +2598,11 @@ function drawHUD(state) {
       drawBar(35, ready ? 1 : Math.max(0, 1 - mp.parryCd / mp.parryMax), ready,
               ready ? 'PARRY' : 'PAR', '#66ccff', '#2a5a7a', '#0a1a2a');
     }
+    if (mp.superMax > 0) {
+      const ready = (mp.superCd || 0) <= 0;
+      drawBar(42, ready ? 1 : Math.max(0, 1 - mp.superCd / mp.superMax), ready,
+              ready ? 'SUPER' : 'SUP', '#ff8a2a', '#7a3a10', '#2a0e04');
+    }
     ctx.textAlign = 'left';
     ctx.font = '10px "Courier New",monospace';
   }
@@ -2379,7 +2765,9 @@ function drawControlHints() {
   ctx.save();
   ctx.font = '8px "Courier New",monospace';
   ctx.textBaseline = 'bottom'; ctx.textAlign = 'center';
-  const t = 'ARROWS MOVE · SPACE ATK · ENTER SWAP · SHIFT SPECIAL · P PARRY · 1-4 ITEMS';
+  const me = myNum === 1 ? currState?.players?.p1 : currState?.players?.p2;
+  const t = 'ARROWS MOVE · SPACE ATK · ENTER SWAP · SHIFT SPECIAL · P PARRY · '
+          + (me && me.superMax > 0 ? 'R SUPER · ' : '') + '1-4 ITEMS';
   const w = ctx.measureText(t).width;
   ctx.globalAlpha = 0.8;
   ctx.fillStyle = 'rgba(0,0,0,0.6)';

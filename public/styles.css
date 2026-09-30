@@ -280,6 +280,30 @@ body {
 .up-cost { color: var(--c-gold); min-width: 30px; text-align: right; }
 .up-btn.maxed .up-cost { color: #6fbf85; }
 .shop-empty { font-size: 11px; color: #666; padding: 14px; text-align: center; }
+
+/* Shop-only weapons, shown above the upgrade rows until bought. */
+.shop-row.legendary {
+  border: 1px solid #7a3410;
+  background: linear-gradient(90deg, rgba(90, 24, 4, 0.45), rgba(20, 8, 4, 0.2));
+  box-shadow: inset 0 0 12px rgba(255, 106, 26, 0.18);
+  margin-bottom: 6px;
+}
+.legend-tag { font-size: 8px; letter-spacing: 2px; color: #ffb040; border: 1px solid #7a4a10; padding: 1px 4px; }
+.legend-buy { display: flex; align-items: center; gap: 10px; flex: 1 1 100%; flex-wrap: wrap; }
+.buy-weapon {
+  background: #3a1204;
+  border: 1px solid #ff8a2a;
+  color: #ffd8a0;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  padding: 6px 12px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.buy-weapon:hover:not(:disabled) { background: #5a1c06; }
+.buy-weapon.poor, .buy-weapon:disabled { opacity: 0.45; cursor: default; }
+.legend-need { font-size: 9px; letter-spacing: 1px; color: #b08060; }
 .shop-back { width: 100%; margin-top: 14px; }
 .shop-open-btn { border-color: #5a4a1a; color: var(--c-gold); }
 
@@ -551,13 +575,27 @@ body {
 }
 .action-btn.parry-btn:active { background: rgba(30, 80, 130, 0.95); border-color: rgba(140, 210, 255, 0.95); }
 
+/* Only shown while holding a weapon that has a SUPER (the fire glove). */
+.action-btn.super-btn {
+  border-color: rgba(255, 140, 40, 0.85);
+  color: #ffd8a0;
+  background: linear-gradient(180deg, rgba(120, 30, 5, 0.9), rgba(60, 10, 0, 0.9));
+  font-size: 12px;
+  font-weight: bold;
+  padding: 12px 18px;
+  box-shadow: 0 0 8px rgba(255, 110, 20, 0.55);
+}
+.action-btn.super-btn:active { background: rgba(190, 60, 10, 0.95); border-color: #ffc070; }
+.action-btn.super-btn.cooling { opacity: 0.45; box-shadow: none; }
+.action-btn.hidden-btn { display: none; }
+
 /* Short screens (landscape phones): shrink the pads so they never eat the map. */
 @media (max-height: 420px) {
   #touchControls { --dpad-size: 40px; padding-bottom: max(8px, env(safe-area-inset-bottom, 0px)); }
   .action-btns { gap: 5px; }
   .action-btn { padding: 7px 14px; min-width: 62px; font-size: 10px; }
   .action-btn.big-btn { padding: 12px 18px; font-size: 13px; min-width: 72px; }
-  .action-btn.special-btn, .action-btn.parry-btn { padding: 8px 14px; font-size: 10px; }
+  .action-btn.special-btn, .action-btn.parry-btn, .action-btn.super-btn { padding: 8px 14px; font-size: 10px; }
 }
 @media (max-height: 340px) {
   #touchControls { --dpad-size: 34px; }
