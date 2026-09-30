@@ -572,6 +572,27 @@ const MONSTER_ARMS_ART = {
     k.poly([[20, -9], [22, -12.5], [24, -9]], MAT.steel); // crown spike
   }},
 
+  // Giant: a whole uprooted tree, held by the trunk, roots trailing behind.
+  m_tree: { draw(k, wc) {
+    k.poly([[-4, -2.5], [-7, -5.5], [-5, -1.5], [-8, 0], [-5, 1.5], [-7, 5], [-3, 2.5]], MAT.woodDark);   // roots
+    k.poly([[-3, -2.8], [30, -1.8], [30, 1.8], [-3, 2.8]], MAT.wood);                    // trunk, tapering
+    k.poly([[-3, -2.8], [30, -1.8], [30, -0.8], [-3, -1.4]], MAT.woodLight);
+    k.poly([[-3, 1.6], [30, 1], [30, 1.8], [-3, 2.8]], MAT.woodDark);
+    k.r(6, -2.4, 1, 1, MAT.woodDark); k.r(15, 1, 1.2, 1, MAT.woodDark);               // knots
+    k.poly([[16, -1.6], [21, -6], [22, -5], [18, -1.4]], MAT.wood);                     // branches
+    k.poly([[22, 1.4], [26, 5.5], [27, 4.5], [24, 1.2]], MAT.wood);
+    // Leafy crown: overlapping clumps, dark underneath, lit on top.
+    k.circ(34, 0, 8, '#2e5a24');
+    k.circ(29, -5, 6, '#2e5a24');
+    k.circ(29, 5, 5.5, '#2e5a24');
+    k.circ(38, -4, 5.5, '#3e7a30');
+    k.circ(33, -3, 6, wc);
+    k.circ(28, -6, 3.5, '#6aa84a');
+    k.circ(36, -6, 3, '#8ac860');
+    k.circ(38, 3, 4, '#3e7a30');
+    k.r(31, -7, 1.2, 1.2, '#b8e080'); k.r(35, 1, 1, 1, '#b8e080');
+  }},
+
   // Wraith: a long, thin spectral scythe.
   m_scythe: { draw(k, wc) {
     k.r(0, -1, 22, 2, '#2a2238');

@@ -462,6 +462,8 @@ const MONSTER_SKIN = {
   titan:    { base: '#5a6a7a', eye: '#8ee8ff', eyes: 2 },
   wraith:   { base: '#3a2a5a', eye: '#c8f0ff', eyes: 2 },
   infernal: { base: '#b8340e', eye: '#ffd84a', eyes: 2 },
+  // Boss
+  giant:    { base: '#7a9a56', eye: '#ffe25a', eyes: 2 },
 };
 
 // Body outlines in normalised 0..1 space, scaled to whatever size the wave asks
@@ -506,6 +508,12 @@ const MONSTER_SHAPE = {
     // A hooded shroud that thins to a ragged tail instead of legs.
     body: [[0.50,0.00],[0.78,0.10],[0.92,0.34],[0.90,0.62],[0.80,0.86],[0.66,0.76],[0.56,1.00],[0.44,0.80],[0.30,0.96],[0.20,0.72],[0.10,0.60],[0.08,0.34],[0.22,0.10]],
     legs: [], legTop: 1, headV: 0.30,
+  },
+  giant: {
+    // A towering brute: small head sunk between vast shoulders, a barrel gut,
+    // thick legs planted wide.
+    body: [[0.36,0.00],[0.64,0.00],[0.70,0.12],[0.92,0.20],[1.00,0.34],[0.98,0.58],[0.90,0.76],[0.10,0.76],[0.02,0.58],[0.00,0.34],[0.08,0.20],[0.30,0.12]],
+    legs: [[0.14,0.26],[0.62,0.26]], legTop: 0.74, headV: 0.10,
   },
   infernal: {
     // A lean, horned demon.
@@ -638,6 +646,17 @@ function monsterBuf(type, w, h) {
     K.ditherRect(b, X(0.14), Y(0.62), w * 0.72, h * 0.30, c[2], '#8a6aff', 'sparse');
     setPx(b, X(0.30), Y(0.96), '#c8b8ff');
     setPx(b, X(0.56), Y(1.00) - 1, '#c8b8ff');
+  } else if (type === 'giant') {
+    // Shaggy beard, heavy brow, a hide loincloth with a rope belt, and scars.
+    rect(b, X(0.34), Y(0.05), w * 0.32, Math.max(2, h * 0.025), c[0]);                    // brow
+    poly(b, P([[0.36,0.13],[0.64,0.13],[0.62,0.26],[0.54,0.32],[0.50,0.36],[0.46,0.32],[0.38,0.26]]), '#5a3a1e');   // beard
+    K.ditherRect(b, X(0.38), Y(0.15), w * 0.24, h * 0.14, '#5a3a1e', '#7a5430', 'checker');
+    rect(b, X(0.10), Y(0.56), w * 0.80, Math.max(2, h * 0.03), '#c9b98e');               // rope belt
+    poly(b, P([[0.12,0.59],[0.88,0.59],[0.80,0.76],[0.62,0.70],[0.50,0.78],[0.38,0.70],[0.20,0.76]]), '#6b4326');   // hide
+    K.ditherRect(b, X(0.16), Y(0.62), w * 0.66, h * 0.08, '#6b4326', '#8f5f36', 'sparse');
+    line(b, X(0.20), Y(0.30), X(0.30), Y(0.44), c[0]);                                     // scars
+    line(b, X(0.72), Y(0.26), X(0.80), Y(0.36), c[0]);
+    K.ditherRect(b, X(0.30), Y(0.36), w * 0.40, h * 0.16, c[2], c[3], 'sparse');          // belly light
   } else if (type === 'infernal') {
     // Swept horns, molten cracks, and a flame licking off the crown.
     const hornH = Math.max(3, h * 0.24), hy = Y(0.10);
@@ -657,7 +676,13 @@ function monsterBuf(type, w, h) {
     rect(b, X(u), ey, es, es, skin.eye);
     setPx(b, X(u), ey, shade(skin.eye, 0.55));
   };
-  if (skin.eyes === 1) {
+  if (type === 'giant') {
+    // Small, deep-set eyes under the brow of a head far narrower than the body.
+    for (const u of [0.40, 0.54]) {
+      rect(b, X(u), Y(0.075), 3, 2, skin.eye);
+      setPx(b, X(u), Y(0.075), shade(skin.eye, 0.55));
+    }
+  } else if (skin.eyes === 1) {
     rect(b, X(0.40), ey, es * 2, es, skin.eye);
     setPx(b, X(0.40), ey, shade(skin.eye, 0.55));
   } else if (skin.eyes === 3) {

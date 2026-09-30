@@ -311,6 +311,7 @@ function connect() {
         if (gap > 0 && gap < 250) stateIntervalMs = stateIntervalMs * 0.9 + gap * 0.1;
       }
       stateRecvTime = nowT;
+      syncAdminTools(msg);
       updateScreens(msg);
     }
   };
@@ -803,6 +804,21 @@ function drawFireRings(fires) {
   const now = performance.now() / 1000;
   for (const f of fires) {
     if (f.kind === 'vortexfield') { drawVortexField(f, now); continue; }
+    if (f.kind === 'soundwave') {
+      // Three rippling rings, fading as the wave spreads.
+      const fade = Math.max(0, 1 - f.r / 420);
+      ctx.save();
+      for (let i = 0; i < 3; i++) {
+        const rr = f.r - i * 7;
+        if (rr <= 2) continue;
+        ctx.globalAlpha = fade * (0.9 - i * 0.25);
+        ctx.strokeStyle = i ? '#d8c89a' : '#fff4d0';
+        ctx.lineWidth = i ? 2 : 3.5;
+        ctx.beginPath(); ctx.arc(f.x, f.y, rr, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+      continue;
+    }
     if ((f.kind !== 'ring' && f.kind !== 'inferno') || f.r <= 0) continue;
     const inferno = f.kind === 'inferno';
     const fade = inferno ? 1 : Math.max(0, 1 - Math.pow(f.k, 3));
@@ -1089,6 +1105,19 @@ function spawnLocalSlash(me, key) {
   if (window.GameAudio) GameAudio.sfx[isRanged(me.weaponId) ? 'shoot' : 'swing']();
   pushSlash(cp, nearestEnemyAngle(cp, currState, key) ?? (facing === 1 ? 0 : Math.PI), key);
   lastLocalSlashTime = performance.now();
+}
+// ── Admin tools: only shown when the server says we're an admin ──
+let adminSkipShown = null;
+function syncAdminTools(state) {
+  const show = !!(state.isAdmin && state.gameMode !== 'pvp' && state.gameState === 'GAMEPLAY');
+  if (show === adminSkipShown) return;
+  adminSkipShown = show;
+  const b = document.getElementById('skipWaveBtn');
+  if (b) b.classList.toggle('shown', show);
+  touchZonesAt = -1e9;   // the top-right buttons changed width: re-measure
+}
+function skipWave() {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'skip_wave' }));
 }
 function sendAckUnlock() { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type:'ack_unlock' })); }
 
@@ -1682,6 +1711,12 @@ function updateScreens(state) {
       } else {
         lb.classList.add('hidden');
       }
+    } else if (state.gameMode === 'coop' && state.victory) {
+      lb.classList.add('hidden');
+      hint.textContent = 'NEW GAME STARTING...';
+      document.getElementById('roundTitle').innerHTML = '<span style="color:#7aff9a">VICTORY!</span>';
+      document.getElementById('roundStats').innerHTML =
+        `THE GIANT HAS FALLEN<br>ALL ${state.finalWave || 10} WAVES CLEARED<br>XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`;
     } else if (state.gameMode === 'coop') {
       lb.classList.add('hidden');
       hint.textContent = 'NEXT ROUND STARTING...';
@@ -1764,6 +1799,7 @@ function draw(state) {
   ctx.save();
   ctx.scale(HUD_SCALE, HUD_SCALE);
   drawHUD(state);
+  drawBossBar(state.monsters);
   drawItemBar(state.inventory || [], myNum === 1 ? state.players.p1 : myNum === 2 ? state.players.p2 : null);
   drawWeaponPanel(state);
   drawPickupBanners(state.particles);
@@ -2210,6 +2246,7 @@ function drawMonster(m) {
   }
   drawMonsterArms(m, x, y);
   if (m.burning) drawFlames(x, y, m.w, m.h);
+  if (m.boss) { drawBossMarks(m, x, y); return; }
 
   drawHpBar(x - 1, y - 5, m.w + 2, 2, m.hp / m.maxHp, '#44ff44', '#003300');
   // Armoured types get a marker on the bar, since their health drains slowly.
@@ -2219,6 +2256,61 @@ function drawMonster(m) {
   }
 }
 function drawMonsters(ms) { for(const m of ms) drawMonster(m); }
+
+// Over the Giant: a flashing "!" while it winds up (red for the close swipe,
+// yellow for the ranged slam), and circling stars while it's stunned.
+function drawBossMarks(m, x, y) {
+  const now = performance.now();
+  const hx = x + m.w / 2, top = y - monsterPad(m.w, m.h) + 2;
+  ctx.save();
+  if (m.windup > 0 && Math.floor(now / 110) % 2 === 0) {
+    ctx.font = 'bold 18px "Courier New",monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.lineWidth = 4; ctx.strokeStyle = '#000'; ctx.lineJoin = 'round';
+    ctx.strokeText('!', hx, top);
+    ctx.fillStyle = m.wind === 'slam' ? '#ffd84a' : '#ff4a3a';
+    ctx.fillText('!', hx, top);
+  }
+  if (m.stun > 0) {
+    for (let i = 0; i < 5; i++) {
+      const a = now / 260 + i * (Math.PI * 2 / 5);
+      const sx = hx + Math.cos(a) * m.w * 0.42, sy = top + 4 + Math.sin(a) * 5;
+      ctx.fillStyle = i % 2 ? '#fff6a0' : '#ffd84a';
+      ctx.beginPath();
+      for (let k = 0; k < 10; k++) {
+        const r = k % 2 ? 1.4 : 3.6, aa = k * Math.PI / 5 - Math.PI / 2;
+        const px = sx + Math.cos(aa) * r, py = sy + Math.sin(aa) * r;
+        if (k) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+      }
+      ctx.closePath(); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+// A wide boss health bar along the bottom of the screen (HUD space).
+function drawBossBar(monsters) {
+  const b = (monsters || []).find(m => m.boss);
+  if (!b) return;
+  const w = Math.min(240, HUD_W * 0.5), h = 7;
+  const x = Math.round(HUD_W / 2 - w / 2), y = HUD_H - (isTouchDevice ? 16 : 28);
+  const ratio = Math.max(0, b.hp / b.maxHp);
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(x - 4, y - 12, w + 8, h + 16);
+  ctx.fillStyle = '#2a0808'; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = b.stun > 0 ? '#ffd84a' : '#d8342a';
+  ctx.fillRect(x, y, Math.round(w * ratio), h);
+  ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(x, y, Math.round(w * ratio), 2);
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.strokeRect(x, y, w, h);
+  for (let i = 1; i < 10; i++) { ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(x + Math.round(w * i / 10), y, 1, h); }
+  ctx.font = 'bold 8px "Courier New",monospace'; ctx.textBaseline = 'bottom';
+  ctx.textAlign = 'left';  ctx.fillStyle = '#000'; ctx.fillText('THE GIANT', x + 1, y - 1);
+  ctx.fillStyle = '#c8e07a'; ctx.fillText('THE GIANT', x, y - 2);
+  ctx.textAlign = 'right'; ctx.fillStyle = b.stun > 0 ? '#ffd84a' : '#ccc';
+  ctx.fillText(b.stun > 0 ? 'STUNNED!' : Math.ceil(b.hp).toLocaleString() + ' / ' + b.maxHp.toLocaleString(), x + w, y - 2);
+  ctx.restore();
+}
 
 // What each monster carries and how it uses it. `size` is the weapon's scale per
 // 12px of monster height, `rest` the idle tilt (negative = raised), and `move`
@@ -2235,6 +2327,8 @@ const MONSTER_ARMS = {
   titan:    { art: 'm_warhammer', color: '#8fa0b4', size: 0.62, rest: -1.1,  move: 'slam'   },
   wraith:   { art: 'm_scythe',    color: '#9a7aff', size: 0.78, rest: -0.7,  move: 'chop'   },
   infernal: { art: 'm_hellstaff', color: '#ff6a1a', size: 0.68, rest: -1.1,  move: 'cast'   },
+  // Boss
+  giant:    { art: 'm_tree',      color: '#4e8a3a', size: 0.62, rest: -0.95, move: 'giant'  },
 };
 // Weapons grow slower than bodies, so a giant's axe stays a weapon, not scenery.
 const monsterArmScale = (h, size) => Math.max(0.5, Math.round(Math.pow(h / 12, 0.65) * size * 10) / 10);
@@ -2274,7 +2368,16 @@ function drawMonsterArms(m, x, y) {
   ctx.translate(Math.round(hx), Math.round(y + m.h * (arms.shield ? 0.5 : 0.55)));
   ctx.scale(d, 1);
   let ang = arms.rest + bob;
-  if (prog >= 0) {
+  // The Giant telegraphs: the tree drawn back for a swipe, hoisted high for a
+  // slam (shaking as it strains), and dropped to the ground while stunned.
+  if (m.boss) {
+    if (m.stun > 0) ang = 1.25 + bob * 0.5;
+    else if (m.windup > 0) {
+      const w = 1 - m.windup / (m.wind === 'slam' ? 900 : 650);
+      ang = arms.rest - (m.wind === 'slam' ? 1.5 : 1.0) * w + Math.sin(performance.now() / 35) * 0.04 * w;
+    }
+  }
+  if (prog >= 0 && !(m.stun > 0)) {
     const kick = Math.sin(prog * Math.PI);
     switch (arms.move) {
       case 'chop':   ang += monsterSwingAngle(prog, 1.3); break;
@@ -2282,6 +2385,7 @@ function drawMonsterArms(m, x, y) {
       case 'stab':   ctx.translate(kick * m.w * 0.5, 0); ang = arms.rest * (1 - kick); break;
       case 'thrust': ctx.translate(kick * m.w * 0.6, 0); ang = arms.rest * (1 - kick); break;
       case 'cast':   ctx.translate(-kick * 2, 0); ang -= kick * 0.35; break;
+      case 'giant':  ang += monsterSwingAngle(prog, 2.3); break;
     }
   }
   ctx.rotate(ang);
@@ -2569,6 +2673,16 @@ function drawParticles(particles) {
       ctx.globalAlpha = a; ctx.fillStyle = '#ffffff';
       ctx.beginPath(); ctx.arc(p.x2, p.y2, 3 + (1-a)*5, 0, Math.PI*2); ctx.fill();
       ctx.restore();
+    } else if (p.type==='giantswipe') {
+      const m=p.max||320, a=Math.max(0,p.timer/m), k=1-a;
+      const mid = p.face === -1 ? Math.PI : 0, span = Math.PI * (0.35 + 0.75 * Math.min(1, k * 2));
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.globalAlpha = a * 0.35; ctx.strokeStyle = '#4e8a3a'; ctx.lineWidth = 14;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 0.85, mid - span / 2, mid + span / 2); ctx.stroke();
+      ctx.globalAlpha = a * 0.9; ctx.strokeStyle = '#e8f0c8'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, mid - span / 2, mid + span / 2); ctx.stroke();
+      ctx.restore();
     } else if (p.type==='streak') {
       // Lance dash: a fading wake along the charge line.
       const m=p.max||300, a=Math.max(0,p.timer/m);
@@ -2709,7 +2823,7 @@ function drawHUD(state) {
   const w = state.wave;
   ctx.textAlign = 'center';
   if (w && state.gameMode !== 'pvp') {
-    const wl = (state.gameMode === 'extreme' ? 'EXTREME ' : '') + 'WAVE ' + w.num;
+    const wl = (state.gameMode === 'extreme' ? 'EXTREME ' : '') + 'WAVE ' + w.num + (state.finalWave ? '/' + state.finalWave : '');
     ctx.fillStyle = '#000'; ctx.fillText(wl, HUD_W/2 + 1, 3);
     ctx.fillStyle = state.gameMode === 'extreme' ? '#ff6a4a' : PAL.text; ctx.fillText(wl, HUD_W/2, 2);
     ctx.font = '8px "Courier New",monospace';

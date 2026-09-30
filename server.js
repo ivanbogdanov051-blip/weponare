@@ -138,7 +138,7 @@ const WEAPONS = [
   // 3 s shield that blocks every hit and banks the damage it would have done.
   // Special throws that bank back as a lightning vortex; SUPER heals 1.5x the
   // bank. Both empty the bank. special.dmg / super.dmg are percentages of it.
-  { id: 'vortex',      name: 'VORTEX SHIELD', damage: 1, range: 60, atkSpd: 3300, type: 'melee', unlockXp: 0, shopOnly: true, noRequirement: true, price: 20000, vortexShield: true,
+  { id: 'vortex',      name: 'VORTEX SHIELD', damage: 1, range: 60, atkSpd: 7000, type: 'melee', unlockXp: 0, shopOnly: true, noRequirement: true, price: 20000, vortexShield: true,
     special: { kind: 'vortex',     dmg: 100, range: 420, cd: 2500 },
     super:   { kind: 'absorbheal', dmg: 150, cd: 12000 } },
 ];
@@ -296,6 +296,13 @@ const MONSTER_TYPES = {
     name: 'BEHEMOTH', minWave: 10, weight: 2,  hp: 7.0,  dmg: 2.8, speed: 0.5,  size: 1.9,
     color: '#8a3a6a', xp: 2.2, coins: 2.4, armor: 0.2,
   },
+  // ── Boss (never picked at random: see isBossWave) ──
+  // The Giant: the most health in the game, a fixed huge body, and a whole tree
+  // for a club. No ordinary attacks — see updateGiant.
+  giant: {
+    name: 'GIANT', minWave: 1, weight: 0, hp: 16, dmg: 3.2, speed: 0.55, size: 2.7,
+    color: '#6a8a4a', xp: 8, coins: 3, armor: 0.25, boss: true, fixedW: 58, fixedH: 72,
+  },
   // ── EXTREME only (extremeOnly: never in normal waves) ──
   // A walking fortress: the most health and armour in the game.
   titan: {
@@ -328,6 +335,16 @@ function pickExtremeType() {
   for (const [id, w] of entries) { roll -= w; if (roll <= 0) return id; }
   return entries[0][0];
 }
+// When the Giant comes: the finale of co-op, every 20th wave of WAVES and
+// every 5th of EXTREME.
+const COOP_FINAL_WAVE = 10;
+function isBossWave(num) {
+  if (room.gameMode === 'coop')    return num === COOP_FINAL_WAVE;
+  if (room.gameMode === 'waves')   return num % 20 === 0;
+  if (room.gameMode === 'extreme') return num % 5 === 0;
+  return false;
+}
+
 function modeLevel(num) { return num + (room.gameMode === 'extreme' ? EXTREME_LEVEL_OFFSET : 0); }
 
 // Size of a baseline (1.0x) monster; every type scales from this.
@@ -343,7 +360,7 @@ function pickMonsterType(wave) {
   const pool = [];
   let total = 0;
   for (const [id, def] of Object.entries(MONSTER_TYPES)) {
-    if (def.extremeOnly || wave < def.minWave) continue;
+    if (def.extremeOnly || def.boss || wave < def.minWave) continue;
     // The further past a type's debut, the more it crowds out the weaker ones.
     const maturity = 1 + Math.min(2.2, (wave - def.minWave) * 0.16);
     const toughness = Math.max(1, def.hp);
@@ -841,13 +858,13 @@ function broadcast(msg) {
   if (room.p2 && room.p2.readyState === 1) room.p2.send(str);
 }
 
-function spawnMonster() {
-  const type = room.gameMode === 'extreme' ? pickExtremeType() : pickMonsterType(room.wave.num);
+function spawnMonster(forceType) {
+  const type = forceType || (room.gameMode === 'extreme' ? pickExtremeType() : pickMonsterType(room.wave.num));
   const def = MONSTER_TYPES[type];
   const lvl = modeLevel(room.wave.num);
 
   // Call out a type the first time it appears in this run.
-  if (!room.seenTypes.has(type)) {
+  if (!def.boss && !room.seenTypes.has(type)) {
     room.seenTypes.add(type);
     if (room.wave.num > 1 || room.gameMode === 'extreme') {
       room.particles.push({
@@ -868,8 +885,8 @@ function spawnMonster() {
   const baseHp = hp / def.hp;                                     // this wave's baseline
   const waveGrowth = Math.min(1.7, Math.pow(Math.max(1, baseHp / 30), 0.28));
   const sizeScale = Math.max(0.6, Math.min(2.7, def.size * waveGrowth));
-  const w = Math.max(9, Math.round(MONSTER_BASE_W * sizeScale));
-  const h = Math.max(11, Math.round(MONSTER_BASE_H * sizeScale));
+  const w = def.fixedW || Math.max(9, Math.round(MONSTER_BASE_W * sizeScale));
+  const h = def.fixedH || Math.max(11, Math.round(MONSTER_BASE_H * sizeScale));
 
   // Damage follows the same shape — bulk, then type, then a slow wave ramp — and
   // is capped so even a late behemoth cannot one-shot a full-health player.
@@ -909,6 +926,7 @@ function spawnMonster() {
     armor: def.armor || 0,
     ranged: !!def.ranged,
     blinkTimer: def.blink ? def.blink * (0.5 + Math.random() * 0.5) : 0,
+    boss: !!def.boss, windup: 0, wind: null, stun: 0, swipeCd: 1500, slamCd: 3000,
     hitFlash: 0,
     invincible: 0,
     slowTimer: 0,
@@ -958,6 +976,13 @@ function startWave(num) {
   room.wave = { num, monstersLeft: cfg.monsters, spawnQueue: cfg.monsters, spawnTimer: 500, betweenTimer: 0 };
   room.waveHpMult    = cfg.hpMult;
   room.waveSpeedMult = cfg.speedMult;
+  // Boss wave: the Giant arrives with the first of the pack.
+  if (isBossWave(num)) {
+    room.wave.monstersLeft++;
+    spawnMonster('giant');
+    room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
+                          text: 'THE GIANT APPROACHES', color: '#c8e07a', timer: 3200, max: 3200 });
+  }
 }
 
 function clearField() {
@@ -988,6 +1013,7 @@ function startGame() {
   room.unlockQueues = { p1: [], p2: [] };
   room.wave = emptyWave();
   room.gameState = 'GAMEPLAY';
+  room.victory = false;
   if (room.gameMode !== 'pvp') startWave(START_WAVE);
 }
 
@@ -1032,7 +1058,7 @@ function applyDamage(target, dmg, attackerKey) {
     const heal = Math.round(dmg * steal);
     if (heal > 0) atk.hp = Math.min(atk.maxHp, atk.hp + heal);
   }
-  if (aw && aw.knock && target.hp > 0) {
+  if (aw && aw.knock && target.hp > 0 && !target.boss) {
     const dx = cx(target) - cx(atk), dy = cy(target) - cy(atk), d = Math.hypot(dx, dy) || 1;
     target.x += (dx / d) * aw.knock;
     target.y += (dy / d) * aw.knock;
@@ -1301,6 +1327,13 @@ function tickRoom(dt) {
       if (Math.abs(dx) > 2) m.face = dx > 0 ? 1 : -1;
       const spd = m.speed * (m.slowTimer > 0 ? 0.4 : 1);
 
+      if (m.boss) {
+        updateGiant(m, nearest, dist, dx, dy, spd, factor, dt);
+        applyPull(m, dt);
+        clampToArena(m);
+        continue;
+      }
+
       // Wraiths blink: every few seconds, if you're far off, they reappear at
       // your side (a flash marks both ends so it can be read and dodged).
       if (def.blink) {
@@ -1369,6 +1402,13 @@ function tickRoom(dt) {
         room.wave.spawnTimer = 1000;
       }
     } else if (room.wave.monstersLeft <= 0 && room.monsters.length === 0) {
+      if (room.gameMode === 'coop' && room.wave.num >= COOP_FINAL_WAVE) {
+        room.victory = true;
+        room.gameState = 'ROUND_OVER';
+        room.roundOverTimer = 7000;
+        broadcastState();
+        return;
+      }
       room.wave.betweenTimer = 3000;
       room.particles.push({
         type: 'waveclear', x: CANVAS_W / 2, y: CANVAS_H / 2 - 10,
@@ -1514,6 +1554,7 @@ function separateMonsters(factor) {
 const PULL_MS = 320;
 function applyPull(e, dt) {
   if (!e.pull) return;
+  if (e.boss) { e.pull = null; return; }
   const step = Math.min(dt, e.pull.timer);
   e.x += e.pull.vx * step;
   e.y += e.pull.vy * step;
@@ -1990,6 +2031,7 @@ function updateFires(factor, dt) {
     if (f.t >= f.life) { if (f.kind === 'hand') explodeHand(f); return false; }
     if (f.kind === 'hand') return updateFireHand(f, factor);
     if (f.kind === 'vortexfield') return updateVortexField(f, factor);
+    if (f.kind === 'soundwave') return updateSoundwave(f, factor);
 
     if (f.kind === 'ring') {
       const k = f.t / f.life;
@@ -2050,6 +2092,131 @@ function updateFireHand(f, factor) {
     return false;
   }
   return true;
+}
+
+// ─── The Giant ────────────────────────────────────────────────────────────────
+// Two moves, both telegraphed by a wind-up:
+//   swipe – up close, a sweep of the tree across its front.
+//   slam  – from range, it smashes the tree into the ground and a sound wave
+//           rolls outward.
+// Parrying either one stuns it for 3 s (no moving, no attacking) and hurts it.
+const GIANT_SWIPE_REACH = 70;      // past the edge of its body
+const GIANT_SWIPE_WIND  = 650;
+const GIANT_SLAM_WIND   = 900;
+const GIANT_STUN_MS     = 3000;
+const GIANT_STUN_DMG    = 0.05;    // share of its max health a parry costs it
+const SOUNDWAVE_SPEED   = 3.2;     // px per 16.67 ms
+const SOUNDWAVE_MAX_R   = 420;
+const SOUNDWAVE_BAND    = 11;
+
+function updateGiant(m, target, dist, dx, dy, spd, factor, dt) {
+  if (m.stun > 0) { m.stun -= dt; return; }
+  if (m.swipeCd > 0) m.swipeCd -= dt;
+  if (m.slamCd  > 0) m.slamCd  -= dt;
+
+  // Winding up: planted, then the blow lands.
+  if (m.windup > 0) {
+    m.windup -= dt;
+    if (m.windup <= 0) {
+      if (m.wind === 'swipe') giantSwipe(m); else giantSlam(m);
+      m.wind = null;
+      m.swing = MONSTER_SWING_MS;
+    }
+    return;
+  }
+  const reach = m.w / 2 + GIANT_SWIPE_REACH;
+  if (dist <= reach && m.swipeCd <= 0) {
+    m.wind = 'swipe'; m.windup = GIANT_SWIPE_WIND; m.swipeCd = 2200;
+    return;
+  }
+  if (dist > reach + 30 && dist < SOUNDWAVE_MAX_R - 40 && m.slamCd <= 0) {
+    m.wind = 'slam'; m.windup = GIANT_SLAM_WIND; m.slamCd = 4800;
+    return;
+  }
+  if (dist > reach * 0.75) {
+    m.x += (dx / dist) * spd * factor;
+    m.y += (dy / dist) * spd * factor;
+  }
+}
+
+// Where the tree comes down: just ahead of the Giant, on the side it faces.
+function giantImpact(m) { return { x: cx(m) + m.face * (m.w / 2 + 34), y: m.y + m.h * 0.8 }; }
+
+function giantSwipe(m) {
+  const reach = m.w / 2 + GIANT_SWIPE_REACH;
+  room.particles.push({ type: 'giantswipe', x: cx(m), y: cy(m), r: reach, face: m.face, timer: 320, max: 320 });
+  for (const p of enemyTargets('monster')) {
+    const ddx = cx(p) - cx(m), ddy = cy(p) - cy(m);
+    if (Math.hypot(ddx, ddy) > reach + p.w / 2) continue;
+    if (ddx * m.face < -m.w * 0.3) continue;          // only in front of it
+    if (p.parryTimer > 0) { stunGiant(m, p); return; }
+    applyDamage(p, m.atkDamage, 'monster');
+    // Sent flying.
+    const d = Math.hypot(ddx, ddy) || 1;
+    p.pull = { vx: (ddx / d) * 60 / 250, vy: (ddy / d) * 60 / 250, timer: 250, from: null };
+  }
+}
+
+function giantSlam(m) {
+  const at = giantImpact(m);
+  room.particles.push({ type: 'shockwave', x: at.x, y: at.y, maxR: 40, timer: 380, max: 380, color: '#d8c89a' });
+  room.fires.push({ id: nextId(), kind: 'soundwave', owner: 'monster', boss: m.id, x: at.x, y: at.y, r: 8,
+                    t: 0, life: 60000, dmg: Math.max(1, Math.round(m.atkDamage * 0.7)), hit: new Set() });
+}
+
+function stunGiant(m, p) {
+  if (m.dead) return;
+  m.stun = GIANT_STUN_MS;
+  m.windup = 0; m.wind = null;
+  spawnParrySpark(cx(p), cy(p));
+  room.particles.push({ type: 'trapburst', x: cx(m), y: m.y + 10, maxR: 50, timer: 900, max: 900, color: '#ffd84a', text: 'STUNNED' });
+  m.invincible = 0;
+  applyDamage(m, Math.round(m.maxHp * GIANT_STUN_DMG), playerKeyOf(p));
+}
+
+// The ring rolls outward; the first touch hurts, a parry breaks it and stuns the Giant.
+function updateSoundwave(f, factor) {
+  f.r += SOUNDWAVE_SPEED * factor;
+  if (f.r > SOUNDWAVE_MAX_R) return false;
+  for (const p of enemyTargets('monster')) {
+    const id = playerKeyOf(p);
+    if (f.hit.has(id)) continue;
+    if (Math.abs(Math.hypot(cx(p) - f.x, cy(p) - f.y) - f.r) > SOUNDWAVE_BAND + p.w / 2) continue;
+    f.hit.add(id);
+    if (p.parryTimer > 0) {
+      const giant = room.monsters.find(mo => mo.id === f.boss);
+      if (giant) stunGiant(giant, p);
+      else spawnParrySpark(cx(p), cy(p));
+      return false;
+    }
+    applyDamage(p, f.dmg, 'monster');
+  }
+  return true;
+}
+
+// ─── Admin: skip wave ─────────────────────────────────────────────────────────
+// Every monster on the field dies (no rewards), their shots and sound waves
+// vanish, and the next wave starts at once — or, on co-op's last wave, the
+// game is won.
+function adminSkipWave() {
+  if (room.gameState !== 'GAMEPLAY' || room.gameMode === 'pvp') return;
+  for (const m of room.monsters) {
+    room.particles.push({ type: 'aoe', x: cx(m), y: cy(m), maxR: Math.max(16, m.w), radius: 2, timer: 360, max: 360, color: '#ffd870' });
+  }
+  room.monsters = [];
+  room.projectiles = room.projectiles.filter(pr => pr.owner !== 'monster');
+  room.fires = room.fires.filter(f => f.owner !== 'monster');
+  const num = room.wave.num;
+  if (room.gameMode === 'coop' && num >= COOP_FINAL_WAVE) {
+    room.wave.spawnQueue = 0; room.wave.monstersLeft = 0;
+    room.victory = true;
+    room.gameState = 'ROUND_OVER';
+    room.roundOverTimer = 7000;
+    return;
+  }
+  startWave(num + 1);
+  room.particles.push({ type: 'waveclear', x: CANVAS_W / 2, y: CANVAS_H / 2 - 10,
+                        text: 'WAVE ' + num + ' SKIPPED', timer: 1800 });
 }
 
 function nearestTargetAngle(p, pKey) {
@@ -2235,7 +2402,8 @@ function buildStateMsg(playerNum) {
     players: { p1: playerView(room.players.p1), p2: playerView(room.players.p2) },
     monsters:    room.monsters.map(m => ({ id: m.id, type: m.type, x: r1(m.x), y: r1(m.y), w: m.w, h: m.h,
                   hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash, slowed: (m.slowTimer || 0) > 0, burning: (m.burnTimer || 0) > 0, armor: m.armor || 0,
-                  face: m.face, swing: m.swing > 0 ? Math.round(m.swing) : 0 })),
+                  face: m.face, swing: m.swing > 0 ? Math.round(m.swing) : 0,
+                  ...(m.boss ? { boss: true, wind: m.windup > 0 ? m.wind : null, windup: Math.max(0, Math.round(m.windup)), stun: Math.max(0, Math.round(m.stun)) } : {}) })),
     projectiles: room.projectiles.map(pr => ({ id: pr.id, x: r1(pr.x), y: r1(pr.y), dx: r1(pr.dx), dy: r1(pr.dy), weaponId: pr.weaponId,
                   upg: pr.upg || null, isAoe: pr.isAoe, special: !!pr.special, grapple: !!pr.grapple,
                   hook: !!pr.hook, boomerang: !!pr.boomerang })),
@@ -2250,8 +2418,11 @@ function buildStateMsg(playerNum) {
     wave:        room.wave,
     xp:          room.playerXp[key],
     myCoins:     room.playerCoins[key],
+    isAdmin:     isAdminPw(room.passwords[key]),
     inventory:   room.players[key] ? room.players[key].inventory : [],
     round:       room.round,
+    victory:     !!room.victory,
+    finalWave:   room.gameMode === 'coop' ? COOP_FINAL_WAVE : 0,
     pendingUnlock: room.unlockQueues[key][0] || null,
     otherHasUnlocks: room.unlockQueues[key === 'p1' ? 'p2' : 'p1'].length > 0,
     leaderboard: isSolo() && room.gameState === 'ROUND_OVER' ? room.lastLeaderboard : null,
@@ -2648,6 +2819,9 @@ wss.on('connection', (ws) => {
           }
         }
       }
+
+      // Admin tool: wipe out the current wave and go straight to the next.
+      if (msg.type === 'skip_wave' && isAdminPw(room.passwords[myKey])) adminSkipWave();
 
       if (msg.type === 'ack_unlock' && room.gameState === 'WEAPON_UNLOCK') {
         room.unlockQueues[myKey].shift();
