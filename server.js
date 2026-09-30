@@ -97,7 +97,8 @@ const COIN_SIZE = 10;
 const COIN_LIFETIME = 22000;
 const COIN_MAGNET = 26;       // auto-collect radius
 const COIN_ATTRACT = 95;      // coins drift toward a player from this far away
-const MAX_COIN_DROPS = 6;     // entities per kill (value is stacked instead)
+const MAX_COIN_DROPS = 9;     // entities per kill (value is stacked instead)
+const COIN_KILL_MULT = 4;     // every kill pays out this many times the base amount
 const MAX_COINS_ON_FLOOR = 140;
 
 const WEAPONS = [
@@ -705,9 +706,9 @@ function spawnItem() {
 
 // ── Coins ──
 function coinsForKill(target, isPlayer) {
-  if (isPlayer) return 10;
+  if (isPlayer) return 10 * COIN_KILL_MULT;
   const def = MONSTER_TYPES[target.type] || MONSTER_TYPES.grunt;
-  return Math.max(1, Math.round((2 + Math.floor((target.maxHp || 30) / 30)) * (def.coins || 1)));
+  return Math.max(1, Math.round((2 + Math.floor((target.maxHp || 30) / 30)) * (def.coins || 1) * COIN_KILL_MULT));
 }
 
 function dropCoins(x, y, total) {
@@ -1696,9 +1697,14 @@ const INFERNO_BAND   = 13;
 const INFERNO_START  = 26;
 const INFERNO_GROWTH = 2.3;    // px per 16.67 ms
 const INFERNO_MAX_R  = Math.hypot(ARENA_W, ARENA_H) + 40;
-const HAND_SPEED     = 5.2;    // quicker than anyone can run
-const HAND_TURN      = 0.14;   // rad per 16.67 ms, so a sharp sidestep can still make it overshoot
-const HAND_RADIUS    = 18;
+// Hands fly like missiles: they launch slowly, accelerate toward a top speed,
+// and the faster they go the wider they turn, so a late sidestep makes them
+// overshoot. (Speeds in px, turn in rad, both per 16.67 ms.)
+const HAND_SPEED0    = 1.2;
+const HAND_SPEED_MAX = 6.8;    // well past a running player (3.6)
+const HAND_ACCEL     = 0.1;
+const HAND_TURN      = 0.13;   // at launch speed; shrinks as it speeds up
+const HAND_RADIUS    = 10;
 const HAND_LIFE      = 4000;
 const HAND_MAX       = 6;      // per player
 
@@ -1715,7 +1721,7 @@ function castFireHand(p, pKey, dmg, count) {
   for (let i = 0; i < count; i++) {
     const a = aim + (i - (count - 1) / 2) * 0.75;
     room.fires.push({ id: nextId(), kind: 'hand', owner: pKey, x: cx(p) + Math.cos(a) * 12, y: cy(p) + Math.sin(a) * 12,
-                      a, t: 0, life: HAND_LIFE, dmg, slot: i });
+                      a, v: HAND_SPEED0, t: 0, life: HAND_LIFE, dmg, slot: i });
   }
   // Never more than two volleys alive at once: the oldest hands burn out first.
   const mine = room.fires.filter(f => f.kind === 'hand' && f.owner === pKey);
@@ -1798,20 +1804,23 @@ function updateFireHand(f, factor) {
     // Steer toward the prey, turning hard but not instantly.
     let diff = Math.atan2(cy(best) - f.y, cx(best) - f.x) - f.a;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-    const turn = HAND_TURN * factor;
+    const turn = HAND_TURN * Math.sqrt(HAND_SPEED0 / f.v) * factor;
     f.a += Math.max(-turn, Math.min(turn, diff));
   }
-  f.x = Math.max(ARENA_X, Math.min(ARENA_X + ARENA_W, f.x + Math.cos(f.a) * HAND_SPEED * factor));
-  f.y = Math.max(ARENA_Y, Math.min(ARENA_Y + ARENA_H, f.y + Math.sin(f.a) * HAND_SPEED * factor));
+  f.v = Math.min(HAND_SPEED_MAX, f.v + HAND_ACCEL * factor);
+  f.x = Math.max(ARENA_X, Math.min(ARENA_X + ARENA_W, f.x + Math.cos(f.a) * f.v * factor));
+  f.y = Math.max(ARENA_Y, Math.min(ARENA_Y + ARENA_H, f.y + Math.sin(f.a) * f.v * factor));
 
-  // A foe still flashing from the last hit can't be caught yet — the hand keeps
-  // circling, so a volley lands as three separate hits instead of fizzling.
-  if (best && !(best.invincible > 0) && Math.hypot(cx(best) - f.x, cy(best) - f.y) <= HAND_RADIUS + best.w / 2) {
+  if (best && Math.hypot(cx(best) - f.x, cy(best) - f.y) <= HAND_RADIUS + best.w / 2) {
     if (playerKeyOf(best) && best.parryTimer > 0) {
       spawnParrySpark(f.x, f.y);
       fizzleFire(f.x, f.y, 'PARRIED');
       return false;
     }
+    // Each hand is its own missile: it lands even on a foe still flashing from
+    // the hit before (those i-frames are at most 500 ms). A respawn's longer
+    // protection and the shield power-up still hold.
+    if (best.invincible > 0 && best.invincible <= 500) best.invincible = 0;
     applyDamage(best, f.dmg, f.owner);
     ignite(best, 2000);
     room.particles.push({ type: 'aoe', x: f.x, y: f.y, maxR: 30, radius: 2, timer: 380, max: 380, color: WEAPON_COLORS.fireglove });
@@ -2002,7 +2011,7 @@ function buildStateMsg(playerNum) {
                   upg: pr.upg || null, isAoe: pr.isAoe, special: !!pr.special, grapple: !!pr.grapple,
                   hook: !!pr.hook, boomerang: !!pr.boomerang })),
     fires:       room.fires.map(f => ({ id: f.id, kind: f.kind, x: r1(f.x), y: r1(f.y), r: r1(f.r || 0),
-                                    a: Math.round((f.a || 0) * 100) / 100, k: Math.round(f.t / f.life * 100) / 100 })),
+                                    a: Math.round((f.a || 0) * 100) / 100, v: f.v ? r1(f.v) : 0, k: Math.round(f.t / f.life * 100) / 100 })),
     chains:      buildChains().map(c => ({ x1: r1(c.x1), y1: r1(c.y1), x2: r1(c.x2), y2: r1(c.y2), kind: c.kind })),
     traps:       room.traps.map(tr => ({ x: r1(tr.x), y: r1(tr.y), w: tr.w, h: tr.h, type: tr.type, state: tr.state, radius: tr.radius, color: tr.color,
                   armRatio: tr.state === 'arming' ? r1(1 - tr.armTimer / (TRAP_TYPES[tr.type].armTime || 1)) : 0 })),

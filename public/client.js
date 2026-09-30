@@ -839,14 +839,16 @@ function drawFireHands(fires) {
     ctx.save();
     ctx.translate(f.x, f.y);
     ctx.rotate(f.a || 0);
-    ctx.scale(1.7, 1.7);   // a giant hand: several times a player's size
-    // Flame trail streaming back from the wrist.
+    ctx.scale(0.95, 0.95);   // about a player's size
+    // Exhaust trail streaming back from the wrist, stretching out as the hand
+    // picks up speed like a missile.
+    const gap = 2.5 + (f.v || 1) * 1.3;
     for (let i = 0; i < 7; i++) {
       const flick = 0.6 + 0.4 * Math.sin(now * 18 + i * 1.9);
       ctx.globalAlpha = 0.55 - i * 0.06;
       ctx.fillStyle = i % 2 ? '#ff6a1a' : '#ffb030';
       ctx.beginPath();
-      ctx.arc(-12 - i * 5, Math.sin(now * 11 + i) * 2.5, (7 - i * 0.8) * flick, 0, Math.PI * 2);
+      ctx.arc(-12 - i * gap, Math.sin(now * 11 + i) * 2.5, (7 - i * 0.8) * flick, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 0.3;
