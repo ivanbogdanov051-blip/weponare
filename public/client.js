@@ -443,7 +443,7 @@ function updatePrediction(frameDt, now) {
   }
 
   // Mirror server speed modifiers so prediction matches authoritative movement.
-  let spd = serverPlayerSpeed;
+  let spd = me.speed || serverPlayerSpeed;
   if (me.effects && me.effects.speed > 0) spd *= 1.7;
   if (me.effects && me.effects.slow  > 0) spd *= 0.4;
 
@@ -1392,12 +1392,16 @@ function renderShop() {
     return;
   }
 
-  list.innerHTML = legendaryCards(weapons, coins) + weapons.map(id => {
+  const perkIds = Object.keys(shopData.perks || {});
+  // Parry and character first, then legendary weapons for sale, then your weapons.
+  list.innerHTML = [...perkIds, '__legend__', ...weapons].map(id => {
+    if (id === '__legend__') return legendaryCards(weapons, coins);
     const lv = upgrades[id] || {};
-    const name = WEAPON_META[id]?.name || id.toUpperCase();
-    const col = WEAPON_COLOR[id] || '#ccc';
+    const perk = PERK_ROWS[id];
+    const name = perk ? perk.name : WEAPON_META[id]?.name || id.toUpperCase();
+    const col = perk ? perk.color : WEAPON_COLOR[id] || '#ccc';
     // Each weapon has its own three upgrades, listed in the server catalog.
-    const stats = (WEAPON_META[id]?.upgrades || ['dmg', 'spd', 'rng']).filter(k => upgradeDefs[k]);
+    const stats = (shopData.perks?.[id] || WEAPON_META[id]?.upgrades || ['dmg', 'spd', 'rng']).filter(k => upgradeDefs[k]);
     // One tap = one level (counted instantly, sent in batches); MAX buys every
     // level the coins cover. Button contents are refreshed in place by
     // refreshShopButtons, so a button is never swapped out under a finger.
@@ -1425,6 +1429,7 @@ function renderShop() {
     g.clearRect(0, 0, cv.width, cv.height);
     const id = cv.dataset.weapon;
     g.imageSmoothingEnabled = false;
+    if (PERK_ROWS[id]) { PERK_ROWS[id].icon(g, cv.width, cv.height); continue; }
     drawWeaponPixelsFitted(g, id, cv.width / 2, cv.height / 2, cv.width - 8, cv.height - 8,
                            WEAPON_COLOR[id] || '#ccc');
   }
@@ -1434,7 +1439,7 @@ function renderShop() {
 const LEGEND_MOVES = {
   fireglove: '<b>ATK</b> a ring of fire that grows for 1s · <b>SPECIAL</b> a fire hand that hunts your foe and explodes'
            + ' (hit or parry it to break it) · <b>SUPER</b> an inferno ring that keeps growing until parried',
-  vortex: '<b>ATK</b> a 3s shield that doesn\'t block hits but banks the damage you take · <b>SPECIAL</b> a 3s lightning'
+  vortex: '<b>ATK</b> a 3s shield that blocks every hit and banks the damage it stopped · <b>SPECIAL</b> a 3s lightning'
         + ' force field around you: anything that touches it takes the whole bank · <b>SUPER</b> heals 1.5x the bank · special and super empty it.'
         + ' No other weapons needed.',
 };
@@ -1492,6 +1497,28 @@ async function buyWeapon(id) {
     shopBusy = false;
   }
 }
+
+// Upgrade rows that aren't weapons: how they're labelled and drawn in the shop.
+const PERK_ROWS = {
+  _parry: { name: 'PARRY', color: '#66ccff', icon(g, w, h) {
+    // The parry flash: a ring with spikes, as it appears in game.
+    const x = w / 2, y = h / 2;
+    g.strokeStyle = '#66ccff'; g.lineWidth = 2;
+    g.beginPath(); g.arc(x, y, 9, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = '#cceeff'; g.lineWidth = 1.5;
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      g.beginPath(); g.moveTo(x + Math.cos(a) * 11, y + Math.sin(a) * 11); g.lineTo(x + Math.cos(a) * 15, y + Math.sin(a) * 15); g.stroke();
+    }
+    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(x, y, 2.5, 0, Math.PI * 2); g.fill();
+  } },
+  _hero: { name: 'CHARACTER', color: '#ffcc55', icon(g, w, h) {
+    // Your own character, in your chosen skin.
+    const skin = pendingSkin || {};
+    const spr = playerSprite(SKIN_COLORS[skin.colorIdx] || '#4488ff', skin.hatIdx || 0, 1, false, skin.outfit || '');
+    if (spr) g.drawImage(spr, Math.floor((w - spr.width) / 2), Math.floor((h - spr.height) / 2));
+  } },
+};
 
 // Update every upgrade button's pips, price and state in place.
 function refreshShopButtons() {

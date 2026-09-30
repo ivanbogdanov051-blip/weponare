@@ -135,7 +135,7 @@ const WEAPONS = [
     special: { kind: 'firehand', dmg: 20, range: 420, cd: 800, aoe: 40, blast: 14 },
     super:   { kind: 'inferno',  dmg: 50, cd: 18000 } },
   // Shop-only, but with no unlock requirement (noRequirement). Attack raises a
-  // 3 s shield that doesn't block anything — it banks the damage you take.
+  // 3 s shield that blocks every hit and banks the damage it would have done.
   // Special throws that bank back as a lightning vortex; SUPER heals 1.5x the
   // bank. Both empty the bank. special.dmg / super.dmg are percentages of it.
   { id: 'vortex',      name: 'VORTEX SHIELD', damage: 1, range: 60, atkSpd: 3300, type: 'melee', unlockXp: 0, shopOnly: true, noRequirement: true, price: 20000, vortexShield: true,
@@ -171,6 +171,14 @@ const UPGRADE_STATS = {
   chill: { name: 'FROST',     short: 'FRZ', max: 5,  perLevel: 0.25,  baseCost: 14, desc: '+25% slow duration' },
   chain: { name: 'CHAIN',     short: 'CHN', max: 3,  perLevel: 1,     baseCost: 55, desc: 'lightning jumps to +1 foe' },
   knock: { name: 'KNOCKBACK', short: 'KNK', max: 5,  perLevel: 5,     baseCost: 12, desc: 'hits push foes +5px' },
+  // Parry upgrades (the _parry row in the shop)
+  pwin:  { name: 'WINDOW',    short: 'WIN', max: 6,  perLevel: 0.12,  baseCost: 16, desc: '+12% parry duration' },
+  pcd:   { name: 'RECHARGE',  short: 'RCH', max: 8,  perLevel: 0.07,  baseCost: 14, desc: '-7% parry cooldown' },
+  prefl: { name: 'REFLECT',   short: 'RFL', max: 6,  perLevel: 0.15,  baseCost: 18, desc: '+0.15x damage sent back by a parry' },
+  // Character upgrades (the _hero row)
+  hp:    { name: 'HEALTH',    short: 'HP',  max: 10, perLevel: 10,    baseCost: 15, desc: '+10 max health' },
+  move:  { name: 'SPEED',     short: 'MOV', max: 6,  perLevel: 0.04,  baseCost: 16, desc: '+4% move speed' },
+  def:   { name: 'DEFENSE',   short: 'DEF', max: 8,  perLevel: 0.03,  baseCost: 18, desc: '-3% damage taken' },
 };
 const UPGRADE_KEYS = Object.keys(UPGRADE_STATS);
 
@@ -202,7 +210,29 @@ const WEAPON_UPGRADES = {
   fireglove:   ['dmg', 'rng', 'life', 'cdr', 'aoe'],
   vortex:      ['dmg', 'spd', 'cdr'],
 };
-function upgradesFor(weaponId) { return WEAPON_UPGRADES[weaponId] || ['dmg', 'spd', 'rng']; }
+// Upgrade rows that aren't weapons: always available, stored alongside the
+// weapon upgrades under these ids.
+const PERK_UPGRADES = {
+  _parry: ['pwin', 'pcd', 'prefl'],
+  _hero:  ['hp', 'move', 'def'],
+};
+function upgradesFor(weaponId) { return PERK_UPGRADES[weaponId] || WEAPON_UPGRADES[weaponId] || ['dmg', 'spd', 'rng']; }
+function isUpgradeTarget(id) { return !!(WEAPON_BY_ID[id] || PERK_UPGRADES[id]); }
+
+// A player's character and parry stats, from their perk upgrades.
+function perkLevel(p, row, stat) { return (p.upgrades?.[row]?.[stat]) || 0; }
+function applyPerks(p) {
+  const hurt = p.maxHp - p.hp;
+  p.maxHp = 100 + perkLevel(p, '_hero', 'hp') * UPGRADE_STATS.hp.perLevel;
+  p.hp = Math.max(1, Math.min(p.maxHp, p.maxHp - hurt));
+  p.speed = PLAYER_SPEED * (1 + perkLevel(p, '_hero', 'move') * UPGRADE_STATS.move.perLevel);
+  p.defense = perkLevel(p, '_hero', 'def') * UPGRADE_STATS.def.perLevel;
+  p.parryWindow = Math.round(PARRY_WINDOW * (1 + perkLevel(p, '_parry', 'pwin') * UPGRADE_STATS.pwin.perLevel));
+  p.parryCd = Math.round(PARRY_COOLDOWN * (1 - perkLevel(p, '_parry', 'pcd') * UPGRADE_STATS.pcd.perLevel));
+  p.parryReflect = PARRY_REFLECT + perkLevel(p, '_parry', 'prefl') * UPGRADE_STATS.prefl.perLevel;
+}
+// Reflect multiplier of whoever parried (monsters/unknown fall back to the base).
+function reflectOf(t) { return (t && t.parryReflect) || PARRY_REFLECT; }
 
 // ── Skins bought with coins: full outfits drawn over the character ──
 // Ownership is saved per password; a skin can only be worn once it is owned.
@@ -411,7 +441,7 @@ function normalizeUpgrades(raw) {
   const out = {};
   if (!raw || typeof raw !== 'object') return out;
   for (const [wid, lv] of Object.entries(raw)) {
-    if (!WEAPON_BY_ID[wid] || !lv || typeof lv !== 'object') continue;
+    if (!isUpgradeTarget(wid) || !lv || typeof lv !== 'object') continue;
     const e = {};
     let any = false;
     for (const k of upgradesFor(wid)) {
@@ -514,6 +544,7 @@ function makePlayer(num, xp, upgrades) {
     pull: null,
   };
   refreshWeapon(p);
+  applyPerks(p);
   return p;
 }
 
@@ -986,7 +1017,15 @@ function applyDamage(target, dmg, attackerKey) {
   }
   // Armoured monsters shrug off a share of every hit, but never all of it.
   if (target.armor) dmg = Math.max(1, Math.round(dmg * (1 - target.armor)));
-  if (target.num && target.vortexShield > 0) bankVortex(target, dmg);
+  if (target.num && target.defense) dmg = Math.max(1, Math.round(dmg * (1 - target.defense)));
+  // The vortex shield blocks the hit outright, but still banks what it would have done.
+  if (target.num && target.vortexShield > 0) {
+    bankVortex(target, dmg);
+    target.hitFlash = 80;
+    target.invincible = 500;
+    room.particles.push({ type: 'shockwave', x: cx(target), y: cy(target), maxR: target.w + 6, timer: 220, max: 220, color: '#7ad8ff' });
+    return;
+  }
   target.hp -= dmg;
   const steal = (aw ? aw.lifesteal || 0 : 0) + (atk && atk !== target && hasEffect(atk, 'vampire') ? 0.25 : 0);
   if (steal && !atk.dead) {
@@ -1227,8 +1266,8 @@ function tickRoom(dt) {
       doSuper(p, key);
     }
     if (room.parryJustPressed[key] && p.parryCooldown <= 0) {
-      p.parryTimer    = PARRY_WINDOW;
-      p.parryCooldown = PARRY_COOLDOWN;
+      p.parryTimer    = p.parryWindow || PARRY_WINDOW;
+      p.parryCooldown = p.parryCd || PARRY_COOLDOWN;
       spawnParrySpark(cx(p), cy(p));
     }
   }
@@ -1297,7 +1336,7 @@ function tickRoom(dt) {
         if (dist <= reach + 4 && m.atkCooldown <= 0) {
           if (nearest.parryTimer > 0) {
             // Parried: reflect the blow back onto the monster
-            applyDamage(m, Math.round(m.atkDamage * PARRY_REFLECT) + 10, playerKeyOf(nearest));
+            applyDamage(m, Math.round(m.atkDamage * reflectOf(nearest)) + 10, playerKeyOf(nearest));
             spawnParrySpark(cx(nearest), cy(nearest));
           } else {
             applyDamage(nearest, m.atkDamage, 'monster');
@@ -1571,7 +1610,7 @@ function advanceProjectile(proj, factor, dt) {
       proj.owner = tk;
       proj.traveled = 0;
       proj.returning = false;
-      proj.damage = Math.round(proj.damage * PARRY_REFLECT);
+      proj.damage = Math.round(proj.damage * reflectOf(t));
       // A deflected hook is just a projectile now — it reels nobody in and
       // teleports nobody, so it should stop drawing a chain too.
       proj.grapple = false;
@@ -1646,7 +1685,8 @@ function dotDamage(t, dmg) {
   if (t.dead) return;
   if (t.num && hasEffect(t, 'shield')) return;
   if (t.armor) dmg = Math.max(1, Math.round(dmg * (1 - t.armor)));
-  if (t.num && t.vortexShield > 0) bankVortex(t, dmg);
+  if (t.num && t.defense) dmg = Math.max(1, Math.round(dmg * (1 - t.defense)));
+  if (t.num && t.vortexShield > 0) { bankVortex(t, dmg); return; }   // blocked, but banked
   t.hp -= dmg;
   t.hitFlash = Math.max(t.hitFlash || 0, 90);
   if (t.hp <= 0) handleKill(t, 'trap');
@@ -1670,7 +1710,7 @@ function strikeTarget(t, dmg, ownerKey) {
   const tk = playerKeyOf(t);
   if (tk && t.parryTimer > 0) {
     const o = room.players[ownerKey];
-    if (o) applyDamage(o, Math.round(dmg * PARRY_REFLECT), tk);
+    if (o) applyDamage(o, Math.round(dmg * reflectOf(t)), tk);
     spawnParrySpark(cx(t), cy(t));
     return;
   }
@@ -1751,7 +1791,7 @@ function doAttack(p, pKey) {
       const tk = playerKeyOf(t);
       if (tk && t.parryTimer > 0) {
         // Parried: the attacker takes the (boosted) hit instead
-        applyDamage(p, Math.round(w.damage * dmgMult * PARRY_REFLECT), tk);
+        applyDamage(p, Math.round(w.damage * dmgMult * reflectOf(t)), tk);
         spawnParrySpark(cx(p), cy(p));
       } else {
         applyDamage(t, Math.round(w.damage * dmgMult), pKey);
@@ -2177,7 +2217,8 @@ function playerView(p) {
     specialCd: Math.max(0, p.specialCooldown), specialMax: w.special?.cd || 0,
     superCd: Math.max(0, p.superCooldown || 0), superMax: w.super?.cd || 0,
     vShield: p.vortexShield > 0 ? Math.round(p.vortexShield) : 0, vStore: Math.round(p.vortexStore || 0),
-    parryCd: Math.max(0, p.parryCooldown), parryMax: PARRY_COOLDOWN, parryActive: p.parryTimer > 0,
+    parryCd: Math.max(0, p.parryCooldown), parryMax: p.parryCd || PARRY_COOLDOWN, parryActive: p.parryTimer > 0,
+    speed: Math.round(p.speed * 1000) / 1000,
     effects: p.effects,
     pulled: !!p.pull,
   };
@@ -2309,14 +2350,14 @@ function cleanSkin(raw, owned) {
 app.use(express.json({ limit: '8kb' }));
 
 app.get('/api/catalog', (_req, res) => {
-  res.json({ catalog: weaponCatalog(), upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP });
+  res.json({ catalog: weaponCatalog(), perks: PERK_UPGRADES, upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP });
 });
 
 app.post('/api/profile', (req, res) => {
   const pw = sanitizeText(req.body?.password, 32);
   if (!pw) return res.status(400).json({ error: 'A password is required to save upgrades.' });
   const p = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins });
-  res.json({ ...p, catalog: weaponCatalog(), upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP });
+  res.json({ ...p, catalog: weaponCatalog(), perks: PERK_UPGRADES, upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP });
 });
 
 app.post('/api/upgrade', (req, res) => {
@@ -2324,14 +2365,14 @@ app.post('/api/upgrade', (req, res) => {
   if (!pw) return res.status(400).json({ error: 'A password is required to save upgrades.' });
   const weaponId = sanitizeText(req.body?.weaponId, 24);
   const stat = sanitizeText(req.body?.stat, 8);
-  if (!WEAPON_BY_ID[weaponId]) return res.status(400).json({ error: 'Unknown weapon.' });
+  if (!isUpgradeTarget(weaponId)) return res.status(400).json({ error: 'Unknown weapon.' });
   if (!UPGRADE_STATS[stat] || !upgradesFor(weaponId).includes(stat)) {
     return res.status(400).json({ error: 'That weapon has no such upgrade.' });
   }
 
   const admin = isAdminPw(pw);
   const prof = profileFor(pw, {});
-  if (!prof.weapons.includes(weaponId)) {
+  if (!PERK_UPGRADES[weaponId] && !prof.weapons.includes(weaponId)) {
     return res.status(400).json({ error: 'Unlock that weapon first.' });
   }
 
@@ -2370,7 +2411,7 @@ app.post('/api/upgrade', (req, res) => {
     room.playerUpgrades[key] = ups;
     if (!admin) room.playerCoins[key] = d.coins[pw];
     const p = room.players[key];
-    if (p) { p.upgrades = ups; refreshWeapon(p); }
+    if (p) { p.upgrades = ups; refreshWeapon(p); applyPerks(p); }
   }
 
   const next = profileFor(pw, {});
