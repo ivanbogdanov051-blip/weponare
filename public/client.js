@@ -3195,22 +3195,40 @@ function drawWeaponPanel(state) {
   // Slots shrink to fit, and wrap onto more rows only if they'd get too small.
   const TOP = 29, SIDE = 156;
   let L = myNum === 2 ? 6 : SIDE, R = myNum === 2 ? HUD_W - SIDE : HUD_W - 6;
-  const avail = R - L, gap = 2, slotH = 22;
-  let rows = 1, slotW = 0;
-  for (; rows <= 4; rows++) {
-    slotW = Math.min(26, Math.floor((avail + gap) / Math.ceil(n / rows)) - gap);
-    if (slotW >= 18) break;
-  }
-  rows = Math.min(rows, 4);
-  slotW = Math.max(14, slotW);
-  const perRow = Math.ceil(n / rows);
+  const gap = 2, slotH = 22;
+  let rows, slotW, perRow, panelW, panelH, panelX;
   const rowW = (cnt) => cnt * (slotW + gap) - gap;
-  const panelW = rowW(Math.min(n, perRow));
-  const panelH = rows * slotH + (rows - 1) * gap;
-  // Centred on the screen when it fits there, otherwise inside its lane.
-  const panelX = Math.round(Math.max(L, Math.min(R - panelW, HUD_W / 2 - panelW / 2)));
+  const layout = () => {
+    const avail = R - L;
+    for (rows = 1; rows <= 4; rows++) {
+      slotW = Math.min(26, Math.floor((avail + gap) / Math.ceil(n / rows)) - gap);
+      if (slotW >= 18) break;
+    }
+    rows = Math.min(rows, 4);
+    slotW = Math.max(14, slotW);
+    perRow = Math.ceil(n / rows);
+    panelW = rowW(Math.min(n, perRow));
+    panelH = rows * slotH + (rows - 1) * gap;
+    // Centred on the screen when it fits there, otherwise inside its lane.
+    panelX = Math.round(Math.max(L, Math.min(R - panelW, HUD_W / 2 - panelW / 2)));
+  };
+  layout();
+  // A tall column of touch buttons reaching up into the rack (short phone
+  // screens, extra ability / SUPER buttons) narrows the lane instead of pushing
+  // the rack down underneath it — which used to shove it off the screen.
+  for (let tries = 0; tries < 3; tries++) {
+    const hit = hudTouchZones().find(z => z.h > 40 && z.y < TOP + panelH + 3 && z.y + z.h > TOP - 3
+                                       && z.x < panelX + panelW + 4 && z.x + z.w > panelX - 4);
+    if (!hit) break;
+    if (hit.x + hit.w / 2 > HUD_W / 2) R = Math.min(R, hit.x - 6);
+    else L = Math.max(L, hit.x + hit.w + 6);
+    if (R - L < 60) break;
+    layout();
+  }
   const midX = panelX + panelW / 2;
-  const panelY = clearOfButtons(panelX - 4, TOP - 3, panelW + 8, panelH + 6) + 3;
+  let panelY = clearOfButtons(panelX - 4, TOP - 3, panelW + 8, panelH + 6) + 3;
+  // Small nudges below the music / leave buttons are fine; never further.
+  if (panelY > TOP + 24 || panelY + panelH > HUD_H - 14) panelY = TOP;
 
   // Never hide your own character: if you walk behind the rack, it turns
   // see-through.

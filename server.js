@@ -133,7 +133,7 @@ const WEAPONS = [
   // weapon is unlocked. Attack = a growing ring of fire (range = its final
   // radius), special = a homing hand of fire, and it alone has a SUPER.
   { id: 'fireglove',   name: 'FIRE GLOVE',  damage: 16, range: 78,  atkSpd: 650,  type: 'melee',  unlockXp: 0, shopOnly: true, price: 5000, fireRing: true,
-    special: { kind: 'firehand', dmg: 20, range: 420, cd: 800, aoe: 40, blast: 14 },
+    special: { kind: 'firehand', dmg: 20, range: 420, cd: 300, minCd: 120, aoe: 40, blast: 14 },
     super:   { kind: 'inferno',  dmg: 50, cd: 18000 } },
   // Shop-only, but with no unlock requirement (noRequirement). Attack raises a
   // 3 s shield that blocks every hit and banks the damage it would have done.
@@ -636,7 +636,7 @@ function applyUpgrades(w, levels) {
       dmg: Math.max(1, Math.round(sp.dmg * dmgM)),
       // A slam's range is its blast radius, so BLAST widens it too.
       range: Math.round(sp.range * (sp.kind === 'slam' ? aoeM : rngM)),
-      cd: Math.max(500, Math.round(sp.cd * cdM)),
+      cd: Math.max(sp.minCd || 500, Math.round(sp.cd * cdM)),   // fire glove hands may go faster
       aoe: sp.aoe ? Math.round(sp.aoe * aoeM) : sp.aoe,
       blast: sp.blast ? Math.max(1, Math.round(sp.blast * dmgM)) : sp.blast,
       chill: sp.chill ? Math.round(sp.chill * chillM) : sp.chill,
@@ -1243,7 +1243,13 @@ function handleKill(target, attackerKey) {
       ...(attacker?.unlockedWeapons || []),
       ...getUnlockedWeaponIds(room.playerXp[attackerKey]),
     ]);
-    if (attacker) { attacker.unlockedWeapons = merged; refreshWeapon(attacker); }
+    if (attacker) {
+      // Keep holding the same weapon even though the sorted list shifted.
+      const cur = attacker.unlockedWeapons[attacker.weaponIdx];
+      attacker.unlockedWeapons = merged;
+      attacker.weaponIdx = Math.max(0, merged.indexOf(cur));
+      refreshWeapon(attacker);
+    }
     room.playerUnlocks[attackerKey] = merged;
 
     if (pw && !admin) {

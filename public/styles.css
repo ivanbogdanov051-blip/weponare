@@ -453,9 +453,9 @@ body {
 #gameControls.visible { display: flex; }
 
 #gameControls button {
-  background: rgba(15, 15, 40, 0.82);
-  border: 2px solid rgba(120, 120, 160, 0.5);
-  color: rgba(220, 220, 240, 0.9);
+  background: rgba(15, 15, 40, 0.96);
+  border: 2px solid rgba(130, 130, 175, 0.95);
+  color: rgb(225, 225, 245);
   font-family: 'Courier New', monospace;
   font-size: 11px;
   letter-spacing: 1px;
@@ -465,11 +465,11 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 #gameControls button:active { background: rgba(40, 40, 90, 0.95); }
-#leaveBtn { border-color: rgba(220, 80, 60, 0.6); color: rgba(255, 180, 160, 0.95); }
+#leaveBtn { border-color: rgba(225, 85, 65, 1); color: rgba(255, 180, 160, 0.95); }
 #leaveBtn:active { background: rgba(90, 25, 20, 0.95); }
-#musicBtnGame { border-color: rgba(90, 170, 230, 0.55); color: rgba(190, 225, 255, 0.95); }
+#musicBtnGame { border-color: rgba(95, 175, 235, 1); color: rgba(190, 225, 255, 0.95); }
 /* Admin tools: hidden unless the server says this player is an admin. */
-#gameControls button.admin-only { display: none; border-color: rgba(255, 200, 60, 0.7); color: #ffd870; }
+#gameControls button.admin-only { display: none; border-color: rgba(255, 200, 60, 1); color: #ffd870; }
 #gameControls button.admin-only.shown { display: inline-block; }
 #gameControls button.admin-only:active { background: rgba(90, 70, 10, 0.95); }
 
@@ -511,9 +511,9 @@ body {
 .dpad-btn {
   width: var(--dpad-size, 52px);
   height: var(--dpad-size, 52px);
-  background: rgba(15, 15, 40, 0.82);
-  border: 2px solid rgba(80, 100, 200, 0.55);
-  color: rgba(180, 200, 255, 0.9);
+  background: rgba(15, 15, 40, 0.96);
+  border: 2px solid rgba(90, 110, 210, 0.95);
+  color: rgb(190, 210, 255);
   font-size: 20px;
   cursor: pointer;
   border-radius: 8px;
@@ -541,9 +541,9 @@ body {
 }
 
 .action-btn {
-  background: rgba(15, 15, 40, 0.82);
-  border: 2px solid rgba(180, 80, 40, 0.55);
-  color: rgba(255, 200, 150, 0.9);
+  background: rgba(15, 15, 40, 0.96);
+  border: 2px solid rgba(200, 95, 50, 0.95);
+  color: rgb(255, 205, 160);
   font-family: 'Courier New', monospace;
   font-size: 11px;
   letter-spacing: 2px;
@@ -563,8 +563,8 @@ body {
   padding: 18px 24px;
   font-size: 15px;
   letter-spacing: 3px;
-  border-color: rgba(255, 80, 40, 0.7);
-  background: rgba(50, 12, 12, 0.85);
+  border-color: rgba(255, 85, 45, 1);
+  background: rgba(55, 14, 12, 0.97);
   min-width: 88px;
 }
 
@@ -572,18 +572,18 @@ body {
 .action-btn.big-btn:active { background: rgba(100, 25, 15, 0.95); }
 
 .action-btn.special-btn {
-  border-color: rgba(170, 120, 255, 0.7);
+  border-color: rgba(175, 125, 255, 1);
   color: rgba(220, 190, 255, 0.95);
-  background: rgba(35, 18, 55, 0.85);
+  background: rgba(38, 20, 60, 0.97);
   font-size: 12px;
   padding: 12px 18px;
 }
 .action-btn.special-btn:active { background: rgba(80, 40, 130, 0.95); border-color: rgba(200, 150, 255, 0.95); }
 
 .action-btn.parry-btn {
-  border-color: rgba(80, 170, 230, 0.7);
+  border-color: rgba(85, 175, 235, 1);
   color: rgba(190, 230, 255, 0.95);
-  background: rgba(15, 35, 55, 0.85);
+  background: rgba(16, 38, 60, 0.97);
   font-size: 12px;
   padding: 12px 18px;
 }
@@ -593,14 +593,14 @@ body {
 .action-btn.super-btn {
   border-color: rgba(255, 140, 40, 0.85);
   color: #ffd8a0;
-  background: linear-gradient(180deg, rgba(120, 30, 5, 0.9), rgba(60, 10, 0, 0.9));
+  background: linear-gradient(180deg, rgba(125, 32, 6, 0.98), rgba(64, 12, 0, 0.98));
   font-size: 12px;
   font-weight: bold;
   padding: 12px 18px;
   box-shadow: 0 0 8px rgba(255, 110, 20, 0.55);
 }
 .action-btn.super-btn:active { background: rgba(190, 60, 10, 0.95); border-color: #ffc070; }
-.action-btn.super-btn.cooling { opacity: 0.45; box-shadow: none; }
+.action-btn.super-btn.cooling { opacity: 0.7; box-shadow: none; }
 .action-btn.hidden-btn { display: none; }
 
 /* Short screens (landscape phones): shrink the pads so they never eat the map. */
@@ -650,10 +650,10 @@ body {
 .ability-btns { display: flex; gap: 6px; }
 .action-btn.ability-btn {
   min-width: 0; padding: 8px 10px; font-size: 10px; letter-spacing: 1px;
-  border-color: #8fd8ff; color: #dff6ff; background: rgba(10, 30, 45, 0.88);
+  border-color: #8fd8ff; color: #dff6ff; background: rgba(10, 32, 48, 0.97);
 }
 .action-btn.ability-btn:active { background: rgba(30, 80, 110, 0.95); }
-.action-btn.ability-btn.cooling { opacity: 0.4; }
+.action-btn.ability-btn.cooling { opacity: 0.7; }
 @media (max-height: 420px) {
   .action-btn.ability-btn { padding: 6px 8px; font-size: 9px; }
 }
