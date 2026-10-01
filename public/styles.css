@@ -657,3 +657,7 @@ body {
 @media (max-height: 420px) {
   .action-btn.ability-btn { padding: 6px 8px; font-size: 9px; }
 }
+
+/* Way out of the connecting / waiting / error screens. */
+.exit-btn { margin-top: 18px; width: 100%; border-color: rgba(225, 85, 65, 0.9); color: #ffb4a4; }
+.exit-btn:hover { border-color: #ff7a60; color: #fff; }

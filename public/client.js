@@ -215,6 +215,16 @@ function leaveGame() {
   showScreen('startScreen');
 }
 
+// Back to the title screen from the connecting / waiting-for-opponent screen
+// or an error. Works whether the connection is still opening, open, or gone.
+function exitToMenu() {
+  if (ws && ws.readyState <= 1) { leaveGame(); return; }   // connecting or open: close it properly
+  if (window.GameAudio) GameAudio.stopMusic();
+  showGameControls(false);
+  showScreen('startScreen');
+  refreshSavedBanner();
+}
+
 function showGameControls(show) {
   const el = document.getElementById('gameControls');
   if (el) el.className = show ? 'visible' : '';
