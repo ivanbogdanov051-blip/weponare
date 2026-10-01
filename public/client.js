@@ -51,6 +51,8 @@ const WEAPON_DESC = {
 
 // Filled from the server catalog: { id: {type, atkSpd, ...} }
 let WEAPON_META = {};
+let ABILITY_DEFS = [];    // from the server: { id, name, price, cd, color, desc }
+function abilityDef(id) { return ABILITY_DEFS.find(a => a.id === id) || null; }
 function isRanged(id) { return WEAPON_META[id] ? WEAPON_META[id].type === 'ranged' : false; }
 
 // ─── Skins ────────────────────────────────────────────────────────────────────
@@ -70,6 +72,11 @@ function loadLocalXp(pw)   { return pw ? (parseInt(lsGet('weponare_xp_' + pw)) |
 function saveLocalXp(pw, xp) { if (pw) lsSet('weponare_xp_' + pw, String(xp)); }
 function loadLocalCoins(pw) { return pw ? (parseInt(lsGet('weponare_coins_' + pw)) || 0) : 0; }
 function saveLocalCoins(pw, c) { if (pw) lsSet('weponare_coins_' + pw, String(c)); }
+// A full copy of this password's save (weapons, upgrades, skins, coins, XP),
+// signed by the server and kept on this device. If the server ever loses its
+// save file — the host wipes it on every update — it restores from this copy.
+function loadBackup(pw) { if (!pw) return null; try { return JSON.parse(lsGet('weponare_save_' + pw)); } catch { return null; } }
+function storeBackup(pw, save) { if (pw && save && save.data && save.sig) lsSet('weponare_save_' + pw, JSON.stringify(save)); }
 
 let pendingSkin = loadLocalSkin();
 let skinModified = false;
@@ -144,10 +151,11 @@ async function refreshSavedBanner() {
   try {
     const res = await fetch('/api/profile', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: pw, localXp: loadLocalXp(pw), localCoins: loadLocalCoins(pw) }),
+      body: JSON.stringify({ password: pw, localXp: loadLocalXp(pw), localCoins: loadLocalCoins(pw), backup: loadBackup(pw) }),
     });
     if (!res.ok) { el.innerHTML = '<span style="color:#555">Save unavailable</span>'; return; }
     const d = await res.json();
+    storeBackup(pw, d.save);
     applyCatalog(d.catalog, d.colors);
     saveLocalCoins(pw, d.coins);
     saveLocalXp(pw, d.xp);
@@ -237,6 +245,7 @@ function connect() {
       if (sample >= 0 && sample < 2000) rttMs = rttMs * 0.7 + sample * 0.3;
       return;
     }
+    if (msg.type === 'save') storeBackup(pendingPass, msg.save);
     if (msg.type === 'skin_init') {
       pendingSkin = msg.skin;
       saveLocalSkin(msg.skin);
@@ -248,10 +257,11 @@ function connect() {
       if (msg.leaderboard) welcomeLeaderboard = msg.leaderboard;
       if (msg.playerSpeed) serverPlayerSpeed = msg.playerSpeed;
       applyCatalog(msg.catalog, msg.colors);
+      if (Array.isArray(msg.abilityDefs)) ABILITY_DEFS = msg.abilityDefs;
       ws.send(JSON.stringify({
         type: 'join', name: pendingName, mode: pendingMode, password: pendingPass,
         skin: pendingSkin, skinModified,
-        localXp: loadLocalXp(pendingPass), localCoins: loadLocalCoins(pendingPass),
+        localXp: loadLocalXp(pendingPass), localCoins: loadLocalCoins(pendingPass), backup: loadBackup(pendingPass),
       }));
       skinModified = false;
       showGameControls(true);
@@ -799,11 +809,39 @@ function drawSpinSlash(sl, alpha, prog, u) {
 // Rings of fire: the attack's quick ring (k = how burnt-out it is) and the
 // SUPER's inferno, which just keeps growing. Flame tongues lick outward
 // along the edge and flicker over time.
+// A meteor on its way down: a pulsing target circle that fills in, and the rock
+// dropping in from the upper right with a fiery tail. It lands when k hits 1.
+function drawMeteor(f, now) {
+  const k = Math.min(1, f.k || 0);
+  ctx.save();
+  ctx.globalAlpha = 0.18 + 0.22 * k;
+  ctx.fillStyle = '#ff5a1a';
+  ctx.beginPath(); ctx.arc(f.x, f.y, f.r * k, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.55 + 0.35 * Math.abs(Math.sin(now * 14));
+  ctx.strokeStyle = '#ffb04a'; ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  const fall = 1 - k, mx = f.x + fall * 150, my = f.y - fall * 260;
+  ctx.globalAlpha = 1;
+  for (let i = 5; i >= 1; i--) {
+    ctx.globalAlpha = 0.16 * (6 - i);
+    ctx.fillStyle = i > 2 ? '#ff6a1a' : '#ffd27a';
+    ctx.beginPath(); ctx.arc(mx + i * 9, my - i * 15, 9 - i, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#5a3020'; ctx.beginPath(); ctx.arc(mx, my, 9, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#8a4a2a'; ctx.beginPath(); ctx.arc(mx - 2, my - 2, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffb04a'; ctx.fillRect(mx + 2, my + 1, 3, 3);
+  ctx.restore();
+}
+
 function drawFireRings(fires) {
   if (!fires.length) return;
   const now = performance.now() / 1000;
   for (const f of fires) {
     if (f.kind === 'vortexfield') { drawVortexField(f, now); continue; }
+    if (f.kind === 'meteor') { drawMeteor(f, now); continue; }
     if (f.kind === 'soundwave') {
       // Three rippling rings, fading as the wave spreads.
       const fade = Math.max(0, 1 - f.r / 420);
@@ -990,6 +1028,28 @@ function fireHandShape(s, color, now) {
 
 // The SUPER touch button appears only while holding a weapon that has one,
 // and dims while it recharges.
+// Q / E touch buttons: shown only for equipped abilities, dimmed while cooling.
+const abBtnState = [{ id: undefined, cooling: null }, { id: undefined, cooling: null }];
+function syncAbilityButtons(me) {
+  for (let i = 0; i < 2; i++) {
+    const el = document.getElementById('btn-ab' + (i + 1));
+    if (!el) continue;
+    const a = me && me.abil ? me.abil[i] : null;
+    const id = a ? a.id : null, st = abBtnState[i];
+    if (id !== st.id) {
+      st.id = id;
+      const def = abilityDef(id);
+      el.textContent = def ? def.name.split(' ').pop().slice(0, 6) : '';
+      el.style.borderColor = def ? def.color : '';
+      el.classList.toggle('hidden-btn', !id);
+      touchZonesAt = -1e9;
+      if (!id) touchKeys['ab' + (i + 1)] = false;
+    }
+    const cooling = !!(a && a.cd > 0);
+    if (cooling !== st.cooling) { st.cooling = cooling; el.classList.toggle('cooling', cooling); }
+  }
+}
+
 let superBtnShown = null, superBtnCooling = null;
 function syncSuperButton(me) {
   const el = document.getElementById('btn-super');
@@ -1040,7 +1100,7 @@ function drawStabSlash(sl, alpha, prog, u) {
 
 const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 const keys = {};
-const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false };
+const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false, ab1: false, ab2: false };
 
 window.addEventListener('keydown', (e) => {
   if (!keys[e.code]) { keys[e.code] = true; sendInput(); }
@@ -1071,6 +1131,8 @@ function currentInputs() {
     special: !!keys['ShiftLeft'] || !!keys['ShiftRight'] || touchKeys.special,
     parry:   !!keys['KeyP'] || !!keys['ControlLeft'] || !!keys['ControlRight'] || touchKeys.parry,
     super:   !!keys['KeyR'] || touchKeys.super,
+    ab1:     !!keys['KeyQ'] || touchKeys.ab1,
+    ab2:     !!keys['KeyE'] || touchKeys.ab2,
   };
 }
 
@@ -1164,6 +1226,7 @@ function setupTouchControls() {
     ['btn-up','up'], ['btn-down','down'], ['btn-left','left'],
     ['btn-right','right'], ['btn-attack','attack'], ['btn-swap','swap'],
     ['btn-special','special'], ['btn-parry','parry'], ['btn-super','super'],
+    ['btn-ab1','ab1'], ['btn-ab2','ab2'],
   ];
   for (const [id, key] of btnMap) {
     const el = document.getElementById(id);
@@ -1228,9 +1291,10 @@ async function openSkinsScreen() {
   try {
     const res = await fetch('/api/profile', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: pendingPass, localXp: loadLocalXp(pendingPass), localCoins: loadLocalCoins(pendingPass) }),
+      body: JSON.stringify({ password: pendingPass, localXp: loadLocalXp(pendingPass), localCoins: loadLocalCoins(pendingPass), backup: loadBackup(pendingPass) }),
     });
     const data = await res.json();
+    storeBackup(pendingPass, data.save);
     if (!res.ok) { setSkinMsg(data.error || 'Could not load your profile.', true); return; }
     skinProfile = { coins: data.coins, owned: data.ownedSkins || [], loaded: true };
     saveLocalCoins(pendingPass, data.coins);
@@ -1287,9 +1351,10 @@ async function buySkin(id) {
   try {
     const res = await fetch('/api/buy_skin', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: pendingPass, skinId: id, localCoins: loadLocalCoins(pendingPass) }),
+      body: JSON.stringify({ password: pendingPass, skinId: id, localCoins: loadLocalCoins(pendingPass), backup: loadBackup(pendingPass) }),
     });
     const data = await res.json();
+    storeBackup(pendingPass, data.save);
     if (!res.ok) { setSkinMsg(data.error || 'Purchase failed.', true); return; }
     skinProfile = { coins: data.coins, owned: data.ownedSkins || [], loaded: true };
     saveLocalCoins(pendingPass, data.coins);
@@ -1392,9 +1457,11 @@ async function openShop() {
         password: pendingPass,
         localXp: loadLocalXp(pendingPass),
         localCoins: loadLocalCoins(pendingPass),
+        backup: loadBackup(pendingPass),
       }),
     });
     const data = await res.json();
+    storeBackup(pendingPass, data.save);
     if (!res.ok) { setShopMsg(data.error || 'Could not load your profile.', true); return; }
     shopData = data;
     applyCatalog(data.catalog, data.colors);
@@ -1511,9 +1578,10 @@ async function buyWeapon(id) {
     const res = await fetch('/api/buy_weapon', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: pendingPass, weaponId: id,
-                             localXp: loadLocalXp(pendingPass), localCoins: loadLocalCoins(pendingPass) }),
+                             localXp: loadLocalXp(pendingPass), localCoins: loadLocalCoins(pendingPass), backup: loadBackup(pendingPass) }),
     });
     const data = await res.json();
+    storeBackup(pendingPass, data.save);
     if (!res.ok) { setShopMsg(data.error || 'Purchase failed.', true); return; }
     shopData = { ...shopData, ...data };
     saveLocalCoins(pendingPass, data.coins);
@@ -1616,9 +1684,10 @@ async function flushUpgrades() {
     const res = await fetch('/api/upgrade', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: pendingPass, weaponId, stat, count }),
+      body: JSON.stringify({ password: pendingPass, weaponId, stat, count, backup: loadBackup(pendingPass) }),
     });
     const data = await res.json();
+    storeBackup(pendingPass, data.save);
     if (!res.ok) setShopMsg(data.error || 'Upgrade failed.', true);
     else server = data;
   } catch {
@@ -1642,7 +1711,163 @@ async function flushUpgrades() {
 
 // ─── Screens ──────────────────────────────────────────────────────────────────
 
-const SCREENS = ['startScreen','lobbyScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen'];
+// ─── Abilities screen ─────────────────────────────────────────────────────────
+// Buy an ability once (it's yours for good), then put it on Q or E.
+
+let abilData = null, abilBusy = false;
+
+function setAbilMsg(text, isError) {
+  const el = document.getElementById('abilMsg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'shop-msg' + (isError ? ' err' : '');
+}
+
+async function abilPost(url, body) {
+  const res = await fetch(url, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pendingPass, localXp: loadLocalXp(pendingPass), localCoins: loadLocalCoins(pendingPass),
+                           backup: loadBackup(pendingPass), ...body }),
+  });
+  const data = await res.json();
+  storeBackup(pendingPass, data.save);
+  if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+  saveLocalCoins(pendingPass, data.coins);
+  return data;
+}
+
+async function openAbilities() {
+  readCredentials();
+  showScreen('abilitiesScreen');
+  document.getElementById('abilList').innerHTML = '';
+  document.getElementById('abilCoins').innerHTML = '';
+  if (!pendingPass) {
+    setAbilMsg('Enter a password on the title screen first — abilities are saved against it.', true);
+    return;
+  }
+  setAbilMsg('Loading...');
+  try {
+    abilData = await abilPost('/api/profile', {});
+    if (Array.isArray(abilData.abilityDefs)) ABILITY_DEFS = abilData.abilityDefs;
+    setAbilMsg('');
+    renderAbilities();
+  } catch (e) {
+    setAbilMsg(e.message === 'Failed to fetch' ? 'Could not reach the server.' : e.message, true);
+  }
+}
+function closeAbilities() { showScreen('startScreen'); refreshSavedBanner(); }
+
+function renderAbilities() {
+  if (!abilData) return;
+  const { coins, abilities = [], abilitySlots = [null, null] } = abilData;
+  document.getElementById('abilCoins').innerHTML = `<span class="coin-ic">◆</span> ${coins.toLocaleString()} COINS`;
+  const slotName = id => { const d = abilityDef(id); return d ? d.name : 'EMPTY'; };
+  document.getElementById('abilSlots').innerHTML = [0, 1].map(i =>
+    `<div class="abil-slot${abilitySlots[i] ? '' : ' empty'}"><span class="abil-key">${i ? 'E' : 'Q'}</span>${slotName(abilitySlots[i])}</div>`).join('');
+
+  document.getElementById('abilList').innerHTML = ABILITY_DEFS.map(a => {
+    const owned = abilities.includes(a.id);
+    const slot = abilitySlots.indexOf(a.id);
+    const cd = (a.cd / 1000).toFixed(a.cd % 1000 ? 1 : 0) + 's';
+    let actions;
+    if (!owned) {
+      const afford = coins >= a.price;
+      actions = `<button class="buy-weapon${afford ? '' : ' poor'}" onclick="buyAbility('${a.id}')">BUY ◆${a.price.toLocaleString()}</button>`
+        + (afford ? '' : `<span class="legend-need">Need ${(a.price - coins).toLocaleString()} more coins</span>`);
+    } else {
+      actions = [0, 1].map(i => slot === i
+        ? `<button class="abil-equip on" onclick="equipAbility('', ${i})">ON ${i ? 'E' : 'Q'} ✓</button>`
+        : `<button class="abil-equip" onclick="equipAbility('${a.id}', ${i})">PUT ON ${i ? 'E' : 'Q'}</button>`).join('');
+    }
+    return `<div class="shop-row abil-row${owned ? ' owned' : ''}">
+      <div class="shop-head">
+        <canvas class="shop-ic" data-ability="${a.id}" width="32" height="32"></canvas>
+        <span class="shop-name" style="color:${a.color}">${a.name}</span>
+        ${owned ? '<span class="abil-tag">OWNED</span>' : ''}
+      </div>
+      <div class="shop-desc">${a.desc} · <b>cooldown ${cd}</b></div>
+      <div class="legend-buy">${actions}</div>
+    </div>`;
+  }).join('');
+  for (const cv of document.querySelectorAll('#abilList canvas[data-ability]')) drawAbilityIcon(cv.getContext('2d'), cv.dataset.ability, cv.width, cv.height);
+}
+
+async function buyAbility(id) {
+  if (abilBusy || !abilData) return;
+  const def = abilityDef(id);
+  if (def && abilData.coins < def.price) { setAbilMsg(`Not enough coins — ${def.name} costs ${def.price.toLocaleString()}.`, true); return; }
+  abilBusy = true;
+  try {
+    abilData = { ...abilData, ...(await abilPost('/api/buy_ability', { abilityId: id })) };
+    if (window.GameAudio) { GameAudio.init(); GameAudio.sfx.unlock(); }
+    const slot = abilData.abilitySlots.indexOf(id);
+    setAbilMsg(`${def ? def.name : id} is yours forever!` + (slot >= 0 ? ` Press ${slot ? 'E' : 'Q'} in a match to use it.` : ' Put it on Q or E to use it.'));
+    renderAbilities();
+  } catch (e) {
+    setAbilMsg(e.message === 'Failed to fetch' ? 'Could not reach the server.' : e.message, true);
+  } finally {
+    abilBusy = false;
+  }
+}
+
+async function equipAbility(id, slot) {
+  if (abilBusy || !abilData) return;
+  abilBusy = true;
+  try {
+    abilData = { ...abilData, ...(await abilPost('/api/equip_ability', { abilityId: id, slot })) };
+    setAbilMsg('');
+    renderAbilities();
+  } catch (e) {
+    setAbilMsg(e.message === 'Failed to fetch' ? 'Could not reach the server.' : e.message, true);
+  } finally {
+    abilBusy = false;
+  }
+}
+
+// Small pixel icons for the ability cards.
+function drawAbilityIcon(g, id, w, h) {
+  const def = abilityDef(id), col = def ? def.color : '#ccc';
+  const x = w / 2, y = h / 2;
+  g.clearRect(0, 0, w, h);
+  g.imageSmoothingEnabled = false;
+  g.lineCap = 'round';
+  if (id === 'dash') {
+    g.strokeStyle = col;
+    for (let i = 0; i < 3; i++) { g.lineWidth = 2; g.globalAlpha = 0.4 + i * 0.3; g.beginPath(); g.moveTo(4 + i * 3, 9 + i * 7); g.lineTo(14 + i * 3, 9 + i * 7); g.stroke(); }
+    g.globalAlpha = 1; g.fillStyle = col;
+    g.beginPath(); g.moveTo(17, 7); g.lineTo(28, 16); g.lineTo(17, 25); g.closePath(); g.fill();
+  } else if (id === 'heal') {
+    g.fillStyle = '#1a3a24'; g.fillRect(x - 11, y - 11, 22, 22);
+    g.fillStyle = col; g.fillRect(x - 3, y - 9, 6, 18); g.fillRect(x - 9, y - 3, 18, 6);
+    g.fillStyle = '#d8ffe6'; g.fillRect(x - 2, y - 8, 2, 6);
+  } else if (id === 'frost') {
+    g.strokeStyle = col; g.lineWidth = 2;
+    for (let i = 0; i < 3; i++) {
+      const a = i * Math.PI / 3;
+      g.beginPath(); g.moveTo(x - Math.cos(a) * 12, y - Math.sin(a) * 12); g.lineTo(x + Math.cos(a) * 12, y + Math.sin(a) * 12); g.stroke();
+    }
+    g.strokeStyle = '#e8faff'; g.lineWidth = 1.5;
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3, px = x + Math.cos(a) * 8, py = y + Math.sin(a) * 8;
+      g.beginPath(); g.moveTo(px, py); g.lineTo(px + Math.cos(a + 0.8) * 4, py + Math.sin(a + 0.8) * 4); g.stroke();
+      g.beginPath(); g.moveTo(px, py); g.lineTo(px + Math.cos(a - 0.8) * 4, py + Math.sin(a - 0.8) * 4); g.stroke();
+    }
+  } else if (id === 'rage') {
+    g.fillStyle = '#ff9a3a';
+    g.beginPath(); g.moveTo(x, 2); g.lineTo(x + 9, y + 2); g.lineTo(x + 5, h - 3); g.lineTo(x - 5, h - 3); g.lineTo(x - 9, y + 2); g.closePath(); g.fill();
+    g.fillStyle = col;
+    g.beginPath(); g.moveTo(x, 9); g.lineTo(x + 5, y + 4); g.lineTo(x + 2, h - 5); g.lineTo(x - 2, h - 5); g.lineTo(x - 5, y + 4); g.closePath(); g.fill();
+    g.fillStyle = '#ffe08a'; g.fillRect(x - 1, y + 3, 2, 6);
+  } else if (id === 'meteor') {
+    for (let i = 4; i >= 1; i--) { g.globalAlpha = 0.2 * (5 - i); g.fillStyle = i > 2 ? '#ff6a1a' : '#ffd27a'; g.beginPath(); g.arc(12 + i * 4, 20 - i * 4, 7 - i, 0, Math.PI * 2); g.fill(); }
+    g.globalAlpha = 1;
+    g.fillStyle = '#5a3020'; g.beginPath(); g.arc(11, 21, 7, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#8a4a2a'; g.beginPath(); g.arc(9, 19, 4, 0, Math.PI * 2); g.fill();
+    g.fillStyle = col; g.fillRect(12, 22, 3, 2);
+  }
+}
+
+const SCREENS = ['startScreen','lobbyScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen'];
 function showScreen(id) { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay '+(s===id?'active':'hidden'); }); }
 function hideAllScreens() { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay hidden'; }); }
 function setLobbyMsg(html) { showScreen('lobbyScreen'); document.getElementById('lobbyMsg').innerHTML = html; }
@@ -1795,6 +2020,7 @@ function draw(state) {
   if (state.players.p2) drawPlayer(state.players.p2, PAL.p2, names.p2 || 'P2', 'p2');
   drawFireHands(state.fires || []);
   syncSuperButton(myNum === 1 ? state.players.p1 : myNum === 2 ? state.players.p2 : null);
+  syncAbilityButtons(myNum === 1 ? state.players.p1 : myNum === 2 ? state.players.p2 : null);
   drawParticles(state.particles || []);
   ctx.save();
   ctx.scale(HUD_SCALE, HUD_SCALE);
@@ -1969,7 +2195,8 @@ function drawItemBar(inv, me) {
   // on-screen button (music / leave) happens to sit there.
   const rowW = Math.max(1, inv.length) * (INV_SLOT + INV_GAP) - INV_GAP;
   const x0 = onRight ? HUD_W - INV_X - rowW : INV_X;
-  const top = INV_Y + (me && me.superMax > 0 ? 7 : 0);   // below the SUPER bar
+  // Below the SUPER and ability bars.
+  const top = INV_Y + (me && me.superMax > 0 ? 7 : 0) + ((me && me.abil) || []).filter(Boolean).length * 7;
   const y = clearOfButtons(x0 - 2, top - 2, rowW + 4, INV_SLOT + 4) + 2;
   ctx.save();
   if (inv.length) {
@@ -2246,6 +2473,7 @@ function drawMonster(m) {
   }
   drawMonsterArms(m, x, y);
   if (m.burning) drawFlames(x, y, m.w, m.h);
+  if (m.frozen) drawIceBlock(x, y, m.w, m.h);
   if (m.boss) { drawBossMarks(m, x, y); return; }
 
   drawHpBar(x - 1, y - 5, m.w + 2, 2, m.hp / m.maxHp, '#44ff44', '#003300');
@@ -2256,6 +2484,21 @@ function drawMonster(m) {
   }
 }
 function drawMonsters(ms) { for(const m of ms) drawMonster(m); }
+
+// Frost nova: the monster sits inside a block of ice until it thaws.
+function drawIceBlock(x, y, w, h) {
+  ctx.save();
+  ctx.globalAlpha = 0.45;
+  ctx.fillStyle = '#9fe0ff';
+  ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
+  ctx.globalAlpha = 0.9;
+  ctx.strokeStyle = '#e4f8ff'; ctx.lineWidth = 1;
+  ctx.strokeRect(x - 1.5, y - 1.5, w + 3, h + 3);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(x, y, 2, Math.max(3, h * 0.35));
+  ctx.fillRect(x + w - 4, y + h * 0.55, 2, 3);
+  ctx.restore();
+}
 
 // Over the Giant: a flashing "!" while it winds up (red for the close swipe,
 // yellow for the ranged slam), and circling stars while it's stunned.
@@ -2650,6 +2893,16 @@ function drawParticles(particles) {
       ctx.fillStyle='#000'; ctx.fillText(p.text,p.x+2,p.y+2);
       ctx.fillStyle=PAL.xp; ctx.fillText(p.text,p.x,p.y);
       ctx.textAlign='left'; ctx.textBaseline='alphabetic'; ctx.globalAlpha=1;
+    } else if (p.type==='dash') {
+      // A streak from where the dash started to where it ended.
+      const m=p.max||260, a=Math.max(0,p.timer/m);
+      ctx.save();
+      ctx.lineCap='round';
+      for (const [w, c, al] of [[12, p.color||'#9fe8ff', 0.25], [5, '#ffffff', 0.7]]) {
+        ctx.globalAlpha=a*al; ctx.strokeStyle=c; ctx.lineWidth=w*a+1;
+        ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(p.x2,p.y2); ctx.stroke();
+      }
+      ctx.restore();
     } else if (p.type==='crit') {
       const m=p.max||600, a=Math.max(0,p.timer/m), rise=(1-a)*12;
       ctx.globalAlpha=a; ctx.fillStyle='#ff5a3a';
@@ -2863,11 +3116,23 @@ function drawHUD(state) {
       drawBar(35, ready ? 1 : Math.max(0, 1 - mp.parryCd / mp.parryMax), ready,
               ready ? 'PARRY' : 'PAR', '#66ccff', '#2a5a7a', '#0a1a2a');
     }
+    let by = 42;
     if (mp.superMax > 0) {
       const ready = (mp.superCd || 0) <= 0;
-      drawBar(42, ready ? 1 : Math.max(0, 1 - mp.superCd / mp.superMax), ready,
+      drawBar(by, ready ? 1 : Math.max(0, 1 - mp.superCd / mp.superMax), ready,
               ready ? 'SUPER' : 'SUP', '#ff8a2a', '#7a3a10', '#2a0e04');
+      by += 7;
     }
+    // Equipped abilities, labelled with their key.
+    (mp.abil || []).forEach((a, i) => {
+      if (!a) return;
+      const def = abilityDef(a.id);
+      const ready = a.cd <= 0, col = def ? def.color : '#ccc';
+      const key = i ? 'E ' : 'Q ';
+      drawBar(by, ready ? 1 : Math.max(0, 1 - a.cd / (a.max || 1)), ready,
+              key + (ready ? (def ? def.name : a.id.toUpperCase()) : Math.ceil(a.cd / 1000) + 's'), col, '#3a4450', '#0c1016');
+      by += 7;
+    });
     ctx.textAlign = 'left';
     ctx.font = '10px "Courier New",monospace';
   }
@@ -3031,8 +3296,10 @@ function drawControlHints() {
   ctx.font = '8px "Courier New",monospace';
   ctx.textBaseline = 'bottom'; ctx.textAlign = 'center';
   const me = myNum === 1 ? currState?.players?.p1 : currState?.players?.p2;
+  const abil = (me && me.abil) || [];
+  const abKeys = [abil[0] ? 'Q' : '', abil[1] ? 'E' : ''].filter(Boolean).join('/');
   const t = 'ARROWS MOVE · SPACE ATK · ENTER SWAP · SHIFT SPECIAL · P PARRY · '
-          + (me && me.superMax > 0 ? 'R SUPER · ' : '') + '1-4 ITEMS';
+          + (me && me.superMax > 0 ? 'R SUPER · ' : '') + (abKeys ? abKeys + ' ABILITY · ' : '') + '1-4 ITEMS';
   const w = ctx.measureText(t).width;
   ctx.globalAlpha = 0.8;
   ctx.fillStyle = 'rgba(0,0,0,0.6)';

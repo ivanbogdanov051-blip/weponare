@@ -5,6 +5,7 @@ const http = require('http');
 const { WebSocketServer } = require('ws');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
@@ -250,6 +251,38 @@ const SKIN_SHOP = [
 ];
 const SKIN_BY_ID = Object.fromEntries(SKIN_SHOP.map(s => [s.id, s]));
 
+// ── Abilities: bought once with coins and kept forever (saved per password,
+// like weapons). Two can be equipped at a time, on Q and E.
+const ABILITIES = [
+  { id: 'dash',   name: 'DASH',        price: 1500,  cd: 3500,  color: '#9fe8ff',
+    desc: 'Burst forward the way you are moving, untouchable mid-dash' },
+  { id: 'heal',   name: 'SECOND WIND', price: 3000,  cd: 25000, color: '#7affb0',
+    desc: 'Heal 35% of your max HP' },
+  { id: 'frost',  name: 'FROST NOVA',  price: 5000,  cd: 16000, color: '#8fd8ff',
+    desc: 'Freeze everything around you solid for 2.5s and chip it for damage' },
+  { id: 'rage',   name: 'BERSERK',     price: 7000,  cd: 28000, color: '#ff5544',
+    desc: 'Hit 80% harder and attack twice as fast for 6s' },
+  { id: 'meteor', name: 'METEOR',      price: 10000, cd: 20000, color: '#ff9a3a',
+    desc: 'Call a meteor down on the nearest enemy: a huge blast after a short warning' },
+];
+const ABILITY_BY_ID = Object.fromEntries(ABILITIES.map(a => [a.id, a]));
+const ABILITY_SLOTS = 2;
+const DASH_DIST = 78, DASH_IFRAMES = 320;
+const HEAL_SHARE = 0.35;
+const FROST_R = 95, FROST_FREEZE_MS = 2500, FROST_DMG = 20;
+const RAGE_MS = 6000;
+const METEOR_R = 62, METEOR_FALL_MS = 850, METEOR_DMG = 120, METEOR_PVP_DMG = 45;
+
+// Equipped slots, keeping only abilities the player owns and no duplicates.
+function cleanSlots(raw, owned) {
+  const out = [];
+  for (let i = 0; i < ABILITY_SLOTS; i++) {
+    const id = Array.isArray(raw) ? raw[i] : null;
+    out.push(typeof id === 'string' && owned.includes(id) && !out.includes(id) ? id : null);
+  }
+  return out;
+}
+
 // Cost of buying the `nextLevel`th level — later levels cost steeply more.
 function upgradeCost(stat, nextLevel) {
   const s = UPGRADE_STATS[stat];
@@ -401,6 +434,8 @@ function progress() {
   if (!d.coins)       d.coins = {};
   if (!d.upgrades)    d.upgrades = {};
   if (!d.ownedSkins)  d.ownedSkins = {};
+  if (!d.abilities)   d.abilities = {};
+  if (!d.abilitySlots) d.abilitySlots = {};
   return d;
 }
 function markDirty() { progressDirty = true; }
@@ -428,6 +463,107 @@ function addLeaderboardEntry(name, waves, mode) {
   return d[k];
 }
 function getLeaderboard() { return progress().leaderboard; }
+
+// ─── Device Backups ───────────────────────────────────────────────────────────
+// The host wipes progress.json on every deploy/restart. So each player's device
+// keeps a full copy of their save, signed here so it can't be edited. When a
+// password has no record on the server, the copy is restored as-is; otherwise
+// only the things that never go down (XP, weapons, upgrades, skins) are merged
+// in, and the server's coin count stays authoritative.
+const SAVE_SECRET = process.env.SAVE_SECRET || 'weponare-save-v1:9f3c2b7e51a04d8c';
+
+function signSave(pw, data) {
+  return crypto.createHmac('sha256', SAVE_SECRET).update(pw + '\n' + data).digest('hex');
+}
+function saveData(pw) {
+  const d = progress();
+  return JSON.stringify({
+    v: 1, xp: d.players[pw] || 0, coins: d.coins[pw] || 0,
+    weapons: d.weapons[pw] || [], upgrades: d.upgrades[pw] || {},
+    ownedSkins: d.ownedSkins[pw] || [], skin: d.skins[pw] || null,
+    abilities: d.abilities[pw] || [], abilitySlots: d.abilitySlots[pw] || [],
+  });
+}
+function makeSave(pw) {
+  if (!pw || isAdminPw(pw)) return null;
+  const data = saveData(pw);
+  return { data, sig: signSave(pw, data) };
+}
+
+function restoreBackup(pw, backup) {
+  if (!pw || isAdminPw(pw) || !backup || typeof backup !== 'object') return;
+  const { data, sig } = backup;
+  if (typeof data !== 'string' || typeof sig !== 'string' || data.length > 60000) return;
+  const want = signSave(pw, data);
+  if (sig.length !== want.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return;
+  let b;
+  try { b = JSON.parse(data); } catch { return; }
+  if (!b || typeof b !== 'object') return;
+
+  const d = progress();
+  const num = v => Math.max(0, Math.floor(Number(v) || 0));
+  const weapons = Array.isArray(b.weapons) ? b.weapons.filter(id => WEAPON_BY_ID[id]) : [];
+  const skins = Array.isArray(b.ownedSkins) ? b.ownedSkins.filter(id => SKIN_BY_ID[id]) : [];
+  const abils = Array.isArray(b.abilities) ? b.abilities.filter(id => ABILITY_BY_ID[id]) : [];
+  const ups = {};
+  if (b.upgrades && typeof b.upgrades === 'object') {
+    for (const [wid, lv] of Object.entries(b.upgrades)) {
+      if (!lv || typeof lv !== 'object') continue;
+      ups[wid] = {};
+      for (const [k, n] of Object.entries(lv)) if (UPGRADE_STATS[k]) ups[wid][k] = num(n);
+    }
+  }
+
+  const fresh = d.players[pw] === undefined && d.coins[pw] === undefined
+    && !d.weapons[pw] && !d.upgrades[pw] && !d.ownedSkins[pw] && !d.abilities[pw];
+  if (fresh) {
+    // Server lost this save: put it all back. Upgrade stats an update removed
+    // are left in, so profileFor refunds them like any other stale upgrade.
+    d.players[pw] = num(b.xp);
+    d.coins[pw] = num(b.coins);
+    d.weapons[pw] = sortWeaponIds(weapons);
+    d.upgrades[pw] = ups;
+    d.ownedSkins[pw] = skins;
+    d.abilities[pw] = abils;
+    d.abilitySlots[pw] = cleanSlots(b.abilitySlots, abils);
+    if (b.skin && typeof b.skin === 'object' && d.skins[pw] === undefined) d.skins[pw] = b.skin;
+    markDirty();
+    return;
+  }
+
+  // Both sides have a save (e.g. another device): merge what only goes up.
+  let changed = false;
+  if (num(b.xp) > (d.players[pw] || 0)) { d.players[pw] = num(b.xp); changed = true; }
+  const have = d.weapons[pw] || [];
+  if (weapons.some(id => !have.includes(id))) { d.weapons[pw] = sortWeaponIds([...have, ...weapons]); changed = true; }
+  const owned = d.ownedSkins[pw] || [];
+  if (skins.some(id => !owned.includes(id))) { d.ownedSkins[pw] = [...new Set([...owned, ...skins])]; changed = true; }
+  const haveAb = d.abilities[pw] || [];
+  if (abils.some(id => !haveAb.includes(id))) { d.abilities[pw] = [...new Set([...haveAb, ...abils])]; changed = true; }
+  for (const [wid, lv] of Object.entries(ups)) {
+    const allowed = upgradesFor(wid);
+    for (const [k, n] of Object.entries(lv)) {
+      if (!allowed.includes(k) || !isUpgradeTarget(wid)) continue;
+      if (!d.upgrades[pw]) d.upgrades[pw] = {};
+      if (!d.upgrades[pw][wid]) d.upgrades[pw][wid] = {};
+      if (n > (d.upgrades[pw][wid][k] || 0)) { d.upgrades[pw][wid][k] = n; changed = true; }
+    }
+  }
+  if (changed) markDirty();
+}
+
+// Keep every connected player's device copy up to date as they earn and spend.
+function pushSaves() {
+  for (const r of rooms) for (const key of ['p1', 'p2']) {
+    const ws = r[key], pw = r.passwords[key];
+    if (!ws || ws.readyState !== 1 || !pw || isAdminPw(pw)) continue;
+    const data = saveData(pw);
+    if (ws.lastSave === data) continue;
+    ws.lastSave = data;
+    ws.send(JSON.stringify({ type: 'save', save: { data, sig: signSave(pw, data) } }));
+  }
+}
+setInterval(pushSaves, 3000).unref?.();
 
 function getUnlockedWeaponIds(xp) {
   return WEAPONS.filter(w => !w.shopOnly && w.unlockXp <= xp).map(w => w.id);
@@ -546,6 +682,8 @@ function makePlayer(num, xp, upgrades) {
     atkCooldown: 0,
     specialCooldown: 0,
     superCooldown: 0,
+    abilities: [null, null],   // equipped on Q and E
+    abCd: {},                  // ability id -> ms until it's ready
     vortexShield: 0,     // ms the vortex shield stays up
     vortexStore: 0,      // damage banked while it was up
     parryCooldown: 0,
@@ -581,11 +719,12 @@ function makeRoom() { return {
   playerSkins: { p1: null, p2: null },
   playerUnlocks: { p1: null, p2: null },
   playerUpgrades: { p1: null, p2: null },
+  playerAbilities: { p1: null, p2: null },
   p1Joined: false, p2Joined: false,
   players: { p1: null, p2: null },
   inputs: {
-    p1: { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false },
-    p2: { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false },
+    p1: { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false, ab1: false, ab2: false },
+    p2: { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false, ab1: false, ab2: false },
   },
   monsters: [],
   projectiles: [],
@@ -1016,6 +1155,7 @@ function startGame() {
     if (!p) continue;
     if (room.playerSkins[key])   p.skin = room.playerSkins[key];
     if (room.playerUnlocks[key]) p.unlockedWeapons = room.playerUnlocks[key];
+    if (room.playerAbilities[key]) p.abilities = room.playerAbilities[key].slice();
     refreshWeapon(p);
   }
   clearField();
@@ -1226,15 +1366,16 @@ function tickRoom(dt) {
 
   const factor = dt / 16.67;
 
-  // Detect just-pressed for attack/swap
+  // Swap and parry fire once per press. Attack, special and super auto-fire
+  // while held: they go off again as soon as their cooldown is ready.
   for (const key of ['p1', 'p2']) {
     const inp  = room.inputs[key];
     const prev = room.prevInputs[key];
-    room.attackJustPressed[key]  = inp.attack  && !prev.attack;
+    room.attackJustPressed[key]  = inp.attack;
     room.swapJustPressed[key]    = inp.swap    && !prev.swap;
-    room.specialJustPressed[key] = inp.special && !prev.special;
+    room.specialJustPressed[key] = inp.special;
     room.parryJustPressed[key]   = inp.parry   && !prev.parry;
-    room.superJustPressed[key]   = inp.super   && !prev.super;
+    room.superJustPressed[key]   = inp.super;
     room.prevInputs[key] = { attack: inp.attack, swap: inp.swap, special: inp.special, parry: inp.parry, super: inp.super };
   }
 
@@ -1286,6 +1427,7 @@ function tickRoom(dt) {
     if (p.invincible      > 0) p.invincible      -= dt;
     if (p.hitFlash        > 0) p.hitFlash        -= dt;
     if (p.swingTimer      > 0) p.swingTimer      -= dt;
+    for (const id in p.abCd) if (p.abCd[id] > 0) p.abCd[id] -= dt;
 
     if (room.swapJustPressed[key] && p.unlockedWeapons.length > 0) {
       p.weaponIdx = (p.weaponIdx + 1) % p.unlockedWeapons.length;
@@ -1300,6 +1442,9 @@ function tickRoom(dt) {
     if (room.superJustPressed[key] && p.superCooldown <= 0 && weapon(p).super) {
       doSuper(p, key);
     }
+    // Abilities auto-fire while held, like attack/special/super.
+    if (room.inputs[key].ab1) useAbility(p, key, 0);
+    if (room.inputs[key].ab2 && !p.dead) useAbility(p, key, 1);
     if (room.parryJustPressed[key] && p.parryCooldown <= 0) {
       p.parryTimer    = p.parryWindow || PARRY_WINDOW;
       p.parryCooldown = p.parryCd || PARRY_COOLDOWN;
@@ -1328,6 +1473,8 @@ function tickRoom(dt) {
     if (m.hitFlash    > 0) m.hitFlash    -= dt;
     if (m.invincible  > 0) m.invincible  -= dt;
     if (m.swing       > 0) m.swing       -= dt;
+    // Frozen solid by a frost nova: no moving, no attacking.
+    if (m.freeze > 0) { m.freeze -= dt; continue; }
 
     if (nearest) {
       const def = MONSTER_TYPES[m.type] || MONSTER_TYPES.grunt;
@@ -2037,7 +2184,12 @@ function updateFires(factor, dt) {
   if (!room.fires.length) return;
   room.fires = room.fires.filter(f => {
     f.t += dt;
-    if (f.t >= f.life) { if (f.kind === 'hand') explodeHand(f); return false; }
+    if (f.t >= f.life) {
+      if (f.kind === 'hand') explodeHand(f);
+      if (f.kind === 'meteor') explodeMeteor(f);
+      return false;
+    }
+    if (f.kind === 'meteor') return true;   // still falling: only the warning shows
     if (f.kind === 'hand') return updateFireHand(f, factor);
     if (f.kind === 'vortexfield') return updateVortexField(f, factor);
     if (f.kind === 'soundwave') return updateSoundwave(f, factor);
@@ -2228,6 +2380,91 @@ function adminSkipWave() {
                         text: 'WAVE ' + num + ' SKIPPED', timer: 1800 });
 }
 
+// ─── Abilities ────────────────────────────────────────────────────────────────
+// Each returns false when there was nothing to do (full HP, no target), so the
+// cooldown isn't spent on a wasted press.
+function useAbility(p, pKey, slot) {
+  const id = p.abilities?.[slot];
+  const ab = ABILITY_BY_ID[id];
+  if (!ab || p.dead || (p.abCd[id] || 0) > 0) return;
+  let used = true;
+  if (id === 'dash') used = abilityDash(p, pKey);
+  else if (id === 'heal') used = abilityHeal(p);
+  else if (id === 'frost') used = abilityFrost(p, pKey);
+  else if (id === 'rage') {
+    applyEffect(p, 'strength', RAGE_MS);
+    applyEffect(p, 'haste', RAGE_MS);
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 34, timer: 600, max: 600, color: ab.color, text: 'BERSERK' });
+  } else if (id === 'meteor') used = abilityMeteor(p, pKey);
+  if (used) p.abCd[id] = ab.cd;
+}
+
+function abilityDash(p, pKey) {
+  const inp = room.inputs[pKey];
+  let dx = (inp.right ? 1 : 0) - (inp.left ? 1 : 0), dy = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
+  if (!dx && !dy) dx = p.facing || 1;
+  const d = Math.hypot(dx, dy);
+  const x0 = cx(p), y0 = cy(p);
+  p.x += dx / d * DASH_DIST;
+  p.y += dy / d * DASH_DIST;
+  p.pull = null;
+  clampToArena(p, 2);
+  p.invincible = Math.max(p.invincible, DASH_IFRAMES);
+  room.particles.push({ type: 'dash', x: x0, y: y0, x2: cx(p), y2: cy(p), timer: 260, max: 260, color: ABILITY_BY_ID.dash.color });
+  return true;
+}
+
+function abilityHeal(p) {
+  if (p.hp >= p.maxHp) return false;
+  const heal = Math.min(p.maxHp - p.hp, Math.round(p.maxHp * HEAL_SHARE));
+  p.hp += heal;
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 36, timer: 700, max: 700,
+                        color: ABILITY_BY_ID.heal.color, text: '+' + heal + ' HP' });
+  return true;
+}
+
+// Monsters freeze solid (the Giant is only slowed); in PvP the other player is slowed.
+function abilityFrost(p, pKey) {
+  const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
+  for (const t of enemyTargets(pKey)) {
+    if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) > FROST_R + t.w / 2) continue;
+    const bonus = t.num ? 0 : Math.round((t.maxHp || 0) * (t.boss ? 0.01 : 0.03));
+    applyDamage(t, Math.round((FROST_DMG + bonus) * dmgMult), pKey);
+    if (t.dead) continue;
+    if (t.num || t.boss) chillTarget(t, FROST_FREEZE_MS);
+    else { t.freeze = Math.max(t.freeze || 0, FROST_FREEZE_MS); t.swing = 0; }
+  }
+  room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: FROST_R, timer: 420, max: 420, color: ABILITY_BY_ID.frost.color });
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 30, timer: 600, max: 600, color: '#dff6ff', text: 'FROST NOVA' });
+  return true;
+}
+
+function abilityMeteor(p, pKey) {
+  let best = null, bd = Infinity;
+  for (const t of enemyTargets(pKey)) {
+    const d = Math.hypot(cx(t) - cx(p), cy(t) - cy(p));
+    if (d < bd) { bd = d; best = t; }
+  }
+  if (!best) return false;
+  const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
+  room.fires.push({ id: nextId(), kind: 'meteor', owner: pKey, x: cx(best), y: cy(best), r: METEOR_R,
+                    t: 0, life: METEOR_FALL_MS, dmgMult });
+  return true;
+}
+
+// The blast: everything in the circle when it lands. Monsters also lose a share
+// of their max HP, so it stays worth casting deep into a run.
+function explodeMeteor(f) {
+  for (const t of enemyTargets(f.owner)) {
+    if (Math.hypot(cx(t) - f.x, cy(t) - f.y) > f.r + t.w / 2) continue;
+    const dmg = t.num ? METEOR_PVP_DMG : METEOR_DMG + Math.round((t.maxHp || 0) * (t.boss ? 0.03 : 0.1));
+    applyDamage(t, Math.round(dmg * (f.dmgMult || 1)), f.owner);
+    if (!t.dead) ignite(t, 2000);
+  }
+  room.particles.push({ type: 'trapburst', x: f.x, y: f.y, maxR: f.r, timer: 600, max: 600, color: ABILITY_BY_ID.meteor.color, text: 'METEOR' });
+  room.particles.push({ type: 'shockwave', x: f.x, y: f.y, maxR: f.r + 12, timer: 380, max: 380, color: '#ffd27a' });
+}
+
 function nearestTargetAngle(p, pKey) {
   const px = cx(p), py = cy(p);
   let best = null, bd = Infinity;
@@ -2392,6 +2629,8 @@ function playerView(p) {
     unlockedWeapons: p.unlockedWeapons, skin: p.skin,
     specialCd: Math.max(0, p.specialCooldown), specialMax: w.special?.cd || 0,
     superCd: Math.max(0, p.superCooldown || 0), superMax: w.super?.cd || 0,
+    abil: (p.abilities || []).map(id => id && ABILITY_BY_ID[id]
+      ? { id, cd: Math.max(0, Math.round(p.abCd[id] || 0)), max: ABILITY_BY_ID[id].cd } : null),
     vShield: p.vortexShield > 0 ? Math.round(p.vortexShield) : 0, vStore: Math.round(p.vortexStore || 0),
     parryCd: Math.max(0, p.parryCooldown), parryMax: p.parryCd || PARRY_COOLDOWN, parryActive: p.parryTimer > 0,
     speed: Math.round(p.speed * 1000) / 1000,
@@ -2410,7 +2649,7 @@ function buildStateMsg(playerNum) {
     playerNames: room.playerNames,
     players: { p1: playerView(room.players.p1), p2: playerView(room.players.p2) },
     monsters:    room.monsters.map(m => ({ id: m.id, type: m.type, x: r1(m.x), y: r1(m.y), w: m.w, h: m.h,
-                  hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash, slowed: (m.slowTimer || 0) > 0, burning: (m.burnTimer || 0) > 0, armor: m.armor || 0,
+                  hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash, slowed: (m.slowTimer || 0) > 0, frozen: (m.freeze || 0) > 0, burning: (m.burnTimer || 0) > 0, armor: m.armor || 0,
                   face: m.face, swing: m.swing > 0 ? Math.round(m.swing) : 0,
                   ...(m.boss ? { boss: true, wind: m.windup > 0 ? m.wind : null, windup: Math.max(0, Math.round(m.windup)), stun: Math.max(0, Math.round(m.stun)) } : {}) })),
     projectiles: room.projectiles.map(pr => ({ id: pr.id, x: r1(pr.x), y: r1(pr.y), dx: r1(pr.dx), dy: r1(pr.dy), weaponId: pr.weaponId,
@@ -2470,6 +2709,7 @@ function weaponCatalog() {
 function profileFor(pw, opts = {}) {
   const admin = isAdminPw(pw);
   const d = progress();
+  if (!admin) restoreBackup(pw, opts.backup);
 
   let xp = admin ? ADMIN_XP : (d.players[pw] || 0);
   const localXp = Math.max(0, Math.floor(Number(opts.localXp) || 0));
@@ -2511,7 +2751,10 @@ function profileFor(pw, opts = {}) {
   const upgrades = normalizeUpgrades(d.upgrades[pw]);
   const ownedSkins = admin ? SKIN_SHOP.map(s => s.id)
     : (Array.isArray(d.ownedSkins[pw]) ? d.ownedSkins[pw].filter(id => SKIN_BY_ID[id]) : []);
-  return { xp, coins, weapons, upgrades, ownedSkins, refunded };
+  const abilities = admin ? ABILITIES.map(a => a.id)
+    : (Array.isArray(d.abilities[pw]) ? d.abilities[pw].filter(id => ABILITY_BY_ID[id]) : []);
+  const abilitySlots = cleanSlots(d.abilitySlots[pw], abilities);
+  return { xp, coins, weapons, upgrades, ownedSkins, abilities, abilitySlots, refunded, save: makeSave(pw) };
 }
 
 // A skin is { colorIdx, hatIdx, outfit }. The outfit survives only if owned.
@@ -2527,17 +2770,75 @@ function cleanSkin(raw, owned) {
 
 // ─── HTTP API (shop / upgrades) ───────────────────────────────────────────────
 
-app.use(express.json({ limit: '8kb' }));
+app.use(express.json({ limit: '64kb' }));
 
 app.get('/api/catalog', (_req, res) => {
-  res.json({ catalog: weaponCatalog(), perks: PERK_UPGRADES, upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP });
+  res.json({ catalog: weaponCatalog(), perks: PERK_UPGRADES, upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP, abilityDefs: ABILITIES });
 });
 
 app.post('/api/profile', (req, res) => {
   const pw = sanitizeText(req.body?.password, 32);
   if (!pw) return res.status(400).json({ error: 'A password is required to save upgrades.' });
-  const p = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins });
-  res.json({ ...p, catalog: weaponCatalog(), perks: PERK_UPGRADES, upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP });
+  const p = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });
+  res.json({ ...p, catalog: weaponCatalog(), perks: PERK_UPGRADES, upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP, abilityDefs: ABILITIES });
+});
+
+// Hand a player's equipped abilities to any match they're in right now.
+function pushAbilities(pw, slots) {
+  for (const [r, key] of liveSeats(pw)) {
+    r.playerAbilities[key] = slots;
+    const p = r.players[key];
+    if (p) p.abilities = slots.slice();
+  }
+}
+
+// Abilities: bought once, kept forever. A new one drops into an empty slot.
+app.post('/api/buy_ability', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'A password is required to buy abilities.' });
+  const id = sanitizeText(req.body?.abilityId, 16);
+  const def = ABILITY_BY_ID[id];
+  if (!def) return res.status(400).json({ error: 'Unknown ability.' });
+
+  const admin = isAdminPw(pw);
+  const prof = profileFor(pw, { localCoins: req.body?.localCoins, backup: req.body?.backup });
+  if (prof.abilities.includes(id)) return res.status(400).json({ error: 'You already own that ability.' });
+  if (prof.coins < def.price) return res.status(400).json({ error: 'Not enough coins.' });
+
+  const d = progress();
+  const owned = [...prof.abilities, id];
+  const slots = prof.abilitySlots.slice();
+  const free = slots.indexOf(null);
+  if (free >= 0) slots[free] = id;
+  d.abilities[pw] = owned;
+  d.abilitySlots[pw] = slots;
+  d.coins[pw] = prof.coins - def.price;
+  markDirty();
+  for (const [r, key] of liveSeats(pw)) r.playerCoins[key] = d.coins[pw];
+  pushAbilities(pw, slots);
+  const next = profileFor(pw, {});
+  res.json({ ...next, spent: def.price });
+});
+
+// Put an owned ability in a slot (0 = Q, 1 = E); an empty id clears the slot.
+// Equipping one that's already in the other slot swaps them.
+app.post('/api/equip_ability', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'A password is required.' });
+  const id = sanitizeText(req.body?.abilityId, 16);
+  const slot = Math.floor(Number(req.body?.slot));
+  if (!(slot >= 0 && slot < ABILITY_SLOTS)) return res.status(400).json({ error: 'Unknown slot.' });
+
+  const prof = profileFor(pw, { backup: req.body?.backup });
+  if (id && !prof.abilities.includes(id)) return res.status(400).json({ error: 'Buy that ability first.' });
+  const slots = prof.abilitySlots.slice();
+  const other = id ? slots.indexOf(id) : -1;
+  if (other >= 0 && other !== slot) slots[other] = slots[slot];
+  slots[slot] = id || null;
+  progress().abilitySlots[pw] = slots;
+  markDirty();
+  pushAbilities(pw, slots);
+  res.json(profileFor(pw, {}));
 });
 
 app.post('/api/upgrade', (req, res) => {
@@ -2551,7 +2852,7 @@ app.post('/api/upgrade', (req, res) => {
   }
 
   const admin = isAdminPw(pw);
-  const prof = profileFor(pw, {});
+  const prof = profileFor(pw, { backup: req.body?.backup });
   if (!PERK_UPGRADES[weaponId] && !prof.weapons.includes(weaponId)) {
     return res.status(400).json({ error: 'Unlock that weapon first.' });
   }
@@ -2606,7 +2907,7 @@ app.post('/api/buy_skin', (req, res) => {
   if (!def) return res.status(400).json({ error: 'Unknown skin.' });
 
   const admin = isAdminPw(pw);
-  const prof = profileFor(pw, { localCoins: req.body?.localCoins });
+  const prof = profileFor(pw, { localCoins: req.body?.localCoins, backup: req.body?.backup });
   if (prof.ownedSkins.includes(skinId)) return res.status(400).json({ error: 'You already own that skin.' });
   if (!admin && prof.coins < def.price) return res.status(400).json({ error: 'Not enough coins.' });
 
@@ -2630,7 +2931,7 @@ app.post('/api/buy_weapon', (req, res) => {
   if (!def || !def.shopOnly) return res.status(400).json({ error: 'That weapon is not for sale.' });
 
   const admin = isAdminPw(pw);
-  const prof = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins });
+  const prof = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });
   if (prof.weapons.includes(weaponId)) return res.status(400).json({ error: 'You already own that weapon.' });
   const missing = def.noRequirement ? 0 : XP_WEAPON_IDS.filter(id => !prof.weapons.includes(id)).length;
   if (missing) return res.status(400).json({ error: `Unlock every other weapon first (${missing} to go).` });
@@ -2671,9 +2972,10 @@ function clearSlot(key) {
   room.playerSkins[key] = null;
   room.playerUnlocks[key] = null;
   room.playerUpgrades[key] = null;
+  room.playerAbilities[key] = null;
   room.unlockQueues[key] = [];
   room.players[key] = null;
-  room.inputs[key] = { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false };
+  room.inputs[key] = { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false, ab1: false, ab2: false };
   room.prevInputs[key] = { attack: false, swap: false, special: false, parry: false, super: false };
 }
 
@@ -2711,6 +3013,7 @@ wss.on('connection', (ws) => {
     world: { w: CANVAS_W, h: CANVAS_H, ax: ARENA_X, ay: ARENA_Y, aw: ARENA_W, ah: ARENA_H },
     playerSpeed: PLAYER_SPEED,
     catalog: weaponCatalog(),
+    abilityDefs: ABILITIES,
     colors: WEAPON_COLORS,
   }));
 
@@ -2742,13 +3045,14 @@ wss.on('connection', (ws) => {
         const admin = isAdminPw(pw);
 
         const prof = pw
-          ? profileFor(pw, { localXp: msg.localXp, localCoins: msg.localCoins })
+          ? profileFor(pw, { localXp: msg.localXp, localCoins: msg.localCoins, backup: msg.backup })
           : { xp: 0, coins: 0, weapons: getUnlockedWeaponIds(0), upgrades: {}, ownedSkins: [] };
 
         room.playerXp[myKey]       = prof.xp;
         room.playerCoins[myKey]    = prof.coins;
         room.playerUnlocks[myKey]  = prof.weapons;
         room.playerUpgrades[myKey] = prof.upgrades;
+        room.playerAbilities[myKey] = prof.abilitySlots || [null, null];
 
         // Skin: if the user explicitly changed it this session, save the new skin;
         // otherwise restore whatever this password had saved.
@@ -2767,6 +3071,8 @@ wss.on('connection', (ws) => {
 
         // Tell the client which skin is active (may have been restored from the password)
         ws.send(JSON.stringify({ type: 'skin_init', skin }));
+        const save = pw && makeSave(pw);
+        if (save) { ws.lastSave = save.data; ws.send(JSON.stringify({ type: 'save', save })); }
 
         room[myKey + 'Joined'] = true;
 
@@ -2784,6 +3090,7 @@ wss.on('connection', (ws) => {
         room.inputs[myKey] = {
           up: !!k.up, down: !!k.down, left: !!k.left, right: !!k.right,
           attack: !!k.attack, swap: !!k.swap, special: !!k.special, parry: !!k.parry, super: !!k.super,
+          ab1: !!k.ab1, ab2: !!k.ab2,
         };
       }
 

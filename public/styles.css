@@ -625,3 +625,35 @@ body {
   min-height: 13px;
   line-height: 1.4;
 }
+
+/* ── Abilities ── */
+.abil-open-btn { border-color: #1f4a5a; color: #8fd8ff; }
+.abil-title { color: #8fd8ff; }
+.abil-slots { display: flex; gap: 8px; justify-content: center; margin-bottom: 6px; flex-wrap: wrap; }
+.abil-slot {
+  font-size: 10px; letter-spacing: 2px; color: #dff6ff;
+  border: 1px solid #2f6a80; background: #0a1a22; padding: 4px 10px; min-width: 120px;
+}
+.abil-slot.empty { color: #4a5a66; border-color: #253038; }
+.abil-key { color: #ffd84a; margin-right: 8px; }
+.shop-row.abil-row.owned { background: rgba(20, 60, 80, 0.18); }
+.abil-tag { font-size: 8px; letter-spacing: 2px; color: #7affb0; border: 1px solid #2d5a3a; padding: 1px 4px; }
+.abil-equip {
+  background: #0b1820; border: 1px solid #2f6a80; color: #bfe8ff;
+  font-family: 'Courier New', monospace; font-size: 10px; letter-spacing: 2px;
+  padding: 6px 10px; cursor: pointer; touch-action: manipulation;
+}
+.abil-equip:hover { border-color: #8fd8ff; }
+.abil-equip.on { background: #12301e; border-color: #4aa86a; color: #9affc0; }
+
+/* Q / E buttons on touch screens: a small pair above SUPER. */
+.ability-btns { display: flex; gap: 6px; }
+.action-btn.ability-btn {
+  min-width: 0; padding: 8px 10px; font-size: 10px; letter-spacing: 1px;
+  border-color: #8fd8ff; color: #dff6ff; background: rgba(10, 30, 45, 0.88);
+}
+.action-btn.ability-btn:active { background: rgba(30, 80, 110, 0.95); }
+.action-btn.ability-btn.cooling { opacity: 0.4; }
+@media (max-height: 420px) {
+  .action-btn.ability-btn { padding: 6px 8px; font-size: 9px; }
+}
