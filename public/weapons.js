@@ -405,19 +405,33 @@ const WEAPON_ART = {
   }},
 
   windwand: { draw(k, wc) {
-    // A pale birch wand, silver-banded, with a little cyclone caught at its tip.
-    k.r(0, -1.1, 15, 2.2, '#cbb98c');
-    k.r(0, -1.1, 15, 0.7, '#efe2bd');
-    k.r(0, 0.7, 15, 0.4, '#8f7d52');
-    k.r(2, -1.6, 1, 3.2, MAT.steelLight);
-    k.r(10, -1.6, 1, 3.2, MAT.steelLight);
-    k.poly([[14, -2.2], [16.5, -1.2], [16.5, 1.2], [14, 2.2]], MAT.steel);   // prong cup
-    k.glow(21, 0, 7.5, wc, 0.35);
-    k.ring(21, 0, 5, 1.3, wc, 0.4, 4.4);
-    k.ring(21, 0, 3, 1.1, '#ffffff', 3.4, 7.2);
-    k.circ(21, 0, 1.3, '#e8fff6');
-    k.line(25.5, -3.5, 28, -5.5, 0.9, wc);             // streaks of wind
-    k.line(25.5, 3.2, 28.5, 4.6, 0.9, '#d8fff0');
+    // A twisted birch staff: leaf-wrapped grip, silver collars, two feathered
+    // wings flaring from the head and a floating orb of caged wind above it.
+    k.r(0, -1.5, 5, 3, '#2f6a3a');                       // leaf-wrapped grip
+    k.r(0.8, -1.5, 0.9, 3, '#58a864'); k.r(2.6, -1.5, 0.9, 3, '#58a864');
+    k.poly([[5, -1.4], [17, -1.1], [17, 1.1], [5, 1.4]], '#d9c79a');   // twisted shaft
+    k.poly([[5, -1.4], [17, -1.1], [17, -0.3], [5, 0]], '#f4e8c4');
+    for (const x of [7, 10, 13]) k.line(x, -1.3, x + 1.6, 1.3, 0.8, '#9a8456');   // spiral grain
+    k.r(4.6, -2.2, 1.4, 4.4, MAT.steelLight);            // collars
+    k.r(11.4, -1.9, 1, 3.8, MAT.steel);
+    k.r(16.4, -2.3, 1.5, 4.6, MAT.steelLight);
+    // Feathered wings.
+    k.poly([[16, -2], [19, -7.5], [21.5, -9], [21, -5], [19, -2]], '#eafff6');
+    k.poly([[16, -2], [19, -6.5], [20.5, -7.4], [19.6, -4.6], [18.4, -2]], '#aef5dc');
+    k.poly([[16, 2], [19, 7.5], [21.5, 9], [21, 5], [19, 2]], '#eafff6');
+    k.poly([[16, 2], [19, 6.5], [20.5, 7.4], [19.6, 4.6], [18.4, 2]], '#aef5dc');
+    // Caged orb of wind.
+    k.glow(24, 0, 9, wc, 0.38);
+    k.circ(24, 0, 5.2, '#1f4a40');
+    k.circ(24, 0, 4.4, '#3fae92');
+    k.ring(24, 0, 3.4, 1.2, '#e8fff6', -0.6, 2.6);       // swirl inside
+    k.ring(24, 0, 2, 1, wc, 2.4, 5.6);
+    k.circ(24, 0, 1, '#ffffff');
+    k.ring(24, 0, 6.6, 0.9, MAT.steelLight, 0.5, 2.5);   // cage arcs
+    k.ring(24, 0, 6.6, 0.9, MAT.steelLight, 3.6, 5.6);
+    k.line(30.5, -4, 33, -6.5, 0.9, wc);                 // streaks of wind
+    k.line(31, 0, 34, 0, 0.9, '#d8fff0');
+    k.line(30.5, 4, 33, 6.5, 0.9, wc);
   }},
 
   revolver: { draw(k, wc) {

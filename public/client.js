@@ -840,6 +840,61 @@ function drawTornado(f, now) {
   ctx.restore();
 }
 
+// Black hole: a dark core ringed by a spinning accretion disc, with matter
+// spiralling in from the edge of its pull.
+function drawBlackhole(f, now) {
+  const k = f.k || 0, fade = Math.min(1, k * 10 + 0.3, (1 - k) * 8);
+  const R = 180;   // pull radius (mirrors the server)
+  ctx.save();
+  ctx.globalAlpha = 0.07 * fade;
+  ctx.fillStyle = '#6a3aff';
+  ctx.beginPath(); ctx.arc(f.x, f.y, R, 0, Math.PI * 2); ctx.fill();
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 16; i++) {
+    const ph = ((now * 0.55 + i / 16) % 1), rr = R * (1 - ph) + 8;
+    const a = now * 3 * (1 + ph * 2) + i * 2.4 + ph * 5;
+    ctx.globalAlpha = (0.2 + 0.6 * ph) * fade;
+    ctx.strokeStyle = i % 3 ? '#b89aff' : '#ffffff';
+    ctx.lineWidth = 1 + ph * 2;
+    ctx.beginPath(); ctx.arc(f.x, f.y, rr, a, a + 0.5 + ph * 0.5); ctx.stroke();
+  }
+  const r = (f.r || 30) * (0.9 + 0.08 * Math.sin(now * 9));
+  for (let i = 0; i < 3; i++) {
+    ctx.globalAlpha = (0.55 - i * 0.15) * fade;
+    ctx.strokeStyle = i === 0 ? '#ffd8ff' : i === 1 ? '#a86aff' : '#5a2aff';
+    ctx.lineWidth = 3 - i * 0.7;
+    ctx.beginPath(); ctx.ellipse(f.x, f.y, r + 6 + i * 4, (r + 6 + i * 4) * 0.4, now * 2 + i, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.globalAlpha = fade;
+  ctx.fillStyle = '#05020c';
+  ctx.beginPath(); ctx.arc(f.x, f.y, r * 0.78, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#8a5aff'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(f.x, f.y, r * 0.78, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
+// Life drain: a pulsing blood-red aura around the caster, motes streaming in.
+function drawDrain(f, now) {
+  const r = f.r || 95, k = f.k || 0, fade = Math.min(1, k * 10 + 0.3, (1 - k) * 6);
+  ctx.save();
+  ctx.globalAlpha = (0.1 + 0.05 * Math.sin(now * 8)) * fade;
+  ctx.fillStyle = '#ff2a4a';
+  ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.65 * fade;
+  ctx.strokeStyle = '#ff5a7a'; ctx.lineWidth = 2;
+  ctx.setLineDash([7, 6]); ctx.lineDashOffset = now * 40;
+  ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  for (let i = 0; i < 12; i++) {
+    const ph = ((now * 0.8 + i / 12) % 1), rr = r * (1 - ph) + 4;
+    const a = i * 2.4 + now * 1.5;
+    ctx.globalAlpha = (0.9 - ph * 0.5) * fade;
+    ctx.fillStyle = i % 2 ? '#ff7a8a' : '#ffd0d8';
+    ctx.fillRect(f.x + Math.cos(a) * rr - 1, f.y + Math.sin(a) * rr - 1, 2.2, 2.2);
+  }
+  ctx.restore();
+}
+
 // Hurricane: a wide ring of wind streaks circling the caster.
 function drawHurricane(f, now) {
   const r = f.r || 115, fade = Math.min(1, (1 - (f.k || 0)) * 6, (f.k || 0) * 12 + 0.2);
@@ -898,6 +953,8 @@ function drawFireRings(fires) {
     if (f.kind === 'meteor') { if ((f.k || 0) >= 0) drawMeteor(f, now); continue; }
     if (f.kind === 'tornado') { drawTornado(f, now); continue; }
     if (f.kind === 'hurricane') { drawHurricane(f, now); continue; }
+    if (f.kind === 'blackhole') { drawBlackhole(f, now); continue; }
+    if (f.kind === 'drain') { drawDrain(f, now); continue; }
     if (f.kind === 'soundwave') {
       // Three rippling rings, fading as the wave spreads.
       const fade = Math.max(0, 1 - f.r / 420);
@@ -1945,6 +2002,41 @@ function drawAbilityIcon(g, id, w, h) {
     g.fillStyle = '#5a3020'; g.beginPath(); g.arc(11, 21, 7, 0, Math.PI * 2); g.fill();
     g.fillStyle = '#8a4a2a'; g.beginPath(); g.arc(9, 19, 4, 0, Math.PI * 2); g.fill();
     g.fillStyle = col; g.fillRect(12, 22, 3, 2);
+  } else if (id === 'aegis') {
+    g.fillStyle = '#7a5a10';
+    g.beginPath(); g.moveTo(x, 3); g.lineTo(x + 11, 8); g.lineTo(x + 9, 21); g.lineTo(x, 29); g.lineTo(x - 9, 21); g.lineTo(x - 11, 8); g.closePath(); g.fill();
+    g.fillStyle = col;
+    g.beginPath(); g.moveTo(x, 5.5); g.lineTo(x + 8.5, 9.5); g.lineTo(x + 7, 20); g.lineTo(x, 26); g.lineTo(x - 7, 20); g.lineTo(x - 8.5, 9.5); g.closePath(); g.fill();
+    g.fillStyle = '#fff6c0'; g.fillRect(x - 1, 9, 2, 12); g.fillRect(x - 5, 13, 10, 2);
+  } else if (id === 'warp') {
+    g.strokeStyle = col; g.lineWidth = 2.2;
+    g.beginPath(); g.arc(x, y, 11, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = '#ffffff'; g.lineWidth = 1.8;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x, y - 8); g.stroke();
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + 6, y + 3); g.stroke();
+    g.fillStyle = col;
+    for (let i = 0; i < 12; i += 3) g.fillRect(x + Math.cos(i * Math.PI / 6) * 9.5 - 1, y + Math.sin(i * Math.PI / 6) * 9.5 - 1, 2, 2);
+  } else if (id === 'storm') {
+    g.fillStyle = '#4a5a74';
+    g.beginPath(); g.arc(11, 10, 6, 0, Math.PI * 2); g.arc(19, 9, 5.5, 0, Math.PI * 2); g.arc(15, 13, 6, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#6a7a96'; g.beginPath(); g.arc(12, 8, 3, 0, Math.PI * 2); g.fill();
+    g.fillStyle = col;
+    g.beginPath(); g.moveTo(17, 14); g.lineTo(10, 23); g.lineTo(15, 23); g.lineTo(12, 30); g.lineTo(22, 19); g.lineTo(16.5, 19); g.lineTo(20, 14); g.closePath(); g.fill();
+    g.fillStyle = '#ffffff'; g.fillRect(14, 16, 2, 4);
+  } else if (id === 'drain') {
+    g.fillStyle = '#8a1a30';
+    g.beginPath(); g.moveTo(x, 3); g.bezierCurveTo(x + 14, 14, x + 12, 28, x, 28); g.bezierCurveTo(x - 12, 28, x - 14, 14, x, 3); g.fill();
+    g.fillStyle = col;
+    g.beginPath(); g.moveTo(x, 6); g.bezierCurveTo(x + 10, 15, x + 9, 25, x, 25); g.bezierCurveTo(x - 9, 25, x - 10, 15, x, 6); g.fill();
+    g.fillStyle = '#ffc0cc'; g.beginPath(); g.ellipse(x - 3.5, y + 1, 2, 4, 0.3, 0, Math.PI * 2); g.fill();
+  } else if (id === 'blackhole') {
+    g.strokeStyle = '#5a2aff'; g.lineWidth = 2;
+    g.beginPath(); g.ellipse(x, y, 13, 5.5, -0.5, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = '#c8a8ff'; g.lineWidth = 1.5;
+    g.beginPath(); g.ellipse(x, y, 10, 4, -0.5, 0.4, 5.2); g.stroke();
+    g.fillStyle = '#05020c'; g.beginPath(); g.arc(x, y, 6, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = col; g.lineWidth = 1.2; g.beginPath(); g.arc(x, y, 6, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = '#ffffff'; g.fillRect(x + 11, y - 9, 2, 2); g.fillRect(x - 13, y + 8, 2, 2);
   }
 }
 
@@ -2252,9 +2344,9 @@ const ITEM_COLOR = {
 const EFFECT_ITEM = { speed:'speed', strength:'strength', shield:'shield', haste:'haste',
                       magnet:'magnet', regen:'regen', vampire:'vampire' };
 const EFFECT_MAX = { speed:6000, strength:6000, shield:4500, haste:6000, magnet:10000, regen:8000, vampire:7000 };
-// Slots are 32 HUD px and the 18px icon is drawn at 24 (exactly 2x on the
-// 1.5x-scaled canvas), so collected power-ups are big, crisp and easy to tap.
-const INV_SLOT = 32, INV_ICON = 24, INV_GAP = 4, INV_X = 4, INV_Y = 44;
+// A compact row tucked into the corner under the cooldown bars. Slots are a
+// little bigger on touch screens so they stay easy to tap.
+const INV_SLOT = isTouchDevice ? 24 : 20, INV_ICON = INV_SLOT - 6, INV_GAP = 2, INV_X = 3, INV_Y = 43;
 let itemSlotRects = [];   // HUD-space hit boxes for tap-to-use
 
 // First y at or below `y` where a box of this size overlaps no on-screen button.
@@ -2297,14 +2389,14 @@ function drawItemBar(inv, me) {
       const o = (INV_SLOT - INV_ICON) / 2;
       ctx.drawImage(cv, x + o, y + o - 1, INV_ICON, INV_ICON);
     }
-    ctx.font = 'bold 8px "Courier New",monospace';
+    ctx.font = 'bold 6px "Courier New",monospace';
     ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-    ctx.fillStyle = '#000'; ctx.fillText(String(i + 1), x + INV_SLOT - 1, y + INV_SLOT);
-    ctx.fillStyle = '#d8d8ea'; ctx.fillText(String(i + 1), x + INV_SLOT - 1.5, y + INV_SLOT - 0.5);
+    ctx.fillStyle = '#000'; ctx.fillText(String(i + 1), x + INV_SLOT - 0.5, y + INV_SLOT + 0.5);
+    ctx.fillStyle = '#d8d8ea'; ctx.fillText(String(i + 1), x + INV_SLOT - 1, y + INV_SLOT);
   });
 
   // Active power-ups: an icon each with a draining timer bar underneath.
-  const B = 16, by = y + (inv.length ? INV_SLOT + 5 : 0);
+  const B = 12, by = y + (inv.length ? INV_SLOT + 4 : 0);
   active.forEach((k, i) => {
     const bx = onRight ? HUD_W - INV_X - (i + 1) * (B + 3) + 3 : INV_X + i * (B + 3);
     const type = EFFECT_ITEM[k], col = ITEM_COLOR[type];
@@ -2785,16 +2877,25 @@ function drawProjectiles(projs) {
       ctx.restore();
       continue;
     }
-    // Wind wand gust: three swept crescents.
+    // Wind wand gust: a swirling pocket of air — a soft glow, three swept
+    // crescents trailing behind and a few leaves caught in the flow.
     if (pr.weaponId === 'windwand') {
       ctx.save();
       ctx.translate(pr.x, pr.y); ctx.rotate(ang);
       ctx.lineCap = 'round';
+      ctx.globalAlpha = 0.22; ctx.fillStyle = '#aef5dc';
+      ctx.beginPath(); ctx.ellipse(-3, 0, 11 * u.size, 6.5 * u.size, 0, 0, Math.PI * 2); ctx.fill();
+      for (let i = 0; i < 4; i++) {
+        ctx.globalAlpha = 0.95 - i * 0.2;
+        ctx.strokeStyle = i === 0 ? '#ffffff' : i === 1 ? '#d8fff0' : '#8fe0c4';
+        ctx.lineWidth = 2.4 - i * 0.4;
+        ctx.beginPath(); ctx.arc(-i * 4.5, 0, (7 - i * 0.8) * u.size, -1.2, 1.2); ctx.stroke();
+      }
+      ctx.lineWidth = 1;
       for (let i = 0; i < 3; i++) {
-        ctx.globalAlpha = 0.85 - i * 0.25;
-        ctx.strokeStyle = i ? '#aef5dc' : '#ffffff';
-        ctx.lineWidth = 2 - i * 0.4;
-        ctx.beginPath(); ctx.arc(-i * 4, 0, 5.5 * u.size - i, -1.1, 1.1); ctx.stroke();
+        const t = now / 90 + i * 2.1;
+        ctx.globalAlpha = 0.85; ctx.fillStyle = i % 2 ? '#7fd8a8' : '#c9f08a';
+        ctx.fillRect(-4 - i * 5 + Math.cos(t) * 2, Math.sin(t * 1.3) * 5 - 1, 2.4, 1.6);
       }
       ctx.restore();
       continue;

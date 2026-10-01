@@ -34,7 +34,7 @@ const ADMIN_COINS = 999999999;
 function isAdminPw(pw) { return pw === ADMIN_PASSWORD; }
 
 const PARRY_WINDOW   = 1200;  // ms the parry is "active" and reflects
-const PARRY_COOLDOWN = 5000;  // ms before it can be used again
+const PARRY_COOLDOWN = 8000;  // ms before it can be used again
 const PARRY_REFLECT  = 1.5;   // reflected damage multiplier
 
 const PLAYER_SPEED  = 3.6;    // scaled up with the bigger arena
@@ -139,17 +139,17 @@ const WEAPONS = [
   // 3 s shield that blocks every hit and banks the damage it would have done.
   // Special throws that bank back as a lightning vortex; SUPER heals 1.5x the
   // bank. Both empty the bank. special.dmg / super.dmg are percentages of it.
-  { id: 'vortex',      name: 'VORTEX SHIELD', damage: 1, range: 60, atkSpd: 7000, type: 'melee', unlockXp: 0, shopOnly: true, noRequirement: true, price: 20000, vortexShield: true,
+  { id: 'vortex',      name: 'VORTEX SHIELD', damage: 1, range: 60, atkSpd: 11000, type: 'melee', unlockXp: 0, shopOnly: true, noRequirement: true, price: 20000, vortexShield: true,
     special: { kind: 'vortex',     dmg: 100, range: 420, cd: 2500 },
     super:   { kind: 'absorbheal', dmg: 150, cd: 12000 } },
   // Shop-only, no requirement. Attack: a piercing gust that shoves foes back
   // (gust = px). Special: a tornado that drifts forward pulling foes into it.
   // SUPER: a hurricane around you for 5 s that flings foes away and blows
   // enemy shots out of the air.
-  { id: 'windwand',    name: 'WIND WAND',   damage: 12, range: 230, atkSpd: 420, type: 'ranged', unlockXp: 0, shopOnly: true, noRequirement: true, price: 9000,
-    gust: 26, pierce: true, projSpeed: 5.4, needLegendary: true,
-    special: { kind: 'tornado',   dmg: 14, range: 280, cd: 5000, aoe: 34 },
-    super:   { kind: 'hurricane', dmg: 22, cd: 20000 } },
+  { id: 'windwand',    name: 'WIND WAND',   damage: 20, range: 270, atkSpd: 340, type: 'ranged', unlockXp: 0, shopOnly: true, noRequirement: true, price: 9000,
+    gust: 38, pierce: true, projSpeed: 6, pellets: 2, needLegendary: true,
+    special: { kind: 'tornado',   dmg: 30, range: 320, cd: 4200, aoe: 46 },
+    super:   { kind: 'hurricane', dmg: 40, cd: 18000 } },
   // Shop-only, no requirement. Every bullet explodes. Special: fan the hammer
   // (six exploding shots at once). SUPER: dead eye, an exploding bullet into
   // every enemy on the field.
@@ -272,7 +272,7 @@ const SKIN_BY_ID = Object.fromEntries(SKIN_SHOP.map(s => [s.id, s]));
 // like weapons). Two can be equipped at a time, on Q and E.
 const ABILITIES = [
   { id: 'dash',   name: 'DASH',        price: 1500,  cd: 3500,  color: '#9fe8ff',
-    desc: 'Dash to your mouse cursor (on touch: the way you are moving), untouchable mid-dash' },
+    desc: 'Dash to your mouse cursor. On phones and tablets: a long dash the way you are moving. Untouchable mid-dash' },
   { id: 'heal',   name: 'SECOND WIND', price: 3000,  cd: 25000, color: '#7affb0',
     desc: 'Heal 35% of your max HP' },
   { id: 'frost',  name: 'FROST NOVA',  price: 5000,  cd: 16000, color: '#8fd8ff',
@@ -281,10 +281,24 @@ const ABILITIES = [
     desc: 'Hit 80% harder and attack twice as fast for 6s' },
   { id: 'meteor', name: 'METEOR SHOWER', price: 10000, cd: 24000, color: '#ff9a3a',
     desc: 'Rain 18 meteors across the whole map for 3s, each one a massive blast' },
+  { id: 'aegis',  name: 'AEGIS',       price: 4000,  cd: 20000, color: '#ffe066',
+    desc: 'A golden barrier: take no damage at all for 3s' },
+  { id: 'warp',   name: 'TIME WARP',   price: 6500,  cd: 22000, color: '#c8a0ff',
+    desc: 'Slow every enemy on the map to a crawl for 5s' },
+  { id: 'storm',  name: 'THUNDERSTORM', price: 8500, cd: 15000, color: '#ffe45a',
+    desc: 'Call down lightning on up to 9 different enemies at once' },
+  { id: 'drain',  name: 'LIFE DRAIN',  price: 9000,  cd: 24000, color: '#ff4a6a',
+    desc: 'A blood aura for 5s: hurts everything near you and heals you for the damage' },
+  { id: 'blackhole', name: 'BLACK HOLE', price: 12000, cd: 26000, color: '#8a5aff',
+    desc: 'A singularity drags every enemy toward it and crushes them for 3.5s' },
 ];
 const ABILITY_BY_ID = Object.fromEntries(ABILITIES.map(a => [a.id, a]));
 const ABILITY_SLOTS = 2;
-const DASH_DIST = 78, DASH_CURSOR_MAX = 170, DASH_IFRAMES = 320;
+const DASH_DIST = 150, DASH_CURSOR_MAX = 170, DASH_IFRAMES = 360;   // DASH_DIST: the way you're moving (touch, or no cursor)
+const AEGIS_MS = 3000, WARP_MS = 5000;
+const STORM_BOLTS = 9, STORM_DMG = 85;
+const DRAIN_MS = 5000, DRAIN_R = 95, DRAIN_TICK = 400, DRAIN_DMG = 18, DRAIN_HEAL = 0.6;
+const HOLE_MS = 3500, HOLE_R = 30, HOLE_PULL_R = 180, HOLE_TICK = 350, HOLE_DMG = 32;
 const HEAL_SHARE = 0.35;
 const FROST_R = 95, FROST_FREEZE_MS = 2500, FROST_DMG = 20;
 const RAGE_MS = 6000;
@@ -2173,8 +2187,8 @@ function doSuper(p, pKey) {
 
 // ─── Wind Wand & Revolver ─────────────────────────────────────────────────────
 const INFERNO_WAVES = 5, INFERNO_WAVE_GAP = 650;
-const TORNADO_MS = 2600, TORNADO_PULL_R = 85, TORNADO_TICK = 320;
-const HURRICANE_MS = 5000, HURRICANE_R = 115, HURRICANE_TICK = 450, HURRICANE_FLING = 34;
+const TORNADO_MS = 3200, TORNADO_PULL_R = 100, TORNADO_TICK = 300;
+const HURRICANE_MS = 5500, HURRICANE_R = 135, HURRICANE_TICK = 380, HURRICANE_FLING = 42;
 const DEADEYE_MAX = 16, DEADEYE_AOE = 40;
 
 // Tornado: drifts along its aim, dragging nearby foes into its middle and
@@ -2316,6 +2330,8 @@ function updateFires(factor, dt) {
       return false;
     }
     if (f.kind === 'meteor') return true;   // still falling: only the warning shows
+    if (f.kind === 'blackhole') return updateBlackhole(f, factor, dt);
+    if (f.kind === 'drain') return updateDrain(f, factor, dt);
     if (f.kind === 'tornado') return updateTornado(f, factor, dt);
     if (f.kind === 'hurricane') return updateHurricane(f, factor, dt);
     if (f.kind === 'hand') return updateFireHand(f, factor);
@@ -2518,6 +2534,18 @@ function useAbility(p, pKey, slot) {
   let used = true;
   if (id === 'dash') used = abilityDash(p, pKey);
   else if (id === 'heal') used = abilityHeal(p);
+  else if (id === 'aegis') {
+    applyEffect(p, 'shield', AEGIS_MS);
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 34, timer: 650, max: 650, color: ab.color, text: 'AEGIS' });
+  }
+  else if (id === 'warp') used = abilityWarp(p, pKey);
+  else if (id === 'storm') used = abilityStorm(p, pKey);
+  else if (id === 'drain') {
+    room.fires.push({ id: nextId(), kind: 'drain', owner: pKey, x: cx(p), y: cy(p), r: DRAIN_R, t: 0, life: DRAIN_MS, tick: 0,
+                      dmg: Math.round(DRAIN_DMG * (hasEffect(p, 'strength') ? 1.8 : 1)) });
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 40, timer: 650, max: 650, color: ab.color, text: 'LIFE DRAIN' });
+  }
+  else if (id === 'blackhole') used = abilityBlackhole(p, pKey);
   else if (id === 'frost') used = abilityFrost(p, pKey);
   else if (id === 'rage') {
     applyEffect(p, 'strength', RAGE_MS);
@@ -2525,6 +2553,87 @@ function useAbility(p, pKey, slot) {
     room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 34, timer: 600, max: 600, color: ab.color, text: 'BERSERK' });
   } else if (id === 'meteor') used = abilityMeteor(p, pKey);
   if (used) p.abCd[id] = ab.cd;
+}
+
+// Slow everyone to a crawl: monsters (and the Giant) through their slow timer,
+// a rival player through the slow effect.
+function abilityWarp(p, pKey) {
+  const foes = enemyTargets(pKey);
+  if (!foes.length) return false;
+  for (const t of foes) chillTarget(t, WARP_MS);
+  room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 420, timer: 700, max: 700, color: ABILITY_BY_ID.warp.color });
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 36, timer: 700, max: 700, color: ABILITY_BY_ID.warp.color, text: 'TIME WARP' });
+  return true;
+}
+
+// Lightning on the nearest STORM_BOLTS foes, whatever their range.
+function abilityStorm(p, pKey) {
+  const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
+  const foes = enemyTargets(pKey)
+    .map(t => ({ t, d: Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) }))
+    .sort((a, b) => a.d - b.d).slice(0, STORM_BOLTS);
+  if (!foes.length) return false;
+  for (const { t } of foes) {
+    const dmg = t.num ? 30 : STORM_DMG + Math.round((t.maxHp || 0) * (t.boss ? 0.01 : 0.04));
+    room.particles.push({ type: 'bolt', x: cx(t) + (Math.random() - 0.5) * 36, y: ARENA_Y + 2, x2: cx(t), y2: cy(t),
+                          timer: 380, max: 380, color: ABILITY_BY_ID.storm.color });
+    strikeTarget(t, Math.round(dmg * dmgMult), pKey);
+  }
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 34, timer: 600, max: 600, color: ABILITY_BY_ID.storm.color, text: 'THUNDERSTORM' });
+  return true;
+}
+
+// The hole opens on the nearest foe and drags everything toward it.
+function abilityBlackhole(p, pKey) {
+  let best = null, bd = Infinity;
+  for (const t of enemyTargets(pKey)) {
+    const d = Math.hypot(cx(t) - cx(p), cy(t) - cy(p));
+    if (d < bd) { bd = d; best = t; }
+  }
+  if (!best) return false;
+  room.fires.push({ id: nextId(), kind: 'blackhole', owner: pKey, x: cx(best), y: cy(best), r: HOLE_R, t: 0, life: HOLE_MS, tick: 0,
+                    dmg: Math.round(HOLE_DMG * (hasEffect(p, 'strength') ? 1.8 : 1)) });
+  room.particles.push({ type: 'trapburst', x: cx(best), y: cy(best), maxR: 40, timer: 650, max: 650, color: ABILITY_BY_ID.blackhole.color, text: 'BLACK HOLE' });
+  return true;
+}
+
+function updateBlackhole(f, factor, dt) {
+  f.tick -= dt;
+  const hurt = f.tick <= 0;
+  if (hurt) f.tick = HOLE_TICK;
+  for (const t of enemyTargets(f.owner)) {
+    const dx = f.x - cx(t), dy = f.y - cy(t), d = Math.hypot(dx, dy) || 1;
+    if (d > HOLE_PULL_R) continue;
+    if (!t.boss && d > 3) {
+      // Pulls harder the closer it gets.
+      const pull = Math.min(d, (1.2 + 2.6 * (1 - d / HOLE_PULL_R)) * factor);
+      t.x += dx / d * pull; t.y += dy / d * pull;
+      clampToArena(t);
+    }
+    if (hurt && d <= f.r + 24 + t.w / 2) applyDamage(t, f.dmg + Math.round(t.num ? 0 : (t.maxHp || 0) * (t.boss ? 0.004 : 0.02)), f.owner);
+  }
+  return true;
+}
+
+// Life drain rides with its caster, hurting everything near and feeding on it.
+function updateDrain(f, factor, dt) {
+  const o = room.players[f.owner];
+  if (!o || o.dead) return false;
+  f.x = cx(o); f.y = cy(o);
+  f.tick -= dt;
+  if (f.tick > 0) return true;
+  f.tick = DRAIN_TICK;
+  let fed = 0;
+  for (const t of enemyTargets(f.owner)) {
+    if (Math.hypot(cx(t) - f.x, cy(t) - f.y) > f.r + t.w / 2) continue;
+    applyDamage(t, f.dmg, f.owner);
+    fed++;
+  }
+  if (fed) {
+    const heal = Math.max(1, Math.round(f.dmg * DRAIN_HEAL * Math.min(fed, 4)));
+    o.hp = Math.min(o.maxHp, o.hp + heal);
+  }
+  return true;
 }
 
 // To the mouse cursor when there is one (up to DASH_CURSOR_MAX away),
