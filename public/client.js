@@ -194,7 +194,7 @@ function toggleSound() {
 
 function updateMusicButtons(info) {
   const sb = document.getElementById('musicBtn');
-  if (sb) sb.innerHTML = '♫ MUSIC: ' + (info.idx + 1) + '/' + info.count;
+  if (sb) sb.innerHTML = '♫ MUSIC ' + (info.idx + 1) + '/' + info.count + ': ' + info.name;
   const gb = document.getElementById('musicBtnGame');
   if (gb) gb.innerHTML = '♫ ' + (info.idx + 1) + '/' + info.count;
 }
@@ -203,6 +203,7 @@ function cycleMusic() {
   if (!window.GameAudio) return;
   GameAudio.init();
   updateMusicButtons(GameAudio.changeTrack());
+  GameAudio.preview();   // from the menu: a few seconds of the new track (no-op mid-match)
 }
 
 let leaving = false, returningToMenu = false;
