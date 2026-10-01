@@ -223,7 +223,7 @@ const WEAPON_UPGRADES = {
   blunderbuss: ['multi', 'dmg', 'knock'],
   lance:       ['dmg', 'rng', 'crit'],
   stormtome:   ['chain', 'dmg', 'cdr'],
-  fireglove:   ['dmg', 'rng', 'life', 'multi', 'aoe'],
+  fireglove:   ['dmg', 'rng', 'crit', 'multi', 'aoe'],
   vortex:      ['dmg', 'spd', 'cdr'],
   windwand:    ['dmg', 'spd', 'knock', 'rng', 'aoe'],
   revolver:    ['dmg', 'spd', 'aoe', 'crit', 'multi'],
