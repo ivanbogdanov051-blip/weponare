@@ -31,7 +31,7 @@ let WEAPON_COLOR = {
   glaive:'#b0d8c0', katana:'#eef0ff', chakram:'#66e0c0', cannon:'#9a90a8',
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
-  fireglove:'#ff6a1a', vortex:'#7ad8ff',
+  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347',
 };
 const WEAPON_DESC = {
   sword:'Balanced blade', dagger:'Fast, low damage', axe:'Slow, heavy hit',
@@ -47,6 +47,8 @@ const WEAPON_DESC = {
   stormtome:'Lightning arcs between foes',
   fireglove:'Rings of fire, exploding fire hands and a SUPER inferno',
   vortex:'Banks the damage you take, then pays it back',
+  windwand:'Gusts that shove foes, tornadoes and a SUPER hurricane',
+  revolver:'Every bullet explodes',
 };
 
 // Filled from the server catalog: { id: {type, atkSpd, ...} }
@@ -517,7 +519,7 @@ const ATTACK_ANIM = {
   bow: 'draw', crossbow: 'recoil', grapple: 'recoil', cannon: 'heavy', blunderbuss: 'heavy',
   staff: 'cast', frostrod: 'cast', wand: 'flick', stormtome: 'tome',
   chakram: 'throw', boomerang: 'throw', shuriken: 'throw',
-  fireglove: 'punch', vortex: 'shieldup',
+  fireglove: 'punch', vortex: 'shieldup', windwand: 'flick', revolver: 'recoil',
 };
 const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
                   heavy: 300, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
@@ -809,6 +811,58 @@ function drawSpinSlash(sl, alpha, prog, u) {
 // Rings of fire: the attack's quick ring (k = how burnt-out it is) and the
 // SUPER's inferno, which just keeps growing. Flame tongues lick outward
 // along the edge and flicker over time.
+// Wind wand tornado: a funnel of spinning bands, narrow at the ground and
+// flaring out above, with grit whirling round it.
+function drawTornado(f, now) {
+  const r = f.r || 34, fade = Math.min(1, (1 - (f.k || 0)) * 4);
+  const baseY = f.y + r * 0.55;
+  ctx.save();
+  ctx.globalAlpha = 0.18 * fade;
+  ctx.fillStyle = '#aef5dc';
+  ctx.beginPath(); ctx.ellipse(f.x, baseY, r, r * 0.35, 0, 0, Math.PI * 2); ctx.fill();
+  for (let i = 0; i < 7; i++) {
+    const h = i / 6, y = baseY - h * r * 1.9;
+    const w = r * (0.25 + h * 0.85) + Math.sin(now * 9 + i) * 2;
+    const sway = Math.sin(now * 3 + h * 3) * r * 0.18 * h;
+    ctx.globalAlpha = (0.35 + 0.4 * (1 - h)) * fade;
+    ctx.strokeStyle = i % 2 ? '#e8fff6' : '#8fe0c4';
+    ctx.lineWidth = 2.5;
+    const a0 = (now * 8 + i * 0.9) % (Math.PI * 2);
+    ctx.beginPath(); ctx.ellipse(f.x + sway, y, w, w * 0.28, 0, a0, a0 + Math.PI * 1.4); ctx.stroke();
+  }
+  ctx.fillStyle = '#c9b98e';
+  for (let i = 0; i < 8; i++) {
+    const a = now * 7 + i * 0.8, h = (i / 8);
+    const rr = r * (0.3 + h * 0.8);
+    ctx.globalAlpha = 0.8 * fade;
+    ctx.fillRect(f.x + Math.cos(a) * rr - 1, baseY - h * r * 1.7 + Math.sin(a) * rr * 0.28 - 1, 2, 2);
+  }
+  ctx.restore();
+}
+
+// Hurricane: a wide ring of wind streaks circling the caster.
+function drawHurricane(f, now) {
+  const r = f.r || 115, fade = Math.min(1, (1 - (f.k || 0)) * 6, (f.k || 0) * 12 + 0.2);
+  ctx.save();
+  ctx.globalAlpha = 0.08 * fade;
+  ctx.fillStyle = '#aef5dc';
+  ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 14; i++) {
+    const rr = r * (0.35 + (i % 5) * 0.16);
+    const a0 = now * (2.6 - (i % 5) * 0.25) + i * 1.7;
+    ctx.globalAlpha = (0.35 + (i % 3) * 0.2) * fade;
+    ctx.strokeStyle = i % 3 ? '#d8fff0' : '#7fd8b8';
+    ctx.lineWidth = 1.5 + (i % 3);
+    ctx.beginPath(); ctx.arc(f.x, f.y, rr, a0, a0 + 0.9); ctx.stroke();
+  }
+  ctx.globalAlpha = 0.5 * fade;
+  ctx.strokeStyle = '#aef5dc'; ctx.lineWidth = 2;
+  ctx.setLineDash([10, 8]); ctx.lineDashOffset = -now * 60;
+  ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
 // A meteor on its way down: a pulsing target circle that fills in, and the rock
 // dropping in from the upper right with a fiery tail. It lands when k hits 1.
 function drawMeteor(f, now) {
@@ -841,7 +895,9 @@ function drawFireRings(fires) {
   const now = performance.now() / 1000;
   for (const f of fires) {
     if (f.kind === 'vortexfield') { drawVortexField(f, now); continue; }
-    if (f.kind === 'meteor') { drawMeteor(f, now); continue; }
+    if (f.kind === 'meteor') { if ((f.k || 0) >= 0) drawMeteor(f, now); continue; }
+    if (f.kind === 'tornado') { drawTornado(f, now); continue; }
+    if (f.kind === 'hurricane') { drawHurricane(f, now); continue; }
     if (f.kind === 'soundwave') {
       // Three rippling rings, fading as the wave spreads.
       const fade = Math.max(0, 1 - f.r / 420);
@@ -1100,6 +1156,19 @@ function drawStabSlash(sl, alpha, prog, u) {
 
 const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 const keys = {};
+// Where the mouse is over the arena, in world coordinates. Only a real mouse
+// counts: a tap on a phone mustn't leave a stale aim point behind.
+let mouseAim = null;
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse') return;
+  const r = canvas.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  mouseAim = { x: (e.clientX - r.left) * CANVAS_W / r.width, y: (e.clientY - r.top) * CANVAS_H / r.height };
+  // Holding a dash key: keep the server's aim fresh for the next dash.
+  if (keys['KeyQ'] || keys['KeyE']) sendInput();
+});
+canvas.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') mouseAim = null; });
+
 const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false, ab1: false, ab2: false };
 
 window.addEventListener('keydown', (e) => {
@@ -1133,6 +1202,9 @@ function currentInputs() {
     super:   !!keys['KeyR'] || touchKeys.super,
     ab1:     !!keys['KeyQ'] || touchKeys.ab1,
     ab2:     !!keys['KeyE'] || touchKeys.ab2,
+    // Mouse position in the world, for DASH (desktop only).
+    aimX:    mouseAim ? Math.round(mouseAim.x) : null,
+    aimY:    mouseAim ? Math.round(mouseAim.y) : null,
   };
 }
 
@@ -1467,7 +1539,7 @@ async function openShop() {
     applyCatalog(data.catalog, data.colors);
     saveLocalCoins(pendingPass, data.coins);
     setShopMsg(data.refunded
-      ? `Weapons now have their own upgrades. Old ones were refunded: +${data.refunded.toLocaleString()} coins.`
+      ? `Some upgrades were changed. The old levels were refunded: +${data.refunded.toLocaleString()} coins.`
       : '');
     renderShop();
   } catch {
@@ -1534,7 +1606,13 @@ function renderShop() {
 
 const LEGEND_MOVES = {
   fireglove: '<b>ATK</b> a ring of fire that grows for 1s · <b>SPECIAL</b> a fire hand that hunts your foe and explodes'
-           + ' (hit or parry it to break it) · <b>SUPER</b> an inferno ring that keeps growing until parried',
+           + ' (hit or parry it to break it; MULTISHOT adds hands) · <b>SUPER</b> five inferno rings, one after another,'
+           + ' each growing until parried',
+  windwand: '<b>ATK</b> a piercing gust that shoves foes back · <b>SPECIAL</b> a tornado that drifts forward, dragging foes'
+          + ' in and shredding them · <b>SUPER</b> a 5s hurricane around you that flings foes away and blows enemy shots'
+          + ' out of the air. No other weapons needed.',
+  revolver: '<b>ATK</b> fast bullets that explode on hit · <b>SPECIAL</b> fan the hammer: six exploding shots at once ·'
+          + ' <b>SUPER</b> dead eye: an exploding bullet into every enemy on the field. No other weapons needed.',
   vortex: '<b>ATK</b> a 3s shield that blocks every hit and banks the damage it stopped · <b>SPECIAL</b> a 3s lightning'
         + ' force field around you: anything that touches it takes the whole bank · <b>SUPER</b> heals 1.5x the bank · special and super empty it.'
         + ' No other weapons needed.',
@@ -1547,11 +1625,14 @@ function legendaryCards(weapons, coins) {
   const xpIds = all.filter(w => !w.shopOnly).map(w => w.id);
   const have = xpIds.filter(id => weapons.includes(id)).length;
   return all.filter(w => w.shopOnly && !weapons.includes(w.id)).map(w => {
-    const ready = w.noRequirement || have >= xpIds.length;
+    const haveLegend = all.some(o => o.shopOnly && o.id !== w.id && weapons.includes(o.id));
+    const legendOk = !w.needLegendary || haveLegend;
+    const ready = legendOk && (w.noRequirement || have >= xpIds.length);
     const afford = coins >= w.price;
     const col = WEAPON_COLOR[w.id] || '#ff6a1a';
-    const need = ready ? (afford ? 'Ready to buy!' : `Need ${(w.price - coins).toLocaleString()} more coins`)
-                       : `Unlock every other weapon first: ${have}/${xpIds.length}`;
+    const need = !legendOk ? 'Own at least one other legendary weapon first'
+      : ready ? (afford ? 'Ready to buy!' : `Need ${(w.price - coins).toLocaleString()} more coins`)
+      : `Unlock every other weapon first: ${have}/${xpIds.length}`;
     return `<div class="shop-row legendary">
       <div class="shop-head">
         <canvas class="shop-ic" data-weapon="${w.id}" width="56" height="32"></canvas>
@@ -2686,6 +2767,35 @@ function drawProjectiles(projs) {
       ctx.beginPath(); ctx.arc(pr.x, pr.y, 2.8, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#fff6d0';
       ctx.beginPath(); ctx.arc(pr.x - 0.8, pr.y - 0.8, 1.2, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      continue;
+    }
+
+    // Explosive revolver round (attack, fan the hammer, dead eye): a hot
+    // tracer with a glowing slug.
+    if (pr.weaponId === 'revolver') {
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.globalAlpha = 0.5; ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = pr.special ? 2.5 : 1.6;
+      ctx.beginPath(); ctx.moveTo(pr.x, pr.y); ctx.lineTo(pr.x - pr.dx * 1.6, pr.y - pr.dy * 1.6); ctx.stroke();
+      ctx.globalAlpha = 0.45; ctx.fillStyle = '#ff7a1a';
+      ctx.beginPath(); ctx.arc(pr.x, pr.y, (pr.special ? 5 : 3.8) * u.size, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1; ctx.fillStyle = '#fff1c0';
+      ctx.beginPath(); ctx.arc(pr.x, pr.y, (pr.special ? 2.4 : 1.8) * u.size, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      continue;
+    }
+    // Wind wand gust: three swept crescents.
+    if (pr.weaponId === 'windwand') {
+      ctx.save();
+      ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+      ctx.lineCap = 'round';
+      for (let i = 0; i < 3; i++) {
+        ctx.globalAlpha = 0.85 - i * 0.25;
+        ctx.strokeStyle = i ? '#aef5dc' : '#ffffff';
+        ctx.lineWidth = 2 - i * 0.4;
+        ctx.beginPath(); ctx.arc(-i * 4, 0, 5.5 * u.size - i, -1.1, 1.1); ctx.stroke();
+      }
       ctx.restore();
       continue;
     }

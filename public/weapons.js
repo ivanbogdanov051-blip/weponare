@@ -403,6 +403,43 @@ const WEAPON_ART = {
     k.circ(11, 0, 1.2, '#ffffff');
     for (const [x, y] of [[11, -7.2], [18.2, 0], [11, 7.2], [3.8, 0]]) k.r(x - 0.6, y - 0.6, 1.2, 1.2, MAT.steelLight);   // studs
   }},
+
+  windwand: { draw(k, wc) {
+    // A pale birch wand, silver-banded, with a little cyclone caught at its tip.
+    k.r(0, -1.1, 15, 2.2, '#cbb98c');
+    k.r(0, -1.1, 15, 0.7, '#efe2bd');
+    k.r(0, 0.7, 15, 0.4, '#8f7d52');
+    k.r(2, -1.6, 1, 3.2, MAT.steelLight);
+    k.r(10, -1.6, 1, 3.2, MAT.steelLight);
+    k.poly([[14, -2.2], [16.5, -1.2], [16.5, 1.2], [14, 2.2]], MAT.steel);   // prong cup
+    k.glow(21, 0, 7.5, wc, 0.35);
+    k.ring(21, 0, 5, 1.3, wc, 0.4, 4.4);
+    k.ring(21, 0, 3, 1.1, '#ffffff', 3.4, 7.2);
+    k.circ(21, 0, 1.3, '#e8fff6');
+    k.line(25.5, -3.5, 28, -5.5, 0.9, wc);             // streaks of wind
+    k.line(25.5, 3.2, 28.5, 4.6, 0.9, '#d8fff0');
+  }},
+
+  revolver: { draw(k, wc) {
+    // A heavy six-gun: wooden grip, fat cylinder, long barrel, glowing muzzle
+    // (it fires explosive rounds).
+    k.poly([[-4, 1.5], [2, -0.5], [4, 3], [0, 7.5], [-4.5, 6.5]], MAT.wood);   // grip
+    k.poly([[-4, 1.5], [2, -0.5], [2.6, 0.9], [-3.6, 2.8]], MAT.woodLight);
+    k.r(-2.4, 4, 1.2, 1.2, MAT.gold);
+    k.r(1, -3, 7.5, 5, MAT.iron);                      // frame
+    k.r(1, -3, 7.5, 1.2, MAT.ironLight);
+    k.circ(5.2, -0.4, 3, MAT.steelDark);               // cylinder
+    k.r(3, -2.6, 4.4, 1, MAT.steelLight);
+    k.r(3.2, 0.4, 4, 0.7, MAT.dark);
+    k.r(0.5, -4.6, 2.2, 1.8, MAT.iron);                // hammer
+    k.r(8, -3, 14, 2.8, MAT.steel);                    // barrel
+    k.r(8, -3, 14, 0.9, MAT.steelLight);
+    k.r(8, -0.6, 14, 0.4, MAT.steelDark);
+    k.r(20, -4.1, 1.4, 1.2, MAT.iron);                 // front sight
+    k.poly([[3, 2], [6.5, 2], [6, 4.8], [3.4, 4.2]], MAT.gold);   // trigger guard
+    k.glow(23, -1.6, 4.5, wc, 0.45);
+    k.r(21.5, -2.9, 1.6, 2.6, wc);                     // hot muzzle
+  }},
 };
 
 // Run a definition through a kit that records geometry instead of painting, to

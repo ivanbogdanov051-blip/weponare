@@ -133,8 +133,8 @@ const WEAPONS = [
   // weapon is unlocked. Attack = a growing ring of fire (range = its final
   // radius), special = a homing hand of fire, and it alone has a SUPER.
   { id: 'fireglove',   name: 'FIRE GLOVE',  damage: 16, range: 78,  atkSpd: 650,  type: 'melee',  unlockXp: 0, shopOnly: true, price: 5000, fireRing: true,
-    special: { kind: 'firehand', dmg: 20, range: 420, cd: 300, minCd: 120, aoe: 40, blast: 14 },
-    super:   { kind: 'inferno',  dmg: 50, cd: 18000 } },
+    special: { kind: 'firehand', dmg: 13, range: 420, cd: 300, minCd: 300, aoe: 40, blast: 9 },
+    super:   { kind: 'inferno',  dmg: 40, cd: 18000 } },
   // Shop-only, but with no unlock requirement (noRequirement). Attack raises a
   // 3 s shield that blocks every hit and banks the damage it would have done.
   // Special throws that bank back as a lightning vortex; SUPER heals 1.5x the
@@ -142,6 +142,21 @@ const WEAPONS = [
   { id: 'vortex',      name: 'VORTEX SHIELD', damage: 1, range: 60, atkSpd: 7000, type: 'melee', unlockXp: 0, shopOnly: true, noRequirement: true, price: 20000, vortexShield: true,
     special: { kind: 'vortex',     dmg: 100, range: 420, cd: 2500 },
     super:   { kind: 'absorbheal', dmg: 150, cd: 12000 } },
+  // Shop-only, no requirement. Attack: a piercing gust that shoves foes back
+  // (gust = px). Special: a tornado that drifts forward pulling foes into it.
+  // SUPER: a hurricane around you for 5 s that flings foes away and blows
+  // enemy shots out of the air.
+  { id: 'windwand',    name: 'WIND WAND',   damage: 12, range: 230, atkSpd: 420, type: 'ranged', unlockXp: 0, shopOnly: true, noRequirement: true, price: 9000,
+    gust: 26, pierce: true, projSpeed: 5.4, needLegendary: true,
+    special: { kind: 'tornado',   dmg: 14, range: 280, cd: 5000, aoe: 34 },
+    super:   { kind: 'hurricane', dmg: 22, cd: 20000 } },
+  // Shop-only, no requirement. Every bullet explodes. Special: fan the hammer
+  // (six exploding shots at once). SUPER: dead eye, an exploding bullet into
+  // every enemy on the field.
+  { id: 'revolver',    name: 'EXPLOSIVE REVOLVER', damage: 24, range: 280, atkSpd: 380, type: 'ranged', unlockXp: 0, shopOnly: true, noRequirement: true, price: 14000,
+    aoeRadius: 26, projSpeed: 8.5, needLegendary: true,
+    special: { kind: 'fanhammer', dmg: 26, range: 260, cd: 4500, count: 6, aoe: 30 },
+    super:   { kind: 'deadeye',   dmg: 110, cd: 16000 } },
 ];
 
 const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
@@ -153,7 +168,7 @@ const WEAPON_COLORS = {
   glaive: '#b0d8c0', katana: '#eef0ff', chakram: '#66e0c0', cannon: '#9a90a8', reaper: '#cc66aa',
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
   shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
-  fireglove: '#ff6a1a', vortex: '#7ad8ff',
+  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347',
 };
 
 // ── Weapon upgrades bought with coins from the menu ──
@@ -208,8 +223,10 @@ const WEAPON_UPGRADES = {
   blunderbuss: ['multi', 'dmg', 'knock'],
   lance:       ['dmg', 'rng', 'crit'],
   stormtome:   ['chain', 'dmg', 'cdr'],
-  fireglove:   ['dmg', 'rng', 'life', 'cdr', 'aoe'],
+  fireglove:   ['dmg', 'rng', 'life', 'multi', 'aoe'],
   vortex:      ['dmg', 'spd', 'cdr'],
+  windwand:    ['dmg', 'spd', 'knock', 'rng', 'aoe'],
+  revolver:    ['dmg', 'spd', 'aoe', 'crit', 'multi'],
 };
 // Upgrade rows that aren't weapons: always available, stored alongside the
 // weapon upgrades under these ids.
@@ -255,23 +272,24 @@ const SKIN_BY_ID = Object.fromEntries(SKIN_SHOP.map(s => [s.id, s]));
 // like weapons). Two can be equipped at a time, on Q and E.
 const ABILITIES = [
   { id: 'dash',   name: 'DASH',        price: 1500,  cd: 3500,  color: '#9fe8ff',
-    desc: 'Burst forward the way you are moving, untouchable mid-dash' },
+    desc: 'Dash to your mouse cursor (on touch: the way you are moving), untouchable mid-dash' },
   { id: 'heal',   name: 'SECOND WIND', price: 3000,  cd: 25000, color: '#7affb0',
     desc: 'Heal 35% of your max HP' },
   { id: 'frost',  name: 'FROST NOVA',  price: 5000,  cd: 16000, color: '#8fd8ff',
     desc: 'Freeze everything around you solid for 2.5s and chip it for damage' },
   { id: 'rage',   name: 'BERSERK',     price: 7000,  cd: 28000, color: '#ff5544',
     desc: 'Hit 80% harder and attack twice as fast for 6s' },
-  { id: 'meteor', name: 'METEOR',      price: 10000, cd: 20000, color: '#ff9a3a',
-    desc: 'Call a meteor down on the nearest enemy: a huge blast after a short warning' },
+  { id: 'meteor', name: 'METEOR SHOWER', price: 10000, cd: 24000, color: '#ff9a3a',
+    desc: 'Rain 18 meteors across the whole map for 3s, each one a massive blast' },
 ];
 const ABILITY_BY_ID = Object.fromEntries(ABILITIES.map(a => [a.id, a]));
 const ABILITY_SLOTS = 2;
-const DASH_DIST = 78, DASH_IFRAMES = 320;
+const DASH_DIST = 78, DASH_CURSOR_MAX = 170, DASH_IFRAMES = 320;
 const HEAL_SHARE = 0.35;
 const FROST_R = 95, FROST_FREEZE_MS = 2500, FROST_DMG = 20;
 const RAGE_MS = 6000;
-const METEOR_R = 62, METEOR_FALL_MS = 850, METEOR_DMG = 120, METEOR_PVP_DMG = 45;
+const METEOR_R = 50, METEOR_FALL_MS = 800, METEOR_DMG = 280, METEOR_PVP_DMG = 40;
+const SHOWER_COUNT = 18, SHOWER_MS = 3000;
 
 // Equipped slots, keeping only abilities the player owns and no duplicates.
 function cleanSlots(raw, owned) {
@@ -1930,6 +1948,13 @@ function distToSegment(px, py, ax, ay, bx, by) {
 // What a projectile does beyond its damage: frost slows, storm arcs onward.
 function onHitExtras(proj, t) {
   if (proj.chill) chillTarget(t, proj.chill);
+  // Wind wand: the gust shoves the target along the shot (never the Giant).
+  if (proj.gust && !t.boss && !t.dead) {
+    const sp = Math.hypot(proj.dx, proj.dy) || 1;
+    t.x += proj.dx / sp * proj.gust;
+    t.y += proj.dy / sp * proj.gust;
+    clampToArena(t);
+  }
   if (proj.burn) ignite(t, proj.burn);
   if (proj.chain > 0) {
     const hit = new Set([t]);
@@ -2029,6 +2054,7 @@ function doAttack(p, pKey) {
       hitTargets: (w.pierce || w.boomerang) ? new Set() : null,
       chill: w.chill || 0,
       chain: w.chain || 0,
+      gust: w.gust || 0,
     });
     }
   }
@@ -2051,9 +2077,9 @@ const INFERNO_MAX_R  = Math.hypot(ARENA_W, ARENA_H) + 40;
 // Hands fly like missiles: they launch slowly, accelerate toward a top speed,
 // and the faster they go the wider they turn, so a late sidestep makes them
 // overshoot. (Speeds in px, turn in rad, both per 16.67 ms.)
-const HAND_SPEED0    = 1.2;
-const HAND_SPEED_MAX = 6.8;    // well past a running player (3.6)
-const HAND_ACCEL     = 0.1;
+const HAND_SPEED0    = 1.0;
+const HAND_SPEED_MAX = 4.6;    // a little faster than a running player (3.6)
+const HAND_ACCEL     = 0.06;
 const HAND_TURN      = 0.13;   // at launch speed; shrinks as it speeds up
 const HAND_RADIUS    = 10;
 const HAND_LIFE      = 3000;
@@ -2066,12 +2092,17 @@ function castFireRing(p, pKey, w, dmgMult) {
 // One hand per cast, with no cap on how many can be out. However a hand ends —
 // catching someone, being swatted or parried, or burning out after 3 s — it
 // explodes (see explodeHand).
+// MULTISHOT adds hands, fanned out around the aim.
 function castFireHand(p, pKey, sp, dmgMult) {
-  const a = nearestTargetAngle(p, pKey);
-  p.facing = Math.cos(a) < 0 ? -1 : 1;
-  room.fires.push({ id: nextId(), kind: 'hand', owner: pKey, x: cx(p) + Math.cos(a) * 12, y: cy(p) + Math.sin(a) * 12,
-                    a, v: HAND_SPEED0, t: 0, life: HAND_LIFE, dmg: Math.round(sp.dmg * dmgMult),
-                    aoe: sp.aoe || 40, blast: Math.round((sp.blast || 14) * dmgMult) });
+  const aim = nearestTargetAngle(p, pKey);
+  p.facing = Math.cos(aim) < 0 ? -1 : 1;
+  const n = 1 + (weapon(p).multi || 0);
+  for (let i = 0; i < n; i++) {
+    const a = aim + (i - (n - 1) / 2) * 0.45;
+    room.fires.push({ id: nextId(), kind: 'hand', owner: pKey, x: cx(p) + Math.cos(a) * 12, y: cy(p) + Math.sin(a) * 12,
+                      a, v: HAND_SPEED0, t: 0, life: HAND_LIFE, dmg: Math.round(sp.dmg * dmgMult),
+                      aoe: sp.aoe || 40, blast: Math.round((sp.blast || 14) * dmgMult) });
+  }
 }
 
 // The blast hurts the caster's enemies nearby — except anyone mid-parry.
@@ -2104,11 +2135,93 @@ function doSuper(p, pKey) {
     return;
   }
   if (su.kind === 'inferno') {
-    room.fires.push({ id: nextId(), kind: 'inferno', owner: pKey, x: cx(p), y: cy(p), r: INFERNO_START,
-                      t: 0, life: 60000, dmg: Math.round(su.dmg * dmgMult), hit: new Set() });
+    // Five waves, one after another; each starts from wherever you are then.
+    for (let i = 0; i < INFERNO_WAVES; i++) {
+      room.fires.push({ id: nextId(), kind: 'inferno', owner: pKey, x: cx(p), y: cy(p), r: i ? 0 : INFERNO_START,
+                        t: -i * INFERNO_WAVE_GAP, life: 60000, dmg: Math.round(su.dmg * dmgMult), hit: new Set() });
+    }
     room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 50, timer: 700, max: 700,
-                          color: WEAPON_COLORS.fireglove, text: 'INFERNO' });
+                          color: WEAPON_COLORS.fireglove, text: 'INFERNO x' + INFERNO_WAVES });
+    return;
   }
+  if (su.kind === 'hurricane') {
+    room.fires.push({ id: nextId(), kind: 'hurricane', owner: pKey, x: cx(p), y: cy(p), r: HURRICANE_R,
+                      t: 0, life: HURRICANE_MS, dmg: Math.round(su.dmg * dmgMult), tick: 0 });
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 50, timer: 700, max: 700,
+                          color: WEAPON_COLORS.windwand, text: 'HURRICANE' });
+    return;
+  }
+  if (su.kind === 'deadeye') {
+    // An exploding bullet straight into every enemy on the field.
+    const foes = enemyTargets(pKey).slice(0, DEADEYE_MAX);
+    if (!foes.length) { p.superCooldown = 0; p.swingTimer = 0; return; }
+    for (const t of foes) {
+      const a = Math.atan2(cy(t) - cy(p), cx(t) - cx(p));
+      room.projectiles.push({
+        id: nextId(), x: cx(p), y: cy(p), dx: Math.cos(a) * 11, dy: Math.sin(a) * 11,
+        damage: Math.round(su.dmg * dmgMult), owner: pKey, traveled: 0,
+        maxRange: Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) + 30, weaponId: 'revolver', upg: p.upgrades?.revolver || null,
+        special: true, isAoe: true, aoeRadius: DEADEYE_AOE, pierce: false, grapple: false, boomerang: false,
+        teleport: false, returning: false, life: 0, hitTargets: null,
+      });
+      room.particles.push({ type: 'crit', x: cx(t), y: t.y - 6, text: 'X', timer: 500, max: 500 });
+    }
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 40, timer: 600, max: 600,
+                          color: WEAPON_COLORS.revolver, text: 'DEAD EYE' });
+  }
+}
+
+// ─── Wind Wand & Revolver ─────────────────────────────────────────────────────
+const INFERNO_WAVES = 5, INFERNO_WAVE_GAP = 650;
+const TORNADO_MS = 2600, TORNADO_PULL_R = 85, TORNADO_TICK = 320;
+const HURRICANE_MS = 5000, HURRICANE_R = 115, HURRICANE_TICK = 450, HURRICANE_FLING = 34;
+const DEADEYE_MAX = 16, DEADEYE_AOE = 40;
+
+// Tornado: drifts along its aim, dragging nearby foes into its middle and
+// hurting everything inside it every TORNADO_TICK.
+function updateTornado(f, factor, dt) {
+  f.x += Math.cos(f.a) * f.v * factor;
+  f.y += Math.sin(f.a) * f.v * factor;
+  if (f.x < ARENA_X || f.x > ARENA_X + ARENA_W) { f.a = Math.PI - f.a; f.x = Math.max(ARENA_X, Math.min(ARENA_X + ARENA_W, f.x)); }
+  if (f.y < ARENA_Y || f.y > ARENA_Y + ARENA_H) { f.a = -f.a; f.y = Math.max(ARENA_Y, Math.min(ARENA_Y + ARENA_H, f.y)); }
+  f.tick -= dt;
+  const hurt = f.tick <= 0;
+  if (hurt) f.tick = TORNADO_TICK;
+  for (const t of enemyTargets(f.owner)) {
+    const dx = f.x - cx(t), dy = f.y - cy(t), d = Math.hypot(dx, dy) || 1;
+    if (d > TORNADO_PULL_R + f.r) continue;
+    if (!t.boss && d > 4) {
+      const pull = Math.min(d, 1.6 * factor);
+      t.x += dx / d * pull; t.y += dy / d * pull;
+      clampToArena(t);
+    }
+    if (hurt && d <= f.r + t.w / 2) applyDamage(t, f.dmg, f.owner);
+  }
+  return true;
+}
+
+// Hurricane: rides along with its caster. Every HURRICANE_TICK it hurts and
+// flings away everything inside, and it blows enemy shots out of the air.
+function updateHurricane(f, factor, dt) {
+  const o = room.players[f.owner];
+  if (!o || o.dead) return false;
+  f.x = cx(o); f.y = cy(o);
+  room.projectiles = room.projectiles.filter(pr =>
+    !(pr.owner === 'monster' || (room.gameMode === 'pvp' && pr.owner !== f.owner))
+    || Math.hypot(pr.x - f.x, pr.y - f.y) > f.r);
+  f.tick -= dt;
+  if (f.tick > 0) return true;
+  f.tick = HURRICANE_TICK;
+  for (const t of enemyTargets(f.owner)) {
+    const dx = cx(t) - f.x, dy = cy(t) - f.y, d = Math.hypot(dx, dy) || 1;
+    if (d > f.r + t.w / 2) continue;
+    applyDamage(t, f.dmg, f.owner);
+    if (!t.boss && !t.dead) {
+      t.x += dx / d * HURRICANE_FLING; t.y += dy / d * HURRICANE_FLING;
+      clampToArena(t);
+    }
+  }
+  return true;
 }
 
 // ─── Vortex Shield ────────────────────────────────────────────────────────────
@@ -2190,12 +2303,21 @@ function updateFires(factor, dt) {
   if (!room.fires.length) return;
   room.fires = room.fires.filter(f => {
     f.t += dt;
+    if (f.t < 0) return true;   // queued (later inferno waves, meteor shower)
+    if (f.kind === 'meteor' && !f.placed) placeMeteor(f);
+    if (f.kind === 'inferno' && f.r === 0) {
+      const o = room.players[f.owner];
+      if (o && !o.dead) { f.x = cx(o); f.y = cy(o); }
+      f.r = INFERNO_START;
+    }
     if (f.t >= f.life) {
       if (f.kind === 'hand') explodeHand(f);
       if (f.kind === 'meteor') explodeMeteor(f);
       return false;
     }
     if (f.kind === 'meteor') return true;   // still falling: only the warning shows
+    if (f.kind === 'tornado') return updateTornado(f, factor, dt);
+    if (f.kind === 'hurricane') return updateHurricane(f, factor, dt);
     if (f.kind === 'hand') return updateFireHand(f, factor);
     if (f.kind === 'vortexfield') return updateVortexField(f, factor);
     if (f.kind === 'soundwave') return updateSoundwave(f, factor);
@@ -2405,14 +2527,24 @@ function useAbility(p, pKey, slot) {
   if (used) p.abCd[id] = ab.cd;
 }
 
+// To the mouse cursor when there is one (up to DASH_CURSOR_MAX away),
+// otherwise a fixed hop the way you're moving.
 function abilityDash(p, pKey) {
   const inp = room.inputs[pKey];
-  let dx = (inp.right ? 1 : 0) - (inp.left ? 1 : 0), dy = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
-  if (!dx && !dy) dx = p.facing || 1;
-  const d = Math.hypot(dx, dy);
   const x0 = cx(p), y0 = cy(p);
-  p.x += dx / d * DASH_DIST;
-  p.y += dy / d * DASH_DIST;
+  let dx, dy, dist = DASH_DIST;
+  if (inp.aimX !== null && inp.aimX !== undefined && inp.aimY !== null && inp.aimY !== undefined) {
+    dx = inp.aimX - x0; dy = inp.aimY - y0;
+    dist = Math.min(DASH_CURSOR_MAX, Math.hypot(dx, dy));
+    if (dist < 4) return false;
+  } else {
+    dx = (inp.right ? 1 : 0) - (inp.left ? 1 : 0); dy = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
+    if (!dx && !dy) dx = p.facing || 1;
+  }
+  const d = Math.hypot(dx, dy);
+  if (dx) p.facing = dx > 0 ? 1 : -1;
+  p.x += dx / d * dist;
+  p.y += dy / d * dist;
   p.pull = null;
   clampToArena(p, 2);
   p.invincible = Math.max(p.invincible, DASH_IFRAMES);
@@ -2445,17 +2577,31 @@ function abilityFrost(p, pKey) {
   return true;
 }
 
+// Meteor shower: meteors start falling one after another over SHOWER_MS. Each
+// picks its spot as it starts to fall (see placeMeteor): every other one goes
+// for an enemy, the rest land anywhere on the map.
 function abilityMeteor(p, pKey) {
-  let best = null, bd = Infinity;
-  for (const t of enemyTargets(pKey)) {
-    const d = Math.hypot(cx(t) - cx(p), cy(t) - cy(p));
-    if (d < bd) { bd = d; best = t; }
-  }
-  if (!best) return false;
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
-  room.fires.push({ id: nextId(), kind: 'meteor', owner: pKey, x: cx(best), y: cy(best), r: METEOR_R,
-                    t: 0, life: METEOR_FALL_MS, dmgMult });
+  for (let i = 0; i < SHOWER_COUNT; i++) {
+    room.fires.push({ id: nextId(), kind: 'meteor', owner: pKey, x: cx(p), y: cy(p), r: METEOR_R,
+                      t: -Math.round(i / SHOWER_COUNT * SHOWER_MS + Math.random() * 120), life: METEOR_FALL_MS,
+                      dmgMult, seek: i % 2 === 0, placed: false });
+  }
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 34, timer: 700, max: 700,
+                        color: ABILITY_BY_ID.meteor.color, text: 'METEOR SHOWER' });
   return true;
+}
+function placeMeteor(f) {
+  f.placed = true;
+  const foes = f.seek ? enemyTargets(f.owner) : [];
+  if (foes.length) {
+    const t = foes[Math.floor(Math.random() * foes.length)];
+    f.x = cx(t) + (Math.random() - 0.5) * 24;
+    f.y = cy(t) + (Math.random() - 0.5) * 24;
+  } else {
+    f.x = ARENA_X + 20 + Math.random() * (ARENA_W - 40);
+    f.y = ARENA_Y + 20 + Math.random() * (ARENA_H - 40);
+  }
 }
 
 // The blast: everything in the circle when it lands. Monsters also lose a share
@@ -2463,11 +2609,11 @@ function abilityMeteor(p, pKey) {
 function explodeMeteor(f) {
   for (const t of enemyTargets(f.owner)) {
     if (Math.hypot(cx(t) - f.x, cy(t) - f.y) > f.r + t.w / 2) continue;
-    const dmg = t.num ? METEOR_PVP_DMG : METEOR_DMG + Math.round((t.maxHp || 0) * (t.boss ? 0.03 : 0.1));
+    const dmg = t.num ? METEOR_PVP_DMG : METEOR_DMG + Math.round((t.maxHp || 0) * (t.boss ? 0.04 : 0.12));
     applyDamage(t, Math.round(dmg * (f.dmgMult || 1)), f.owner);
     if (!t.dead) ignite(t, 2000);
   }
-  room.particles.push({ type: 'trapburst', x: f.x, y: f.y, maxR: f.r, timer: 600, max: 600, color: ABILITY_BY_ID.meteor.color, text: 'METEOR' });
+  room.particles.push({ type: 'trapburst', x: f.x, y: f.y, maxR: f.r, timer: 500, max: 500, color: ABILITY_BY_ID.meteor.color });
   room.particles.push({ type: 'shockwave', x: f.x, y: f.y, maxR: f.r + 12, timer: 380, max: 380, color: '#ffd27a' });
 }
 
@@ -2500,6 +2646,13 @@ function doSpecial(p, pKey) {
   }
   if (sp.kind === 'vortex') {
     if (!castVortex(p, pKey, sp, dmgMult)) { p.specialCooldown = 0; p.swingTimer = 0; }
+    return;
+  }
+  if (sp.kind === 'tornado') {
+    const a = nearestTargetAngle(p, pKey);
+    p.facing = Math.cos(a) < 0 ? -1 : 1;
+    room.fires.push({ id: nextId(), kind: 'tornado', owner: pKey, x: px + Math.cos(a) * 16, y: py + Math.sin(a) * 16,
+                      a, v: sp.range / (TORNADO_MS / 16.67), r: sp.aoe || 34, t: 0, life: TORNADO_MS, dmg: spDmg, tick: 0 });
     return;
   }
   if (sp.kind === 'slam') {
@@ -2548,7 +2701,7 @@ function doSpecial(p, pKey) {
     return;
   }
 
-  const speed = sp.kind === 'hook' ? 14 : 5.2;
+  const speed = sp.kind === 'hook' ? 14 : sp.kind === 'fanhammer' ? 8.5 : 5.2;
   const mkProj = (angle, extra = {}) => ({
     id: nextId(),
     x: px, y: py,
@@ -2575,6 +2728,13 @@ function doSpecial(p, pKey) {
 
   if (sp.kind === 'pierce') {
     room.projectiles.push(mkProj(aim, { pierce: true, hitTargets: new Set() }));
+  } else if (sp.kind === 'fanhammer') {
+    // Fan the hammer: every chamber at once, in a tight fan, all exploding.
+    const n = sp.count || 6;
+    for (let i = 0; i < n; i++) {
+      const a = aim + (i - (n - 1) / 2) * 0.1 + (Math.random() - 0.5) * 0.04;
+      room.projectiles.push(mkProj(a, { isAoe: true, aoeRadius: sp.aoe || 30 }));
+    }
   } else if (sp.kind === 'aoeshot') {
     room.projectiles.push(mkProj(aim, { isAoe: true, aoeRadius: sp.aoe || 40, chill: sp.chill || 0 }));
   } else if (sp.kind === 'hook') {
@@ -2705,7 +2865,7 @@ function weaponCatalog() {
   return WEAPONS.map(w => ({
     id: w.id, name: w.name, type: w.type, unlockXp: w.unlockXp,
     damage: w.damage, range: w.range, atkSpd: w.atkSpd, spin: !!w.swing360,
-    shopOnly: !!w.shopOnly, noRequirement: !!w.noRequirement, price: w.price || 0,
+    shopOnly: !!w.shopOnly, noRequirement: !!w.noRequirement, needLegendary: !!w.needLegendary, price: w.price || 0,
     special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd } : null,
     super: w.super ? { kind: w.super.kind, dmg: w.super.dmg, cd: w.super.cd } : null,
     upgrades: upgradesFor(w.id),
@@ -2940,6 +3100,10 @@ app.post('/api/buy_weapon', (req, res) => {
   const prof = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });
   if (prof.weapons.includes(weaponId)) return res.status(400).json({ error: 'You already own that weapon.' });
   const missing = def.noRequirement ? 0 : XP_WEAPON_IDS.filter(id => !prof.weapons.includes(id)).length;
+  // Some legendaries are only for players who already own another one.
+  if (def.needLegendary && !SHOP_WEAPONS.some(w => w.id !== weaponId && prof.weapons.includes(w.id))) {
+    return res.status(400).json({ error: 'Own at least one other legendary weapon first.' });
+  }
   if (missing) return res.status(400).json({ error: `Unlock every other weapon first (${missing} to go).` });
   if (!admin && prof.coins < def.price) return res.status(400).json({ error: 'Not enough coins.' });
 
@@ -3097,6 +3261,8 @@ wss.on('connection', (ws) => {
           up: !!k.up, down: !!k.down, left: !!k.left, right: !!k.right,
           attack: !!k.attack, swap: !!k.swap, special: !!k.special, parry: !!k.parry, super: !!k.super,
           ab1: !!k.ab1, ab2: !!k.ab2,
+          // Mouse position in world space (desktop only): where DASH goes.
+          aimX: Number.isFinite(k.aimX) ? k.aimX : null, aimY: Number.isFinite(k.aimY) ? k.aimY : null,
         };
       }
 
