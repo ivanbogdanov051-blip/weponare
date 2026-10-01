@@ -133,7 +133,7 @@ const WEAPONS = [
   // weapon is unlocked. Attack = a growing ring of fire (range = its final
   // radius), special = a homing hand of fire, and it alone has a SUPER.
   { id: 'fireglove',   name: 'FIRE GLOVE',  damage: 16, range: 78,  atkSpd: 650,  type: 'melee',  unlockXp: 0, shopOnly: true, price: 5000, fireRing: true,
-    special: { kind: 'firehand', dmg: 13, range: 420, cd: 300, minCd: 300, aoe: 40, blast: 9 },
+    special: { kind: 'firehand', dmg: 13, range: 420, cd: 1000, minCd: 1000, aoe: 40, blast: 9 },
     super:   { kind: 'inferno',  dmg: 40, cd: 18000 } },
   // Shop-only, but with no unlock requirement (noRequirement). Attack raises a
   // 3 s shield that blocks every hit and banks the damage it would have done.
