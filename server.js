@@ -2217,7 +2217,7 @@ function doSuper(p, pKey) {
 }
 
 // ─── Wind Wand & Revolver ─────────────────────────────────────────────────────
-const INFERNO_WAVES = 5, INFERNO_WAVE_GAP = 650;
+const INFERNO_WAVES = 5, INFERNO_WAVE_GAP = 220;
 const TORNADO_MS = 3200, TORNADO_PULL_R = 100, TORNADO_TICK = 300;
 const HURRICANE_MS = 5500, HURRICANE_R = 135, HURRICANE_TICK = 380, HURRICANE_FLING = 42;
 const DEADEYE_MAX = 16, DEADEYE_AOE = 40;
@@ -2392,7 +2392,11 @@ function updateFires(factor, dt) {
       f.hit.add(id);
       if (playerKeyOf(t) && t.parryTimer > 0) {
         spawnParrySpark(cx(t), cy(t));
-        if (f.kind === 'inferno') { fizzleFire(cx(t), cy(t), 'INFERNO PARRIED'); return false; }
+        if (f.kind === 'inferno') {
+          fizzleFire(cx(t), cy(t), 'INFERNO PARRIED');
+          for (const o of old) if (o.kind === 'inferno' && o.owner === f.owner) o.t = o.life;   // the whole super goes with it
+          return false;
+        }
         continue;   // a parry simply blocks the small ring
       }
       applyDamage(t, f.dmg, f.owner);
