@@ -2346,7 +2346,11 @@ function fizzleFire(x, y, text) {
 
 function updateFires(factor, dt) {
   if (!room.fires.length) return;
-  room.fires = room.fires.filter(f => {
+  // Fires can spawn fires mid-pass (a meteor dropping the mage to his last
+  // resort opens the giant portals), and a fire can end the fight and clear
+  // the list. Keep what was added; honour a clear.
+  const old = room.fires, n = old.length;
+  const kept = old.filter(f => {
     f.t += dt;
     if (f.t < 0) return true;   // queued (later inferno waves, meteor shower)
     if (f.kind === 'meteor' && !f.placed) placeMeteor(f);
@@ -2396,6 +2400,9 @@ function updateFires(factor, dt) {
     }
     return true;
   });
+  const next = kept.concat(old.slice(n));
+  const live = room.fires === old ? null : new Set(room.fires);
+  room.fires = live ? next.filter(f => live.has(f)) : next;
 }
 
 function updateFireHand(f, factor) {
@@ -2535,7 +2542,18 @@ function arenaClamp(x, y, inset) {
 function updateMage(m, target, dist, dx, dy, spd, factor, dt) {
   // Hidden behind his giants: he waits for them to fall, then comes back.
   if (m.hidden) {
-    if (m.pendingGiants <= 0 && !room.monsters.some(o => o.type === 'giant' && !o.dead)) {
+    // Safety net: giants still owed but no portal bringing them — bring them now.
+    if (m.pendingGiants > 0 && !room.fires.some(f => f.spawn === 'giant')) {
+      for (let i = 0; i < m.pendingGiants; i++) {
+        spawnMonster('giant');
+        const g = room.monsters[room.monsters.length - 1];
+        g.hp = g.maxHp = MAGE_GIANT_HP;
+        g.x = CANVAS_W / 2 + (i ? 1 : -1) * ARENA_W * 0.3 - g.w / 2; g.y = ARENA_Y + ARENA_H / 2 - g.h / 2;
+        clampToArena(g);
+      }
+      m.pendingGiants = 0;
+    }
+    if (m.pendingGiants <= 0 &&!room.monsters.some(o => o.type === 'giant' && !o.dead)) {
       m.hidden = false; m.giantsDone = true; m.castCd = 1800; m.invincible = 600;
       room.particles.push({ type: 'teleport', x: cx(m), y: cy(m), timer: 500, max: 500, color: '#c8a0ff' });
       room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
