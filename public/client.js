@@ -291,6 +291,8 @@ function connect() {
         setLobbyMsg(`<span class="p1-color">WAVES MODE</span><br><span style="color:#888">SOLO ENDLESS</span><br>Loading...`);
       } else if (mode === 'extreme') {
         setLobbyMsg(`<span style="color:#ff5a3a">EXTREME MODE</span><br><span style="color:#888">SOLO · STRONGEST MONSTERS · HUGE REWARDS</span><br>Loading...`);
+      } else if (mode === 'portal') {
+        setLobbyMsg(PORTAL_LOBBY);
       } else {
         setLobbyMsg(myNum === 1
           ? `<span class="p1-color">YOU ARE PLAYER 1</span><br><span style="color:#888">${modeLabel} MODE</span><br>Waiting for opponent...`
@@ -851,6 +853,87 @@ function drawTornado(f, now) {
   ctx.restore();
 }
 
+// The Portal Mage's portals: an upright oval with a dark void, swirling arms
+// and a bright rim. Red ones throw fireballs, purple ones are his teleport,
+// green ones spit out monsters, and the giant ones bring the Giants.
+const PORTAL_COLORS = {
+  red:    ['#ff3a2a', '#ffb04a', '#2a0604'],
+  purple: ['#a050ff', '#e0c8ff', '#12051f'],
+  green:  ['#3aff7a', '#c8ffd8', '#04200c'],
+  giant:  ['#c8e07a', '#ffffff', '#141c0a'],
+};
+function drawPortal(f, now) {
+  const [col, hi, voidC] = PORTAL_COLORS[f.c] || PORTAL_COLORS.purple;
+  const k = Math.max(0, f.k || 0);
+  // Opens with a snap, holds, then pinches shut.
+  const s = Math.min(1, k / 0.12) * Math.min(1, (1 - k) / 0.12);
+  if (s <= 0) return;
+  const rx = (f.r || 18) * s, ry = rx * 1.4;
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.globalAlpha = 0.28;
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.ellipse(0, 0, rx * 1.7, ry * 1.4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = voidC;
+  ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 4; i++) {
+    const a0 = now * 4 * (i % 2 ? -1 : 1) + i * 1.6;
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = i % 2 ? hi : col;
+    ctx.lineWidth = Math.max(1, rx * 0.12);
+    ctx.beginPath(); ctx.ellipse(0, 0, rx * (0.35 + i * 0.15), ry * (0.35 + i * 0.15), 0, a0, a0 + 1.6); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = col; ctx.lineWidth = Math.max(2, rx * 0.2);
+  ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = hi; ctx.lineWidth = Math.max(1, rx * 0.07);
+  ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+  for (let i = 0; i < 6; i++) {
+    const a = now * 2.2 + i * 1.05, rr = 1.15 + 0.15 * Math.sin(now * 6 + i);
+    ctx.fillStyle = i % 2 ? hi : col;
+    ctx.fillRect(Math.cos(a) * rx * rr - 1, Math.sin(a) * ry * rr - 1, 2, 2);
+  }
+  ctx.restore();
+}
+
+// The mage's trap spell: a rune circle draws itself in the trap's colour,
+// filling up and flashing faster until the real trap snaps into place.
+function drawRuneCast(f, now) {
+  const k = Math.max(0, Math.min(1, f.k || 0));
+  const r = f.r || 20, col = f.c || '#ff8822';
+  const blink = k > 0.7 ? (Math.floor(now * 14) % 2 ? 1 : 0.45) : 1;
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.globalAlpha = (0.15 + 0.35 * k) * blink;
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.arc(0, 0, r * (0.3 + 0.7 * k), 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.95 * blink;
+  ctx.strokeStyle = col; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(0, 0, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, k * 1.4)); ctx.stroke();
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(0, 0, r * 0.62, 0, Math.PI * 2); ctx.stroke();
+  ctx.rotate(now * 1.6);
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3;
+    ctx.save(); ctx.rotate(a); ctx.translate(r * 0.8, 0);
+    ctx.fillRect(-1, -2.5, 2, 5); ctx.fillRect(-2.5, -1, 5, 2);
+    ctx.restore();
+  }
+  ctx.restore();
+  // An exclamation over the spot once it's about to arm.
+  if (k > 0.5) {
+    ctx.save();
+    ctx.globalAlpha = blink;
+    ctx.font = 'bold 12px "Courier New",monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText('!', f.x, f.y);
+    ctx.fillStyle = col; ctx.fillText('!', f.x, f.y);
+    ctx.restore();
+  }
+}
+
 // Black hole: a dark core ringed by a spinning accretion disc, with matter
 // spiralling in from the edge of its pull.
 function drawBlackhole(f, now) {
@@ -964,6 +1047,8 @@ function drawFireRings(fires) {
     if (f.kind === 'meteor') { if ((f.k || 0) >= 0) drawMeteor(f, now); continue; }
     if (f.kind === 'tornado') { drawTornado(f, now); continue; }
     if (f.kind === 'hurricane') { drawHurricane(f, now); continue; }
+    if (f.kind === 'portal') { if ((f.k || 0) >= 0) drawPortal(f, now); continue; }
+    if (f.kind === 'runecast') { if ((f.k || 0) >= 0) drawRuneCast(f, now); continue; }
     if (f.kind === 'blackhole') { drawBlackhole(f, now); continue; }
     if (f.kind === 'drain') { drawDrain(f, now); continue; }
     if (f.kind === 'soundwave') {
@@ -2055,6 +2140,8 @@ const SCREENS = ['startScreen','lobbyScreen','unlockScreen','roundScreen','disco
 function showScreen(id) { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay '+(s===id?'active':'hidden'); }); }
 function hideAllScreens() { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay hidden'; }); }
 function setLobbyMsg(html) { showScreen('lobbyScreen'); document.getElementById('lobbyMsg').innerHTML = html; }
+const PORTAL_LOBBY = `<span style="color:#c8a0ff">THE PORTAL MAGE</span><br>`
+  + `<span style="color:#888">SOLO BOSS FIGHT · WIN 50,000 COINS + 50,000 XP</span><br>Opening the portal...`;
 
 function updateScreens(state) {
   if (state.gameState === 'LOBBY') {
@@ -2062,6 +2149,8 @@ function updateScreens(state) {
       setLobbyMsg(`<span style="color:#ffcc00">WAVES MODE</span><br><span style="color:#888">SOLO ENDLESS</span><br>Loading...`);
     } else if (state.gameMode === 'extreme') {
       setLobbyMsg(`<span style="color:#ff5a3a">EXTREME MODE</span><br><span style="color:#888">SOLO · STRONGEST MONSTERS</span><br>Loading...`);
+    } else if (state.gameMode === 'portal') {
+      setLobbyMsg(PORTAL_LOBBY);
     } else {
       const modeStr = state.gameMode === 'coop' ? 'CO-OP MODE' : 'PvP MODE';
       setLobbyMsg(myNum
@@ -2099,7 +2188,20 @@ function updateScreens(state) {
     const r = state.round;
     const lb = document.getElementById('leaderboardBox');
     const hint = document.getElementById('roundHint');
-    if (state.gameMode === 'waves' || state.gameMode === 'extreme') {
+    if (state.gameMode === 'portal') {
+      lb.classList.add('hidden');
+      hint.textContent = 'RETURNING TO MENU...';
+      const mage = (state.monsters || []).find(m => m.mage);
+      document.getElementById('roundTitle').innerHTML = state.victory
+        ? '<span style="color:#7aff9a">VICTORY!</span>'
+        : '<span style="color:#ff5a6a">DEFEATED</span>';
+      document.getElementById('roundStats').innerHTML = state.victory
+        ? `THE PORTAL MAGE HAS FALLEN<br><span style="color:${PAL.coin}">+50,000 COINS</span> &nbsp; <span style="color:${PAL.xp}">+50,000 XP</span>`
+          + `<br>XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`
+        : `THE PORTAL MAGE WINS THIS TIME<br>`
+          + (mage ? `HE HAD <span style="color:#c8a0ff">${Math.ceil(mage.hp).toLocaleString()}</span> HP LEFT${mage.phase === 2 ? ' (PHASE 2)' : ''}<br>` : '')
+          + `XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`;
+    } else if (state.gameMode === 'waves' || state.gameMode === 'extreme') {
       const ext = state.gameMode === 'extreme';
       hint.textContent = 'RETURNING TO MENU...';
       document.getElementById('roundTitle').innerHTML = ext
@@ -2643,9 +2745,11 @@ function drawWeaponSprite(p, px, py, key) {
 // Each monster type gets its own silhouette and palette, so what a thing is — and
 // roughly how hard it hits — is readable at a glance, not just from its size.
 function drawMonster(m) {
+  if (m.mage && m.hidden) return;   // gone into hiding behind his giants
   const type = m.type || 'grunt';
   const state = m.hitFlash > 0 ? 'flash' : (m.slowed ? 'slow' : 'base');
   const x = Math.round(m.x), y = Math.round(m.y);
+  if (m.mage) drawMageAura(m, x, y);
 
   ctx.fillStyle = 'rgba(0,0,0,0.32)';
   ctx.fillRect(x + 1, y + m.h, m.w - 2, 2);
@@ -2669,6 +2773,25 @@ function drawMonster(m) {
 }
 function drawMonsters(ms) { for(const m of ms) drawMonster(m); }
 
+// Under the Portal Mage: a slowly turning rune circle; in phase 2 it burns
+// magenta and pulses.
+const MAGE_CAST_COLOR = { fireportals: '#ff4a2a', teleport: '#b07aff', traps: '#ffcc33', monsterportals: '#3aff7a' };
+function drawMageAura(m, x, y) {
+  const now = performance.now() / 1000;
+  const cxm = x + m.w / 2, fy = y + m.h - 2;
+  const p2 = m.phase === 2;
+  const col = m.cast ? (MAGE_CAST_COLOR[m.cast] || '#b07aff') : p2 ? '#ff4a9a' : '#8a5aff';
+  ctx.save();
+  ctx.globalAlpha = (p2 ? 0.35 : 0.22) + (p2 ? 0.12 * Math.sin(now * 8) : 0);
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.ellipse(cxm, fy, m.w * 0.95, m.w * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.8;
+  ctx.strokeStyle = col; ctx.lineWidth = 1.2;
+  ctx.setLineDash([4, 3]); ctx.lineDashOffset = -now * 20;
+  ctx.beginPath(); ctx.ellipse(cxm, fy, m.w * 0.95, m.w * 0.32, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
 // Frost nova: the monster sits inside a block of ice until it thaws.
 function drawIceBlock(x, y, w, h) {
   ctx.save();
@@ -2689,6 +2812,25 @@ function drawIceBlock(x, y, w, h) {
 function drawBossMarks(m, x, y) {
   const now = performance.now();
   const hx = x + m.w / 2, top = y - monsterPad(m.w, m.h) + 2;
+  if (m.mage) {
+    // Casting: a spinning sigil over his head in the spell's colour.
+    if (m.cast) {
+      const col = MAGE_CAST_COLOR[m.cast] || '#b07aff';
+      ctx.save();
+      ctx.translate(hx, top - 4);
+      ctx.rotate(now / 180);
+      ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = i * Math.PI * 2 / 3 + (i >= 3 ? Math.PI / 3 : 0);
+        if (i % 3 === 0) ctx.moveTo(Math.cos(a) * 7, Math.sin(a) * 7); else ctx.lineTo(Math.cos(a) * 7, Math.sin(a) * 7);
+      }
+      ctx.closePath(); ctx.stroke();
+      ctx.restore();
+    }
+    return;
+  }
   ctx.save();
   if (m.windup > 0 && Math.floor(now / 110) % 2 === 0) {
     ctx.font = 'bold 18px "Courier New",monospace';
@@ -2717,10 +2859,16 @@ function drawBossMarks(m, x, y) {
 
 // A wide boss health bar along the bottom of the screen (HUD space).
 function drawBossBar(monsters) {
-  const b = (monsters || []).find(m => m.boss);
-  if (!b) return;
+  const ms = monsters || [];
+  // The Portal Mage's bar, or — while he hides — his giants'.
+  const mage = ms.find(m => m.mage);
+  if (mage && !mage.hidden) { drawOneBossBar(mage, 0); return; }
+  const giants = ms.filter(m => m.boss && !m.mage);
+  giants.slice(0, 2).forEach((g, i) => drawOneBossBar(g, i));
+}
+function drawOneBossBar(b, row) {
   const w = Math.min(240, HUD_W * 0.5), h = 7;
-  const x = Math.round(HUD_W / 2 - w / 2), y = HUD_H - (isTouchDevice ? 16 : 28);
+  const x = Math.round(HUD_W / 2 - w / 2), y = HUD_H - (isTouchDevice ? 16 : 28) - row * 22;
   const ratio = Math.max(0, b.hp / b.maxHp);
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.7)';
@@ -2732,8 +2880,9 @@ function drawBossBar(monsters) {
   ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.strokeRect(x, y, w, h);
   for (let i = 1; i < 10; i++) { ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(x + Math.round(w * i / 10), y, 1, h); }
   ctx.font = 'bold 8px "Courier New",monospace'; ctx.textBaseline = 'bottom';
-  ctx.textAlign = 'left';  ctx.fillStyle = '#000'; ctx.fillText('THE GIANT', x + 1, y - 1);
-  ctx.fillStyle = '#c8e07a'; ctx.fillText('THE GIANT', x, y - 2);
+  const label = b.mage ? 'THE PORTAL MAGE' + (b.phase === 2 ? ' - PHASE 2' : '') : 'THE GIANT';
+  ctx.textAlign = 'left';  ctx.fillStyle = '#000'; ctx.fillText(label, x + 1, y - 1);
+  ctx.fillStyle = b.mage ? (b.phase === 2 ? '#ff7aaa' : '#c8a0ff') : '#c8e07a'; ctx.fillText(label, x, y - 2);
   ctx.textAlign = 'right'; ctx.fillStyle = b.stun > 0 ? '#ffd84a' : '#ccc';
   ctx.fillText(b.stun > 0 ? 'STUNNED!' : Math.ceil(b.hp).toLocaleString() + ' / ' + b.maxHp.toLocaleString(), x + w, y - 2);
   ctx.restore();
@@ -2756,6 +2905,7 @@ const MONSTER_ARMS = {
   infernal: { art: 'm_hellstaff', color: '#ff6a1a', size: 0.68, rest: -1.1,  move: 'cast'   },
   // Boss
   giant:    { art: 'm_tree',      color: '#4e8a3a', size: 0.62, rest: -0.95, move: 'giant'  },
+  portalmage: { art: 'm_portalstaff', color: '#b07aff', size: 0.6, rest: -1.15, move: 'cast' },
 };
 // Weapons grow slower than bodies, so a giant's axe stays a weapon, not scenery.
 const monsterArmScale = (h, size) => Math.max(0.5, Math.round(Math.pow(h / 12, 0.65) * size * 10) / 10);
@@ -2795,6 +2945,8 @@ function drawMonsterArms(m, x, y) {
   ctx.translate(Math.round(hx), Math.round(y + m.h * (arms.shield ? 0.5 : 0.55)));
   ctx.scale(d, 1);
   let ang = arms.rest + bob;
+  // The mage raises his staff high while a spell builds, trembling with it.
+  if (m.mage && m.cast) ang = arms.rest - 0.55 + Math.sin(performance.now() / 30) * 0.05;
   // The Giant telegraphs: the tree drawn back for a swipe, hoisted high for a
   // slam (shaking as it strains), and dropped to the ground while stunned.
   if (m.boss) {
@@ -3297,7 +3449,16 @@ function drawHUD(state) {
 
   const w = state.wave;
   ctx.textAlign = 'center';
-  if (w && state.gameMode !== 'pvp') {
+  if (state.gameMode === 'portal') {
+    const mage = (state.monsters || []).find(m => m.mage);
+    const t = 'THE PORTAL MAGE';
+    const sub = !mage ? '' : mage.hidden ? 'SLAY HIS GIANTS!' : 'PHASE ' + (mage.phase || 1);
+    ctx.fillStyle = '#000'; ctx.fillText(t, HUD_W/2 + 1, 3);
+    ctx.fillStyle = '#c8a0ff'; ctx.fillText(t, HUD_W/2, 2);
+    ctx.font = '8px "Courier New",monospace';
+    ctx.fillStyle = mage && mage.phase === 2 ? '#ff7aaa' : '#999'; ctx.fillText(sub, HUD_W/2, 15);
+    ctx.font = '10px "Courier New",monospace';
+  } else if (w && state.gameMode !== 'pvp') {
     const wl = (state.gameMode === 'extreme' ? 'EXTREME ' : '') + 'WAVE ' + w.num + (state.finalWave ? '/' + state.finalWave : '');
     ctx.fillStyle = '#000'; ctx.fillText(wl, HUD_W/2 + 1, 3);
     ctx.fillStyle = state.gameMode === 'extreme' ? '#ff6a4a' : PAL.text; ctx.fillText(wl, HUD_W/2, 2);

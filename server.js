@@ -368,6 +368,12 @@ const MONSTER_TYPES = {
     name: 'GIANT', minWave: 1, weight: 0, hp: 16, dmg: 3.2, speed: 0.55, size: 2.7,
     color: '#6a8a4a', xp: 8, coins: 3, armor: 0.25, boss: true, fixedW: 84, fixedH: 104,
   },
+  // The Portal Mage: only ever met in his own fight (the 'portal' mode). His
+  // health is set by MAGE_HP, not the wave formula — see startMageFight.
+  portalmage: {
+    name: 'PORTAL MAGE', minWave: 1, weight: 0, hp: 1, dmg: 1.4, speed: 1.7, size: 1.6,
+    color: '#7a3aff', xp: 0, coins: 0, armor: 0.15, boss: true, mage: true, fixedW: 30, fixedH: 42,
+  },
   // ── EXTREME only (extremeOnly: never in normal waves) ──
   // A walking fortress: the most health and armour in the game.
   titan: {
@@ -410,7 +416,12 @@ function isBossWave(num) {
   return false;
 }
 
-function modeLevel(num) { return num + (room.gameMode === 'extreme' ? EXTREME_LEVEL_OFFSET : 0); }
+// The Portal Mage's minions arrive as tough as a deep EXTREME wave.
+const PORTAL_LEVEL = 15;
+function modeLevel(num) {
+  if (room.gameMode === 'portal') return PORTAL_LEVEL;
+  return num + (room.gameMode === 'extreme' ? EXTREME_LEVEL_OFFSET : 0);
+}
 
 // Size of a baseline (1.0x) monster; every type scales from this.
 const MONSTER_BASE_W = 14, MONSTER_BASE_H = 17;
@@ -789,7 +800,7 @@ function makeRoom() { return {
 const rooms = [];
 let room = makeRoom();   // the room being worked on right now
 
-const SOLO_MODES = ['waves', 'extreme'];
+const SOLO_MODES = ['waves', 'extreme', 'portal'];
 function isSolo() { return SOLO_MODES.includes(room.gameMode); }
 
 // Seats (room + slot) held by a password, for pushing shop changes into live games.
@@ -841,7 +852,8 @@ function enemyTargets(pKey) {
     const p = room.players[k];
     if (p && !p.dead) out.push(p);
   }
-  for (const m of room.monsters) if (!m.dead) out.push(m);
+  // A hidden Portal Mage can't be seen, hit or aimed at.
+  for (const m of room.monsters) if (!m.dead && !m.hidden) out.push(m);
   return out;
 }
 
@@ -1035,7 +1047,7 @@ function spawnMonster(forceType) {
   const lvl = modeLevel(room.wave.num);
 
   // Call out a type the first time it appears in this run.
-  if (!def.boss && !room.seenTypes.has(type)) {
+  if (!def.boss && !room.seenTypes.has(type) && room.gameMode !== 'portal') {
     room.seenTypes.add(type);
     if (room.wave.num > 1 || room.gameMode === 'extreme') {
       room.particles.push({
@@ -1105,7 +1117,7 @@ function spawnMonster(forceType) {
     armor: def.armor || 0,
     ranged: !!def.ranged,
     blinkTimer: def.blink ? def.blink * (0.5 + Math.random() * 0.5) : 0,
-    boss: !!def.boss, windup: 0, wind: null, stun: 0, swipeCd: 1500, slamCd: 3000,
+    boss: !!def.boss, mage: !!def.mage, windup: 0, wind: null, stun: 0, swipeCd: 1500, slamCd: 3000,
     hitFlash: 0,
     invincible: 0,
     slowTimer: 0,
@@ -1195,7 +1207,8 @@ function startGame() {
   room.wave = emptyWave();
   room.gameState = 'GAMEPLAY';
   room.victory = false;
-  if (room.gameMode !== 'pvp') startWave(START_WAVE);
+  if (room.gameMode === 'portal') startMageFight();
+  else if (room.gameMode !== 'pvp') startWave(START_WAVE);
 }
 
 function resetToLobby() {
@@ -1209,7 +1222,7 @@ function resetToLobby() {
 }
 
 function applyDamage(target, dmg, attackerKey) {
-  if (target.dead || target.invincible > 0) return;
+  if (target.dead || target.invincible > 0 || target.hidden) return;
   if (target.num && hasEffect(target, 'shield')) {  // shield item: ignore all incoming damage
     target.hitFlash = 80;
     return;
@@ -1245,12 +1258,14 @@ function applyDamage(target, dmg, attackerKey) {
     target.y += (dy / d) * aw.knock;
     clampToArena(target);
   }
+  if (target.mage) mageFloor(target);
   target.hitFlash  = 200;
   target.invincible = target.num ? 500 : 300;
   if (target.hp <= 0) handleKill(target, attackerKey);
 }
 
 function handleKill(target, attackerKey) {
+  if (target.mage) { mageDefeated(target); return; }
   const isPlayer = !!target.num;
   let baseGain = isPlayer ? 15 : 6;
   // Bigger (tankier) monsters reward more XP, scaled by their max HP over the base
@@ -1262,35 +1277,7 @@ function handleKill(target, attackerKey) {
   const xpGain = room.gameMode === 'extreme' ? baseGain * 3 : room.gameMode === 'waves' ? baseGain * 2 : baseGain;
 
   // Credit XP to attacking player
-  if (attackerKey === 'p1' || attackerKey === 'p2') {
-    const attacker = room.players[attackerKey];
-    const pw = room.passwords[attackerKey];
-    const admin = isAdminPw(pw);
-    const oldXp = room.playerXp[attackerKey];
-    room.playerXp[attackerKey] += xpGain;
-
-    const newUnlocks = checkNewUnlocks(oldXp, room.playerXp[attackerKey]);
-    room.unlockQueues[attackerKey].push(...newUnlocks);
-    const merged = sortWeaponIds([
-      ...(attacker?.unlockedWeapons || []),
-      ...getUnlockedWeaponIds(room.playerXp[attackerKey]),
-    ]);
-    if (attacker) {
-      // Keep holding the same weapon even though the sorted list shifted.
-      const cur = attacker.unlockedWeapons[attacker.weaponIdx];
-      attacker.unlockedWeapons = merged;
-      attacker.weaponIdx = Math.max(0, merged.indexOf(cur));
-      refreshWeapon(attacker);
-    }
-    room.playerUnlocks[attackerKey] = merged;
-
-    if (pw && !admin) {
-      const d = progress();
-      d.players[pw] = room.playerXp[attackerKey];
-      d.weapons[pw] = merged;
-      markDirty();
-    }
-  }
+  if (attackerKey === 'p1' || attackerKey === 'p2') creditXp(attackerKey, xpGain);
 
   // Only float the XP number when a player actually banked it — a trap or a
   // monster finishing something off earns nobody anything.
@@ -1323,6 +1310,37 @@ function handleKill(target, attackerKey) {
   }
 }
 
+// Bank XP for a player: unlocks anything it reaches and saves it.
+function creditXp(key, xpGain) {
+  const attacker = room.players[key];
+  const pw = room.passwords[key];
+  const admin = isAdminPw(pw);
+  const oldXp = room.playerXp[key];
+  room.playerXp[key] += xpGain;
+
+  const newUnlocks = checkNewUnlocks(oldXp, room.playerXp[key]);
+  room.unlockQueues[key].push(...newUnlocks);
+  const merged = sortWeaponIds([
+    ...(attacker?.unlockedWeapons || room.playerUnlocks[key] || []),
+    ...getUnlockedWeaponIds(room.playerXp[key]),
+  ]);
+  if (attacker) {
+    // Keep holding the same weapon even though the sorted list shifted.
+    const cur = attacker.unlockedWeapons[attacker.weaponIdx];
+    attacker.unlockedWeapons = merged;
+    attacker.weaponIdx = Math.max(0, merged.indexOf(cur));
+    refreshWeapon(attacker);
+  }
+  room.playerUnlocks[key] = merged;
+
+  if (pw && !admin) {
+    const d = progress();
+    d.players[pw] = room.playerXp[key];
+    d.weapons[pw] = merged;
+    markDirty();
+  }
+}
+
 function respawnPlayer(p) {
   const sp = spawnPointFor(p.num);
   p.hp = p.maxHp;
@@ -1340,7 +1358,9 @@ function checkRoundEnd() {
 
   if (isSolo()) {
     if (p1 && p1.dead && p1.lives <= 0) {
-      room.lastLeaderboard = addLeaderboardEntry(room.playerNames.p1, room.wave.num, room.gameMode);
+      // The boss fight has no leaderboard: you win or you don't.
+      room.lastLeaderboard = room.gameMode === 'portal' ? []
+        : addLeaderboardEntry(room.playerNames.p1, room.wave.num, room.gameMode);
       room.gameState      = 'ROUND_OVER';
       room.roundOverTimer = 6000;
     }
@@ -1522,7 +1542,8 @@ function tickRoom(dt) {
       const spd = m.speed * (m.slowTimer > 0 ? 0.4 : 1);
 
       if (m.boss) {
-        updateGiant(m, nearest, dist, dx, dy, spd, factor, dt);
+        if (m.mage) updateMage(m, nearest, dist, dx, dy, spd, factor, dt);
+        else updateGiant(m, nearest, dist, dx, dy, spd, factor, dt);
         applyPull(m, dt);
         clampToArena(m);
         continue;
@@ -1583,8 +1604,8 @@ function tickRoom(dt) {
   room.projectiles = room.projectiles.filter(proj => updateProjectile(proj, factor, dt));
   updateFires(factor, dt);
 
-  // ── Wave spawner ──
-  if (room.gameMode !== 'pvp') {
+  // ── Wave spawner ── (the Portal Mage fight has no waves: he brings his own)
+  if (room.gameMode !== 'pvp' && room.gameMode !== 'portal') {
     if (room.wave.betweenTimer > 0) {
       room.wave.betweenTimer -= dt;
       if (room.wave.betweenTimer <= 0) startWave(room.wave.num + 1);
@@ -1621,13 +1642,21 @@ function tickRoom(dt) {
     }
   }
 
-  // ── Traps ──
+  // ── Traps ── (in the Portal Mage fight only he lays them)
   room.trapSpawnTimer -= dt;
-  if (room.trapSpawnTimer <= 0) {
+  if (room.trapSpawnTimer <= 0 && room.gameMode !== 'portal') {
     if (room.traps.length < MAX_TRAPS) spawnTrap();
     room.trapSpawnTimer = TRAP_SPAWN_MIN + Math.random() * (TRAP_SPAWN_MAX - TRAP_SPAWN_MIN);
   }
   room.traps = room.traps.filter(tr => {
+    // The mage's traps fade away if nobody steps on them.
+    if (tr.expire && tr.state === 'idle') {
+      tr.expire -= dt;
+      if (tr.expire <= 0) {
+        room.particles.push({ type: 'teleport', x: tr.x + tr.w / 2, y: tr.y + tr.h / 2, timer: 300, max: 300, color: '#b07aff' });
+        return false;
+      }
+    }
     if (tr.state === 'idle') {
       for (const key of ['p1', 'p2']) {
         const p = room.players[key];
@@ -1922,7 +1951,9 @@ function dotDamage(t, dmg) {
   if (t.armor) dmg = Math.max(1, Math.round(dmg * (1 - t.armor)));
   if (t.num && t.defense) dmg = Math.max(1, Math.round(dmg * (1 - t.defense)));
   if (t.num && t.vortexShield > 0) { bankVortex(t, dmg); return; }   // blocked, but banked
+  if (t.hidden) return;
   t.hp -= dmg;
+  if (t.mage) mageFloor(t);
   t.hitFlash = Math.max(t.hitFlash || 0, 90);
   if (t.hp <= 0) handleKill(t, 'trap');
 }
@@ -2327,9 +2358,12 @@ function updateFires(factor, dt) {
     if (f.t >= f.life) {
       if (f.kind === 'hand') explodeHand(f);
       if (f.kind === 'meteor') explodeMeteor(f);
+      if (f.kind === 'runecast') placeMageTrap(f);
       return false;
     }
+    if (f.kind === 'runecast') return true;   // the warning circle, still drawing itself
     if (f.kind === 'meteor') return true;   // still falling: only the warning shows
+    if (f.kind === 'portal') return updatePortal(f, dt);
     if (f.kind === 'blackhole') return updateBlackhole(f, factor, dt);
     if (f.kind === 'drain') return updateDrain(f, factor, dt);
     if (f.kind === 'tornado') return updateTornado(f, factor, dt);
@@ -2444,6 +2478,296 @@ function updateGiant(m, target, dist, dx, dy, spd, factor, dt) {
   }
 }
 
+// ─── The Portal Mage ──────────────────────────────────────────────────────────
+// The strongest boss in the game, fought on his own (mode 'portal'). He keeps
+// his distance and casts:
+//   phase 1  fireportals  red portals around you that hurl fireballs
+//            teleport     steps through a portal and out of another; for a
+//                         moment you can follow him through it
+//            traps        runes that glow, then turn into real traps
+//   phase 2  (below half health) all of the above, faster, plus
+//            monsterportals  green portals that spit out monsters
+//            giants       his last resort, once, at 20% health: two Giants
+//                         come through massive portals and he vanishes until
+//                         both are dead. Only then can he die.
+const MAGE_HP = 26000;
+const MAGE_PHASE2 = 0.5, MAGE_LAST = 0.2;
+const MAGE_KEEP_AWAY = 170;
+const MAGE_FIREBALL_DMG = 22, MAGE_FIREBALL_SPEED = 3.6;
+const MAGE_GIANT_HP = 6000;
+const MAGE_MAX_MINIONS = 8;
+const MAGE_MINIONS = ['brute', 'runner', 'wraith', 'infernal', 'warden', 'spitter', 'titan'];
+const MAGE_TRAPS = ['spike', 'mine', 'fire', 'tesla', 'snare', 'poison'];
+const MAGE_CAST_MS = { fireportals: 600, teleport: 450, traps: 700, monsterportals: 800 };
+const MAGE_REWARD_COINS = 50000, MAGE_REWARD_XP = 50000;
+
+function startMageFight() {
+  room.wave = { num: 1, monstersLeft: 1, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 };
+  room.waveHpMult = 1; room.waveSpeedMult = 1;
+  spawnMonster('portalmage');
+  const m = room.monsters[room.monsters.length - 1];
+  m.hp = m.maxHp = MAGE_HP;
+  Object.assign(m, { phase: 1, cast: null, castT: 0, castCd: 2200, tpT: 0, lastAtk: null, orbit: 1,
+                     summoned: false, giantsDone: false, hidden: false, pendingGiants: 0 });
+  room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
+                        text: 'THE PORTAL MAGE', color: '#c8a0ff', timer: 3200, max: 3200 });
+}
+
+// His last resort: below MAGE_LAST he can't be hurt any further until the
+// giants he summons are dead.
+function mageFloor(m) {
+  if (m.giantsDone || m.dead) return;
+  const floor = Math.ceil(m.maxHp * MAGE_LAST);
+  if (m.hp <= floor) {
+    m.hp = floor;
+    if (!m.summoned) summonGiants(m);
+  }
+}
+
+function minionsAlive() { return room.monsters.filter(o => !o.dead && !o.mage && o.type !== 'giant').length; }
+
+// A spot inside the arena, `inset` from the walls.
+function arenaClamp(x, y, inset) {
+  return { x: Math.max(ARENA_X + inset, Math.min(ARENA_X + ARENA_W - inset, x)),
+           y: Math.max(ARENA_Y + inset, Math.min(ARENA_Y + ARENA_H - inset, y)) };
+}
+
+function updateMage(m, target, dist, dx, dy, spd, factor, dt) {
+  // Hidden behind his giants: he waits for them to fall, then comes back.
+  if (m.hidden) {
+    if (m.pendingGiants <= 0 && !room.monsters.some(o => o.type === 'giant' && !o.dead)) {
+      m.hidden = false; m.giantsDone = true; m.castCd = 1800; m.invincible = 600;
+      room.particles.push({ type: 'teleport', x: cx(m), y: cy(m), timer: 500, max: 500, color: '#c8a0ff' });
+      room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
+                            text: 'THE MAGE IS EXPOSED - FINISH HIM!', color: '#ffd84a', timer: 3000, max: 3000 });
+    }
+    return;
+  }
+  // Mid-teleport: standing in his portal, then out of the other one.
+  if (m.tpT > 0) {
+    m.tpT -= dt;
+    if (m.tpT <= 0) {
+      room.particles.push({ type: 'teleport', x: cx(m), y: cy(m), timer: 380, max: 380, color: '#b07aff' });
+      m.x = m.tpTo.x - m.w / 2; m.y = m.tpTo.y - m.h / 2;
+      clampToArena(m);
+      room.particles.push({ type: 'teleport', x: cx(m), y: cy(m), timer: 380, max: 380, color: '#e0c8ff' });
+    }
+    return;
+  }
+  if (m.phase === 1 && m.hp <= m.maxHp * MAGE_PHASE2) {
+    m.phase = 2; m.cast = null; m.castT = 0; m.castCd = 1600; m.invincible = 1200;
+    room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 140, timer: 700, max: 700, color: '#ff4a8a' });
+    room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
+                          text: 'PHASE 2 - THE MAGE IS ENRAGED', color: '#ff6a9a', timer: 3000, max: 3000 });
+  }
+  if (m.castCd > 0) m.castCd -= dt;
+  // Winding a spell up: planted, staff raised, until it goes off.
+  if (m.castT > 0) {
+    m.castT -= dt;
+    if (m.castT <= 0) { mageCast(m, m.cast, target); m.swing = MONSTER_SWING_MS; }
+    return;
+  }
+  // Keep his distance, circling.
+  let vx = -dy / dist * 0.65 * m.orbit, vy = dx / dist * 0.65 * m.orbit;
+  if (dist > MAGE_KEEP_AWAY + 30)      { vx += dx / dist; vy += dy / dist; }
+  else if (dist < MAGE_KEEP_AWAY - 40) { vx -= dx / dist; vy -= dy / dist; }
+  m.x += vx * spd * factor; m.y += vy * spd * factor;
+  if (Math.random() < 0.006) m.orbit = -m.orbit;
+
+  if (m.castCd <= 0) {
+    const pool = m.phase === 1 ? ['fireportals', 'teleport', 'traps']
+                               : ['fireportals', 'teleport', 'traps', 'monsterportals', 'monsterportals'];
+    let pick;
+    do { pick = pool[Math.floor(Math.random() * pool.length)]; } while (pick === m.lastAtk && Math.random() < 0.85);
+    if (pick === 'monsterportals' && minionsAlive() >= MAGE_MAX_MINIONS) pick = 'fireportals';
+    m.cast = pick; m.lastAtk = pick;
+    m.castT = MAGE_CAST_MS[pick];
+    m.castCd = (m.phase === 1 ? 2700 : 1900) + m.castT;
+  }
+}
+
+function mageCast(m, kind, target) {
+  const p2 = m.phase === 2;
+  if (kind === 'fireportals') {
+    // Red portals in a loose ring around you, each throwing fireballs.
+    const n = p2 ? 5 : 3;
+    const a0 = Math.random() * Math.PI * 2;
+    for (let i = 0; i < n; i++) {
+      const a = a0 + (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+      const d = 115 + Math.random() * 60;
+      const at = arenaClamp(cx(target) + Math.cos(a) * d, cy(target) + Math.sin(a) * d, 22);
+      room.fires.push({ id: nextId(), kind: 'portal', color: 'red', owner: 'monster', x: at.x, y: at.y, r: 15,
+                        t: -i * 140, life: p2 ? 3000 : 2500, shots: p2 ? [650, 1150, 1650, 2150] : [700, 1250, 1800], shot: 0 });
+    }
+  } else if (kind === 'teleport') {
+    // Into a portal at his feet, out of one far from you. The entry stays open
+    // a moment after he's gone: step in fast and you come out beside him.
+    let best = null;
+    for (let i = 0; i < 12; i++) {
+      const at = arenaClamp(ARENA_X + Math.random() * ARENA_W, ARENA_Y + Math.random() * ARENA_H, 40);
+      const d = Math.hypot(at.x - cx(target), at.y - cy(target));
+      if (!best || d > best.d) best = { ...at, d };
+      if (d > 220) break;
+    }
+    const exitId = nextId();
+    room.fires.push({ id: nextId(), kind: 'portal', color: 'purple', owner: 'monster', x: cx(m), y: cy(m) + m.h * 0.25,
+                      r: 20, t: 0, life: 2300, link: exitId });
+    room.fires.push({ id: exitId, kind: 'portal', color: 'purple', owner: 'monster', x: best.x, y: best.y + m.h * 0.25,
+                      r: 20, t: 0, life: 2300 });
+    m.tpT = 450; m.tpTo = { x: best.x, y: best.y };
+  } else if (kind === 'traps') {
+    // Glowing runes first (the warning), then real traps where they were.
+    const n = p2 ? 5 : 3;
+    const spots = [];
+    for (let i = 0; i < n; i++) {
+      let at;
+      for (let k = 0; k < 10; k++) {
+        const a = Math.random() * Math.PI * 2, d = i === 0 ? Math.random() * 20 : 45 + Math.random() * 120;
+        at = arenaClamp(cx(target) + Math.cos(a) * d, cy(target) + Math.sin(a) * d, 26);
+        if (spots.every(s => Math.hypot(s.x - at.x, s.y - at.y) > 46)) break;
+      }
+      spots.push(at);
+      const type = MAGE_TRAPS[Math.floor(Math.random() * MAGE_TRAPS.length)];
+      room.fires.push({ id: nextId(), kind: 'runecast', color: TRAP_TYPES[type].color, trapType: type, owner: 'monster',
+                        x: at.x, y: at.y, r: TRAP_TYPES[type].size / 2 + 6, t: -i * 110, life: 1150 });
+    }
+  } else if (kind === 'monsterportals') {
+    // Green portals near the walls, each sending out monsters.
+    const n = 3;
+    for (let i = 0; i < n; i++) {
+      let at;
+      for (let k = 0; k < 10; k++) {
+        const edge = Math.floor(Math.random() * 4);
+        const x = edge < 2 ? ARENA_X + 40 + Math.random() * (ARENA_W - 80) : (edge === 2 ? ARENA_X + 40 : ARENA_X + ARENA_W - 40);
+        const y = edge >= 2 ? ARENA_Y + 50 + Math.random() * (ARENA_H - 100) : (edge === 0 ? ARENA_Y + 50 : ARENA_Y + ARENA_H - 40);
+        at = { x, y };
+        if (Math.hypot(x - cx(target), y - cy(target)) > 140) break;
+      }
+      room.fires.push({ id: nextId(), kind: 'portal', color: 'green', owner: 'monster', x: at.x, y: at.y, r: 22,
+                        t: -i * 200, life: 2600, spawn: 'minion', spawnAt: [900, 1600], spawned: 0 });
+    }
+  }
+  m.cast = null;
+}
+
+// Two massive portals; a Giant steps out of each, and the mage disappears.
+function summonGiants(m) {
+  m.summoned = true; m.phase = 2;
+  m.cast = null; m.castT = 0; m.tpT = 0;
+  m.pendingGiants = 2;
+  for (const side of [-1, 1]) {
+    room.fires.push({ id: nextId(), kind: 'portal', color: 'giant', owner: 'monster',
+                      x: CANVAS_W / 2 + side * ARENA_W * 0.3, y: ARENA_Y + ARENA_H / 2, r: 60,
+                      t: 0, life: 3400, spawn: 'giant', spawnAt: [1700], spawned: 0 });
+  }
+  room.particles.push({ type: 'teleport', x: cx(m), y: cy(m), timer: 500, max: 500, color: '#c8a0ff' });
+  room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
+                        text: 'LAST RESORT: THE GIANTS COME', color: '#c8e07a', timer: 3400, max: 3400 });
+  m.hidden = true;
+  m.hitFlash = 0;
+}
+
+function updatePortal(f, dt) {
+  // Fire portals: fireballs at the nearest player.
+  if (f.shots && f.shot < f.shots.length && f.t >= f.shots[f.shot]) {
+    f.shot++;
+    const ps = [room.players.p1, room.players.p2].filter(p => p && !p.dead);
+    if (ps.length) {
+      const t = ps.reduce((a, b) => Math.hypot(cx(a) - f.x, cy(a) - f.y) < Math.hypot(cx(b) - f.x, cy(b) - f.y) ? a : b);
+      const ang = Math.atan2(cy(t) - f.y, cx(t) - f.x) + (Math.random() - 0.5) * 0.12;
+      room.projectiles.push({
+        id: nextId(), x: f.x, y: f.y, dx: Math.cos(ang) * MAGE_FIREBALL_SPEED, dy: Math.sin(ang) * MAGE_FIREBALL_SPEED,
+        damage: MAGE_FIREBALL_DMG, owner: 'monster', traveled: 0, maxRange: 560, weaponId: 'hellfire', burn: 1500,
+        isAoe: false, aoeRadius: 0, pierce: false, grapple: false, boomerang: false, teleport: false,
+        returning: false, life: 0, hitTargets: null,
+      });
+    }
+  }
+  // Summoning portals.
+  if (f.spawn && f.spawned < f.spawnAt.length && f.t >= f.spawnAt[f.spawned]) {
+    f.spawned++;
+    if (f.spawn === 'giant') {
+      spawnMonster('giant');
+      const g = room.monsters[room.monsters.length - 1];
+      g.hp = g.maxHp = MAGE_GIANT_HP;
+      g.x = f.x - g.w / 2; g.y = f.y - g.h / 2;
+      clampToArena(g);
+      const mage = room.monsters.find(o => o.mage);
+      if (mage) mage.pendingGiants--;
+    } else if (minionsAlive() < MAGE_MAX_MINIONS) {
+      spawnMonster(MAGE_MINIONS[Math.floor(Math.random() * MAGE_MINIONS.length)]);
+      const n = room.monsters[room.monsters.length - 1];
+      n.x = f.x - n.w / 2; n.y = f.y - n.h / 2;
+      clampToArena(n);
+    }
+    room.particles.push({ type: 'teleport', x: f.x, y: f.y, timer: 340, max: 340, color: f.color === 'giant' ? '#c8e07a' : '#7aff9a' });
+  }
+  // The teleport portal he left by: anyone stepping in while it's open comes
+  // out of its partner.
+  if (f.link && f.t > 300 && f.t < f.life - 150) {
+    const out = room.fires.find(o => o.id === f.link);
+    if (out) {
+      for (const key of ['p1', 'p2']) {
+        const p = room.players[key];
+        if (!p || p.dead || (p.portalCd || 0) > Date.now()) continue;
+        if (Math.hypot(cx(p) - f.x, cy(p) - f.y) > f.r + 6) continue;
+        room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 340, max: 340, color: '#b07aff' });
+        p.x = out.x - p.w / 2 + 18; p.y = out.y - p.h / 2;
+        p.pull = null;
+        clampToArena(p, 2);
+        p.portalCd = Date.now() + 900;
+        room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 340, max: 340, color: '#ffffff' });
+        room.particles.push({ type: 'pickup', who: key, text: 'THROUGH THE PORTAL!', color: '#c8a0ff', timer: 1400, max: 1400,
+                              x: cx(p), y: p.y - 10 });
+      }
+    }
+  }
+  return true;
+}
+
+// The rune has finished glowing: a real trap is now there.
+function placeMageTrap(f) {
+  const def = TRAP_TYPES[f.trapType];
+  if (!def) return;
+  if (room.traps.length >= 12) room.traps.shift();
+  const s = def.size;
+  room.traps.push({
+    id: nextId(), type: f.trapType, x: f.x - s / 2, y: f.y - s / 2, w: s, h: s,
+    state: 'idle', armTimer: 0, fireTimer: 0,
+    mode: def.mode, radius: def.radius, damage: def.damage || 0,
+    effect: def.effect || null, dur: def.dur || 0, color: def.color, expire: 14000,
+  });
+  room.particles.push({ type: 'trapburst', x: f.x, y: f.y, maxR: def.size, timer: 260, max: 260, color: def.color });
+}
+
+// Victory: everything he summoned vanishes and the reward is paid out.
+function mageDefeated(m) {
+  if (m.dead) return;
+  m.dead = true;
+  for (const o of room.monsters) {
+    o.dead = true;
+    room.particles.push({ type: 'teleport', x: cx(o), y: cy(o), timer: 420, max: 420, color: '#c8a0ff' });
+  }
+  room.monsters = [];
+  room.wave.monstersLeft = 0;
+  room.projectiles = room.projectiles.filter(pr => pr.owner !== 'monster');
+  room.fires = room.fires.filter(f => f.owner !== 'monster');
+  room.traps = [];
+  room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 220, timer: 900, max: 900, color: '#c8a0ff' });
+  room.particles.push({ type: 'waveclear', x: CANVAS_W / 2, y: CANVAS_H / 2 - 10, text: 'THE PORTAL MAGE IS DEFEATED!', timer: 4000 });
+  for (const key of ['p1', 'p2']) {
+    const p = room.players[key];
+    if (!p) continue;
+    addCoins(key, MAGE_REWARD_COINS);
+    creditXp(key, MAGE_REWARD_XP);
+    room.particles.push({ type: 'coin', x: cx(p), y: p.y - 10, text: '+' + MAGE_REWARD_COINS.toLocaleString() + ' COINS', timer: 3000, max: 3000 });
+    room.particles.push({ type: 'xp', x: cx(p), y: p.y - 22, text: '+' + MAGE_REWARD_XP.toLocaleString() + ' XP', timer: 3000 });
+  }
+  room.victory = true;
+  room.gameState = 'ROUND_OVER';
+  room.roundOverTimer = 8000;
+}
+
 // Where the tree comes down: just ahead of the Giant, on the side it faces.
 function giantImpact(m) { return { x: cx(m) + m.face * (m.w / 2 + m.h * 0.45), y: m.y + m.h * 0.8 }; }
 
@@ -2505,6 +2829,12 @@ function updateSoundwave(f, factor) {
 // game is won.
 function adminSkipWave() {
   if (room.gameState !== 'GAMEPLAY' || room.gameMode === 'pvp') return;
+  // Boss fight: skipping means winning it outright.
+  if (room.gameMode === 'portal') {
+    const m = room.monsters.find(o => o.mage);
+    if (m) mageDefeated(m);
+    return;
+  }
   for (const m of room.monsters) {
     room.particles.push({ type: 'aoe', x: cx(m), y: cy(m), maxR: Math.max(16, m.w), radius: 2, timer: 360, max: 360, color: '#ffd870' });
   }
@@ -2926,12 +3256,14 @@ function buildStateMsg(playerNum) {
     monsters:    room.monsters.map(m => ({ id: m.id, type: m.type, x: r1(m.x), y: r1(m.y), w: m.w, h: m.h,
                   hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash, slowed: (m.slowTimer || 0) > 0, frozen: (m.freeze || 0) > 0, burning: (m.burnTimer || 0) > 0, armor: m.armor || 0,
                   face: m.face, swing: m.swing > 0 ? Math.round(m.swing) : 0,
-                  ...(m.boss ? { boss: true, wind: m.windup > 0 ? m.wind : null, windup: Math.max(0, Math.round(m.windup)), stun: Math.max(0, Math.round(m.stun)) } : {}) })),
+                  ...(m.boss ? { boss: true, wind: m.windup > 0 ? m.wind : null, windup: Math.max(0, Math.round(m.windup)), stun: Math.max(0, Math.round(m.stun)) } : {}),
+                  ...(m.mage ? { mage: true, hidden: !!m.hidden, phase: m.phase, cast: m.tpT > 0 ? 'teleport' : m.castT > 0 ? m.cast : null } : {}) })),
     projectiles: room.projectiles.map(pr => ({ id: pr.id, x: r1(pr.x), y: r1(pr.y), dx: r1(pr.dx), dy: r1(pr.dy), weaponId: pr.weaponId,
                   upg: pr.upg || null, isAoe: pr.isAoe, special: !!pr.special, grapple: !!pr.grapple,
                   hook: !!pr.hook, boomerang: !!pr.boomerang })),
     fires:       room.fires.map(f => ({ id: f.id, kind: f.kind, x: r1(f.x), y: r1(f.y), r: r1(f.r || 0),
-                                    a: Math.round((f.a || 0) * 100) / 100, v: f.v ? r1(f.v) : 0, k: Math.round(f.t / f.life * 100) / 100 })),
+                                    a: Math.round((f.a || 0) * 100) / 100, v: f.v ? r1(f.v) : 0, k: Math.round(f.t / f.life * 100) / 100,
+                                    ...(f.color ? { c: f.color } : {}), ...(f.trapType ? { tt: f.trapType } : {}) })),
     chains:      buildChains().map(c => ({ x1: r1(c.x1), y1: r1(c.y1), x2: r1(c.x2), y2: r1(c.y2), kind: c.kind })),
     traps:       room.traps.map(tr => ({ x: r1(tr.x), y: r1(tr.y), w: tr.w, h: tr.h, type: tr.type, state: tr.state, radius: tr.radius, color: tr.color,
                   armRatio: tr.state === 'arming' ? r1(1 - tr.armTimer / (TRAP_TYPES[tr.type].armTime || 1)) : 0 })),
@@ -3305,7 +3637,7 @@ wss.on('connection', (ws) => {
         return;
       }
       if (msg.type === 'join' && !ws.room) {
-        const mode = ['pvp', 'coop', 'waves', 'extreme'].includes(msg.mode) ? msg.mode : 'pvp';
+        const mode = ['pvp', 'coop', 'waves', 'extreme', 'portal'].includes(msg.mode) ? msg.mode : 'pvp';
         reapRooms();
         const [r, key] = findSeat(mode);
         ws.room = r; ws.key = key;

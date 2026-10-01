@@ -661,3 +661,13 @@ body {
 /* Way out of the connecting / waiting / error screens. */
 .exit-btn { margin-top: 18px; width: 100%; border-color: rgba(225, 85, 65, 0.9); color: #ffb4a4; }
 .exit-btn:hover { border-color: #ff7a60; color: #fff; }
+
+/* The Portal Mage boss fight: its own full-width button, glowing purple. */
+.mode-btn.btn-portal {
+  width: 100%; margin-top: 10px;
+  border-color: #a050ff; color: #e0c8ff;
+  background: linear-gradient(90deg, #1a0830, #2a0e4a, #1a0830);
+  box-shadow: 0 0 10px rgba(160, 80, 255, 0.45), inset 0 0 10px rgba(160, 80, 255, 0.25);
+  letter-spacing: 3px;
+}
+.mode-btn.btn-portal:hover { background: linear-gradient(90deg, #2a0e4a, #3e1670, #2a0e4a); color: #fff; }

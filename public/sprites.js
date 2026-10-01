@@ -464,6 +464,7 @@ const MONSTER_SKIN = {
   infernal: { base: '#b8340e', eye: '#ffd84a', eyes: 2 },
   // Boss
   giant:    { base: '#7a9a56', eye: '#ffe25a', eyes: 2 },
+  portalmage: { base: '#5a2aa8', eye: '#ff9aff', eyes: 2 },
 };
 
 // Body outlines in normalised 0..1 space, scaled to whatever size the wave asks
@@ -514,6 +515,11 @@ const MONSTER_SHAPE = {
     // thick legs planted wide.
     body: [[0.36,0.00],[0.64,0.00],[0.70,0.12],[0.92,0.20],[1.00,0.34],[0.98,0.58],[0.90,0.76],[0.10,0.76],[0.02,0.58],[0.00,0.34],[0.08,0.20],[0.30,0.12]],
     legs: [[0.14,0.26],[0.62,0.26]], legTop: 0.74, headV: 0.10,
+  },
+  portalmage: {
+    // A tall pointed hood over a robe that flares to the floor — no legs show.
+    body: [[0.50,0.00],[0.60,0.10],[0.68,0.22],[0.80,0.30],[0.84,0.50],[0.96,0.98],[0.04,0.98],[0.16,0.50],[0.20,0.30],[0.32,0.22],[0.40,0.10]],
+    legs: [], legTop: 1, headV: 0.30,
   },
   infernal: {
     // A lean, horned demon.
@@ -657,6 +663,21 @@ function monsterBuf(type, w, h) {
     line(b, X(0.20), Y(0.30), X(0.30), Y(0.44), c[0]);                                     // scars
     line(b, X(0.72), Y(0.26), X(0.80), Y(0.36), c[0]);
     K.ditherRect(b, X(0.30), Y(0.36), w * 0.40, h * 0.16, c[2], c[3], 'sparse');          // belly light
+  } else if (type === 'portalmage') {
+    // A shadowed face in the hood, a gold-trimmed robe split down the middle,
+    // a sash, glowing runes in the cloth and a star on the hood's tip.
+    poly(b, P([[0.34,0.20],[0.66,0.20],[0.70,0.36],[0.58,0.40],[0.42,0.40],[0.30,0.36]]), '#0c0816');   // face in shadow
+    poly(b, P([[0.46,0.42],[0.54,0.42],[0.60,0.98],[0.40,0.98]]), c[3]);                                  // robe opening
+    line(b, X(0.46), Y(0.42), X(0.40), Y(0.98), MAT5.gold[3]);                                            // gold trim
+    line(b, X(0.54), Y(0.42), X(0.60), Y(0.98), MAT5.gold[3]);
+    rect(b, X(0.20), Y(0.52), w * 0.62, Math.max(2, h * 0.04), '#2a0e4a');                                // sash
+    rect(b, X(0.46), Y(0.51), Math.max(2, w * 0.1), Math.max(3, h * 0.06), MAT5.gold[2]);                 // clasp
+    for (const [u, v] of [[0.24, 0.66], [0.72, 0.62], [0.30, 0.84], [0.70, 0.86], [0.18, 0.92], [0.80, 0.94]]) {
+      setPx(b, X(u), Y(v), '#c87aff'); setPx(b, X(u) + 1, Y(v), '#7a3ad0');                              // runes
+    }
+    K.ditherRect(b, X(0.12), Y(0.70), w * 0.76, h * 0.26, c[1], c[0], 'sparse');
+    rect(b, X(0.48), Y(0.00) - 2, 2, 2, '#ffe25a');                                                        // star on the tip
+    setPx(b, X(0.48) - 1, Y(0.00) - 1, '#fff6c0'); setPx(b, X(0.48) + 2, Y(0.00) - 1, '#fff6c0');
   } else if (type === 'infernal') {
     // Swept horns, molten cracks, and a flame licking off the crown.
     const hornH = Math.max(3, h * 0.24), hy = Y(0.10);
@@ -676,7 +697,13 @@ function monsterBuf(type, w, h) {
     rect(b, X(u), ey, es, es, skin.eye);
     setPx(b, X(u), ey, shade(skin.eye, 0.55));
   };
-  if (type === 'giant') {
+  if (type === 'portalmage') {
+    // Two burning points in the dark of the hood.
+    for (const u of [0.40, 0.55]) {
+      rect(b, X(u), Y(0.28), 2, 2, skin.eye);
+      setPx(b, X(u), Y(0.28), '#ffffff');
+    }
+  } else if (type === 'giant') {
     // Small, deep-set eyes under the brow of a head far narrower than the body.
     for (const u of [0.40, 0.54]) {
       rect(b, X(u), Y(0.075), 3, 2, skin.eye);

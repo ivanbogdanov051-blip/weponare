@@ -657,6 +657,22 @@ const MONSTER_ARMS_ART = {
     k.circ(22, -0.2, 1.5, '#c8b8ff');
   }},
 
+  // Portal Mage: a long ebony staff whose head is a tiny portal held open in a
+  // ring of gold, with crescent prongs around it.
+  m_portalstaff: { draw(k, wc) {
+    k.r(0, -1.2, 19, 2.4, '#1a1026');
+    k.r(0, -1.2, 19, 0.8, '#3a2652');
+    k.r(3, -1.7, 1.2, 3.4, MAT.gold); k.r(9, -1.7, 1.2, 3.4, MAT.gold); k.r(15, -1.7, 1.2, 3.4, MAT.gold);
+    k.poly([[18, -2], [20.5, -7.5], [23, -9], [21.5, -4]], MAT.gold);        // prongs
+    k.poly([[18, 2], [20.5, 7.5], [23, 9], [21.5, 4]], MAT.gold);
+    k.glow(25, 0, 9, wc, 0.45);
+    k.circ(25, 0, 5.6, MAT.goldLight);                                      // gold ring
+    k.circ(25, 0, 4.4, '#12051f');                                          // portal void
+    k.ring(25, 0, 3.2, 1.1, wc, 0.2, 3.6);                                  // swirl
+    k.ring(25, 0, 1.8, 0.9, '#e0c8ff', 3.4, 6.6);
+    k.circ(25, 0, 0.8, '#ffffff');
+  }},
+
   // Infernal: a blackened staff crowned with a burning skull.
   m_hellstaff: { draw(k, wc) {
     k.r(0, -1.2, 16, 2.4, '#2a1a14');
