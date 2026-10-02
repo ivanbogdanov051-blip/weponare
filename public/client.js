@@ -1766,7 +1766,7 @@ function renderShop() {
 }
 
 const LEGEND_MOVES = {
-  portalwand: '<b>ATK</b> burning fireballs that explode · <b>SPECIAL</b> jump through a portal to the safest spot on the'
+  portalwand: '<b>ATK</b> small fire portals open beside you and throw exploding fireballs · <b>SPECIAL</b> jump through a portal to the safest spot on the'
             + ' field (furthest from foes, clear of shots and traps), leaving a fire portal behind that keeps shooting ·'
             + ' <b>SUPER</b> portal legion: portals in your colour pour out monsters that fight on your side for 14s.'
             + ' Never for sale.',

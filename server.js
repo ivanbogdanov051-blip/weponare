@@ -163,7 +163,7 @@ const WEAPONS = [
   // SUPER: portal legion, portals in your colour pouring out monsters that
   // fight on your side for a while (see spawnAlly).
   { id: 'portalwand',  name: 'PORTAL WAND', damage: 34, range: 330, atkSpd: 360, type: 'ranged', unlockXp: 0, shopOnly: true, bossReward: true, price: 0,
-    aoeRadius: 24, projSpeed: 6.2, burn: 1500,
+    aoeRadius: 24, projSpeed: 6.2, burn: 1500, portalShot: true,
     special: { kind: 'blink',       dmg: 46, range: 420, cd: 4000 },
     super:   { kind: 'legion',      dmg: 40, cd: 18000 } },
 ];
@@ -2060,6 +2060,21 @@ function doAttack(p, pKey) {
     room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 22, timer: 300, max: 300, color: WEAPON_COLORS.vortex });
     return;
   }
+  if (w.portalShot) {
+    // Portal Wand: a small fire portal flicks open beside you and throws a
+    // fireball at the nearest foe (MULTISHOT opens more of them).
+    const aim = nearestTargetAngle(p, pKey);
+    p.facing = Math.cos(aim) < 0 ? -1 : 1;
+    const n = 1 + (w.multi || 0);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = 24 + Math.random() * 16;
+      const at = arenaClamp(cx(p) + Math.cos(a) * d, cy(p) + Math.sin(a) * d, 12);
+      openFirePortal(pKey, at.x, at.y, Math.round(w.damage * dmgMult), -i * 60, [170],
+                     { r: 11, linger: 260, aoe: w.aoeRadius });
+    }
+    return;
+  }
   if (w.fireRing) {
     const aim = nearestTargetAngle(p, pKey);
     p.facing = Math.cos(aim) < 0 ? -1 : 1;
@@ -2345,9 +2360,9 @@ function updateAllies(factor, dt) {
 }
 
 // A player's red fire portal: throws a fireball at the nearest foe at each of `shots` (ms).
-function openFirePortal(pKey, x, y, dmg, delay, shots) {
-  room.fires.push({ id: nextId(), kind: 'portal', color: 'red', owner: pKey, x, y, r: 15,
-                    t: delay, life: shots[shots.length - 1] + 450, shots, shot: 0, dmg });
+function openFirePortal(pKey, x, y, dmg, delay, shots, opts = {}) {
+  room.fires.push({ id: nextId(), kind: 'portal', color: 'red', owner: pKey, x, y, r: opts.r || 15,
+                    t: delay, life: shots[shots.length - 1] + (opts.linger || 450), shots, shot: 0, dmg, aoe: opts.aoe });
 }
 
 // The safest spot on the field: as far as possible from every foe, and clear
@@ -2871,7 +2886,7 @@ function updatePortal(f, dt) {
         id: nextId(), x: f.x, y: f.y, dx: Math.cos(ang) * sp, dy: Math.sin(ang) * sp,
         damage: f.dmg || MAGE_FIREBALL_DMG, owner: f.owner, traveled: 0, maxRange: mine ? PWAND_FIREBALL_RANGE + 40 : 560,
         weaponId: mine ? 'portalwand' : 'hellfire', burn: 1500, special: mine,
-        isAoe: mine, aoeRadius: mine ? 22 : 0, pierce: false, grapple: false, boomerang: false, teleport: false,
+        isAoe: mine, aoeRadius: mine ? f.aoe || 22 : 0, pierce: false, grapple: false, boomerang: false, teleport: false,
         returning: false, life: 0, hitTargets: null,
       });
     }
