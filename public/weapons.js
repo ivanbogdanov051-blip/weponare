@@ -455,6 +455,56 @@ const WEAPON_ART = {
     k.r(21.5, -2.9, 1.6, 2.6, wc);                     // hot muzzle
   }},
 
+  stormhammer: { draw(k, wc) {
+    // A rune-banded war hammer: leather-wrapped haft, a heavy steel head with
+    // gold caps, and lightning crackling off its face.
+    k.r(-2, -1.6, 2, 3.2, MAT.gold);                     // pommel
+    k.r(0, -1.4, 14, 2.8, MAT.wood);                     // haft
+    k.r(0, -1.4, 14, 0.9, MAT.woodLight);
+    for (const x of [2, 4.5, 7]) k.r(x, -1.6, 1.2, 3.2, MAT.leather);   // grip wrap
+    k.r(10, -1.7, 1, 3.4, MAT.gold);
+    k.r(13, -7, 9, 14, '#4a5a6a');                       // head
+    k.r(13, -7, 9, 3, '#7a8a9a');
+    k.r(13, -7, 1.6, 14, MAT.gold); k.r(20.4, -7, 1.6, 14, MAT.gold);   // gold caps
+    k.r(15.5, -2, 4, 4, '#2a3440');                      // rune plate
+    k.line(16.5, -1.5, 18.5, 0, 0.8, wc); k.line(18.5, 0, 16.5, 1.5, 0.8, wc);
+    k.glow(24, 0, 7, wc, 0.45);
+    k.line(22, -5, 25, -3, 0.8, wc); k.line(25, -3, 23.5, -1, 0.8, wc); k.line(23.5, -1, 26.5, 1.5, 0.8, '#e8f6ff');
+    k.line(22, 4, 25, 6.5, 0.8, wc);
+  }},
+
+  frostscythe: { draw(k, wc) {
+    // A long pale haft bound in silver, and a great curved blade of blue ice
+    // with frost spikes along its back.
+    k.r(-1, -1.2, 20, 2.4, '#d8e8f0');                   // haft
+    k.r(-1, -1.2, 20, 0.8, '#ffffff');
+    for (const x of [3, 9, 15]) k.r(x, -1.6, 1.2, 3.2, MAT.steelLight);   // silver bands
+    k.glow(22, -6, 9, wc, 0.4);
+    k.poly([[18, -1.5], [20, -6], [24, -10], [29, -11], [33, -9], [27, -8], [23, -5], [21, -1.5]], '#7ac8e8');   // blade
+    k.poly([[20, -6], [24, -10], [29, -11], [33, -9], [28, -9.4], [24, -8]], '#e8faff');
+    k.poly([[22, -9], [21, -12], [23.5, -10]], '#bfefff');   // frost spikes
+    k.poly([[26, -11], [26, -14], [28, -11.2]], '#bfefff');
+    k.r(30, -13, 1, 1, '#ffffff'); k.r(34, -7, 1, 1, wc);
+  }},
+
+  sunbow: { draw(k, wc) {
+    // A golden recurve bow with a sun disc at the grip, its string drawn
+    // with a burning arrow of sunlight.
+    k.ring(4, 0, 12, 1.8, MAT.gold, -1.25, 1.25);        // limbs
+    k.ring(4, 0, 12, 0.8, MAT.goldLight, -1.15, -0.2);
+    k.line(7.6, -11.5, 7.6, 11.5, 0.6, '#fff6c0');       // string
+    k.glow(16, 0, 8, wc, 0.45);
+    k.circ(15.5, 0, 3.2, '#ff9a2a');                     // sun disc at the grip
+    k.circ(15.5, 0, 2, '#ffd24a');
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      k.r(15.5 + Math.cos(a) * 4.6 - 0.5, Math.sin(a) * 4.6 - 0.5, 1, 1, '#ffe08a');
+    }
+    k.r(7.6, -0.5, 20, 1, '#ffd24a');                    // arrow shaft
+    k.poly([[27.6, -2], [31, 0], [27.6, 2]], '#fff6c0'); // burning head
+    k.r(8, -1.6, 2.4, 1, '#ff7a1a'); k.r(8, 0.6, 2.4, 1, '#ff7a1a');   // fletching
+  }},
+
   ghostdagger: { draw(k, wc) {
     // A slim, wavy spectral blade on a dark, rune-wrapped hilt: wisps trail off
     // the edge, and a ghostly glow hangs around the whole thing.

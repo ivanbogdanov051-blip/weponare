@@ -168,6 +168,31 @@ const WEAPONS = [
     aoeRadius: 24, projSpeed: 6.2, burn: 1500, portalShot: true,
     special: { kind: 'blink',       dmg: 46, range: 420, cd: 4000 },
     super:   { kind: 'legion',      dmg: 40, cd: 18000 } },
+  // ── Three more legendaries (shop-only, each needs another legendary first) ──
+  // STORMBREAKER: every hammer blow arcs lightning on to 2 more foes. Special:
+  // hurl the hammer — it smashes through everything, stunning, then flies back.
+  // SUPER: THUNDER GOD — for 6s lightning strikes the 3 nearest foes every 0.45s.
+  { id: 'stormhammer', name: 'STORMBREAKER', damage: 40, range: 56, atkSpd: 650, type: 'melee', unlockXp: 0,
+    shopOnly: true, noRequirement: true, needLegendary: true, price: 16000, arcHit: 2,
+    special: { kind: 'hammerthrow', dmg: 70, range: 270, cd: 5500 },
+    super:   { kind: 'thundergod',  dmg: 34, cd: 20000 } },
+  // WINTER'S EDGE: a 360 scythe sweep; every hit adds a frostbite stack and the
+  // third freezes the target solid (bosses and players are badly slowed instead).
+  // Special: ten ice shards burst out in a ring. SUPER: ABSOLUTE ZERO — a 5s
+  // blizzard around you that grinds everything inside, and shatters the frozen
+  // for double damage.
+  { id: 'frostscythe', name: "WINTER'S EDGE", damage: 30, range: 70, atkSpd: 600, type: 'melee', unlockXp: 0,
+    shopOnly: true, noRequirement: true, needLegendary: true, price: 18000, swing360: true, frostbite: true,
+    special: { kind: 'icespikes',    dmg: 38, range: 230, cd: 6000, count: 10 },
+    super:   { kind: 'absolutezero', dmg: 26, cd: 20000 } },
+  // SUNFIRE LONGBOW: piercing arrows of sunlight that set foes alight. Special:
+  // a small sun hangs in the air for 4.5s, beaming the nearest foe again and
+  // again. SUPER: SUPERNOVA — a beam of sunlight right across the arena that
+  // sweeps through a wide arc, burning everything it crosses.
+  { id: 'sunbow', name: 'SUNFIRE LONGBOW', damage: 28, range: 340, atkSpd: 520, type: 'ranged', unlockXp: 0,
+    shopOnly: true, noRequirement: true, needLegendary: true, price: 15000, pierce: true, projSpeed: 7.5, burn: 1200,
+    special: { kind: 'sunorb',    dmg: 26, range: 230, cd: 9000 },
+    super:   { kind: 'supernova', dmg: 30, cd: 22000 } },
   // The rarest weapon: free to claim, but only once you own every other weapon
   // in the game (needAll). Attack: melt into the shadows — invisible (you still
   // see yourself) and 75% faster; the next attack is a double-damage ghost
@@ -190,7 +215,7 @@ const WEAPON_COLORS = {
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
   shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
   fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff',
-  ghostdagger: '#a8f0ff',
+  ghostdagger: '#a8f0ff', stormhammer: '#7ac8ff', frostscythe: '#bfefff', sunbow: '#ffd24a',
 };
 
 // ── Weapon upgrades bought with coins from the menu ──
@@ -250,7 +275,10 @@ const WEAPON_UPGRADES = {
   windwand:    ['dmg', 'spd', 'knock', 'rng', 'aoe'],
   revolver:    ['dmg', 'spd', 'aoe', 'crit', 'multi'],
   portalwand:  ['dmg', 'crit', 'cdr', 'aoe'],
-  ghostdagger: ['dmg', 'spd', 'crit', 'cdr'],   // no SPD or MLT: its portals come fast enough
+  ghostdagger: ['dmg', 'spd', 'crit', 'cdr'],
+  stormhammer: ['dmg', 'spd', 'crit', 'cdr', 'knock'],
+  frostscythe: ['dmg', 'rng', 'chill', 'cdr', 'aoe'],
+  sunbow:      ['dmg', 'spd', 'rng', 'crit', 'cdr'],   // no SPD or MLT: its portals come fast enough
 };
 // Upgrade rows that aren't weapons: always available, stored alongside the
 // weapon upgrades under these ids.
@@ -1589,6 +1617,7 @@ function tickRoom(dt) {
     if (p.hitFlash        > 0) p.hitFlash        -= dt;
     if (p.swingTimer      > 0) p.swingTimer      -= dt;
     for (const id in p.abCd) if (p.abCd[id] > 0) p.abCd[id] -= dt;
+    if (hasEffect(p, 'thunder')) thunderTick(p, key, dt);
     if (room.gameMode === 'sandbox') sandboxCheats(p);
 
     if (room.swapJustPressed[key] && p.unlockedWeapons.length > 0) {
@@ -2111,6 +2140,8 @@ function distToSegment(px, py, ax, ay, bx, by) {
 // What a projectile does beyond its damage: frost slows, storm arcs onward.
 function onHitExtras(proj, t) {
   if (proj.chill) chillTarget(t, proj.chill);
+  if (proj.stun) stagger(t, proj.stun);
+  if (proj.frostbite) addFrostbite(t);
   // Wind wand: the gust shoves the target along the shot (never the Giant).
   if (proj.gust && !t.boss && !t.dead) {
     const sp = Math.hypot(proj.dx, proj.dy) || 1;
@@ -2215,6 +2246,8 @@ function doAttack(p, pKey) {
         spawnParrySpark(cx(p), cy(p));
       } else {
         applyDamage(t, Math.round(w.damage * dmgMult), pKey);
+        if (w.arcHit) arcLightning(t, Math.round(w.damage * dmgMult * 0.5), w.arcHit, pKey);
+        if (w.frostbite) addFrostbite(t);
       }
     }
   } else {
@@ -2365,6 +2398,28 @@ function doSuper(p, pKey) {
                           color: WEAPON_COLORS.revolver, text: 'DEAD EYE' });
     return;
   }
+  if (su.kind === 'thundergod') {
+    applyEffect(p, 'thunder', THUNDER_MS);
+    p.thunderDmg = Math.round(su.dmg * dmgMult);
+    p.thunderAcc = THUNDER_EVERY;   // the first strike lands at once
+    room.particles.push({ type: 'bolt', x: cx(p), y: ARENA_Y + 2, x2: cx(p), y2: cy(p), timer: 400, max: 400, color: WEAPON_COLORS.stormhammer });
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 50, timer: 700, max: 700, color: WEAPON_COLORS.stormhammer, text: 'THUNDER GOD' });
+    return;
+  }
+  if (su.kind === 'absolutezero') {
+    room.fires.push({ id: nextId(), kind: 'blizzard', owner: pKey, x: cx(p), y: cy(p), r: BLIZZARD_R, t: 0, life: BLIZZARD_MS,
+                      tick: 0, dmg: Math.round(su.dmg * dmgMult) });
+    room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: BLIZZARD_R, timer: 500, max: 500, color: WEAPON_COLORS.frostscythe });
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 50, timer: 700, max: 700, color: WEAPON_COLORS.frostscythe, text: 'ABSOLUTE ZERO' });
+    return;
+  }
+  if (su.kind === 'supernova') {
+    const aim = nearestTargetAngle(p, pKey);
+    room.fires.push({ id: nextId(), kind: 'sunbeam', owner: pKey, x: cx(p), y: cy(p), r: SUNBEAM_W, t: 0, life: SUNBEAM_MS,
+                      a: aim - SUNBEAM_SWEEP / 2, a0: aim - SUNBEAM_SWEEP / 2, tick: 0, dmg: Math.round(su.dmg * dmgMult) });
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 50, timer: 700, max: 700, color: WEAPON_COLORS.sunbow, text: 'SUPERNOVA' });
+    return;
+  }
   if (su.kind === 'knifestorm') {
     // The dagger goes up... and knives come down all over the field for a few
     // seconds, each one marked where it will land.
@@ -2392,6 +2447,122 @@ function doSuper(p, pKey) {
     room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 50, timer: 700, max: 700,
                           color: WEAPON_COLORS.portalwand, text: 'PORTAL LEGION' });
   }
+}
+
+// ─── Stormbreaker, Winter's Edge, Sunfire Longbow ─────────────────────────────
+const ARC_REACH = 110;
+const THUNDER_MS = 6000, THUNDER_EVERY = 450, THUNDER_R = 210, THUNDER_TARGETS = 3;
+const FROSTBITE_STACKS = 3, FROSTBITE_DECAY = 4000, FROSTBITE_FREEZE = 1500;
+const BLIZZARD_MS = 5000, BLIZZARD_R = 150, BLIZZARD_TICK = 400;
+const SUNORB_MS = 4500, SUNORB_TICK = 380, SUNORB_R = 230;
+const SUNBEAM_MS = 2500, SUNBEAM_SWEEP = 1.6, SUNBEAM_W = 14, SUNBEAM_TICK = 150, SUNBEAM_LEN = 900;
+
+// Lightning leaps from `from` on to up to n more foes nearby, one after another.
+function arcLightning(from, dmg, n, pKey) {
+  const hit = new Set([from]);
+  let at = from;
+  for (let i = 0; i < n; i++) {
+    let next = null, bd = ARC_REACH;
+    for (const t of enemyTargets(pKey)) {
+      if (hit.has(t)) continue;
+      const d = Math.hypot(cx(t) - cx(at), cy(t) - cy(at));
+      if (d < bd) { bd = d; next = t; }
+    }
+    if (!next) break;
+    room.particles.push({ type: 'bolt', x: cx(at), y: cy(at), x2: cx(next), y2: cy(next), timer: 260, max: 260, color: WEAPON_COLORS.stormhammer });
+    next.invincible = 0;
+    strikeTarget(next, dmg, pKey);
+    hit.add(next);
+    at = next;
+  }
+}
+
+// THUNDER GOD: bolts from the sky on the nearest few foes, on a steady beat.
+function thunderTick(p, pKey, dt) {
+  p.thunderAcc = (p.thunderAcc || 0) + dt;
+  if (p.thunderAcc < THUNDER_EVERY) return;
+  p.thunderAcc -= THUNDER_EVERY;
+  const foes = enemyTargets(pKey)
+    .map(t => ({ t, d: Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) }))
+    .filter(e => e.d <= THUNDER_R).sort((a, b) => a.d - b.d).slice(0, THUNDER_TARGETS);
+  for (const { t } of foes) {
+    room.particles.push({ type: 'bolt', x: cx(t) + (Math.random() - 0.5) * 30, y: ARENA_Y + 2, x2: cx(t), y2: cy(t),
+                          timer: 300, max: 300, color: WEAPON_COLORS.stormhammer });
+    t.invincible = 0;
+    strikeTarget(t, (p.thunderDmg || 30) + (t.num ? 0 : Math.round((t.maxHp || 0) * (t.boss ? 0.003 : 0.015))), pKey);
+  }
+}
+
+// Frostbite: stacks fade if not topped up; the third one freezes.
+function addFrostbite(t) {
+  if (t.dead) return;
+  const now = Date.now();
+  if (!t.frostAt || now - t.frostAt > FROSTBITE_DECAY) t.frostStacks = 0;
+  t.frostAt = now;
+  t.frostStacks = (t.frostStacks || 0) + 1;
+  if (t.frostStacks < FROSTBITE_STACKS) { chillTarget(t, 600); return; }
+  t.frostStacks = 0;
+  if (!t.num && !t.boss) { t.freeze = Math.max(t.freeze || 0, FROSTBITE_FREEZE); t.swing = 0; }
+  else chillTarget(t, 2000);
+  room.particles.push({ type: 'crit', x: cx(t), y: t.y - 6, text: 'FROZEN', timer: 600, max: 600 });
+}
+
+// ABSOLUTE ZERO: rides with its caster; every tick it grinds, chills and adds
+// frostbite to everything inside, and hits the frozen twice as hard.
+function updateBlizzard(f, dt) {
+  const o = room.players[f.owner];
+  if (!o || o.dead) return false;
+  f.x = cx(o); f.y = cy(o);
+  f.tick -= dt;
+  if (f.tick > 0) return true;
+  f.tick = BLIZZARD_TICK;
+  for (const t of enemyTargets(f.owner)) {
+    if (Math.hypot(cx(t) - f.x, cy(t) - f.y) > f.r + t.w / 2) continue;
+    const frozen = (t.freeze || 0) > 0;
+    t.invincible = 0;
+    applyDamage(t, frozen ? f.dmg * 2 : f.dmg, f.owner);
+    if (frozen && !t.dead) room.particles.push({ type: 'crit', x: cx(t), y: t.y - 6, text: 'SHATTER', timer: 450, max: 450 });
+    addFrostbite(t);
+  }
+  return true;
+}
+
+// The little sun: beams the nearest foe in reach on every tick.
+function updateSunorb(f, dt) {
+  f.tick -= dt;
+  if (f.tick > 0) return true;
+  f.tick = SUNORB_TICK;
+  let best = null, bd = SUNORB_R;
+  for (const t of enemyTargets(f.owner)) {
+    const d = Math.hypot(cx(t) - f.x, cy(t) - f.y);
+    if (d < bd) { bd = d; best = t; }
+  }
+  if (!best) return true;
+  room.particles.push({ type: 'bolt', x: f.x, y: f.y, x2: cx(best), y2: cy(best), timer: 220, max: 220, color: WEAPON_COLORS.sunbow });
+  best.invincible = 0;
+  strikeTarget(best, f.dmg, f.owner);
+  ignite(best, 900);
+  return true;
+}
+
+// SUPERNOVA: the beam rides with its caster and sweeps across SUNBEAM_SWEEP;
+// everything along it burns on every tick.
+function updateSunbeam(f, dt) {
+  const o = room.players[f.owner];
+  if (!o || o.dead) return false;
+  f.x = cx(o); f.y = cy(o);
+  f.a = f.a0 + SUNBEAM_SWEEP * Math.min(1, f.t / f.life);
+  f.tick -= dt;
+  if (f.tick > 0) return true;
+  f.tick = SUNBEAM_TICK;
+  const ex = f.x + Math.cos(f.a) * SUNBEAM_LEN, ey = f.y + Math.sin(f.a) * SUNBEAM_LEN;
+  for (const t of enemyTargets(f.owner)) {
+    if (distToSegment(cx(t), cy(t), f.x, f.y, ex, ey) > f.r + t.w / 2) continue;
+    t.invincible = 0;
+    applyDamage(t, f.dmg + (t.num ? 0 : Math.round((t.maxHp || 0) * (t.boss ? 0.005 : 0.02))), f.owner);
+    ignite(t, 1200);
+  }
+  return true;
 }
 
 // ─── Dagger of Ghosts ─────────────────────────────────────────────────────────
@@ -2728,6 +2899,9 @@ function updateFires(factor, dt) {
     if (f.kind === 'meteor' || f.kind === 'knife') return true;   // still falling: only the warning shows
     if (f.kind === 'portal') return updatePortal(f, dt);
     if (f.kind === 'barrier') return updateBarrier(f);
+    if (f.kind === 'blizzard') return updateBlizzard(f, dt);
+    if (f.kind === 'sunorb') return updateSunorb(f, dt);
+    if (f.kind === 'sunbeam') return updateSunbeam(f, dt);
     if (f.kind === 'cloud') return updateCloud(f, dt);
     if (f.kind === 'blackhole') return updateBlackhole(f, factor, dt);
     if (f.kind === 'drain') return updateDrain(f, factor, dt);
@@ -3932,6 +4106,27 @@ function doSpecial(p, pKey) {
     ...extra,
   });
 
+  if (sp.kind === 'sunorb') {
+    // The sun hangs part-way toward the nearest foe.
+    const t = nearestFoe(p, pKey, 600);
+    const d = t ? Math.min(160, Math.hypot(cx(t) - px, cy(t) - py)) : 60;
+    const at = arenaClamp(px + Math.cos(aim) * d, py + Math.sin(aim) * d - 20, 16);
+    room.fires.push({ id: nextId(), kind: 'sunorb', owner: pKey, x: at.x, y: at.y, r: 12, t: 0, life: SUNORB_MS, tick: 200, dmg: spDmg });
+    return;
+  }
+  if (sp.kind === 'hammerthrow') {
+    // Out through everything in its path, stunning, and back to your hand.
+    room.projectiles.push(mkProj(aim, { pierce: true, boomerang: true, hitTargets: new Set(), life: 4000, stun: 700,
+                                        dx: Math.cos(aim) * 7, dy: Math.sin(aim) * 7 }));
+    return;
+  }
+  if (sp.kind === 'icespikes') {
+    const n = sp.count || 10;
+    for (let i = 0; i < n; i++) {
+      room.projectiles.push(mkProj(aim + (i / n) * Math.PI * 2, { pierce: true, hitTargets: new Set(), chill: 1200, frostbite: true }));
+    }
+    return;
+  }
   if (sp.kind === 'ghostthrow') {
     // Who has their back to you right now? (Monsters turn the moment you
     // reappear, so it's decided as the dagger leaves your hand.)

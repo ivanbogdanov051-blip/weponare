@@ -32,7 +32,7 @@ let WEAPON_COLOR = {
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
   fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff',
-  ghostdagger:'#a8f0ff',
+  ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
 };
 const WEAPON_DESC = {
   sword:'Balanced blade', dagger:'Fast, low damage', axe:'Slow, heavy hit',
@@ -52,6 +52,9 @@ const WEAPON_DESC = {
   revolver:'Every bullet explodes',
   portalwand:"The Portal Mage's own wand: fireballs, portal jumps and a SUPER army of your own monsters",
   ghostdagger:'The rarest weapon of all: turn invisible, throw a deadly dagger, and make it rain knives',
+  stormhammer:'A war hammer full of lightning that comes back when you throw it',
+  frostscythe:'A sweeping scythe of ice that freezes whatever it keeps cutting',
+  sunbow:'Arrows of sunlight, a little sun that fights for you, and a beam that burns across the arena',
 };
 
 // Filled from the server catalog: { id: {type, atkSpd, ...} }
@@ -540,6 +543,7 @@ const ATTACK_ANIM = {
   staff: 'cast', frostrod: 'cast', wand: 'flick', stormtome: 'tome',
   chakram: 'throw', boomerang: 'throw', shuriken: 'throw',
   fireglove: 'punch', vortex: 'shieldup', windwand: 'flick', revolver: 'recoil', portalwand: 'cast', ghostdagger: 'stab',
+  stormhammer: 'chop', frostscythe: 'spin', sunbow: 'draw',
 };
 const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
                   heavy: 300, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
@@ -1077,6 +1081,64 @@ function drawKnife(f, now) {
   ctx.restore();
 }
 
+// ABSOLUTE ZERO: a frosty disc with snow whirling round it.
+function drawBlizzard(f, now) {
+  const k = Math.max(0, f.k || 0);
+  const fade = Math.min(1, k / 0.08) * Math.min(1, (1 - k) / 0.12);
+  ctx.save();
+  ctx.globalAlpha = 0.16 * fade; ctx.fillStyle = '#bfefff';
+  ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.5 * fade; ctx.strokeStyle = '#e8faff'; ctx.lineWidth = 1.5;
+  ctx.setLineDash([3, 5]); ctx.lineDashOffset = -now * 30;
+  ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < 40; i++) {
+    const a = i * 2.4 + now * (1.2 + (i % 3) * 0.4), d = f.r * ((i * 53 % 97) / 97);
+    ctx.globalAlpha = (0.5 + 0.5 * ((i * 31 % 7) / 7)) * fade;
+    ctx.fillRect(f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, i % 4 ? 1.5 : 2.5, i % 4 ? 1.5 : 2.5);
+  }
+  ctx.restore();
+}
+
+// The little sun of the Sunfire Longbow: a pulsing core with turning rays.
+function drawSunorb(f, now) {
+  const k = Math.max(0, f.k || 0);
+  const fade = Math.min(1, k / 0.06) * Math.min(1, (1 - k) / 0.1);
+  const pulse = 1 + 0.12 * Math.sin(now * 8);
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.globalAlpha = 0.25 * fade; ctx.fillStyle = '#ffb030';
+  ctx.beginPath(); ctx.arc(0, 0, 22 * pulse, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.9 * fade; ctx.strokeStyle = '#ffd24a'; ctx.lineWidth = 2;
+  for (let i = 0; i < 8; i++) {
+    const a = now * 1.5 + i * Math.PI / 4;
+    ctx.beginPath(); ctx.moveTo(Math.cos(a) * 11, Math.sin(a) * 11); ctx.lineTo(Math.cos(a) * 17 * pulse, Math.sin(a) * 17 * pulse); ctx.stroke();
+  }
+  ctx.globalAlpha = fade; ctx.fillStyle = '#ffd24a';
+  ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff6c0';
+  ctx.beginPath(); ctx.arc(-2, -2, 4.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// SUPERNOVA: a blazing beam from the archer across the arena.
+function drawSunbeam(f, now) {
+  const k = Math.max(0, f.k || 0);
+  const fade = Math.min(1, k / 0.06) * Math.min(1, (1 - k) / 0.1);
+  const L = 900, a = f.a || 0;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(ARENA_X, ARENA_Y, ARENA_W, ARENA_H); ctx.clip();
+  ctx.translate(f.x, f.y); ctx.rotate(a);
+  const w = (f.r || 14) * (1 + 0.15 * Math.sin(now * 30));
+  ctx.globalAlpha = 0.25 * fade; ctx.fillStyle = '#ff8a1a'; ctx.fillRect(0, -w * 1.6, L, w * 3.2);
+  ctx.globalAlpha = 0.6 * fade; ctx.fillStyle = '#ffd24a'; ctx.fillRect(0, -w, L, w * 2);
+  ctx.globalAlpha = 0.95 * fade; ctx.fillStyle = '#fff6d0'; ctx.fillRect(0, -w * 0.4, L, w * 0.8);
+  ctx.globalAlpha = fade; ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(0, 0, w * 1.3, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
 // BARRIER: a shimmering dome riding on its caster; it flickers as it runs out.
 function drawBarrier(f, now) {
   const k = Math.max(0, f.k || 0);
@@ -1131,6 +1193,9 @@ function drawFireRings(fires) {
     if (f.kind === 'blackhole') { drawBlackhole(f, now); continue; }
     if (f.kind === 'drain') { drawDrain(f, now); continue; }
     if (f.kind === 'barrier') { drawBarrier(f, now); continue; }
+    if (f.kind === 'blizzard') { drawBlizzard(f, now); continue; }
+    if (f.kind === 'sunorb') { drawSunorb(f, now); continue; }
+    if (f.kind === 'sunbeam') { drawSunbeam(f, now); continue; }
     if (f.kind === 'cloud') { drawCloud(f, now); continue; }
     if (f.kind === 'soundwave') {
       // Three rippling rings, fading as the wave spreads.
@@ -1916,6 +1981,19 @@ function renderShop() {
 }
 
 const LEGEND_MOVES = {
+  stormhammer: '<b>ATK</b> a heavy hammer blow; lightning arcs from every foe it hits on to 2 more nearby, for half'
+             + ' the damage · <b>SPECIAL</b> hurl the hammer: it smashes through everything in its path, stunning'
+             + ' them, then flies back to your hand and hits them again · <b>SUPER</b> THUNDER GOD: for 6s, lightning'
+             + ' strikes the 3 nearest foes every 0.45s. Needs another legendary.',
+  frostscythe: '<b>ATK</b> a full 360&deg; sweep; every hit adds a frostbite stack and the third freezes the target'
+             + ' solid for 1.5s (bosses and players are slowed instead); stacks fade after 4s · <b>SPECIAL</b> ten'
+             + ' ice shards burst out in a ring, piercing, slowing and adding frostbite · <b>SUPER</b> ABSOLUTE ZERO: a'
+             + ' 5s blizzard around you that grinds and freezes everything inside, and SHATTERS frozen foes for double'
+             + ' damage. Needs another legendary.',
+  sunbow:      '<b>ATK</b> fast arrows of sunlight that pierce through every foe in a line and set them alight ·'
+             + ' <b>SPECIAL</b> a small sun hangs in the air for 4.5s, beaming the nearest foe in reach again and again ·'
+             + ' <b>SUPER</b> SUPERNOVA: a beam of sunlight right across the arena that sweeps a wide arc for 2.5s,'
+             + ' burning everything it crosses. Needs another legendary.',
   ghostdagger: '<b>ATK</b> melt into the shadows: invisible to every enemy (you still see yourself) and 75% faster;'
              + ' your next attack is a double-damage ghost strike that ends it, and so does a special, a super or a'
              + ' weapon swap · <b>SPECIAL</b> throw the dagger: at least a quarter of the target\'s health, half of it'
@@ -2970,7 +3048,7 @@ function drawChains(chains) {
 
 const EFFECT_GLOW = { speed:'#44ddee', strength:'#ff5544', shield:'#ffdd44', haste:'#aa66ff', slow:'#3366aa',
                       burn:'#ff6a1a', poison:'#8ad048', magnet:'#ffc24a', regen:'#ff7ac8', vampire:'#d8304a',
-                      vanish:'#6a6a9a', phoenix:'#ffa03a', ghost:'#a8f0ff' };
+                      vanish:'#6a6a9a', phoenix:'#ffa03a', ghost:'#a8f0ff', thunder:'#7ac8ff' };
 
 // Flickering pixel flames over something that's on fire.
 function drawFlames(x, y, w, h) {
@@ -3396,6 +3474,42 @@ function drawProjectiles(projs) {
       ctx.beginPath(); ctx.arc(pr.x, pr.y, 4, 0, Math.PI*2); ctx.fill();
       ctx.fillStyle = '#d6ff5c';
       ctx.beginPath(); ctx.arc(pr.x - 0.8, pr.y - 1, 1.8, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+      continue;
+    }
+    // Stormbreaker, thrown: a spinning hammer crackling with lightning.
+    if (pr.weaponId === 'stormhammer') {
+      ctx.save();
+      ctx.translate(pr.x, pr.y); ctx.rotate(now / 50);
+      ctx.fillStyle = '#5a3a20'; ctx.fillRect(-1.5, -2, 3, 12);
+      ctx.fillStyle = '#5a6a7a'; ctx.fillRect(-7, -8, 14, 7);
+      ctx.fillStyle = '#9fb6c8'; ctx.fillRect(-7, -8, 14, 2);
+      ctx.strokeStyle = '#bfe8ff'; ctx.lineWidth = 1.2; ctx.globalAlpha = 0.8;
+      ctx.beginPath(); ctx.moveTo(-9, -4); ctx.lineTo(-12, -1); ctx.lineTo(-10, 1); ctx.lineTo(-13, 4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(9, -6); ctx.lineTo(12, -3); ctx.lineTo(10, -1); ctx.stroke();
+      ctx.restore();
+      continue;
+    }
+    // Winter's Edge ice shard.
+    if (pr.weaponId === 'frostscythe') {
+      ctx.save();
+      ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+      ctx.globalAlpha = 0.35; ctx.fillStyle = '#bfefff'; ctx.fillRect(-12, -1.5, 9, 3);
+      ctx.globalAlpha = 1; ctx.fillStyle = '#9fe0f8';
+      ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(-3, -3); ctx.lineTo(-5, 0); ctx.lineTo(-3, 3); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(-2, -1, 6, 1);
+      ctx.restore();
+      continue;
+    }
+    // Sunfire arrow: a golden shaft with a burning tip and a bright wake.
+    if (pr.weaponId === 'sunbow') {
+      ctx.save();
+      ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+      ctx.globalAlpha = 0.35; ctx.fillStyle = '#ffb030'; ctx.fillRect(-18, -2, 14, 4);
+      ctx.globalAlpha = 1; ctx.fillStyle = '#ffd24a'; ctx.fillRect(-9, -0.8, 12, 1.6);
+      ctx.fillStyle = '#fff6c0';
+      ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(2, -2.8); ctx.lineTo(2, 2.8); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ff7a1a'; ctx.fillRect(-11, -2.5, 2, 1.5); ctx.fillRect(-11, 1, 2, 1.5);
       ctx.restore();
       continue;
     }
