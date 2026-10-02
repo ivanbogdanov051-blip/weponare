@@ -454,6 +454,30 @@ const WEAPON_ART = {
     k.glow(23, -1.6, 4.5, wc, 0.45);
     k.r(21.5, -2.9, 1.6, 2.6, wc);                     // hot muzzle
   }},
+
+  portalwand: { draw(k, wc) {
+    // The Portal Mage's wand: a dark rune-cut shaft bound in gold, twin gold
+    // prongs cradling a swirling portal, and a flicker of his fire inside it.
+    k.r(0, -1.6, 5, 3.2, '#2a1440');                     // wrapped grip
+    k.r(0.8, -1.6, 0.9, 3.2, '#5a2a8a'); k.r(2.8, -1.6, 0.9, 3.2, '#5a2a8a');
+    k.r(-1.2, -1.2, 1.4, 2.4, MAT.gold);                 // pommel
+    k.poly([[5, -1.4], [17, -1.1], [17, 1.1], [5, 1.4]], '#1a1026');   // shaft
+    k.poly([[5, -1.4], [17, -1.1], [17, -0.4], [5, -0.4]], '#3a2652');
+    for (const x of [7.5, 10.5, 13.5]) k.r(x, -0.5, 1, 1, '#c87aff');  // glowing runes
+    k.r(4.6, -2.2, 1.3, 4.4, MAT.gold);                  // gold bands
+    k.r(16.2, -2.4, 1.5, 4.8, MAT.gold);
+    k.poly([[17, -2], [19.5, -7], [22.5, -8.6], [20.8, -3.6]], MAT.gold);   // prongs
+    k.poly([[17, 2], [19.5, 7], [22.5, 8.6], [20.8, 3.6]], MAT.gold);
+    k.poly([[17.6, -2], [19.8, -6.2], [21.4, -7], [20.2, -3.4]], MAT.goldLight);
+    k.glow(25, 0, 10, wc, 0.5);
+    k.circ(25, 0, 6, MAT.goldLight);                     // portal ring
+    k.circ(25, 0, 5, '#12051f');                         // the void
+    k.ring(25, 0, 3.8, 1.2, wc, 0.2, 3.8);               // swirl
+    k.ring(25, 0, 2.3, 1, '#e0c8ff', 3.4, 6.8);
+    k.circ(25.4, 0.4, 1.3, '#ff7a2a');                   // the mage's fire within
+    k.circ(25.2, 0.2, 0.6, '#ffd84a');
+    k.r(31.5, -4.5, 1, 1, '#e0c8ff'); k.r(32.5, 2.5, 1, 1, wc); k.r(30.5, 5, 0.8, 0.8, '#ff9a3a');   // sparks
+  }},
 };
 
 // Run a definition through a kit that records geometry instead of painting, to

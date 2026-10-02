@@ -31,7 +31,7 @@ let WEAPON_COLOR = {
   glaive:'#b0d8c0', katana:'#eef0ff', chakram:'#66e0c0', cannon:'#9a90a8',
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
-  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347',
+  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff',
 };
 const WEAPON_DESC = {
   sword:'Balanced blade', dagger:'Fast, low damage', axe:'Slow, heavy hit',
@@ -49,6 +49,7 @@ const WEAPON_DESC = {
   vortex:'Banks the damage you take, then pays it back',
   windwand:'Gusts that shove foes, tornadoes and a SUPER hurricane',
   revolver:'Every bullet explodes',
+  portalwand:"The Portal Mage's own wand: fireballs, portal jumps and a SUPER army of your own monsters",
 };
 
 // Filled from the server catalog: { id: {type, atkSpd, ...} }
@@ -393,6 +394,7 @@ function interpState(prev, curr, t) {
       p2: ip(prev.players?.p2, curr.players?.p2),
     },
     monsters:    interpById(prev.monsters, curr.monsters || [], t),
+    allies:      interpById(prev.allies, curr.allies || [], t),
     projectiles: interpById(prev.projectiles, curr.projectiles || [], t),
     coins:       interpById(prev.coins, curr.coins || [], t),
     fires:       interpFires(prev.fires, curr.fires || [], t),
@@ -532,7 +534,7 @@ const ATTACK_ANIM = {
   bow: 'draw', crossbow: 'recoil', grapple: 'recoil', cannon: 'heavy', blunderbuss: 'heavy',
   staff: 'cast', frostrod: 'cast', wand: 'flick', stormtome: 'tome',
   chakram: 'throw', boomerang: 'throw', shuriken: 'throw',
-  fireglove: 'punch', vortex: 'shieldup', windwand: 'flick', revolver: 'recoil',
+  fireglove: 'punch', vortex: 'shieldup', windwand: 'flick', revolver: 'recoil', portalwand: 'cast',
 };
 const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
                   heavy: 300, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
@@ -862,8 +864,14 @@ const PORTAL_COLORS = {
   green:  ['#3aff7a', '#c8ffd8', '#04200c'],
   giant:  ['#c8e07a', '#ffffff', '#141c0a'],
 };
+// A player's colour: their skin colour, else the P1/P2 default.
+function ownerColor(key) {
+  return getSkinColor(currState?.players?.[key], key === 'p2' ? PAL.p2 : PAL.p1);
+}
 function drawPortal(f, now) {
-  const [col, hi, voidC] = PORTAL_COLORS[f.c] || PORTAL_COLORS.purple;
+  // Portal Wand summoning portals ('p1'/'p2') wear their caster's colour.
+  const [col, hi, voidC] = f.c === 'p1' || f.c === 'p2' ? [ownerColor(f.c), '#ffffff', '#0a0a14']
+    : PORTAL_COLORS[f.c] || PORTAL_COLORS.purple;
   const k = Math.max(0, f.k || 0);
   // Opens with a snap, holds, then pinches shut.
   const s = Math.min(1, k / 0.12) * Math.min(1, (1 - k) / 0.12);
@@ -1758,6 +1766,10 @@ function renderShop() {
 }
 
 const LEGEND_MOVES = {
+  portalwand: '<b>ATK</b> burning fireballs that explode · <b>SPECIAL</b> jump through a portal to the safest spot on the'
+            + ' field (furthest from foes, clear of shots and traps), leaving a fire portal behind that keeps shooting ·'
+            + ' <b>SUPER</b> portal legion: portals in your colour pour out monsters that fight on your side for 14s.'
+            + ' Never for sale.',
   fireglove: '<b>ATK</b> a ring of fire that grows for 1s · <b>SPECIAL</b> a fire hand that hunts your foe and explodes'
            + ' (hit or parry it to break it; MULTISHOT adds hands) · <b>SUPER</b> five inferno rings, one after another,'
            + ' each growing until parried',
@@ -1783,6 +1795,20 @@ function legendaryCards(weapons, coins) {
     const ready = legendOk && (w.noRequirement || have >= xpIds.length);
     const afford = coins >= w.price;
     const col = WEAPON_COLOR[w.id] || '#ff6a1a';
+    if (w.bossReward) {
+      return `<div class="shop-row legendary">
+        <div class="shop-head">
+          <canvas class="shop-ic" data-weapon="${w.id}" width="56" height="32"></canvas>
+          <span class="shop-name" style="color:${col}">${w.name}</span>
+          <span class="legend-tag">LEGENDARY</span>
+        </div>
+        <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>
+        <div class="legend-buy">
+          <button class="buy-weapon poor" disabled>BOSS REWARD</button>
+          <span class="legend-need">Defeat the Portal Mage to earn it</span>
+        </div>
+      </div>`;
+    }
     const need = !legendOk ? 'Own at least one other legendary weapon first'
       : ready ? (afford ? 'Ready to buy!' : `Need ${(w.price - coins).toLocaleString()} more coins`)
       : `Unlock every other weapon first: ${have}/${xpIds.length}`;
@@ -2197,6 +2223,7 @@ function updateScreens(state) {
         : '<span style="color:#ff5a6a">DEFEATED</span>';
       document.getElementById('roundStats').innerHTML = state.victory
         ? `THE PORTAL MAGE HAS FALLEN<br><span style="color:${PAL.coin}">+50,000 COINS</span> &nbsp; <span style="color:${PAL.xp}">+50,000 XP</span>`
+          + ` &nbsp; <span style="color:#b07aff">+ THE PORTAL WAND</span>`
           + `<br>XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`
         : `THE PORTAL MAGE WINS THIS TIME<br>`
           + (mage ? `HE HAD <span style="color:#c8a0ff">${Math.ceil(mage.hp).toLocaleString()}</span> HP LEFT${mage.phase === 2 ? ' (PHASE 2)' : ''}<br>` : '')
@@ -2301,6 +2328,7 @@ function draw(state) {
   drawChains(state.chains || []);
   drawProjectiles(state.projectiles || []);
   drawMonsters(state.monsters || []);
+  drawAllies(state.allies || []);
   const names = state.playerNames || {};
   if (state.players.p1) drawPlayer(state.players.p1, PAL.p1, names.p1 || 'P1', 'p1');
   if (state.players.p2) drawPlayer(state.players.p2, PAL.p2, names.p2 || 'P2', 'p2');
@@ -2773,6 +2801,30 @@ function drawMonster(m) {
 }
 function drawMonsters(ms) { for(const m of ms) drawMonster(m); }
 
+// Portal Wand allies: the same monsters, washed in their owner's colour, with
+// a ring at their feet and a bar in that colour. They flicker as they fade.
+function drawAlly(a) {
+  const col = ownerColor(a.owner);
+  const x = Math.round(a.x), y = Math.round(a.y);
+  ctx.save();
+  if (a.fade) ctx.globalAlpha = 0.45 + 0.4 * Math.abs(Math.sin(performance.now() / 90));
+  ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+  ctx.globalAlpha *= 0.8;
+  ctx.beginPath(); ctx.ellipse(x + a.w / 2, y + a.h, a.w * 0.6, 3.5, 0, 0, Math.PI * 2); ctx.stroke();
+  if (a.fade) ctx.globalAlpha = 0.45 + 0.4 * Math.abs(Math.sin(performance.now() / 90));
+  else ctx.globalAlpha = 1;
+  const cv = monsterSprite(a.type, a.w, a.h, a.hitFlash > 0 ? 'flash' : 'ally:' + col);
+  if (cv) {
+    const pad = monsterPad(a.w, a.h);
+    ctx.drawImage(cv, x - pad, y - pad);
+  }
+  drawMonsterArms(a, x, y);
+  if (a.burning) drawFlames(x, y, a.w, a.h);
+  ctx.restore();
+  drawHpBar(x - 1, y - 5, a.w + 2, 2, a.hp / a.maxHp, col, '#111');
+}
+function drawAllies(as) { for (const a of as) drawAlly(a); }
+
 // Under the Portal Mage: a slowly turning rune circle; in phase 2 it burns
 // magenta and pulses.
 const MAGE_CAST_COLOR = { fireportals: '#ff4a2a', teleport: '#b07aff', traps: '#ffcc33', monsterportals: '#3aff7a' };
@@ -3002,6 +3054,29 @@ function drawProjectiles(projs) {
       ctx.beginPath(); ctx.arc(pr.x, pr.y, 4, 0, Math.PI*2); ctx.fill();
       ctx.fillStyle = '#d6ff5c';
       ctx.beginPath(); ctx.arc(pr.x - 0.8, pr.y - 1, 1.8, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+      continue;
+    }
+    // Portal Wand fireball: the mage's fire, wrapped in violet portal light.
+    if (pr.weaponId === 'portalwand') {
+      const t = performance.now() / 60;
+      const s = (pr.special ? 1 : 1.15) * u.size;
+      ctx.save();
+      for (let i = 3; i >= 1; i--) {
+        ctx.globalAlpha = 0.2 * (4 - i);
+        ctx.fillStyle = i === 1 ? '#ff9a3a' : '#9a4aff';
+        ctx.beginPath();
+        ctx.arc(pr.x - pr.dx * i * 1.2, pr.y - pr.dy * i * 1.2 + Math.sin(t + i) * 0.8, (6 - i) * s, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 0.5; ctx.strokeStyle = '#d8b8ff'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(pr.x, pr.y, 6.5 * s, t * 0.4, t * 0.4 + 4); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.fillStyle = '#ff5a14';
+      ctx.beginPath(); ctx.arc(pr.x, pr.y, 4.6 * s, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffd84a';
+      ctx.beginPath(); ctx.arc(pr.x, pr.y, 2.6 * s, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff6d0';
+      ctx.beginPath(); ctx.arc(pr.x - 0.8, pr.y - 0.8, 1.1 * s, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
       continue;
     }

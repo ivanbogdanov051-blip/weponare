@@ -157,6 +157,15 @@ const WEAPONS = [
     aoeRadius: 26, projSpeed: 8.5, needLegendary: true,
     special: { kind: 'fanhammer', dmg: 26, range: 260, cd: 4500, count: 6, aoe: 30 },
     super:   { kind: 'deadeye',   dmg: 110, cd: 16000 } },
+  // Never for sale: the Portal Mage's own wand, won by beating him (bossReward).
+  // Attack: his burning fireballs, which explode. Special: a portal jump to the
+  // safest spot on the field, leaving a fire portal behind that keeps shooting.
+  // SUPER: portal legion, portals in your colour pouring out monsters that
+  // fight on your side for a while (see spawnAlly).
+  { id: 'portalwand',  name: 'PORTAL WAND', damage: 34, range: 330, atkSpd: 360, type: 'ranged', unlockXp: 0, shopOnly: true, bossReward: true, price: 0,
+    aoeRadius: 24, projSpeed: 6.2, burn: 1500,
+    special: { kind: 'blink',       dmg: 46, range: 420, cd: 4000 },
+    super:   { kind: 'legion',      dmg: 40, cd: 18000 } },
 ];
 
 const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
@@ -168,7 +177,7 @@ const WEAPON_COLORS = {
   glaive: '#b0d8c0', katana: '#eef0ff', chakram: '#66e0c0', cannon: '#9a90a8', reaper: '#cc66aa',
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
   shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
-  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347',
+  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff',
 };
 
 // ── Weapon upgrades bought with coins from the menu ──
@@ -227,6 +236,7 @@ const WEAPON_UPGRADES = {
   vortex:      ['dmg', 'spd', 'cdr'],
   windwand:    ['dmg', 'spd', 'knock', 'rng', 'aoe'],
   revolver:    ['dmg', 'spd', 'aoe', 'crit', 'multi'],
+  portalwand:  ['dmg', 'spd', 'cdr', 'multi', 'aoe'],
 };
 // Upgrade rows that aren't weapons: always available, stored alongside the
 // weapon upgrades under these ids.
@@ -770,6 +780,7 @@ function makeRoom() { return {
     p2: { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false, ab1: false, ab2: false },
   },
   monsters: [],
+  allies: [],
   projectiles: [],
   fires: [],
   particles: [],
@@ -839,11 +850,13 @@ function enemyTargets(pKey) {
   const out = [];
   // Monster fire only ever threatens players — a spitter must not mow down the
   // pack it spawned with.
+  // Summoned allies (Portal Wand) are fair game for monsters too.
   if (pKey === 'monster') {
     for (const k of ['p1', 'p2']) {
       const p = room.players[k];
       if (p && !p.dead) out.push(p);
     }
+    for (const a of room.allies) if (!a.dead) out.push(a);
     return out;
   }
   for (const k of ['p1', 'p2']) {
@@ -854,6 +867,8 @@ function enemyTargets(pKey) {
   }
   // A hidden Portal Mage can't be seen, hit or aimed at.
   for (const m of room.monsters) if (!m.dead && !m.hidden) out.push(m);
+  // In PvP the rival's summoned allies can be cut down.
+  if (room.gameMode === 'pvp') for (const a of room.allies) if (!a.dead && a.owner !== pKey) out.push(a);
   return out;
 }
 
@@ -1180,6 +1195,7 @@ function startWave(num) {
 function clearField() {
   room.seenTypes   = new Set();
   room.monsters    = [];
+  room.allies      = [];
   room.projectiles = [];
   room.fires       = [];
   room.particles   = [];
@@ -1266,6 +1282,7 @@ function applyDamage(target, dmg, attackerKey) {
 
 function handleKill(target, attackerKey) {
   if (target.mage) { mageDefeated(target); return; }
+  if (target.ally) { killAlly(target); return; }   // a summoned ally: no reward for anyone
   const isPlayer = !!target.num;
   let baseGain = isPlayer ? 15 : 6;
   // Bigger (tankier) monsters reward more XP, scaled by their max HP over the base
@@ -1515,7 +1532,7 @@ function tickRoom(dt) {
   for (const m of room.monsters.slice()) {
     if (m.dead) continue;
     let nearest = null, bestDist = Infinity;
-    for (const p of [room.players.p1, room.players.p2]) {
+    for (const p of [room.players.p1, room.players.p2, ...room.allies]) {
       if (!p || p.dead) continue;
       const d = distBetween(p, m);
       if (d < bestDist) { bestDist = d; nearest = p; }
@@ -1598,6 +1615,7 @@ function tickRoom(dt) {
     applyPull(m, dt);
     clampToArena(m);
   }
+  updateAllies(factor, dt);
   separateMonsters(factor);
 
   // ── Projectiles ──
@@ -1754,7 +1772,7 @@ function tickRoom(dt) {
 
 // Nudge overlapping monsters apart so a wave doesn't collapse into one blob.
 function separateMonsters(factor) {
-  const ms = room.monsters;
+  const ms = room.monsters.concat(room.allies);   // allies shoulder through the pack too
   for (let i = 0; i < ms.length; i++) {
     for (let j = i + 1; j < ms.length; j++) {
       const a = ms[i], b = ms[j];
@@ -2100,6 +2118,7 @@ function doAttack(p, pKey) {
       chill: w.chill || 0,
       chain: w.chain || 0,
       gust: w.gust || 0,
+      burn: w.burn || 0,
     });
     }
   }
@@ -2214,7 +2233,149 @@ function doSuper(p, pKey) {
     }
     room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 40, timer: 600, max: 600,
                           color: WEAPON_COLORS.revolver, text: 'DEAD EYE' });
+    return;
   }
+  if (su.kind === 'legion') {
+    // Portals in your colour open around you, and each sends out monsters
+    // that fight for you (MULTISHOT adds portals).
+    const n = LEGION_PORTALS + (weapon(p).multi || 0);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.4;
+      const at = arenaClamp(cx(p) + Math.cos(a) * 75, cy(p) + Math.sin(a) * 75, 26);
+      room.fires.push({ id: nextId(), kind: 'portal', color: pKey, owner: pKey, x: at.x, y: at.y, r: 22,
+                        t: -i * 120, life: 2300, spawn: 'ally', spawnAt: LEGION_WAVES, spawned: 0,
+                        dmg: Math.round(su.dmg * dmgMult) });
+    }
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 50, timer: 700, max: 700,
+                          color: WEAPON_COLORS.portalwand, text: 'PORTAL LEGION' });
+  }
+}
+
+// ─── Portal Wand ──────────────────────────────────────────────────────────────
+const LEGION_PORTALS = 4, LEGION_WAVES = [450, 950, 1450];   // 3 monsters per portal
+const PWAND_FIREBALL_SPEED = 5.2, PWAND_FIREBALL_RANGE = 440;
+
+// ─── Allies ───────────────────────────────────────────────────────────────────
+// Monsters summoned by the Portal Wand's SUPER. They live in room.allies, wear
+// their owner's colour, hunt the owner's enemies (kills are the owner's) and
+// fade after ALLY_LIFE. Monsters fight back; in PvP the rival can cut them down.
+const ALLY_TYPES = ['grunt', 'runner', 'brute', 'brute', 'warden', 'wraith', 'behemoth'];
+const ALLY_LIFE = 14000, ALLY_MAX = 18, ALLY_HP = 70, ALLY_ATK_MS = 850;
+
+function spawnAlly(owner, x, y, dmg) {
+  if (room.allies.filter(a => a.owner === owner).length >= ALLY_MAX) return;
+  const type = ALLY_TYPES[Math.floor(Math.random() * ALLY_TYPES.length)];
+  const def = MONSTER_TYPES[type];
+  const s = Math.max(0.8, Math.min(2.2, def.size * 1.15));
+  const w = Math.round(MONSTER_BASE_W * s), h = Math.round(MONSTER_BASE_H * s);
+  const hp = Math.round(ALLY_HP * def.hp);
+  const a = { id: nextId(), ally: true, owner, type, x: x - w / 2, y: y - h / 2, w, h, hp, maxHp: hp,
+              speed: 1.3 * def.speed + 0.6, atkDamage: Math.max(1, Math.round(dmg * def.dmg * 0.55)),
+              atkRange: 8 + w * 0.5, atkCooldown: 300, armor: def.armor || 0, face: 1, swing: 0,
+              life: ALLY_LIFE, hitFlash: 0, invincible: 0, slowTimer: 0, pull: null, dead: false };
+  clampToArena(a);
+  room.allies.push(a);
+}
+
+function killAlly(a) {
+  if (a.dead) return;
+  a.dead = true;
+  room.particles.push({ type: 'teleport', x: cx(a), y: cy(a), timer: 380, max: 380, color: WEAPON_COLORS.portalwand });
+}
+
+function updateAllies(factor, dt) {
+  for (const a of room.allies.slice()) {
+    if (a.dead) continue;
+    a.life -= dt;
+    if (a.life <= 0) { killAlly(a); continue; }
+    if (a.atkCooldown > 0) a.atkCooldown -= dt;
+    if (a.hitFlash    > 0) a.hitFlash    -= dt;
+    if (a.invincible  > 0) a.invincible  -= dt;
+    if (a.swing       > 0) a.swing       -= dt;
+    if (a.slowTimer   > 0) a.slowTimer   -= dt;
+    if (a.burnTimer > 0) {
+      a.burnTimer -= dt;
+      a.burnAcc = (a.burnAcc || 0) + dt;
+      while (a.burnAcc >= 500 && !a.dead) { a.burnAcc -= 500; dotDamage(a, 4); }
+      if (a.dead) continue;
+    }
+    const spd = a.speed * (a.slowTimer > 0 ? 0.4 : 1);
+    let best = null, bd = Infinity;
+    for (const t of enemyTargets(a.owner)) {
+      const d = distBetween(t, a);
+      if (d < bd) { bd = d; best = t; }
+    }
+    if (best) {
+      const dx = cx(best) - cx(a), dy = cy(best) - cy(a), dist = Math.hypot(dx, dy) || 1;
+      if (Math.abs(dx) > 2) a.face = dx > 0 ? 1 : -1;
+      const reach = a.atkRange + (best.w + best.h) / 4;
+      if (dist > reach) { a.x += (dx / dist) * spd * factor; a.y += (dy / dist) * spd * factor; }
+      if (dist <= reach + 4 && a.atkCooldown <= 0) {
+        const tk = playerKeyOf(best);
+        if (tk && best.parryTimer > 0) {
+          applyDamage(a, Math.round(a.atkDamage * reflectOf(best)) + 10, tk);
+          spawnParrySpark(cx(best), cy(best));
+        } else if (tk) {
+          applyDamage(best, a.atkDamage, a.owner);
+        } else if (best.invincible <= 300) {
+          // A pack mobbing one monster: every blow lands through the brief
+          // invulnerability after a hit (never a boss's longer phase shield),
+          // and none of them lends it any.
+          const inv = best.invincible;
+          best.invincible = 0;
+          applyDamage(best, a.atkDamage, a.owner);
+          if (!best.dead) best.invincible = inv;
+        }
+        a.atkCooldown = ALLY_ATK_MS;
+        a.swing = MONSTER_SWING_MS;
+      }
+    } else {
+      // Nothing to fight: stay close to whoever summoned it.
+      const o = room.players[a.owner];
+      if (o && !o.dead) {
+        const dx = cx(o) - cx(a), dy = cy(o) - cy(a), d = Math.hypot(dx, dy) || 1;
+        if (Math.abs(dx) > 2) a.face = dx > 0 ? 1 : -1;
+        if (d > 60) { a.x += (dx / d) * spd * factor; a.y += (dy / d) * spd * factor; }
+      }
+    }
+    applyPull(a, dt);
+    clampToArena(a);
+  }
+  room.allies = room.allies.filter(a => !a.dead);
+}
+
+// A player's red fire portal: throws a fireball at the nearest foe at each of `shots` (ms).
+function openFirePortal(pKey, x, y, dmg, delay, shots) {
+  room.fires.push({ id: nextId(), kind: 'portal', color: 'red', owner: pKey, x, y, r: 15,
+                    t: delay, life: shots[shots.length - 1] + 450, shots, shot: 0, dmg });
+}
+
+// The safest spot on the field: as far as possible from every foe, and clear
+// of traps, enemy fire and the path of any shot coming in.
+function safestSpot(p, pKey) {
+  const hostile = o => o === 'monster' || (room.gameMode === 'pvp' && o !== pKey);
+  const foes = enemyTargets(pKey);
+  const hazards = [
+    ...room.traps.map(t => ({ x: t.x + t.w / 2, y: t.y + t.h / 2, r: Math.max(t.w / 2, t.radius || 0) + 30 })),
+    ...room.fires.filter(f => hostile(f.owner) && f.kind !== 'inferno')
+      .map(f => ({ x: f.x, y: f.y, r: (f.r || 20) + 45 })),
+  ];
+  const shots = room.projectiles.filter(pr => hostile(pr.owner));
+  let best = null;
+  for (let x = ARENA_X + 26; x <= ARENA_X + ARENA_W - 26; x += 22) {
+    // (Not in the top strip, where the HUD would hide you.)
+    for (let y = ARENA_Y + 60; y <= ARENA_Y + ARENA_H - 26; y += 22) {
+      let score = 700;
+      for (const t of foes) score = Math.min(score, Math.hypot(cx(t) - x, cy(t) - y) - t.w / 2);
+      for (const h of hazards) if (Math.hypot(h.x - x, h.y - y) < h.r) score -= 1000;
+      for (const s of shots) {
+        if (distToSegment(x, y, s.x, s.y, s.x + s.dx * 80, s.y + s.dy * 80) < 34) { score -= 800; break; }
+      }
+      score += Math.random() * 4;   // break ties
+      if (!best || score > best.score) best = { x, y, score };
+    }
+  }
+  return best;
 }
 
 // ─── Wind Wand & Revolver ─────────────────────────────────────────────────────
@@ -2698,14 +2859,19 @@ function updatePortal(f, dt) {
   // Fire portals: fireballs at the nearest player.
   if (f.shots && f.shot < f.shots.length && f.t >= f.shots[f.shot]) {
     f.shot++;
-    const ps = [room.players.p1, room.players.p2].filter(p => p && !p.dead);
+    // The mage's portals shoot at players; a Portal Wand's at its owner's foes in reach.
+    const mine = f.owner !== 'monster';
+    const ps = mine ? enemyTargets(f.owner).filter(t => Math.hypot(cx(t) - f.x, cy(t) - f.y) <= PWAND_FIREBALL_RANGE)
+                    : [room.players.p1, room.players.p2].filter(p => p && !p.dead);
     if (ps.length) {
       const t = ps.reduce((a, b) => Math.hypot(cx(a) - f.x, cy(a) - f.y) < Math.hypot(cx(b) - f.x, cy(b) - f.y) ? a : b);
       const ang = Math.atan2(cy(t) - f.y, cx(t) - f.x) + (Math.random() - 0.5) * 0.12;
+      const sp = mine ? PWAND_FIREBALL_SPEED : MAGE_FIREBALL_SPEED;
       room.projectiles.push({
-        id: nextId(), x: f.x, y: f.y, dx: Math.cos(ang) * MAGE_FIREBALL_SPEED, dy: Math.sin(ang) * MAGE_FIREBALL_SPEED,
-        damage: MAGE_FIREBALL_DMG, owner: 'monster', traveled: 0, maxRange: 560, weaponId: 'hellfire', burn: 1500,
-        isAoe: false, aoeRadius: 0, pierce: false, grapple: false, boomerang: false, teleport: false,
+        id: nextId(), x: f.x, y: f.y, dx: Math.cos(ang) * sp, dy: Math.sin(ang) * sp,
+        damage: f.dmg || MAGE_FIREBALL_DMG, owner: f.owner, traveled: 0, maxRange: mine ? PWAND_FIREBALL_RANGE + 40 : 560,
+        weaponId: mine ? 'portalwand' : 'hellfire', burn: 1500, special: mine,
+        isAoe: mine, aoeRadius: mine ? 22 : 0, pierce: false, grapple: false, boomerang: false, teleport: false,
         returning: false, life: 0, hitTargets: null,
       });
     }
@@ -2721,13 +2887,16 @@ function updatePortal(f, dt) {
       clampToArena(g);
       const mage = room.monsters.find(o => o.mage);
       if (mage) mage.pendingGiants--;
+    } else if (f.spawn === 'ally') {
+      spawnAlly(f.owner, f.x, f.y, f.dmg);
     } else if (minionsAlive() < MAGE_MAX_MINIONS) {
       spawnMonster(MAGE_MINIONS[Math.floor(Math.random() * MAGE_MINIONS.length)]);
       const n = room.monsters[room.monsters.length - 1];
       n.x = f.x - n.w / 2; n.y = f.y - n.h / 2;
       clampToArena(n);
     }
-    room.particles.push({ type: 'teleport', x: f.x, y: f.y, timer: 340, max: 340, color: f.color === 'giant' ? '#c8e07a' : '#7aff9a' });
+    room.particles.push({ type: 'teleport', x: f.x, y: f.y, timer: 340, max: 340,
+                          color: f.color === 'giant' ? '#c8e07a' : f.spawn === 'ally' ? WEAPON_COLORS.portalwand : '#7aff9a' });
   }
   // The teleport portal he left by: anyone stepping in while it's open comes
   // out of its partner.
@@ -2789,10 +2958,35 @@ function mageDefeated(m) {
     creditXp(key, MAGE_REWARD_XP);
     room.particles.push({ type: 'coin', x: cx(p), y: p.y - 10, text: '+' + MAGE_REWARD_COINS.toLocaleString() + ' COINS', timer: 3000, max: 3000 });
     room.particles.push({ type: 'xp', x: cx(p), y: p.y - 22, text: '+' + MAGE_REWARD_XP.toLocaleString() + ' XP', timer: 3000 });
+    grantBossWeapon(key, 'portalwand');
   }
   room.victory = true;
   room.gameState = 'ROUND_OVER';
   room.roundOverTimer = 8000;
+}
+
+// A boss's reward weapon: saved to the account, handed over in the match, and
+// shown on the unlock screen once the fight ends.
+function grantBossWeapon(key, wid) {
+  const p = room.players[key];
+  const cur = p?.unlockedWeapons || room.playerUnlocks[key] || [];
+  if (cur.includes(wid)) return false;
+  const weapons = sortWeaponIds([...cur, wid]);
+  const pw = room.passwords[key];
+  if (pw && !isAdminPw(pw)) {
+    const d = progress();
+    d.weapons[pw] = sortWeaponIds([...(d.weapons[pw] || []), ...weapons]);
+    markDirty();
+  }
+  room.playerUnlocks[key] = weapons;
+  if (p) {
+    const held = p.unlockedWeapons[p.weaponIdx];
+    p.unlockedWeapons = weapons;
+    p.weaponIdx = Math.max(0, weapons.indexOf(held));
+    refreshWeapon(p);
+  }
+  room.unlockQueues[key].push(wid);
+  return true;
 }
 
 // Where the tree comes down: just ahead of the Giant, on the side it faces.
@@ -2835,7 +3029,7 @@ function updateSoundwave(f, factor) {
   f.r += SOUNDWAVE_SPEED * factor;
   if (f.r > SOUNDWAVE_MAX_R) return false;
   for (const p of enemyTargets('monster')) {
-    const id = playerKeyOf(p);
+    const id = playerKeyOf(p) || p.id;
     if (f.hit.has(id)) continue;
     if (Math.abs(Math.hypot(cx(p) - f.x, cy(p) - f.y) - f.r) > SOUNDWAVE_BAND + p.w / 2) continue;
     f.hit.add(id);
@@ -3110,6 +3304,22 @@ function doSpecial(p, pKey) {
     castFireHand(p, pKey, sp, dmgMult);
     return;
   }
+  if (sp.kind === 'blink') {
+    // Through a portal to the safest spot on the field; a fire portal opens
+    // where you stood and keeps shooting at whoever was chasing you.
+    const to = safestSpot(p, pKey);
+    room.fires.push({ id: nextId(), kind: 'portal', color: 'purple', owner: pKey, x: px, y: py + p.h * 0.25, r: 18, t: 0, life: 650 });
+    p.x = to.x - p.w / 2; p.y = to.y - p.h / 2;
+    clampToArena(p, 2);
+    p.pull = null;
+    p.invincible = Math.max(p.invincible || 0, 400);
+    room.fires.push({ id: nextId(), kind: 'portal', color: 'purple', owner: pKey, x: cx(p), y: cy(p) + p.h * 0.25, r: 18, t: 0, life: 650 });
+    room.particles.push({ type: 'teleport', x: px, y: py, timer: 380, max: 380, color: '#b07aff' });
+    room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 380, max: 380, color: '#e0c8ff' });
+    const n = 3 + (w.multi || 0);
+    openFirePortal(pKey, px, py, spDmg, -350, Array.from({ length: n }, (_, i) => 400 + i * 420));
+    return;
+  }
   if (sp.kind === 'vortex') {
     if (!castVortex(p, pKey, sp, dmgMult)) { p.specialCooldown = 0; p.swingTimer = 0; }
     return;
@@ -3285,6 +3495,9 @@ function buildStateMsg(playerNum) {
                   face: m.face, swing: m.swing > 0 ? Math.round(m.swing) : 0,
                   ...(m.boss ? { boss: true, wind: m.windup > 0 ? m.wind : null, windup: Math.max(0, Math.round(m.windup)), stun: Math.max(0, Math.round(m.stun)) } : {}),
                   ...(m.mage ? { mage: true, hidden: !!m.hidden, phase: m.phase, cast: m.tpT > 0 ? 'teleport' : m.castT > 0 ? m.cast : null } : {}) })),
+    allies:      room.allies.map(a => ({ id: a.id, type: a.type, owner: a.owner, x: r1(a.x), y: r1(a.y), w: a.w, h: a.h,
+                  hp: a.hp, maxHp: a.maxHp, hitFlash: a.hitFlash, burning: (a.burnTimer || 0) > 0,
+                  face: a.face, swing: a.swing > 0 ? Math.round(a.swing) : 0, fade: a.life < 1500 })),
     projectiles: room.projectiles.map(pr => ({ id: pr.id, x: r1(pr.x), y: r1(pr.y), dx: r1(pr.dx), dy: r1(pr.dy), weaponId: pr.weaponId,
                   upg: pr.upg || null, isAoe: pr.isAoe, special: !!pr.special, grapple: !!pr.grapple,
                   hook: !!pr.hook, boomerang: !!pr.boomerang })),
@@ -3334,6 +3547,7 @@ function weaponCatalog() {
     id: w.id, name: w.name, type: w.type, unlockXp: w.unlockXp,
     damage: w.damage, range: w.range, atkSpd: w.atkSpd, spin: !!w.swing360,
     shopOnly: !!w.shopOnly, noRequirement: !!w.noRequirement, needLegendary: !!w.needLegendary, price: w.price || 0,
+    bossReward: !!w.bossReward,
     special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd } : null,
     super: w.super ? { kind: w.super.kind, dmg: w.super.dmg, cd: w.super.cd } : null,
     upgrades: upgradesFor(w.id),
@@ -3563,6 +3777,7 @@ app.post('/api/buy_weapon', (req, res) => {
   const weaponId = sanitizeText(req.body?.weaponId, 24);
   const def = WEAPON_BY_ID[weaponId];
   if (!def || !def.shopOnly) return res.status(400).json({ error: 'That weapon is not for sale.' });
+  if (def.bossReward) return res.status(400).json({ error: 'Only won by defeating the Portal Mage.' });
 
   const admin = isAdminPw(pw);
   const prof = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });

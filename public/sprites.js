@@ -729,6 +729,7 @@ function monsterSprite(type, w, h, state) {
     const b = monsterBuf(type, w, h);
     if (state === 'flash') tint(b, '#ffffff', 0.8);
     else if (state === 'slow') tint(b, '#4fd8ff', 0.42);
+    else if (state.startsWith('ally:')) tint(b, state.slice(5), 0.5);   // a Portal Wand ally, in its owner's colour
     return b;
   });
 }
