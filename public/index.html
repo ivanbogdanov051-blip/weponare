@@ -52,7 +52,7 @@
   <div id="abilitiesScreen" class="overlay hidden">
     <div class="pixel-box shop-box">
       <div class="title-text shop-title abil-title">ABILITIES</div>
-      <div class="subtitle">BUY ONCE, KEEP FOREVER &middot; USE WITH Q AND E</div>
+      <div class="subtitle">BUY ONCE, KEEP FOREVER &middot; USE WITH Q AND E &middot; MORE SLOTS FOR A FORTUNE</div>
       <div id="abilCoins" class="shop-coins"></div>
       <div id="abilSlots" class="abil-slots"></div>
       <div id="abilMsg" class="shop-msg"></div>
@@ -68,7 +68,7 @@
       <div class="subtitle">EVERYTHING YOU NEED TO KNOW</div>
       <div class="howto-list">
         <div class="howto-sec"><h3>CONTROLS</h3>
-          <p><b>Keyboard:</b> ARROWS or WASD move &middot; SPACE attack &middot; SHIFT special &middot; R super &middot; P (or CTRL) parry &middot; ENTER next weapon &middot; Q / E abilities &middot; 1-4 use an item &middot; M sound.</p>
+          <p><b>Keyboard:</b> ARROWS or WASD move &middot; SPACE attack &middot; SHIFT special &middot; R super &middot; P (or CTRL) parry &middot; ENTER next weapon &middot; Q / E abilities (F, G, V, B for extra slots) &middot; 1-4 use an item &middot; M sound.</p>
           <p><b>Touch:</b> the pad on the left moves you; the buttons on the right attack, use your special, super, parry, swap weapon and fire your abilities. Tap an item in the bar to use it.</p>
           <p>Click or tap a weapon in the rack at the top to switch straight to it. <b>Hold</b> attack, special, super or an ability and it fires again by itself whenever it is ready.</p></div>
         <div class="howto-sec"><h3>MODES</h3>
@@ -80,13 +80,13 @@
           <p><b>Sandbox</b> &ndash; solo practice with every weapon. Spawn any monster, boss, item or trap and switch on cheats from the TOOLS button. Nothing you do there is saved.</p></div>
         <div class="howto-sec"><h3>WEAPONS &amp; XP</h3>
           <p>Kills give XP, and XP unlocks new weapons for good. Each weapon has its own attack and a <b>special</b> with a cooldown (the purple bar). Melee weapons hit what is in front of you; ranged ones auto-aim at the nearest enemy.</p>
-          <p><b>Legendary</b> weapons are bought with coins in UPGRADE WEAPONS and are the only ones with a <b>SUPER</b> (R). The Fire Glove needs every other weapon first; the Vortex Shield needs nothing; the Wind Wand and Explosive Revolver need another legendary; the Portal Wand can only be won from the Portal Mage.</p></div>
+          <p><b>Legendary</b> weapons are bought with coins in UPGRADE WEAPONS and are the only ones with a <b>SUPER</b> (R). The Fire Glove needs every other weapon first; the Vortex Shield needs nothing; the Wind Wand and Explosive Revolver need another legendary; the Portal Wand can only be won from the Portal Mage; and the rarest of all, the <b>Dagger of Ghosts</b>, can only be claimed once you own every other weapon in the game.</p></div>
         <div class="howto-sec"><h3>PARRY</h3>
           <p>Parry (P) opens a short window: a melee blow aimed at you is sent back at the attacker, a shot bounces back the way it came, and a fire hand or inferno fizzles out. Parrying a Giant's swing or shockwave stuns him. It then needs 8 seconds to recharge (the blue bar).</p></div>
         <div class="howto-sec"><h3>COINS &amp; UPGRADES</h3>
           <p>Monsters drop coins &ndash; walk over them to collect. Spend coins in <b>UPGRADE WEAPONS</b> (damage, speed, range, crit, cooldown, multishot and more for each weapon, plus your health, move speed, defense and parry), on <b>ABILITIES</b>, and on skins in <b>CUSTOMIZE</b>.</p></div>
         <div class="howto-sec"><h3>ABILITIES</h3>
-          <p>Bought once and kept forever. Put two of them on Q and E in the ABILITIES menu: dash, heal, frost nova, berserk, meteor shower, aegis, time warp, thunderstorm, life drain and black hole. Each has its own cooldown.</p></div>
+          <p>Bought once and kept forever. Put them in your slots in the ABILITIES menu: you start with two (Q and E) and can buy up to four more (F, G, V, B) for huge sums. There are 30 to collect: movement (dash, shadow step), healing and protection (second wind, rejuvenate, aegis, barrier, vanish, phoenix), damage (meteor shower, thunderstorm, chain lightning, fire nova, airstrike, ice lance, execute and more), control (frost nova, time warp, black hole, gravity grip, force push, earthquake) and summons (call to arms, stone golem, fire sentry). Each has its own cooldown.</p></div>
         <div class="howto-sec"><h3>ITEMS</h3>
           <p>Glowing gems appear on the floor. Walk over one to pick it up (you can carry 4), then use it with 1-4 or by tapping it: speed, strength, shield, haste, heal, coin magnet, regeneration, vampire, bomb and frost nova.</p></div>
         <div class="howto-sec"><h3>TRAPS</h3>
@@ -197,6 +197,10 @@
       <div class="sb-row">
         <span class="sb-opt">Q <select id="sbAb0"></select></span>
         <span class="sb-opt">E <select id="sbAb1"></select></span>
+        <span class="sb-opt">F <select id="sbAb2"></select></span>
+        <span class="sb-opt">G <select id="sbAb3"></select></span>
+        <span class="sb-opt">V <select id="sbAb4"></select></span>
+        <span class="sb-opt">B <select id="sbAb5"></select></span>
       </div>
       <div class="sb-note">Every weapon is yours here &ndash; switch with the rack at the top. No XP, coins or scores are saved.</div>
     </div>
@@ -220,6 +224,10 @@
       <div class="ability-btns">
         <button id="btn-ab1" class="action-btn ability-btn hidden-btn"></button>
         <button id="btn-ab2" class="action-btn ability-btn hidden-btn"></button>
+        <button id="btn-ab3" class="action-btn ability-btn hidden-btn"></button>
+        <button id="btn-ab4" class="action-btn ability-btn hidden-btn"></button>
+        <button id="btn-ab5" class="action-btn ability-btn hidden-btn"></button>
+        <button id="btn-ab6" class="action-btn ability-btn hidden-btn"></button>
       </div>
       <button id="btn-super" class="action-btn super-btn hidden-btn">SUPER</button>
       <button id="btn-swap" class="action-btn">SWAP</button>

@@ -455,6 +455,22 @@ const WEAPON_ART = {
     k.r(21.5, -2.9, 1.6, 2.6, wc);                     // hot muzzle
   }},
 
+  ghostdagger: { draw(k, wc) {
+    // A slim, wavy spectral blade on a dark, rune-wrapped hilt: wisps trail off
+    // the edge, and a ghostly glow hangs around the whole thing.
+    k.r(-2.4, -1.4, 1.6, 2.8, '#c8a040');                 // pommel
+    k.r(-1, -1.5, 5, 3, '#2a1a3a');                        // wrapped grip
+    k.r(0, -1.5, 0.8, 3, '#5a3a7a'); k.r(2, -1.5, 0.8, 3, '#5a3a7a');
+    k.poly([[4, -4], [5.6, -4], [5.6, 4], [4, 4]], '#c8a040');   // guard
+    k.r(4.4, -0.6, 0.8, 1.2, '#a8f0ff');                  // gem in the guard
+    k.glow(12, 0, 9, wc, 0.4);
+    k.poly([[5.6, -2], [10, -2.6], [14, -1.6], [18, -1.2], [21, 0], [18, 1.2], [14, 1.6], [10, 2.6], [5.6, 2]], '#bfeeff');   // blade
+    k.poly([[5.6, -2], [10, -2.6], [14, -1.6], [18, -1.2], [21, 0], [14, -0.3], [5.6, -0.3]], '#ffffff');
+    k.line(6.5, 0.6, 18, 0.4, 0.6, '#7ac8e0');              // fuller
+    k.r(9, -4.4, 1, 1, '#e8fcff'); k.r(13.5, 3.4, 1, 1, wc); k.r(17, -3.6, 0.8, 0.8, '#ffffff');   // wisps
+    k.line(20, -2, 23.5, -4, 0.7, wc); k.line(20, 2, 23.5, 4, 0.7, '#e8fcff');
+  }},
+
   portalwand: { draw(k, wc) {
     // The Portal Mage's wand: a dark rune-cut shaft bound in gold, twin gold
     // prongs cradling a swirling portal, and a flicker of his fire inside it.

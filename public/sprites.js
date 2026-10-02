@@ -812,6 +812,11 @@ function itemSymbol(b, type, c) {
     rect(b, cx + 1, cy - 4, 2, 2, ink);
     line(b, cx + 3, cy - 5, cx + 4, cy - 6, '#ffe070');
     setPx(b, cx - 2, cy - 1, hi); setPx(b, cx - 3, cy, hi);
+  } else if (type === 'medkit') {
+    // A white cross (the Dagger of Ghosts' knife storm leaves these).
+    rect(b, cx - 1, cy - 5, 3, 11, '#ffffff');
+    rect(b, cx - 5, cy - 1, 11, 3, '#ffffff');
+    rect(b, cx, cy - 4, 1, 9, '#ffd8dc');
   } else if (type === 'frost') {
     // Snowflake.
     rect(b, cx, cy - 5, 1, 11, ink);

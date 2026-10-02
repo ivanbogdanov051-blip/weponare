@@ -32,6 +32,7 @@ let WEAPON_COLOR = {
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
   fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff',
+  ghostdagger:'#a8f0ff',
 };
 const WEAPON_DESC = {
   sword:'Balanced blade', dagger:'Fast, low damage', axe:'Slow, heavy hit',
@@ -50,6 +51,7 @@ const WEAPON_DESC = {
   windwand:'Gusts that shove foes, tornadoes and a SUPER hurricane',
   revolver:'Every bullet explodes',
   portalwand:"The Portal Mage's own wand: fireballs, portal jumps and a SUPER army of your own monsters",
+  ghostdagger:'The rarest weapon of all: turn invisible, throw a deadly dagger, and make it rain knives',
 };
 
 // Filled from the server catalog: { id: {type, atkSpd, ...} }
@@ -537,7 +539,7 @@ const ATTACK_ANIM = {
   bow: 'draw', crossbow: 'recoil', grapple: 'recoil', cannon: 'heavy', blunderbuss: 'heavy',
   staff: 'cast', frostrod: 'cast', wand: 'flick', stormtome: 'tome',
   chakram: 'throw', boomerang: 'throw', shuriken: 'throw',
-  fireglove: 'punch', vortex: 'shieldup', windwand: 'flick', revolver: 'recoil', portalwand: 'cast',
+  fireglove: 'punch', vortex: 'shieldup', windwand: 'flick', revolver: 'recoil', portalwand: 'cast', ghostdagger: 'stab',
 };
 const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
                   heavy: 300, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
@@ -1050,18 +1052,86 @@ function drawMeteor(f, now) {
   ctx.restore();
 }
 
+// KNIFE STORM: a pale warning ring where each knife will land, and the knife
+// itself dropping point-first out of the sky.
+function drawKnife(f, now) {
+  const k = Math.min(1, f.k || 0);
+  ctx.save();
+  ctx.globalAlpha = 0.15 + 0.25 * k;
+  ctx.fillStyle = '#a8f0ff';
+  ctx.beginPath(); ctx.arc(f.x, f.y, f.r * k, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.6 + 0.35 * Math.abs(Math.sin(now * 16));
+  ctx.strokeStyle = '#e8fcff'; ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  const my = f.y - (1 - k) * 280;
+  ctx.globalAlpha = 0.35; ctx.fillStyle = '#a8f0ff';
+  ctx.fillRect(f.x - 1, my - 26, 2, 16);                                    // ghostly trail
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#3a2a4a'; ctx.fillRect(f.x - 1.5, my - 12, 3, 6);       // grip
+  ctx.fillStyle = '#c8a040'; ctx.fillRect(f.x - 4, my - 6, 8, 2);          // guard
+  ctx.fillStyle = '#dff6ff';
+  ctx.beginPath(); ctx.moveTo(f.x - 2.5, my - 4); ctx.lineTo(f.x + 2.5, my - 4); ctx.lineTo(f.x, my + 8); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(f.x - 0.5, my - 3, 1, 8);
+  ctx.restore();
+}
+
+// BARRIER: a shimmering dome riding on its caster; it flickers as it runs out.
+function drawBarrier(f, now) {
+  const k = Math.max(0, f.k || 0);
+  const flick = k > 0.8 ? 0.5 + 0.5 * Math.abs(Math.sin(now * 20)) : 1;
+  ctx.save();
+  ctx.globalAlpha = 0.14 * flick;
+  ctx.fillStyle = '#7ad8ff';
+  ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.8 * flick;
+  ctx.strokeStyle = '#bfefff'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.stroke();
+  // Hexagon facets turning slowly round the rim.
+  ctx.globalAlpha = 0.45 * flick; ctx.lineWidth = 1; ctx.strokeStyle = '#ffffff';
+  for (let i = 0; i < 6; i++) {
+    const a = now * 0.8 + i * Math.PI / 3;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r - 3, a, a + 0.5); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// TOXIC CLOUD: overlapping green puffs that drift and swell, fading at the end.
+function drawCloud(f, now) {
+  const k = Math.max(0, f.k || 0);
+  const fade = Math.min(1, k / 0.1) * Math.min(1, (1 - k) / 0.15);
+  ctx.save();
+  for (let i = 0; i < 9; i++) {
+    const a = i * 0.7 + now * 0.4, d = f.r * (0.25 + (i % 3) * 0.22);
+    const rr = f.r * (0.32 + 0.06 * Math.sin(now * 2 + i));
+    ctx.globalAlpha = 0.16 * fade;
+    ctx.fillStyle = i % 2 ? '#8ad048' : '#5a9a2a';
+    ctx.beginPath(); ctx.arc(f.x + Math.cos(a) * d, f.y + Math.sin(a) * d * 0.7, rr, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 0.5 * fade; ctx.fillStyle = '#d8ff9a';
+  for (let i = 0; i < 6; i++) {
+    const a = now * 1.3 + i * 1.05, d = f.r * 0.6 * ((i * 37 % 10) / 10);
+    ctx.fillRect(f.x + Math.cos(a) * d, f.y + Math.sin(a) * d - ((now * 12 + i * 5) % 14), 1.5, 1.5);
+  }
+  ctx.restore();
+}
+
 function drawFireRings(fires) {
   if (!fires.length) return;
   const now = performance.now() / 1000;
   for (const f of fires) {
     if (f.kind === 'vortexfield') { drawVortexField(f, now); continue; }
     if (f.kind === 'meteor') { if ((f.k || 0) >= 0) drawMeteor(f, now); continue; }
+    if (f.kind === 'knife') { if ((f.k || 0) >= 0) drawKnife(f, now); continue; }
     if (f.kind === 'tornado') { drawTornado(f, now); continue; }
     if (f.kind === 'hurricane') { drawHurricane(f, now); continue; }
     if (f.kind === 'portal') { if ((f.k || 0) >= 0) drawPortal(f, now); continue; }
     if (f.kind === 'runecast') { if ((f.k || 0) >= 0) drawRuneCast(f, now); continue; }
     if (f.kind === 'blackhole') { drawBlackhole(f, now); continue; }
     if (f.kind === 'drain') { drawDrain(f, now); continue; }
+    if (f.kind === 'barrier') { drawBarrier(f, now); continue; }
+    if (f.kind === 'cloud') { drawCloud(f, now); continue; }
     if (f.kind === 'soundwave') {
       // Three rippling rings, fading as the wave spreads.
       const fade = Math.max(0, 1 - f.r / 420);
@@ -1248,10 +1318,13 @@ function fireHandShape(s, color, now) {
 
 // The SUPER touch button appears only while holding a weapon that has one,
 // and dims while it recharges.
-// Q / E touch buttons: shown only for equipped abilities, dimmed while cooling.
-const abBtnState = [{ id: undefined, cooling: null }, { id: undefined, cooling: null }];
+// Ability touch buttons (one per slot): shown only for equipped abilities,
+// dimmed while cooling.
+const AB_KEYS = ['Q', 'E', 'F', 'G', 'V', 'B'];
+const AB_CODES = ['KeyQ', 'KeyE', 'KeyF', 'KeyG', 'KeyV', 'KeyB'];
+const abBtnState = AB_KEYS.map(() => ({ id: undefined, cooling: null }));
 function syncAbilityButtons(me) {
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < AB_KEYS.length; i++) {
     const el = document.getElementById('btn-ab' + (i + 1));
     if (!el) continue;
     const a = me && me.abil ? me.abil[i] : null;
@@ -1329,11 +1402,12 @@ canvas.addEventListener('pointermove', (e) => {
   if (!r.width || !r.height) return;
   mouseAim = { x: (e.clientX - r.left) * CANVAS_W / r.width, y: (e.clientY - r.top) * CANVAS_H / r.height };
   // Holding a dash key: keep the server's aim fresh for the next dash.
-  if (keys['KeyQ'] || keys['KeyE']) sendInput();
+  if (AB_CODES.some(c => keys[c])) sendInput();
 });
 canvas.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') mouseAim = null; });
 
-const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false, ab1: false, ab2: false };
+const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false,
+                    ab1: false, ab2: false, ab3: false, ab4: false, ab5: false, ab6: false };
 
 window.addEventListener('keydown', (e) => {
   if (!keys[e.code]) { keys[e.code] = true; sendInput(); }
@@ -1366,6 +1440,10 @@ function currentInputs() {
     super:   !!keys['KeyR'] || touchKeys.super,
     ab1:     !!keys['KeyQ'] || touchKeys.ab1,
     ab2:     !!keys['KeyE'] || touchKeys.ab2,
+    ab3:     !!keys['KeyF'] || touchKeys.ab3,
+    ab4:     !!keys['KeyG'] || touchKeys.ab4,
+    ab5:     !!keys['KeyV'] || touchKeys.ab5,
+    ab6:     !!keys['KeyB'] || touchKeys.ab6,
     // Mouse position in the world, for DASH (desktop only).
     aimX:    mouseAim ? Math.round(mouseAim.x) : null,
     aimY:    mouseAim ? Math.round(mouseAim.y) : null,
@@ -1437,8 +1515,9 @@ function buildSandboxPanel() {
   document.getElementById('sbTraps').innerHTML = SANDBOX_DEFS.traps.map(t =>
     btn(`data-act="trap" data-what="${t.id}"`, t.name, t.color)).join('');
   const opts = '<option value="">- NONE -</option>' + ABILITY_DEFS.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
-  for (const i of [0, 1]) {
+  for (let i = 0; i < AB_KEYS.length; i++) {
     const sel = document.getElementById('sbAb' + i);
+    if (!sel) continue;
     sel.innerHTML = opts;
     sel.addEventListener('change', () => { sendSandbox('ability', { slot: i, what: sel.value || null }); sel.blur(); });
   }
@@ -1475,7 +1554,7 @@ function syncSandbox(state) {
   if (!on || !state.sandbox) return;
   for (const b of document.querySelectorAll('#sandboxPanel .sb-toggle')) b.classList.toggle('on', !!state.sandbox[b.dataset.toggle]);
   const me = state.players?.p1;
-  for (const i of [0, 1]) {
+  for (let i = 0; i < AB_KEYS.length; i++) {
     const sel = document.getElementById('sbAb' + i);
     const want = (me && me.abil && me.abil[i] && me.abil[i].id) || '';
     if (sel && document.activeElement !== sel && sel.value !== want) sel.value = want;
@@ -1530,7 +1609,7 @@ function setupTouchControls() {
     ['btn-up','up'], ['btn-down','down'], ['btn-left','left'],
     ['btn-right','right'], ['btn-attack','attack'], ['btn-swap','swap'],
     ['btn-special','special'], ['btn-parry','parry'], ['btn-super','super'],
-    ['btn-ab1','ab1'], ['btn-ab2','ab2'],
+    ['btn-ab1','ab1'], ['btn-ab2','ab2'], ['btn-ab3','ab3'], ['btn-ab4','ab4'], ['btn-ab5','ab5'], ['btn-ab6','ab6'],
   ];
   for (const [id, key] of btnMap) {
     const el = document.getElementById(id);
@@ -1837,6 +1916,11 @@ function renderShop() {
 }
 
 const LEGEND_MOVES = {
+  ghostdagger: '<b>ATK</b> melt into the shadows: invisible to every enemy (you still see yourself) and 75% faster;'
+             + ' your next attack is a double-damage ghost strike that ends it, and so does a special, a super or a'
+             + ' weapon swap · <b>SPECIAL</b> throw the dagger: at least a quarter of the target\'s health, half of it'
+             + ' in the back (long cooldown) · <b>SUPER</b> throw it skyward and it rains knives that hit for massive'
+             + ' damage where they\'re marked; a quarter of them become medkits that heal on touch.',
   portalwand: '<b>ATK</b> small fire portals open beside you and throw exploding fireballs · <b>SPECIAL</b> jump through a portal to the safest spot on the'
             + ' field (furthest from foes, clear of shots and traps), leaving a fire portal behind that keeps shooting ·'
             + ' <b>SUPER</b> portal legion: portals in your colour pour out monsters that fight on your side for 14s.'
@@ -1877,6 +1961,21 @@ function legendaryCards(weapons, coins) {
         <div class="legend-buy">
           <button class="buy-weapon poor" disabled>BOSS REWARD</button>
           <span class="legend-need">Defeat the Portal Mage to earn it</span>
+        </div>
+      </div>`;
+    }
+    if (w.needAll) {
+      const left = all.filter(o => o.id !== w.id && !weapons.includes(o.id)).length;
+      return `<div class="shop-row legendary ghost-row">
+        <div class="shop-head">
+          <canvas class="shop-ic" data-weapon="${w.id}" width="56" height="32"></canvas>
+          <span class="shop-name" style="color:${col}">${w.name}</span>
+          <span class="legend-tag ghost-tag">RAREST</span>
+        </div>
+        <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>
+        <div class="legend-buy">
+          <button class="buy-weapon${left ? ' poor' : ''}" onclick="buyWeapon('${w.id}')" ${left ? 'disabled' : ''}>CLAIM</button>
+          <span class="legend-need">${left ? `Own every other weapon in the game first: ${left} to go` : 'Every weapon is yours - claim it!'}</span>
         </div>
       </div>`;
     }
@@ -2090,11 +2189,17 @@ function closeAbilities() { showScreen('startScreen'); refreshSavedBanner(); }
 
 function renderAbilities() {
   if (!abilData) return;
-  const { coins, abilities = [], abilitySlots = [null, null] } = abilData;
+  const { coins, abilities = [], abilitySlots = [null, null], nextSlotPrice = 0 } = abilData;
+  const slotIdx = abilitySlots.map((_, i) => i);
   document.getElementById('abilCoins').innerHTML = `<span class="coin-ic">◆</span> ${coins.toLocaleString()} COINS`;
   const slotName = id => { const d = abilityDef(id); return d ? d.name : 'EMPTY'; };
-  document.getElementById('abilSlots').innerHTML = [0, 1].map(i =>
-    `<div class="abil-slot${abilitySlots[i] ? '' : ' empty'}"><span class="abil-key">${i ? 'E' : 'Q'}</span>${slotName(abilitySlots[i])}</div>`).join('');
+  // Your slots, then (while there are more to buy) the next one up for sale.
+  document.getElementById('abilSlots').innerHTML = slotIdx.map(i =>
+    `<div class="abil-slot${abilitySlots[i] ? '' : ' empty'}"><span class="abil-key">${AB_KEYS[i]}</span>${slotName(abilitySlots[i])}</div>`).join('')
+    + (nextSlotPrice
+      ? `<button class="abil-slot abil-buyslot${coins >= nextSlotPrice ? '' : ' poor'}" onclick="buyAbilitySlot()">`
+        + `<span class="abil-key">+${AB_KEYS[abilitySlots.length]}</span>NEW SLOT ◆${nextSlotPrice.toLocaleString()}</button>`
+      : '');
 
   document.getElementById('abilList').innerHTML = ABILITY_DEFS.map(a => {
     const owned = abilities.includes(a.id);
@@ -2106,9 +2211,9 @@ function renderAbilities() {
       actions = `<button class="buy-weapon${afford ? '' : ' poor'}" onclick="buyAbility('${a.id}')">BUY ◆${a.price.toLocaleString()}</button>`
         + (afford ? '' : `<span class="legend-need">Need ${(a.price - coins).toLocaleString()} more coins</span>`);
     } else {
-      actions = [0, 1].map(i => slot === i
-        ? `<button class="abil-equip on" onclick="equipAbility('', ${i})">ON ${i ? 'E' : 'Q'} ✓</button>`
-        : `<button class="abil-equip" onclick="equipAbility('${a.id}', ${i})">PUT ON ${i ? 'E' : 'Q'}</button>`).join('');
+      actions = slotIdx.map(i => slot === i
+        ? `<button class="abil-equip on" onclick="equipAbility('', ${i})">ON ${AB_KEYS[i]} ✓</button>`
+        : `<button class="abil-equip" onclick="equipAbility('${a.id}', ${i})">${slotIdx.length > 2 ? '' : 'PUT ON '}${AB_KEYS[i]}</button>`).join('');
     }
     return `<div class="shop-row abil-row${owned ? ' owned' : ''}">
       <div class="shop-head">
@@ -2132,7 +2237,27 @@ async function buyAbility(id) {
     abilData = { ...abilData, ...(await abilPost('/api/buy_ability', { abilityId: id })) };
     if (window.GameAudio) { GameAudio.init(); GameAudio.sfx.unlock(); }
     const slot = abilData.abilitySlots.indexOf(id);
-    setAbilMsg(`${def ? def.name : id} is yours forever!` + (slot >= 0 ? ` Press ${slot ? 'E' : 'Q'} in a match to use it.` : ' Put it on Q or E to use it.'));
+    setAbilMsg(`${def ? def.name : id} is yours forever!` + (slot >= 0 ? ` Press ${AB_KEYS[slot]} in a match to use it.` : ' Put it in a slot to use it.'));
+    renderAbilities();
+  } catch (e) {
+    setAbilMsg(e.message === 'Failed to fetch' ? 'Could not reach the server.' : e.message, true);
+  } finally {
+    abilBusy = false;
+  }
+}
+
+async function buyAbilitySlot() {
+  if (abilBusy || !abilData || !abilData.nextSlotPrice) return;
+  if (abilData.coins < abilData.nextSlotPrice) {
+    setAbilMsg(`Not enough coins — the next slot costs ${abilData.nextSlotPrice.toLocaleString()}.`, true);
+    return;
+  }
+  abilBusy = true;
+  try {
+    const r = await abilPost('/api/buy_slot', {});
+    abilData = { ...abilData, ...r };
+    if (window.GameAudio) { GameAudio.init(); GameAudio.sfx.unlock(); }
+    setAbilMsg(`New ability slot! Use it with ${r.newKey} (or its button on a touch screen).`);
     renderAbilities();
   } catch (e) {
     setAbilMsg(e.message === 'Failed to fetch' ? 'Could not reach the server.' : e.message, true);
@@ -2230,8 +2355,143 @@ function drawAbilityIcon(g, id, w, h) {
     g.fillStyle = '#05020c'; g.beginPath(); g.arc(x, y, 6, 0, Math.PI * 2); g.fill();
     g.strokeStyle = col; g.lineWidth = 1.2; g.beginPath(); g.arc(x, y, 6, 0, Math.PI * 2); g.stroke();
     g.fillStyle = '#ffffff'; g.fillRect(x + 11, y - 9, 2, 2); g.fillRect(x - 13, y + 8, 2, 2);
+  } else if (ABILITY_ICONS[id]) {
+    ABILITY_ICONS[id](g, x, y, col);
   }
 }
+
+// Icons for the second shelf of abilities (each drawn around the centre x, y
+// of a ~32px canvas, in the ability's colour).
+const ABILITY_ICONS = {
+  shadowstep(g, x, y, col) {
+    g.fillStyle = '#2a2050'; g.beginPath(); g.arc(x - 6, y + 2, 7, 0, Math.PI * 2); g.fill();
+    g.fillStyle = col; g.beginPath(); g.arc(x + 5, y - 2, 7, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#ffffff'; g.fillRect(x + 3, y - 4, 2, 2); g.fillRect(x + 7, y - 4, 2, 2);
+    g.strokeStyle = '#e0d8ff'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x - 13, y + 11); g.lineTo(x + 13, y - 12); g.stroke();
+  },
+  quake(g, x, y, col) {
+    g.fillStyle = '#5a3a1a'; g.fillRect(x - 13, y + 4, 26, 9);
+    g.fillStyle = col; g.fillRect(x - 13, y + 3, 26, 3);
+    g.strokeStyle = '#1a0e04'; g.lineWidth = 1.6;
+    g.beginPath(); g.moveTo(x - 2, y + 3); g.lineTo(x + 2, y + 7); g.lineTo(x - 1, y + 9); g.lineTo(x + 3, y + 13); g.stroke();
+    g.fillStyle = '#a07a4a'; g.fillRect(x - 8, y - 6, 4, 4); g.fillRect(x + 5, y - 9, 3, 3); g.fillRect(x - 1, y - 12, 3, 3);
+  },
+  firenova(g, x, y, col) {
+    g.strokeStyle = '#8a1a04'; g.lineWidth = 5; g.beginPath(); g.arc(x, y, 10, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = col; g.lineWidth = 3; g.beginPath(); g.arc(x, y, 10, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = '#ffd84a'; g.lineWidth = 1.2; g.beginPath(); g.arc(x, y, 10, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = '#ffd84a'; g.beginPath(); g.arc(x, y, 3, 0, Math.PI * 2); g.fill();
+  },
+  chain(g, x, y, col) {
+    g.strokeStyle = col; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(x - 13, y - 8); g.lineTo(x - 5, y + 4); g.lineTo(x - 1, y - 4); g.lineTo(x + 6, y + 8); g.lineTo(x + 13, y - 6); g.stroke();
+    g.fillStyle = '#ffffff';
+    for (const [px, py] of [[-13, -8], [-1, -4], [13, -6]]) g.fillRect(x + px - 1.5, y + py - 1.5, 3, 3);
+  },
+  army(g, x, y, col) {
+    for (const [dx, s] of [[-8, 0.8], [8, 0.8], [0, 1]]) {
+      g.fillStyle = s < 1 ? '#3a8a6a' : col;
+      g.fillRect(x + dx - 4 * s, y - 6 * s + (s < 1 ? 3 : 0), 8 * s, 12 * s);
+      g.fillStyle = '#ffffff'; g.fillRect(x + dx - 2 * s, y - 3 * s + (s < 1 ? 3 : 0), 1.5, 1.5); g.fillRect(x + dx + 1 * s, y - 3 * s + (s < 1 ? 3 : 0), 1.5, 1.5);
+    }
+  },
+  sentry(g, x, y, col) {
+    g.fillStyle = 'rgba(255,58,42,0.3)'; g.beginPath(); g.ellipse(x - 3, y, 9, 12, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#2a0604'; g.beginPath(); g.ellipse(x - 3, y, 5, 8, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.ellipse(x - 3, y, 6, 9, 0, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = '#ff5a14'; g.beginPath(); g.arc(x + 9, y - 2, 3.5, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#ffd84a'; g.beginPath(); g.arc(x + 9, y - 2, 1.8, 0, Math.PI * 2); g.fill();
+  },
+  cyclone(g, x, y, col) {
+    g.strokeStyle = col; g.lineWidth = 2;
+    for (let i = 0; i < 5; i++) {
+      const w = 13 - i * 2.4, yy = y - 10 + i * 5;
+      g.beginPath(); g.ellipse(x + i * 0.8, yy, w, 2.2, 0, 0, Math.PI * 2); g.stroke();
+    }
+  },
+  vanish(g, x, y, col) {
+    g.globalAlpha = 0.45; g.fillStyle = col; g.fillRect(x - 5, y - 10, 10, 20);
+    g.globalAlpha = 1; g.strokeStyle = '#c8c8ff'; g.lineWidth = 1; g.setLineDash([2, 2]);
+    g.strokeRect(x - 5.5, y - 10.5, 11, 21); g.setLineDash([]);
+    g.fillStyle = '#ffffff'; g.fillRect(x - 3, y - 6, 2, 2); g.fillRect(x + 1, y - 6, 2, 2);
+  },
+  adrenaline(g, x, y, col) {
+    g.strokeStyle = col; g.lineWidth = 2.2;
+    g.beginPath(); g.moveTo(x - 13, y); g.lineTo(x - 6, y); g.lineTo(x - 3, y - 9); g.lineTo(x + 2, y + 9); g.lineTo(x + 5, y); g.lineTo(x + 13, y); g.stroke();
+  },
+  barrier(g, x, y, col) {
+    g.fillStyle = 'rgba(122,216,255,0.2)'; g.beginPath(); g.arc(x, y + 4, 12, Math.PI, 0); g.fill();
+    g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.arc(x, y + 4, 12, Math.PI, 0); g.stroke();
+    g.fillStyle = col; g.fillRect(x - 13, y + 4, 26, 2);
+    g.fillStyle = '#ffffff'; g.fillRect(x - 6, y - 4, 2, 2);
+  },
+  toxic(g, x, y, col) {
+    g.fillStyle = '#5a9a2a';
+    for (const [dx, dy, r] of [[-6, 2, 7], [5, 1, 8], [0, -5, 7]]) { g.beginPath(); g.arc(x + dx, y + dy, r, 0, Math.PI * 2); g.fill(); }
+    g.fillStyle = col; g.beginPath(); g.arc(x - 2, y - 2, 4, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#1a2a0a'; g.fillRect(x - 4, y + 2, 2, 2); g.fillRect(x + 2, y + 2, 2, 2);
+  },
+  vampirism(g, x, y, col) {
+    g.fillStyle = '#2a0a12'; g.beginPath(); g.moveTo(x - 13, y - 4); g.lineTo(x, y + 4); g.lineTo(x + 13, y - 4); g.lineTo(x + 8, y + 6); g.lineTo(x - 8, y + 6); g.closePath(); g.fill();
+    g.fillStyle = '#ffffff'; g.beginPath(); g.moveTo(x - 5, y + 1); g.lineTo(x - 3, y + 9); g.lineTo(x - 1, y + 2); g.fill();
+    g.beginPath(); g.moveTo(x + 1, y + 2); g.lineTo(x + 3, y + 9); g.lineTo(x + 5, y + 1); g.fill();
+    g.fillStyle = col; g.fillRect(x - 3.5, y + 9, 1.5, 3);
+  },
+  rejuvenate(g, x, y, col) {
+    g.fillStyle = '#3a8a4a'; g.beginPath(); g.ellipse(x - 4, y + 2, 5, 9, -0.6, 0, Math.PI * 2); g.fill();
+    g.fillStyle = col; g.beginPath(); g.ellipse(x + 4, y - 1, 5, 9, 0.6, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#ffffff'; g.fillRect(x + 8, y - 12, 2, 6); g.fillRect(x + 6, y - 10, 6, 2);
+  },
+  airstrike(g, x, y, col) {
+    for (const [dx, dy] of [[-8, -6], [0, 0], [8, -4]]) {
+      g.fillStyle = '#3a3a44'; g.beginPath(); g.ellipse(x + dx, y + dy, 2.6, 4.5, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = col; g.fillRect(x + dx - 2, y + dy - 7, 4, 2);
+    }
+    g.fillStyle = '#ff8a2a'; g.beginPath(); g.arc(x, y + 10, 4, Math.PI, 0); g.fill();
+  },
+  gravity(g, x, y, col) {
+    g.strokeStyle = col; g.lineWidth = 1.8;
+    for (const a of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+      const ox = Math.cos(a), oy = Math.sin(a);
+      g.beginPath(); g.moveTo(x + ox * 13, y + oy * 13); g.lineTo(x + ox * 5, y + oy * 5); g.stroke();
+      g.beginPath(); g.moveTo(x + ox * 5 + oy * 3, y + oy * 5 - ox * 3); g.lineTo(x + ox * 5, y + oy * 5); g.lineTo(x + ox * 5 - oy * 3, y + oy * 5 + ox * 3); g.stroke();
+    }
+    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(x, y, 2.5, 0, Math.PI * 2); g.fill();
+  },
+  forcepush(g, x, y, col) {
+    g.fillStyle = col; g.beginPath(); g.arc(x - 8, y, 4, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = col; g.lineWidth = 2;
+    for (let i = 0; i < 3; i++) { g.globalAlpha = 1 - i * 0.25; g.beginPath(); g.arc(x - 8, y, 8 + i * 6, -0.7, 0.7); g.stroke(); }
+    g.globalAlpha = 1;
+  },
+  golem(g, x, y, col) {
+    g.fillStyle = '#4a5a6a'; g.fillRect(x - 10, y - 6, 20, 17);
+    g.fillStyle = col; g.fillRect(x - 6, y - 13, 12, 9); g.fillRect(x - 13, y - 4, 4, 11); g.fillRect(x + 9, y - 4, 4, 11);
+    g.fillStyle = '#ffd84a'; g.fillRect(x - 4, y - 10, 2, 2); g.fillRect(x + 2, y - 10, 2, 2);
+    g.fillStyle = '#2a3440'; g.fillRect(x - 3, y, 6, 2);
+  },
+  execute(g, x, y, col) {
+    g.fillStyle = '#8a8a9a'; g.beginPath(); g.moveTo(x - 12, y - 2); g.lineTo(x + 2, y - 12); g.lineTo(x + 8, y - 6); g.lineTo(x - 4, y + 4); g.closePath(); g.fill();
+    g.fillStyle = '#5a3a20'; g.save(); g.translate(x, y); g.rotate(0.8); g.fillRect(-2, -2, 4, 18); g.restore();
+    g.fillStyle = col; g.fillRect(x - 12, y - 3, 4, 2); g.fillRect(x - 9, y + 2, 2, 4);
+  },
+  icelance(g, x, y, col) {
+    g.fillStyle = col;
+    for (let i = 0; i < 4; i++) {
+      const bx = x - 12 + i * 7, h = 6 + i * 2.5;
+      g.beginPath(); g.moveTo(bx, y + 10); g.lineTo(bx + 3, y + 10 - h); g.lineTo(bx + 6, y + 10); g.closePath(); g.fill();
+    }
+    g.fillStyle = '#ffffff'; g.fillRect(x + 9, y - 2, 1.5, 4);
+  },
+  phoenix(g, x, y, col) {
+    g.fillStyle = '#c84a10';
+    g.beginPath(); g.moveTo(x, y - 4); g.lineTo(x - 14, y - 10); g.lineTo(x - 8, y + 2); g.lineTo(x, y + 2); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(x, y - 4); g.lineTo(x + 14, y - 10); g.lineTo(x + 8, y + 2); g.lineTo(x, y + 2); g.closePath(); g.fill();
+    g.fillStyle = col; g.beginPath(); g.ellipse(x, y, 3.5, 6, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#ffd84a'; g.beginPath(); g.moveTo(x - 4, y + 5); g.lineTo(x, y + 13); g.lineTo(x + 4, y + 5); g.closePath(); g.fill();
+    g.fillStyle = '#ffffff'; g.fillRect(x - 1, y - 4, 2, 2);
+  },
+};
 
 const SCREENS = ['startScreen','lobbyScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen','howtoScreen'];
 function showScreen(id) { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay '+(s===id?'active':'hidden'); }); }
@@ -2709,7 +2969,8 @@ function drawChains(chains) {
 // ─── Players ──────────────────────────────────────────────────────────────────
 
 const EFFECT_GLOW = { speed:'#44ddee', strength:'#ff5544', shield:'#ffdd44', haste:'#aa66ff', slow:'#3366aa',
-                      burn:'#ff6a1a', poison:'#8ad048', magnet:'#ffc24a', regen:'#ff7ac8', vampire:'#d8304a' };
+                      burn:'#ff6a1a', poison:'#8ad048', magnet:'#ffc24a', regen:'#ff7ac8', vampire:'#d8304a',
+                      vanish:'#6a6a9a', phoenix:'#ffa03a', ghost:'#a8f0ff' };
 
 // Flickering pixel flames over something that's on fire.
 function drawFlames(x, y, w, h) {
@@ -2728,6 +2989,14 @@ function drawFlames(x, y, w, h) {
 
 function drawPlayer(p, baseColor, label, key) {
   if (p.dead) return;
+  // VANISH / ghost cloak: gone for everyone else; a faint shimmer for you.
+  const unseen = p.effects && (p.effects.vanish > 0 || p.effects.ghost > 0);
+  if (unseen && key !== 'p' + myNum) return;
+  if (unseen) { ctx.save(); ctx.globalAlpha = 0.35 + 0.1 * Math.sin(performance.now() / 120); }
+  drawPlayerBody(p, baseColor, label, key);
+  if (unseen) ctx.restore();
+}
+function drawPlayerBody(p, baseColor, label, key) {
   const skinCol = getSkinColor(p, baseColor);
   const x = Math.round(p.x), y = Math.round(p.y);
 
@@ -3127,6 +3396,22 @@ function drawProjectiles(projs) {
       ctx.beginPath(); ctx.arc(pr.x, pr.y, 4, 0, Math.PI*2); ctx.fill();
       ctx.fillStyle = '#d6ff5c';
       ctx.beginPath(); ctx.arc(pr.x - 0.8, pr.y - 1, 1.8, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+      continue;
+    }
+    // Dagger of Ghosts, thrown: a spinning pale blade with a ghostly wake.
+    if (pr.weaponId === 'ghostdagger') {
+      ctx.save();
+      for (let i = 4; i >= 1; i--) {
+        ctx.globalAlpha = 0.12 * (5 - i); ctx.fillStyle = '#a8f0ff';
+        ctx.beginPath(); ctx.arc(pr.x - pr.dx * i * 0.9, pr.y - pr.dy * i * 0.9, 5 - i * 0.6, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.translate(pr.x, pr.y); ctx.rotate(now / 40);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#3a2a4a'; ctx.fillRect(-7, -1.5, 5, 3);
+      ctx.fillStyle = '#c8a040'; ctx.fillRect(-2.5, -3.5, 1.5, 7);
+      ctx.fillStyle = '#e8fcff';
+      ctx.beginPath(); ctx.moveTo(-1, -2.5); ctx.lineTo(9, 0); ctx.lineTo(-1, 2.5); ctx.closePath(); ctx.fill();
       ctx.restore();
       continue;
     }
@@ -3668,7 +3953,7 @@ function drawHUD(state) {
       if (!a) return;
       const def = abilityDef(a.id);
       const ready = a.cd <= 0, col = def ? def.color : '#ccc';
-      const key = i ? 'E ' : 'Q ';
+      const key = AB_KEYS[i] + ' ';
       drawBar(by, ready ? 1 : Math.max(0, 1 - a.cd / (a.max || 1)), ready,
               key + (ready ? (def ? def.name : a.id.toUpperCase()) : Math.ceil(a.cd / 1000) + 's'), col, '#3a4450', '#0c1016');
       by += 7;
@@ -3860,7 +4145,7 @@ function drawControlHints() {
   ctx.textBaseline = 'bottom'; ctx.textAlign = 'center';
   const me = myNum === 1 ? currState?.players?.p1 : currState?.players?.p2;
   const abil = (me && me.abil) || [];
-  const abKeys = [abil[0] ? 'Q' : '', abil[1] ? 'E' : ''].filter(Boolean).join('/');
+  const abKeys = abil.map((a, i) => a ? AB_KEYS[i] : '').filter(Boolean).join('/');
   const t = 'ARROWS MOVE · SPACE ATK · ENTER SWAP · SHIFT SPECIAL · P PARRY · '
           + (me && me.superMax > 0 ? 'R SUPER · ' : '') + (abKeys ? abKeys + ' ABILITY · ' : '') + '1-4 ITEMS';
   const w = ctx.measureText(t).width;
