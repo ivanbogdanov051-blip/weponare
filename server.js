@@ -236,7 +236,7 @@ const WEAPON_UPGRADES = {
   vortex:      ['dmg', 'spd', 'cdr'],
   windwand:    ['dmg', 'spd', 'knock', 'rng', 'aoe'],
   revolver:    ['dmg', 'spd', 'aoe', 'crit', 'multi'],
-  portalwand:  ['dmg', 'spd', 'cdr', 'multi', 'aoe'],
+  portalwand:  ['dmg', 'crit', 'cdr', 'aoe'],   // no SPD or MLT: its portals come fast enough
 };
 // Upgrade rows that aren't weapons: always available, stored alongside the
 // weapon upgrades under these ids.
@@ -430,6 +430,7 @@ function isBossWave(num) {
 const PORTAL_LEVEL = 15;
 function modeLevel(num) {
   if (room.gameMode === 'portal') return PORTAL_LEVEL;
+  if (room.gameMode === 'sandbox') return room.sandbox.level;
   return num + (room.gameMode === 'extreme' ? EXTREME_LEVEL_OFFSET : 0);
 }
 
@@ -811,7 +812,7 @@ function makeRoom() { return {
 const rooms = [];
 let room = makeRoom();   // the room being worked on right now
 
-const SOLO_MODES = ['waves', 'extreme', 'portal'];
+const SOLO_MODES = ['waves', 'extreme', 'portal', 'sandbox'];
 function isSolo() { return SOLO_MODES.includes(room.gameMode); }
 
 // Seats (room + slot) held by a password, for pushing shop changes into live games.
@@ -1021,6 +1022,7 @@ function coinsForKill(target, isPlayer) {
 }
 
 function dropCoins(x, y, total) {
+  if (room.gameMode === 'sandbox') return;
   const n = Math.min(MAX_COIN_DROPS, Math.max(1, total));
   const per = Math.floor(total / n), extra = total - per * n;
   for (let i = 0; i < n; i++) {
@@ -1041,7 +1043,7 @@ function dropCoins(x, y, total) {
 }
 
 function addCoins(pKey, amount) {
-  if (amount <= 0) return;
+  if (amount <= 0 || room.gameMode === 'sandbox') return;   // the sandbox earns nothing
   room.playerCoins[pKey] = (room.playerCoins[pKey] || 0) + amount;
   const pw = room.passwords[pKey];
   if (pw && !isAdminPw(pw)) {
@@ -1224,6 +1226,7 @@ function startGame() {
   room.gameState = 'GAMEPLAY';
   room.victory = false;
   if (room.gameMode === 'portal') startMageFight();
+  else if (room.gameMode === 'sandbox') startSandbox();
   else if (room.gameMode !== 'pvp') startWave(START_WAVE);
 }
 
@@ -1317,7 +1320,7 @@ function handleKill(target, attackerKey) {
     target.pull = null;
     // Don't respawn still on fire, poisoned or snared.
     if (target.effects) { delete target.effects.burn; delete target.effects.poison; delete target.effects.slow; }
-    target.lives--;
+    if (room.gameMode !== 'sandbox') target.lives--;   // the sandbox never runs out of lives
     target.hp = 0;
     if (target.lives > 0) target.respawnTimer = 2000;
   } else {
@@ -1329,6 +1332,7 @@ function handleKill(target, attackerKey) {
 
 // Bank XP for a player: unlocks anything it reaches and saves it.
 function creditXp(key, xpGain) {
+  if (room.gameMode === 'sandbox') return;
   const attacker = room.players[key];
   const pw = room.passwords[key];
   const admin = isAdminPw(pw);
@@ -1503,6 +1507,7 @@ function tickRoom(dt) {
     if (p.hitFlash        > 0) p.hitFlash        -= dt;
     if (p.swingTimer      > 0) p.swingTimer      -= dt;
     for (const id in p.abCd) if (p.abCd[id] > 0) p.abCd[id] -= dt;
+    if (room.gameMode === 'sandbox') sandboxCheats(p);
 
     if (room.swapJustPressed[key] && p.unlockedWeapons.length > 0) {
       p.weaponIdx = (p.weaponIdx + 1) % p.unlockedWeapons.length;
@@ -1550,6 +1555,7 @@ function tickRoom(dt) {
     if (m.swing       > 0) m.swing       -= dt;
     // Frozen solid by a frost nova: no moving, no attacking.
     if (m.freeze > 0) { m.freeze -= dt; continue; }
+    if (room.gameMode === 'sandbox' && room.sandbox.freeze) continue;   // sandbox: AI switched off
 
     if (nearest) {
       const def = MONSTER_TYPES[m.type] || MONSTER_TYPES.grunt;
@@ -1622,8 +1628,9 @@ function tickRoom(dt) {
   room.projectiles = room.projectiles.filter(proj => updateProjectile(proj, factor, dt));
   updateFires(factor, dt);
 
-  // ── Wave spawner ── (the Portal Mage fight has no waves: he brings his own)
-  if (room.gameMode !== 'pvp' && room.gameMode !== 'portal') {
+  // ── Wave spawner ── (the Portal Mage fight has no waves: he brings his own;
+  // in the sandbox you spawn what you like)
+  if (room.gameMode !== 'pvp' && room.gameMode !== 'portal' && room.gameMode !== 'sandbox') {
     if (room.wave.betweenTimer > 0) {
       room.wave.betweenTimer -= dt;
       if (room.wave.betweenTimer <= 0) startWave(room.wave.num + 1);
@@ -1662,7 +1669,7 @@ function tickRoom(dt) {
 
   // ── Traps ── (in the Portal Mage fight only he lays them)
   room.trapSpawnTimer -= dt;
-  if (room.trapSpawnTimer <= 0 && room.gameMode !== 'portal') {
+  if (room.trapSpawnTimer <= 0 && room.gameMode !== 'portal' && room.gameMode !== 'sandbox') {
     if (room.traps.length < MAX_TRAPS) spawnTrap();
     room.trapSpawnTimer = TRAP_SPAWN_MIN + Math.random() * (TRAP_SPAWN_MAX - TRAP_SPAWN_MIN);
   }
@@ -2966,6 +2973,7 @@ function mageDefeated(m) {
   room.traps = [];
   room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 220, timer: 900, max: 900, color: '#c8a0ff' });
   room.particles.push({ type: 'waveclear', x: CANVAS_W / 2, y: CANVAS_H / 2 - 10, text: 'THE PORTAL MAGE IS DEFEATED!', timer: 4000 });
+  if (room.gameMode === 'sandbox') return;   // practice: no reward, and the sandbox carries on
   for (const key of ['p1', 'p2']) {
     const p = room.players[key];
     if (!p) continue;
@@ -3002,6 +3010,98 @@ function grantBossWeapon(key, wid) {
   }
   room.unlockQueues[key].push(wid);
   return true;
+}
+
+// ─── Sandbox ──────────────────────────────────────────────────────────────────
+// A solo practice arena: no waves, every weapon and ability to try, and a panel
+// to spawn monsters, bosses, items and traps and to switch on cheats. Nothing
+// here is saved — no XP, no coins, no leaderboard.
+const SANDBOX_MAX_MONSTERS = 40;
+
+function startSandbox() {
+  room.sandbox = { god: false, noCd: false, freeze: false, level: 5 };
+  room.wave = { num: 1, monstersLeft: 0, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 };
+  room.waveHpMult = 1; room.waveSpeedMult = 1;
+  const p = room.players.p1;
+  if (p) {
+    p.unlockedWeapons = WEAPONS.map(w => w.id);
+    p.weaponIdx = 0;
+    refreshWeapon(p);
+  }
+  room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
+                        text: 'SANDBOX - TRY ANYTHING', color: '#7affc8', timer: 2600, max: 2600 });
+}
+
+function sandboxCheats(p) {
+  const s = room.sandbox;
+  if (s.god) { p.hp = p.maxHp; if (p.effects) { delete p.effects.burn; delete p.effects.poison; } }
+  if (s.noCd) {
+    p.specialCooldown = 0; p.superCooldown = 0; p.parryCooldown = 0;
+    for (const id in p.abCd) p.abCd[id] = 0;
+  }
+}
+
+function sandboxClear() {
+  room.monsters = [];
+  room.traps = [];
+  room.items = [];
+  room.projectiles = room.projectiles.filter(pr => pr.owner !== 'monster');
+  room.fires = room.fires.filter(f => f.owner !== 'monster');
+}
+
+// A spot a little ahead of the player, inside the arena.
+function sandboxSpot(p, dist, size) {
+  const a = (p.facing === -1 ? Math.PI : 0) + (Math.random() - 0.5) * 1.2;
+  const at = arenaClamp(cx(p) + Math.cos(a) * dist, cy(p) + Math.sin(a) * dist, size / 2 + 4);
+  return { x: at.x - size / 2, y: at.y - size / 2 };
+}
+
+function sandboxAction(key, msg) {
+  const p = room.players[key];
+  if (!p) return;
+  const s = room.sandbox;
+  const act = String(msg.action || '');
+  if (act === 'spawn') {
+    const type = String(msg.what || '');
+    if (!MONSTER_TYPES[type]) return;
+    const n = Math.max(1, Math.min(10, Math.floor(Number(msg.count) || 1)));
+    for (let i = 0; i < n && room.monsters.length < SANDBOX_MAX_MONSTERS; i++) {
+      if (type === 'portalmage') {
+        if (room.monsters.some(o => o.mage)) break;   // one mage at a time
+        startMageFight();
+        break;
+      }
+      spawnMonster(type);
+    }
+  } else if (act === 'item') {
+    const type = String(msg.what || '');
+    if (!ITEM_TYPES[type] || room.items.length >= 30) return;
+    const at = sandboxSpot(p, 40, ITEM_SIZE);
+    room.items.push({ id: nextId(), type, x: at.x, y: at.y, w: ITEM_SIZE, h: ITEM_SIZE });
+  } else if (act === 'trap') {
+    const type = String(msg.what || '');
+    const def = TRAP_TYPES[type];
+    if (!def || room.traps.length >= 30) return;
+    const at = sandboxSpot(p, 70, def.size);
+    room.traps.push({ id: nextId(), type, x: at.x, y: at.y, w: def.size, h: def.size,
+                      state: 'idle', armTimer: 0, fireTimer: 0, mode: def.mode, radius: def.radius,
+                      damage: def.damage || 0, effect: def.effect || null, dur: def.dur || 0, color: def.color });
+  } else if (act === 'clear') {
+    sandboxClear();
+  } else if (act === 'toggle') {
+    const k = String(msg.what || '');
+    if (k === 'god' || k === 'noCd' || k === 'freeze') s[k] = !s[k];
+  } else if (act === 'level') {
+    s.level = Math.max(1, Math.min(50, Math.floor(Number(msg.value) || 1)));
+  } else if (act === 'ability') {
+    const slot = msg.slot === 1 ? 1 : 0;
+    const id = msg.what && ABILITY_BY_ID[msg.what] ? msg.what : null;
+    p.abilities[slot] = id;
+    if (id) p.abCd[id] = 0;
+  } else if (act === 'heal') {
+    p.hp = p.maxHp;
+    p.effects = {};
+  }
 }
 
 // Where the tree comes down: just ahead of the Giant, on the side it faces.
@@ -3065,6 +3165,7 @@ function updateSoundwave(f, factor) {
 // game is won.
 function adminSkipWave() {
   if (room.gameState !== 'GAMEPLAY' || room.gameMode === 'pvp') return;
+  if (room.gameMode === 'sandbox') { sandboxClear(); return; }
   // Boss fight: skipping means winning it outright.
   if (room.gameMode === 'portal') {
     const m = room.monsters.find(o => o.mage);
@@ -3532,6 +3633,7 @@ function buildStateMsg(playerNum) {
     inventory:   room.players[key] ? room.players[key].inventory : [],
     round:       room.round,
     victory:     !!room.victory,
+    sandbox:     room.gameMode === 'sandbox' ? room.sandbox : null,
     finalWave:   room.gameMode === 'coop' ? COOP_FINAL_WAVE : 0,
     pendingUnlock: room.unlockQueues[key][0] || null,
     otherHasUnlocks: room.unlockQueues[key === 'p1' ? 'p2' : 'p1'].length > 0,
@@ -3883,6 +3985,12 @@ wss.on('connection', (ws) => {
     catalog: weaponCatalog(),
     abilityDefs: ABILITIES,
     colors: WEAPON_COLORS,
+    // What the sandbox panel can spawn.
+    sandboxDefs: {
+      monsters: Object.entries(MONSTER_TYPES).map(([id, m]) => ({ id, name: m.name, color: m.color, boss: !!m.boss })),
+      items: Object.entries(ITEM_TYPES).map(([id, t]) => ({ id, name: t.name, color: t.color })),
+      traps: Object.entries(TRAP_TYPES).map(([id, t]) => ({ id, name: t.name, color: t.color })),
+    },
   }));
 
   ws.on('message', (data) => {
@@ -3894,7 +4002,7 @@ wss.on('connection', (ws) => {
         return;
       }
       if (msg.type === 'join' && !ws.room) {
-        const mode = ['pvp', 'coop', 'waves', 'extreme', 'portal'].includes(msg.mode) ? msg.mode : 'pvp';
+        const mode = ['pvp', 'coop', 'waves', 'extreme', 'portal', 'sandbox'].includes(msg.mode) ? msg.mode : 'pvp';
         reapRooms();
         const [r, key] = findSeat(mode);
         ws.room = r; ws.key = key;
@@ -4005,6 +4113,8 @@ wss.on('connection', (ws) => {
           }
         }
       }
+
+      if (msg.type === 'sandbox' && room.gameMode === 'sandbox' && room.gameState === 'GAMEPLAY') sandboxAction(myKey, msg);
 
       // Admin tool: wipe out the current wave and go straight to the next.
       if (msg.type === 'skip_wave' && isAdminPw(room.passwords[myKey])) adminSkipWave();

@@ -210,6 +210,7 @@ function cycleMusic() {
 let leaving = false, returningToMenu = false;
 function leaveGame() {
   leaving = true;
+  toggleSandboxPanel(false);
   if (window.GameAudio) GameAudio.stopMusic();
   if (ws) { try { ws.close(); } catch {} }
   showGameControls(false);
@@ -272,6 +273,7 @@ function connect() {
       if (msg.playerSpeed) serverPlayerSpeed = msg.playerSpeed;
       applyCatalog(msg.catalog, msg.colors);
       if (Array.isArray(msg.abilityDefs)) ABILITY_DEFS = msg.abilityDefs;
+      if (msg.sandboxDefs) SANDBOX_DEFS = msg.sandboxDefs;
       ws.send(JSON.stringify({
         type: 'join', name: pendingName, mode: pendingMode, password: pendingPass,
         skin: pendingSkin, skinModified,
@@ -338,6 +340,7 @@ function connect() {
       }
       stateRecvTime = nowT;
       syncAdminTools(msg);
+      syncSandbox(msg);
       updateScreens(msg);
     }
   };
@@ -1411,6 +1414,74 @@ function syncAdminTools(state) {
   if (b) b.classList.toggle('shown', show);
   touchZonesAt = -1e9;   // the top-right buttons changed width: re-measure
 }
+// ── How to play ──
+function openHowTo() { showScreen('howtoScreen'); }
+function closeHowTo() { showScreen('startScreen'); }
+
+// ── Sandbox tools ──
+// The panel is built once from the server's lists; its buttons send
+// { type: 'sandbox', action, ... } and the toggles mirror state.sandbox.
+let SANDBOX_DEFS = null, sandboxBuilt = false, sandboxShown = null;
+function sendSandbox(action, extra) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'sandbox', action, ...extra }));
+}
+function buildSandboxPanel() {
+  if (sandboxBuilt || !SANDBOX_DEFS) return;
+  sandboxBuilt = true;
+  const btn = (attrs, label, color) =>
+    `<button class="sb-btn" ${attrs} style="${color ? 'color:' + color : ''}">${label}</button>`;
+  document.getElementById('sbMonsters').innerHTML = SANDBOX_DEFS.monsters.map(m =>
+    btn(`data-act="spawn" data-what="${m.id}"`, (m.boss ? '&#9733; ' : '') + m.name, m.color)).join('');
+  document.getElementById('sbItems').innerHTML = SANDBOX_DEFS.items.map(t =>
+    btn(`data-act="item" data-what="${t.id}"`, t.name, t.color)).join('');
+  document.getElementById('sbTraps').innerHTML = SANDBOX_DEFS.traps.map(t =>
+    btn(`data-act="trap" data-what="${t.id}"`, t.name, t.color)).join('');
+  const opts = '<option value="">- NONE -</option>' + ABILITY_DEFS.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+  for (const i of [0, 1]) {
+    const sel = document.getElementById('sbAb' + i);
+    sel.innerHTML = opts;
+    sel.addEventListener('change', () => { sendSandbox('ability', { slot: i, what: sel.value || null }); sel.blur(); });
+  }
+  const lvl = document.getElementById('sbLevel'), lvlVal = document.getElementById('sbLevelVal');
+  lvl.addEventListener('input', () => { lvlVal.textContent = lvl.value; });
+  lvl.addEventListener('change', () => { sendSandbox('level', { value: Number(lvl.value) }); lvl.blur(); });
+  document.getElementById('sbCount').addEventListener('change', e => e.target.blur());
+  const panel = document.getElementById('sandboxPanel');
+  // Buttons never take focus, so SPACE keeps attacking instead of re-clicking them.
+  panel.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
+  panel.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.toggle) sendSandbox('toggle', { what: b.dataset.toggle });
+    else if (b.dataset.act === 'spawn') sendSandbox('spawn', { what: b.dataset.what, count: Number(document.getElementById('sbCount').value) });
+    else if (b.dataset.act) sendSandbox(b.dataset.act, { what: b.dataset.what });
+  });
+}
+function toggleSandboxPanel(show) {
+  const panel = document.getElementById('sandboxPanel');
+  if (!panel) return;
+  const open = show === undefined ? panel.classList.contains('hidden') : show;
+  if (open) buildSandboxPanel();
+  panel.classList.toggle('hidden', !open);
+}
+function syncSandbox(state) {
+  const on = state.gameMode === 'sandbox' && state.gameState === 'GAMEPLAY';
+  if (on !== sandboxShown) {
+    sandboxShown = on;
+    document.getElementById('sandboxBtn')?.classList.toggle('shown', on);
+    if (!on) toggleSandboxPanel(false);
+    touchZonesAt = -1e9;   // the top-right buttons changed width: re-measure
+  }
+  if (!on || !state.sandbox) return;
+  for (const b of document.querySelectorAll('#sandboxPanel .sb-toggle')) b.classList.toggle('on', !!state.sandbox[b.dataset.toggle]);
+  const me = state.players?.p1;
+  for (const i of [0, 1]) {
+    const sel = document.getElementById('sbAb' + i);
+    const want = (me && me.abil && me.abil[i] && me.abil[i].id) || '';
+    if (sel && document.activeElement !== sel && sel.value !== want) sel.value = want;
+  }
+}
+
 function skipWave() {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'skip_wave' }));
 }
@@ -2162,7 +2233,7 @@ function drawAbilityIcon(g, id, w, h) {
   }
 }
 
-const SCREENS = ['startScreen','lobbyScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen'];
+const SCREENS = ['startScreen','lobbyScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen','howtoScreen'];
 function showScreen(id) { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay '+(s===id?'active':'hidden'); }); }
 function hideAllScreens() { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay hidden'; }); }
 function setLobbyMsg(html) { showScreen('lobbyScreen'); document.getElementById('lobbyMsg').innerHTML = html; }
@@ -2177,6 +2248,8 @@ function updateScreens(state) {
       setLobbyMsg(`<span style="color:#ff5a3a">EXTREME MODE</span><br><span style="color:#888">SOLO · STRONGEST MONSTERS</span><br>Loading...`);
     } else if (state.gameMode === 'portal') {
       setLobbyMsg(PORTAL_LOBBY);
+    } else if (state.gameMode === 'sandbox') {
+      setLobbyMsg(`<span style="color:#9fffd0">SANDBOX</span><br><span style="color:#888">SOLO PRACTICE · NOTHING IS SAVED</span><br>Loading...`);
     } else {
       const modeStr = state.gameMode === 'coop' ? 'CO-OP MODE' : 'PvP MODE';
       setLobbyMsg(myNum
@@ -3524,7 +3597,16 @@ function drawHUD(state) {
 
   const w = state.wave;
   ctx.textAlign = 'center';
-  if (state.gameMode === 'portal') {
+  if (state.gameMode === 'sandbox') {
+    const t = 'SANDBOX';
+    const sub = 'LEVEL ' + (state.sandbox?.level || 1) + ' · ' + (state.monsters || []).length + ' MONSTERS'
+              + (state.sandbox?.god ? ' · GOD' : '') + (state.sandbox?.freeze ? ' · FROZEN' : '');
+    ctx.fillStyle = '#000'; ctx.fillText(t, HUD_W/2 + 1, 3);
+    ctx.fillStyle = '#9fffd0'; ctx.fillText(t, HUD_W/2, 2);
+    ctx.font = '8px "Courier New",monospace';
+    ctx.fillStyle = '#999'; ctx.fillText(sub, HUD_W/2, 15);
+    ctx.font = '10px "Courier New",monospace';
+  } else if (state.gameMode === 'portal') {
     const mage = (state.monsters || []).find(m => m.mage);
     const t = 'THE PORTAL MAGE';
     const sub = !mage ? '' : mage.hidden ? 'SLAY HIS GIANTS!' : 'PHASE ' + (mage.phase || 1);
@@ -3650,20 +3732,22 @@ function drawWeaponPanel(state) {
   // The rack sits at the top, just under the top bar, where no touch button
   // ever reaches. It keeps clear of your own ability bars and power-up row
   // (left for player 1, right for player 2) and of the music / leave buttons.
-  // Slots shrink to fit, and wrap onto more rows only if they'd get too small.
+  // Slots are icon-only and shrink to fit, wrapping onto a second (rarely a
+  // third) row only if they'd get too small; the held weapon's name sits under
+  // the rack instead of a label in every slot.
   const TOP = 29, SIDE = 156;
   let L = myNum === 2 ? 6 : SIDE, R = myNum === 2 ? HUD_W - SIDE : HUD_W - 6;
-  const gap = 2, slotH = 22;
+  const gap = 1, slotH = isTouchDevice ? 16 : 14, minW = isTouchDevice ? 17 : 15;
   let rows, slotW, perRow, panelW, panelH, panelX;
   const rowW = (cnt) => cnt * (slotW + gap) - gap;
   const layout = () => {
     const avail = R - L;
-    for (rows = 1; rows <= 4; rows++) {
-      slotW = Math.min(26, Math.floor((avail + gap) / Math.ceil(n / rows)) - gap);
-      if (slotW >= 18) break;
+    for (rows = 1; rows <= 3; rows++) {
+      slotW = Math.min(isTouchDevice ? 20 : 18, Math.floor((avail + gap) / Math.ceil(n / rows)) - gap);
+      if (slotW >= minW) break;
     }
-    rows = Math.min(rows, 4);
-    slotW = Math.max(14, slotW);
+    rows = Math.min(rows, 3);
+    slotW = Math.max(12, slotW);
     perRow = Math.ceil(n / rows);
     panelW = rowW(Math.min(n, perRow));
     panelH = rows * slotH + (rows - 1) * gap;
@@ -3696,13 +3780,13 @@ function drawWeaponPanel(state) {
     const px = me.x / HUD_SCALE, py = (me.y - PLAYER_PAD) / HUD_SCALE;
     const pw = me.w / HUD_SCALE, ph = (me.h + PLAYER_PAD) / HUD_SCALE;
     if (px + pw > panelX - 6 && px < panelX + panelW + 6 &&
-        py < panelY + panelH + 6 && py + ph > panelY - 6) alpha = 0.3;
+        py < panelY + panelH + 14 && py + ph > panelY - 6) alpha = 0.25;
   }
   ctx.save();
-  ctx.globalAlpha = alpha;
+  ctx.globalAlpha = alpha * 0.85;
 
-  ctx.fillStyle='rgba(0,0,0,0.72)';
-  ctx.fillRect(panelX-4, panelY-3, panelW+8, panelH+6);
+  ctx.fillStyle='rgba(0,0,0,0.35)';
+  ctx.fillRect(panelX-2, panelY-2, panelW+4, panelH+4);
 
   if (!isTouchDevice) drawControlHints();
 
@@ -3715,7 +3799,7 @@ function drawWeaponPanel(state) {
     const wId = weapons[i], sel = i === mp.weaponIdx;
     weaponSlotRects.push({ x: sx, y: sy, w: slotW, h: slotH, index: i });
     const wc = WEAPON_COLOR[wId] || PAL.white;
-    ctx.fillStyle = sel ? 'rgba(255,255,255,0.1)' : 'rgba(5,5,15,0.8)';
+    ctx.fillStyle = sel ? 'rgba(255,255,255,0.14)' : 'rgba(5,5,15,0.35)';
     ctx.fillRect(sx, sy, slotW, slotH);
     ctx.strokeStyle = sel ? wc : '#2a2a3a'; ctx.lineWidth = 1;
     ctx.strokeRect(sx+0.5, sy+0.5, slotW-1, slotH-1);
@@ -3724,15 +3808,18 @@ function drawWeaponPanel(state) {
       ctx.strokeRect(sx-0.5, sy-0.5, slotW+1, slotH+1); ctx.restore();
     }
     ctx.save();
-    ctx.globalAlpha = sel ? 1 : 0.42;   // unselected slots dim, but still readable
-    drawWeaponPixelsFitted(ctx, wId, sx + slotW/2, sy + 8.5, slotW - 4, 13, wc);
+    ctx.globalAlpha = (sel ? 1 : 0.5) * alpha;   // unselected slots dim, but still readable
+    drawWeaponPixelsFitted(ctx, wId, sx + slotW/2, sy + slotH/2, slotW - 3, slotH - 3, wc);
     ctx.restore();
-    ctx.save();
-    ctx.font='7px "Courier New",monospace'; ctx.textBaseline='bottom'; ctx.textAlign='center';
-    ctx.fillStyle = sel ? wc : '#4c4c5a';
-    const label = wId.slice(0, slotW >= 22 ? 4 : 3).toUpperCase();
-    ctx.fillText(label, sx + slotW/2, sy + slotH - 1);
-    ctx.restore();
+  }
+  // The held weapon's name, just under the rack.
+  const held = weapons[mp.weaponIdx];
+  if (held) {
+    const name = (WEAPON_META[held]?.name || held).toUpperCase();
+    ctx.font = '6px "Courier New",monospace'; ctx.textBaseline = 'top'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#000'; ctx.fillText(name, midX + 0.5, panelY + panelH + 2.5);
+    ctx.fillStyle = WEAPON_COLOR[held] || PAL.white; ctx.fillText(name, midX, panelY + panelH + 2);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
   ctx.restore();
 }

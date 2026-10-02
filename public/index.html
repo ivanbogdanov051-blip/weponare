@@ -22,7 +22,11 @@
         <button class="mode-btn btn-extreme" onclick="joinGame('extreme')">&#9888; EXTREME &#9888;</button>
       </div>
       <button class="mode-btn btn-portal" onclick="joinGame('portal')">&#10022; FIGHT THE PORTAL MAGE &#10022;</button>
-      <div class="hint-text">PvP/Co-op: 2 players &nbsp;|&nbsp; Waves: solo endless &nbsp;|&nbsp; Extreme: solo, strongest monsters, huge coin rewards</div>
+      <div class="mode-row mode-row-2">
+        <button class="mode-btn btn-sandbox" onclick="joinGame('sandbox')">&#9874; SANDBOX</button>
+        <button class="mode-btn btn-howto" onclick="openHowTo()">? HOW TO PLAY</button>
+      </div>
+      <div class="hint-text">PvP/Co-op: 2 players &nbsp;|&nbsp; Waves: solo endless &nbsp;|&nbsp; Extreme: solo, strongest monsters, huge coin rewards &nbsp;|&nbsp; Sandbox: solo practice, nothing saved</div>
       <div id="savedInfo" class="saved-info"></div>
       <button class="skin-btn shop-open-btn" onclick="openShop()">&#9670; UPGRADE WEAPONS</button>
       <button class="skin-btn abil-open-btn" onclick="openAbilities()">&#10038; ABILITIES</button>
@@ -54,6 +58,46 @@
       <div id="abilMsg" class="shop-msg"></div>
       <div id="abilList" class="shop-list"></div>
       <button class="mode-btn shop-back" onclick="closeAbilities()">&#10003; BACK</button>
+    </div>
+  </div>
+
+  <!-- How to play: the rules and controls, in one scrolling page -->
+  <div id="howtoScreen" class="overlay hidden">
+    <div class="pixel-box shop-box howto-box">
+      <div class="title-text shop-title howto-title">HOW TO PLAY</div>
+      <div class="subtitle">EVERYTHING YOU NEED TO KNOW</div>
+      <div class="howto-list">
+        <div class="howto-sec"><h3>CONTROLS</h3>
+          <p><b>Keyboard:</b> ARROWS or WASD move &middot; SPACE attack &middot; SHIFT special &middot; R super &middot; P (or CTRL) parry &middot; ENTER next weapon &middot; Q / E abilities &middot; 1-4 use an item &middot; M sound.</p>
+          <p><b>Touch:</b> the pad on the left moves you; the buttons on the right attack, use your special, super, parry, swap weapon and fire your abilities. Tap an item in the bar to use it.</p>
+          <p>Click or tap a weapon in the rack at the top to switch straight to it. <b>Hold</b> attack, special, super or an ability and it fires again by itself whenever it is ready.</p></div>
+        <div class="howto-sec"><h3>MODES</h3>
+          <p><b>PvP</b> &ndash; two players fight; each round you have 3 lives, and the first to win 3 rounds takes the match.</p>
+          <p><b>Co-op</b> &ndash; two players fight 10 waves of monsters together; the Giant waits at wave 10.</p>
+          <p><b>Waves</b> &ndash; solo and endless; every wave is harder, a Giant comes every 20th wave, and your best wave goes on the leaderboard.</p>
+          <p><b>Extreme</b> &ndash; solo with the toughest monsters, a Giant every 5th wave and much bigger coin rewards.</p>
+          <p><b>The Portal Mage</b> &ndash; the hardest boss: win 50,000 coins, 50,000 XP and the Portal Wand.</p>
+          <p><b>Sandbox</b> &ndash; solo practice with every weapon. Spawn any monster, boss, item or trap and switch on cheats from the TOOLS button. Nothing you do there is saved.</p></div>
+        <div class="howto-sec"><h3>WEAPONS &amp; XP</h3>
+          <p>Kills give XP, and XP unlocks new weapons for good. Each weapon has its own attack and a <b>special</b> with a cooldown (the purple bar). Melee weapons hit what is in front of you; ranged ones auto-aim at the nearest enemy.</p>
+          <p><b>Legendary</b> weapons are bought with coins in UPGRADE WEAPONS and are the only ones with a <b>SUPER</b> (R). The Fire Glove needs every other weapon first; the Vortex Shield needs nothing; the Wind Wand and Explosive Revolver need another legendary; the Portal Wand can only be won from the Portal Mage.</p></div>
+        <div class="howto-sec"><h3>PARRY</h3>
+          <p>Parry (P) opens a short window: a melee blow aimed at you is sent back at the attacker, a shot bounces back the way it came, and a fire hand or inferno fizzles out. Parrying a Giant's swing or shockwave stuns him. It then needs 8 seconds to recharge (the blue bar).</p></div>
+        <div class="howto-sec"><h3>COINS &amp; UPGRADES</h3>
+          <p>Monsters drop coins &ndash; walk over them to collect. Spend coins in <b>UPGRADE WEAPONS</b> (damage, speed, range, crit, cooldown, multishot and more for each weapon, plus your health, move speed, defense and parry), on <b>ABILITIES</b>, and on skins in <b>CUSTOMIZE</b>.</p></div>
+        <div class="howto-sec"><h3>ABILITIES</h3>
+          <p>Bought once and kept forever. Put two of them on Q and E in the ABILITIES menu: dash, heal, frost nova, berserk, meteor shower, aegis, time warp, thunderstorm, life drain and black hole. Each has its own cooldown.</p></div>
+        <div class="howto-sec"><h3>ITEMS</h3>
+          <p>Glowing gems appear on the floor. Walk over one to pick it up (you can carry 4), then use it with 1-4 or by tapping it: speed, strength, shield, haste, heal, coin magnet, regeneration, vampire, bomb and frost nova.</p></div>
+        <div class="howto-sec"><h3>TRAPS</h3>
+          <p>Traps appear around the arena and hurt <b>everyone</b>, monsters included &ndash; so lure enemies onto them. Spikes, fire vents and tesla coils glow while they arm, then go off. Others: mines, snares, poison pools, spring pads and warp runes.</p></div>
+        <div class="howto-sec"><h3>MONSTERS &amp; BOSSES</h3>
+          <p>Each kind fights its own way: runners are fast, brutes hit hard, spitters and infernals shoot from range, wraiths blink next to you, and armoured ones (grey mark on their health bar) shrug off part of every hit.</p>
+          <p><b>The Giant</b> swings his tree and slams the ground to send out a shockwave &ndash; parry either one to stun him. <b>The Portal Mage</b> throws fireballs through red portals, teleports (follow him through the portal if you are quick), lays traps, summons monsters through green portals and, as a last resort, hides behind two Giants &ndash; kill them to finish him.</p></div>
+        <div class="howto-sec"><h3>SAVING</h3>
+          <p>Type a password on the start screen and your XP, coins, weapons, upgrades, abilities and skins are saved to it. Use the same password on any device to carry on. A copy is also kept in your browser, so progress survives server updates.</p></div>
+      </div>
+      <button class="mode-btn shop-back" onclick="closeHowTo()">&#10003; BACK</button>
     </div>
   </div>
 
@@ -122,8 +166,40 @@
   <!-- In-game controls (top-right) -->
   <div id="gameControls">
     <button id="skipWaveBtn" class="admin-only" onclick="skipWave()" title="Admin: kill everything and start the next wave">&#9193; SKIP WAVE</button>
+    <button id="sandboxBtn" onclick="toggleSandboxPanel()">&#9874; TOOLS</button>
     <button id="musicBtnGame" onclick="cycleMusic()">&#9835; 1/21</button>
     <button id="leaveBtn" onclick="leaveGame()">&#10005; LEAVE</button>
+  </div>
+
+  <!-- Sandbox tools: spawn anything, switch on cheats (sandbox mode only) -->
+  <div id="sandboxPanel" class="hidden">
+    <div class="sb-head">SANDBOX TOOLS <button class="sb-close" onclick="toggleSandboxPanel(false)">&#10005;</button></div>
+    <div class="sb-body">
+      <div class="sb-title">CHEATS</div>
+      <div class="sb-row">
+        <button class="sb-btn sb-toggle" data-toggle="god">GOD MODE</button>
+        <button class="sb-btn sb-toggle" data-toggle="noCd">NO COOLDOWNS</button>
+        <button class="sb-btn sb-toggle" data-toggle="freeze">FREEZE MONSTERS</button>
+        <button class="sb-btn" data-act="heal">HEAL</button>
+        <button class="sb-btn sb-danger" data-act="clear">CLEAR ALL</button>
+      </div>
+      <div class="sb-title">MONSTERS</div>
+      <div class="sb-row">
+        <span class="sb-opt">LEVEL <input type="range" id="sbLevel" min="1" max="50" value="5"> <b id="sbLevelVal">5</b></span>
+        <span class="sb-opt">COUNT <select id="sbCount"><option>1</option><option>3</option><option>5</option><option>10</option></select></span>
+      </div>
+      <div id="sbMonsters" class="sb-row"></div>
+      <div class="sb-title">ITEMS <span class="sb-note">(dropped in front of you)</span></div>
+      <div id="sbItems" class="sb-row"></div>
+      <div class="sb-title">TRAPS</div>
+      <div id="sbTraps" class="sb-row"></div>
+      <div class="sb-title">ABILITIES <span class="sb-note">(any of them, free)</span></div>
+      <div class="sb-row">
+        <span class="sb-opt">Q <select id="sbAb0"></select></span>
+        <span class="sb-opt">E <select id="sbAb1"></select></span>
+      </div>
+      <div class="sb-note">Every weapon is yours here &ndash; switch with the rack at the top. No XP, coins or scores are saved.</div>
+    </div>
   </div>
 
   <!-- Collected items are drawn inside the canvas HUD (see drawItemBar), so they

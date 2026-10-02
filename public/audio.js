@@ -7,7 +7,7 @@
 
 const GameAudio = (() => {
   let ctx = null;
-  let masterGain = null, musicGain = null;
+  let masterGain = null, musicGain = null, sfxGain = null;
   let muted = false;
   let musicPlaying = false, musicTimer = null;
 
@@ -21,8 +21,12 @@ const GameAudio = (() => {
       masterGain.gain.value = muted ? 0 : 0.7;
       masterGain.connect(ctx.destination);
       musicGain = ctx.createGain();
-      musicGain.gain.value = 0.18;
+      musicGain.gain.value = 0.22;
       musicGain.connect(masterGain);
+      // Sound effects sit well under the music so it can be heard in a fight.
+      sfxGain = ctx.createGain();
+      sfxGain.gain.value = 0.38;
+      sfxGain.connect(masterGain);
     } catch (e) { ctx = null; }
   }
   function resume() { if (ctx && ctx.state === 'suspended') ctx.resume(); }
@@ -38,7 +42,7 @@ const GameAudio = (() => {
     if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(1, slideTo), t + dur);
     g.gain.setValueAtTime(Math.max(0.0001, vol), t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(dest || masterGain);
+    o.connect(g); g.connect(dest || sfxGain);
     o.start(t); o.stop(t + dur + 0.02);
   }
 
@@ -55,7 +59,7 @@ const GameAudio = (() => {
     const g = ctx.createGain();
     g.gain.setValueAtTime(Math.max(0.0001, vol), t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(filt); filt.connect(g); g.connect(masterGain);
+    src.connect(filt); filt.connect(g); g.connect(sfxGain);
     src.start(t); src.stop(t + dur + 0.02);
   }
 
