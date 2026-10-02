@@ -2143,10 +2143,11 @@ function castFireHand(p, pKey, sp, dmgMult) {
   p.facing = Math.cos(aim) < 0 ? -1 : 1;
   const n = 1 + (weapon(p).multi || 0);
   for (let i = 0; i < n; i++) {
-    const a = aim + (i - (n - 1) / 2) * 0.45;
+    const a = aim + (i - (n - 1) / 2) * 0.7;
     room.fires.push({ id: nextId(), kind: 'hand', owner: pKey, x: cx(p) + Math.cos(a) * 12, y: cy(p) + Math.sin(a) * 12,
                       a, v: HAND_SPEED0, t: 0, life: HAND_LIFE, dmg: Math.round(sp.dmg * dmgMult),
-                      aoe: sp.aoe || 40, blast: Math.round((sp.blast || 14) * dmgMult) });
+                      aoe: sp.aoe || 40, blast: Math.round((sp.blast || 14) * dmgMult),
+                      slot: i, side: n > 1 ? (i - (n - 1) / 2) / ((n - 1) / 2) : 0 });
   }
 }
 
@@ -2413,10 +2414,14 @@ function updateFireHand(f, factor) {
   const foes = enemyTargets(f.owner)
     .map(t => ({ t, d: Math.hypot(cx(t) - f.x, cy(t) - f.y) }))
     .sort((a, b) => a.d - b.d);
-  const best = foes.length ? foes[0].t : null;
+  // MULTISHOT hands split up: each picks its own foe (nearest, next nearest...),
+  // and with only one foe they still come in from different sides.
+  const best = foes.length ? foes[(f.slot || 0) % foes.length].t : null;
   if (best) {
     // Steer toward the prey, turning hard but not instantly.
-    let diff = Math.atan2(cy(best) - f.y, cx(best) - f.x) - f.a;
+    const bd = Math.hypot(cx(best) - f.x, cy(best) - f.y);
+    const bend = (foes.length < 2 ? f.side || 0 : 0) * 0.9 * Math.min(1, bd / 220);
+    let diff = Math.atan2(cy(best) - f.y, cx(best) - f.x) + bend - f.a;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
     const turn = HAND_TURN * Math.sqrt(HAND_SPEED0 / f.v) * factor;
     f.a += Math.max(-turn, Math.min(turn, diff));
