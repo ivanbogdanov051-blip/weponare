@@ -482,6 +482,7 @@ function updatePrediction(frameDt, now) {
   let spd = me.speed || serverPlayerSpeed;
   if (me.effects && me.effects.speed > 0) spd *= 1.7;
   if (ghostNow(me, now)) spd *= 1.75;
+  if (me.passive === 'dagger') spd *= 1.3;   // SWIFTNESS
   if (me.effects && me.effects.slow  > 0) spd *= 0.4;
 
   // Apply currently-held inputs immediately (instant response)
@@ -2007,6 +2008,7 @@ function renderShop() {
       </div>
       <div class="shop-stats">${rows}</div>
       <div class="shop-desc">${desc}</div>
+      ${WEAPON_META[id]?.passive ? `<div class="shop-passive" data-pw="${id}" style="--pc:${WEAPON_META[id].passive.color}"></div>` : ''}
     </div>`;
   }).join('');
 
@@ -2173,6 +2175,17 @@ function refreshShopButtons() {
   const { coins, upgrades, upgradeDefs, costs } = shopData;
   document.getElementById('shopCoins').innerHTML =
     `<span class="coin-ic">◆</span> ${coins.toLocaleString()} COINS`;
+  // Each passive line shows how close its weapon is to unlocking it.
+  for (const el of document.querySelectorAll('#shopList .shop-passive')) {
+    const id = el.dataset.pw, pv = WEAPON_META[id]?.passive;
+    const stats = (WEAPON_META[id]?.upgrades || []).filter(k => upgradeDefs[k]);
+    const done = stats.filter(k => (upgrades[id]?.[k] || 0) >= upgradeDefs[k].max).length;
+    const on = done === stats.length;
+    el.classList.toggle('on', on);
+    el.innerHTML = `<b>★ PASSIVE: ${pv.name}</b> &ndash; ${pv.desc} while you hold it. `
+      + (on ? '<span class="pv-state">UNLOCKED</span>'
+            : `<span class="pv-state">Max every upgrade to unlock (${done}/${stats.length} maxed)</span>`);
+  }
   for (const b of document.querySelectorAll('#shopList .up-btn, #shopList .up-max')) {
     const id = b.dataset.w, stat = b.dataset.s, def = upgradeDefs[stat];
     if (!def) continue;
@@ -3116,9 +3129,120 @@ function drawPlayer(p, baseColor, label, key) {
   drawPlayerBody(p, baseColor, label, key);
   if (unseen) ctx.restore();
 }
+// ── Weapon passives, made visible ──
+// Every active passive gets a pulsing aura in its colour, plus its own touch:
+// SWIFTNESS trails wind streaks while you run, BERSERKER burns hotter the more
+// hurt you are, FROST AURA shows its reach, EMBER SKIN sheds embers, and so on.
+// Puffs (streaks, embers, petals) live per player and are stepped per frame.
+const passiveTrack = {};
+function drawPassiveFx(p, key, x, y) {
+  const pv = p.passive && WEAPON_META[p.passive]?.passive;
+  if (!pv) { delete passiveTrack[key]; return; }
+  const now = performance.now(), col = pv.color, id = p.passive;
+  const mx = x + p.w / 2, my = y + p.h / 2;
+  let tr = passiveTrack[key];
+  if (!tr || tr.id !== id) tr = passiveTrack[key] = { id, x: mx, y: my, t: now, vx: 0, vy: 0, puffs: [], acc: 0 };
+  const dt = Math.min(50, Math.max(1, now - tr.t));
+  tr.vx = tr.vx * 0.75 + ((mx - tr.x) / dt * 16) * 0.25;
+  tr.vy = tr.vy * 0.75 + ((my - tr.y) / dt * 16) * 0.25;
+  tr.x = mx; tr.y = my; tr.t = now;
+  const spd = Math.hypot(tr.vx, tr.vy);
+  const rnd = Math.random;
+
+  // New puffs.
+  tr.acc += dt;
+  const every = id === 'dagger' ? 28 : id === 'fireglove' ? 70 : id === 'katana' ? 160 : 0;
+  while (every && tr.acc >= every) {
+    tr.acc -= every;
+    if (id === 'dagger' && spd > 0.6) {
+      // Streaks start just behind you and blow back the way you came.
+      const ux = tr.vx / spd, uy = tr.vy / spd;
+      const side = (rnd() - 0.5) * p.h * 1.1;
+      tr.puffs.push({ x: mx - ux * p.w * 0.6 - uy * side, y: my - uy * p.w * 0.6 + ux * side,
+                      vx: -ux * 1.2, vy: -uy * 1.2, len: 6 + rnd() * 8, ux, uy, life: 320, max: 320 });
+    } else if (id === 'fireglove') {
+      tr.puffs.push({ x: mx + (rnd() - 0.5) * p.w, y: y + p.h - rnd() * 4, vx: (rnd() - 0.5) * 0.3, vy: -0.6 - rnd() * 0.5, life: 650, max: 650 });
+    } else if (id === 'katana') {
+      tr.puffs.push({ x: mx + (rnd() - 0.5) * p.w * 2, y: y - 4, vx: (rnd() - 0.5) * 0.4, vy: 0.35 + rnd() * 0.2, life: 1100, max: 1100, spin: rnd() * 6 });
+    }
+  }
+  if (!every) tr.acc = 0;
+  for (const f of tr.puffs) { f.x += f.vx * dt / 16; f.y += f.vy * dt / 16; f.life -= dt; }
+  tr.puffs = tr.puffs.filter(f => f.life > 0).slice(-60);
+
+  ctx.save();
+  // The aura: a soft disc that breathes, brighter for BERSERKER at low health.
+  const hurt = p.maxHp ? 1 - p.hp / p.maxHp : 0;
+  const pulse = 0.5 + 0.5 * Math.sin(now / (id === 'axe' ? 220 - hurt * 140 : 260));
+  const base = id === 'axe' ? 0.12 + hurt * 0.3 : 0.16;
+  ctx.globalAlpha = base + 0.1 * pulse; ctx.fillStyle = col;
+  ctx.beginPath(); ctx.ellipse(mx, my, p.w * 1.05 + pulse * 2, p.h * 0.85 + pulse * 2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.45 + 0.25 * pulse; ctx.strokeStyle = col; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.ellipse(mx, y + p.h, p.w * 0.75, 3, 0, 0, Math.PI * 2); ctx.stroke();
+
+  // Each passive's own touch.
+  if (id === 'dagger') {
+    ctx.lineWidth = 1.2; ctx.lineCap = 'round';
+    for (const f of tr.puffs) {
+      const k = f.life / f.max;
+      ctx.globalAlpha = 0.75 * k; ctx.strokeStyle = k > 0.6 ? '#ffffff' : col;
+      ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.x - f.ux * f.len, f.y - f.uy * f.len); ctx.stroke();
+    }
+  } else if (id === 'fireglove') {
+    for (const f of tr.puffs) {
+      const k = f.life / f.max;
+      ctx.globalAlpha = k; ctx.fillStyle = k > 0.5 ? '#ffd84a' : col;
+      ctx.fillRect(Math.round(f.x), Math.round(f.y), 1.5, 1.5);
+    }
+  } else if (id === 'katana') {
+    for (const f of tr.puffs) {
+      const k = f.life / f.max;
+      ctx.globalAlpha = Math.min(1, k * 2) * 0.9; ctx.fillStyle = col;
+      ctx.save(); ctx.translate(f.x + Math.sin(now / 300 + f.spin) * 3, f.y); ctx.rotate(now / 400 + f.spin);
+      ctx.fillRect(-1.5, -0.8, 3, 1.6); ctx.restore();
+    }
+  } else if (id === 'frostrod') {
+    ctx.globalAlpha = 0.35; ctx.strokeStyle = col; ctx.setLineDash([3, 5]); ctx.lineDashOffset = -now / 60;
+    ctx.beginPath(); ctx.arc(mx, my, 85, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#ffffff';
+    for (let i = 0; i < 10; i++) {
+      const a = i * 0.63 + now / 1400, d = 30 + ((i * 37) % 50);
+      ctx.globalAlpha = 0.5 + 0.4 * Math.sin(now / 300 + i);
+      ctx.fillRect(Math.round(mx + Math.cos(a) * d), Math.round(my + Math.sin(a) * d), 1.5, 1.5);
+    }
+  } else if (id === 'stormtome') {
+    ctx.strokeStyle = col; ctx.lineWidth = 1;
+    if (Math.floor(now / 90) % 3 === 0) {
+      const a = rnd() * Math.PI * 2, r0 = p.w * 0.7, r1 = p.w * 1.3;
+      ctx.globalAlpha = 0.9; ctx.beginPath();
+      ctx.moveTo(mx + Math.cos(a) * r0, my + Math.sin(a) * r0);
+      ctx.lineTo(mx + Math.cos(a + 0.3) * (r0 + r1) / 2 + 2, my + Math.sin(a + 0.3) * (r0 + r1) / 2);
+      ctx.lineTo(mx + Math.cos(a) * r1, my + Math.sin(a) * r1); ctx.stroke();
+    }
+  } else {
+    // Orbiting motes: sword sparkles, bow glints, staff runes, reaper souls.
+    const n = id === 'reaper' ? 2 : 3, r = p.w * 1.1;
+    for (let i = 0; i < n; i++) {
+      const a = now / (id === 'reaper' ? 500 : 700) + i * Math.PI * 2 / n;
+      const ox = mx + Math.cos(a) * r, oy = my + Math.sin(a) * r * 0.55;
+      ctx.globalAlpha = 0.85; ctx.fillStyle = col;
+      if (id === 'staff') ctx.fillRect(Math.round(ox) - 1.5, Math.round(oy) - 1.5, 3, 3);
+      else if (id === 'reaper') {
+        ctx.beginPath(); ctx.arc(ox, oy, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.35; ctx.fillRect(Math.round(ox - Math.sin(a) * 4) - 1, Math.round(oy) - 1, 2, 2);
+      } else {
+        ctx.fillRect(Math.round(ox) - 0.5, Math.round(oy) - 2, 1, 4);
+        ctx.fillRect(Math.round(ox) - 2, Math.round(oy) - 0.5, 4, 1);
+      }
+    }
+  }
+  ctx.restore();
+}
+
 function drawPlayerBody(p, baseColor, label, key) {
   const skinCol = getSkinColor(p, baseColor);
   const x = Math.round(p.x), y = Math.round(p.y);
+  drawPassiveFx(p, key, x, y);
 
   // Active-effect aura sits under the sprite.
   if (p.effects) {
@@ -4323,6 +4447,15 @@ function drawWeaponPanel(state) {
     ctx.font = '6px "Courier New",monospace'; ctx.textBaseline = 'top'; ctx.textAlign = 'center';
     ctx.fillStyle = '#000'; ctx.fillText(name, midX + 0.5, panelY + panelH + 2.5);
     ctx.fillStyle = WEAPON_COLOR[held] || PAL.white; ctx.fillText(name, midX, panelY + panelH + 2);
+    // A maxed weapon's passive, named under it while it's working.
+    const pv = mp.passive && WEAPON_META[mp.passive]?.passive;
+    if (pv) {
+      const t = '★ ' + pv.name + ' ★';
+      ctx.fillStyle = '#000'; ctx.fillText(t, midX + 0.5, panelY + panelH + 10.5);
+      ctx.globalAlpha = 0.75 + 0.25 * Math.sin(performance.now() / 250);
+      ctx.fillStyle = pv.color; ctx.fillText(t, midX, panelY + panelH + 10);
+      ctx.globalAlpha = 1;
+    }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
   ctx.restore();

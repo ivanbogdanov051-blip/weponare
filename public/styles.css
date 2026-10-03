@@ -242,6 +242,13 @@ body {
 .shop-row:last-child { border-bottom: none; }
 .shop-desc { flex: 1 1 100%; font-size: 9px; letter-spacing: 1px; color: #6a6a88; line-height: 1.5; }
 .shop-desc b { color: #a8a8c8; font-weight: normal; }
+/* A weapon's passive: dim until every upgrade is maxed, then lit in its colour. */
+.shop-passive { flex: 1 1 100%; font-size: 9px; letter-spacing: 1px; line-height: 1.5; color: #6a6a88;
+  border-left: 2px solid var(--pc); padding: 2px 0 2px 7px; opacity: 0.75; }
+.shop-passive b { color: var(--pc); font-weight: normal; }
+.shop-passive .pv-state { color: #8a8aa8; }
+.shop-passive.on { opacity: 1; color: #c8c8e0; background: linear-gradient(90deg, color-mix(in srgb, var(--pc) 18%, transparent), transparent); }
+.shop-passive.on .pv-state { color: var(--pc); font-weight: bold; }
 .shop-head { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; min-width: 132px; }
 .shop-ic { width: 56px; height: 32px; image-rendering: pixelated; }
 .shop-name { font-size: 11px; letter-spacing: 2px; }

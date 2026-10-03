@@ -280,6 +280,30 @@ const WEAPON_UPGRADES = {
   frostscythe: ['dmg', 'rng', 'chill', 'cdr', 'aoe'],
   sunbow:      ['dmg', 'spd', 'rng', 'crit', 'cdr'],   // no SPD or MLT: its portals come fast enough
 };
+// ── Weapon passives ──
+// Max out every upgrade on one of these weapons and, whenever you hold it, you
+// get its passive. Clients draw each one (an aura and its own effect) so it
+// can be seen; WEAPON_META[id].passive carries these to the upgrade menu.
+const PASSIVES = {
+  dagger:    { name: 'SWIFTNESS',     color: '#5ac8ff', desc: '+30% move speed' },
+  sword:     { name: 'GUARDIAN',      color: '#e8f0ff', desc: 'take 20% less damage' },
+  axe:       { name: 'BERSERKER',     color: '#ff4a3a', desc: 'up to +60% damage the lower your health' },
+  bow:       { name: 'EAGLE EYE',     color: '#ffd24a', desc: '+20% range and +10% critical chance' },
+  staff:     { name: 'ARCANE FLOW',   color: '#b07aff', desc: 'your special recharges 35% faster' },
+  katana:    { name: 'BLADE DANCE',   color: '#ff7ac8', desc: '20% faster attacks' },
+  reaper:    { name: 'SOUL HARVEST',  color: '#7aff9a', desc: 'every kill heals 8% of your health' },
+  frostrod:  { name: 'FROST AURA',    color: '#9fe8ff', desc: 'monsters close to you are slowed' },
+  fireglove: { name: 'EMBER SKIN',    color: '#ff8a2a', desc: 'you never burn, and monsters that hit you catch fire' },
+  stormtome: { name: 'STATIC CHARGE', color: '#c8a0ff', desc: 'zaps the nearest foe every 2s' },
+};
+const PASSIVE_SPEED = 1.3, PASSIVE_GUARD = 0.8, PASSIVE_RAGE = 0.6, PASSIVE_HARVEST = 0.08;
+const FROST_AURA_R = 85, STATIC_CD = 2000, STATIC_R = 180, STATIC_MULT = 0.6;
+
+function weaponMaxed(p, wid) {
+  const lv = p.upgrades?.[wid] || {};
+  return upgradesFor(wid).every(k => (lv[k] || 0) >= UPGRADE_STATS[k].max);
+}
+
 // Upgrade rows that aren't weapons: always available, stored alongside the
 // weapon upgrades under these ids.
 const PERK_UPGRADES = {
@@ -840,6 +864,12 @@ function refreshWeapon(p) {
   if (p.weaponIdx >= ids.length) p.weaponIdx = 0;
   const base = WEAPON_BY_ID[ids[p.weaponIdx]] || WEAPONS[0];
   p.w_ = applyUpgrades(base, p.upgrades?.[base.id]);
+  // A maxed weapon's passive (the sandbox can switch them all on).
+  const free = room && room.gameMode === 'sandbox' && room.sandbox?.passives;
+  p.passive = PASSIVES[base.id] && (free || weaponMaxed(p, base.id)) ? base.id : null;
+  if (p.passive === 'bow')    p.w_ = { ...p.w_, range: Math.round(p.w_.range * 1.2), crit: (p.w_.crit || 0) + 0.1 };
+  if (p.passive === 'katana') p.w_ = { ...p.w_, atkSpd: Math.max(70, Math.round(p.w_.atkSpd * 0.8)) };
+  if (p.passive === 'staff' && p.w_.special) p.w_ = { ...p.w_, special: { ...p.w_.special, cd: Math.round(p.w_.special.cd * 0.65) } };
   // Swapping off the Dagger of Ghosts drops its cloak.
   if (!base.ghostCloak && p.effects && p.effects.ghost) breakGhost(p);
 }
@@ -1025,6 +1055,7 @@ function effectiveSpeed(p) {
   let s = p.speed;
   if (hasEffect(p, 'speed')) s *= 1.7;
   if (hasEffect(p, 'ghost')) s *= 1.75;
+  if (p.passive === 'dagger') s *= PASSIVE_SPEED;
   if (hasEffect(p, 'slow'))  s *= 0.4;
   return s;
 }
@@ -1311,6 +1342,7 @@ function monsterMelee(m, t) {
     spawnParrySpark(cx(t), cy(t));
   } else {
     applyDamage(t, m.atkDamage, 'monster');
+    if (t.passive === 'fireglove') m.burnTimer = Math.max(m.burnTimer || 0, 2000);   // EMBER SKIN
   }
   m.atkCooldown = 1200;
   m.swing = MONSTER_SWING_MS;
@@ -1593,6 +1625,9 @@ function applyDamage(target, dmg, attackerKey) {
   // Weapon upgrades on the attacking player: critical hits, lifesteal, knockback.
   const atk = (attackerKey === 'p1' || attackerKey === 'p2') ? room.players[attackerKey] : null;
   const aw = atk && atk !== target ? weapon(atk) : null;
+  if (aw && atk.passive === 'axe') dmg *= 1 + PASSIVE_RAGE * Math.max(0, 1 - atk.hp / atk.maxHp);   // BERSERKER
+  if (target.num && target.passive === 'sword') dmg *= PASSIVE_GUARD;                              // GUARDIAN
+  dmg = Math.max(1, Math.round(dmg));
   if (aw && aw.crit && Math.random() < aw.crit) {
     dmg *= 2;
     room.particles.push({ type: 'crit', x: cx(target), y: target.y - 4, text: 'CRIT', timer: 600, max: 600 });
@@ -1638,6 +1673,14 @@ function handleKill(target, attackerKey) {
     room.particles.push({ type: 'trapburst', x: cx(target), y: cy(target), maxR: 60, timer: 900, max: 900, color: '#ffa03a', text: 'REBORN!' });
     room.particles.push({ type: 'shockwave', x: cx(target), y: cy(target), maxR: 80, timer: 600, max: 600, color: '#ffd84a' });
     return;
+  }
+  // SOUL HARVEST: the reaper's wielder feeds on every kill.
+  const reaper = room.players[attackerKey];
+  if (reaper && reaper !== target && !reaper.dead && reaper.passive === 'reaper') {
+    const heal = Math.round(reaper.maxHp * PASSIVE_HARVEST);
+    reaper.hp = Math.min(reaper.maxHp, reaper.hp + heal);
+    room.particles.push({ type: 'bolt', x: cx(target), y: cy(target), x2: cx(reaper), y2: cy(reaper), timer: 300, max: 300, color: PASSIVES.reaper.color });
+    room.particles.push({ type: 'xp', x: cx(reaper), y: reaper.y - 4, text: '+' + heal, timer: 800, color: PASSIVES.reaper.color });
   }
   const isPlayer = !!target.num;
   let baseGain = isPlayer ? 15 : 6;
@@ -1867,6 +1910,7 @@ function tickRoom(dt) {
     if (p.swingTimer      > 0) p.swingTimer      -= dt;
     for (const id in p.abCd) if (p.abCd[id] > 0) p.abCd[id] -= dt;
     if (hasEffect(p, 'thunder')) thunderTick(p, key, dt);
+    if (p.passive && !p.dead) passiveTick(p, key, dt);
     if (room.gameMode === 'sandbox') sandboxCheats(p);
 
     if (room.swapJustPressed[key] && p.unlockedWeapons.length > 0) {
@@ -2821,6 +2865,29 @@ const KNIFE_PVP_DMG = 40, KNIFE_MEDKIT_CHANCE = 0.25, MAX_MEDKITS = 10;
 // take a much smaller share, or the fights would be over in a few throws).
 const THROW_SHARE = 0.25, THROW_BACK_SHARE = 0.5, THROW_BOSS_SHARE = 0.06, THROW_BOSS_BACK_SHARE = 0.12;
 
+// The passives that act every tick rather than on a stat.
+function passiveTick(p, key, dt) {
+  if (p.passive === 'fireglove' && p.effects) delete p.effects.burn;   // EMBER SKIN
+  if (p.passive === 'frostrod') {                                     // FROST AURA
+    for (const m of room.monsters) {
+      if (Math.hypot(cx(m) - cx(p), cy(m) - cy(p)) <= FROST_AURA_R + m.w / 2) m.slowTimer = Math.max(m.slowTimer || 0, 250);
+    }
+  }
+  if (p.passive === 'stormtome') {                                    // STATIC CHARGE
+    p.staticCd = (p.staticCd || 0) - dt;
+    if (p.staticCd > 0) return;
+    let best = null, bd = STATIC_R;
+    for (const t of enemyTargets(key)) {
+      const d = Math.hypot(cx(t) - cx(p), cy(t) - cy(p));
+      if (d < bd) { bd = d; best = t; }
+    }
+    if (!best) { p.staticCd = 250; return; }
+    p.staticCd = STATIC_CD;
+    room.particles.push({ type: 'bolt', x: cx(p), y: cy(p), x2: cx(best), y2: cy(best), timer: 260, max: 260, color: PASSIVES.stormtome.color });
+    applyDamage(best, Math.max(1, Math.round(weapon(p).damage * STATIC_MULT)), key);
+  }
+}
+
 function breakGhost(p) {
   if (!p.effects || !p.effects.ghost) return;
   delete p.effects.ghost;
@@ -3617,7 +3684,7 @@ function grantBossWeapon(key, wid) {
 const SANDBOX_MAX_MONSTERS = 40;
 
 function startSandbox() {
-  room.sandbox = { god: false, noCd: false, freeze: false, level: 5 };
+  room.sandbox = { god: false, noCd: false, freeze: false, passives: false, level: 5 };
   room.wave = { num: 1, monstersLeft: 0, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 };
   room.waveHpMult = 1; room.waveSpeedMult = 1;
   const p = room.players.p1;
@@ -3690,7 +3757,8 @@ function sandboxAction(key, msg) {
     sandboxClear();
   } else if (act === 'toggle') {
     const k = String(msg.what || '');
-    if (k === 'god' || k === 'noCd' || k === 'freeze') s[k] = !s[k];
+    if (k === 'god' || k === 'noCd' || k === 'freeze' || k === 'passives') s[k] = !s[k];
+    if (k === 'passives') refreshWeapon(p);
   } else if (act === 'level') {
     s.level = Math.max(1, Math.min(50, Math.floor(Number(msg.value) || 1)));
   } else if (act === 'ability') {
@@ -4457,6 +4525,7 @@ function playerView(p) {
     vShield: p.vortexShield > 0 ? Math.round(p.vortexShield) : 0, vStore: Math.round(p.vortexStore || 0),
     parryCd: Math.max(0, p.parryCooldown), parryMax: p.parryCd || PARRY_COOLDOWN, parryActive: p.parryTimer > 0,
     speed: Math.round(p.speed * 1000) / 1000,
+    passive: p.passive || null,
     effects: p.effects,
     pulled: !!p.pull,
   };
@@ -4539,6 +4608,7 @@ function weaponCatalog() {
     special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd } : null,
     super: w.super ? { kind: w.super.kind, dmg: w.super.dmg, cd: w.super.cd } : null,
     upgrades: upgradesFor(w.id),
+    passive: PASSIVES[w.id] || null,
   }));
 }
 
