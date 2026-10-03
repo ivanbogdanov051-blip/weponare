@@ -1728,16 +1728,6 @@ function handleKill(target, attackerKey) {
     room.particles.push({ type: 'bolt', x: cx(target), y: cy(target), x2: cx(reaper), y2: cy(reaper), timer: 300, max: 300, color: PASSIVES.reaper.color });
     room.particles.push({ type: 'xp', x: cx(reaper), y: reaper.y - 4, text: '+' + heal, timer: 800, color: PASSIVES.reaper.color });
   }
-  // CHAIN REACTION: the revolver's holder makes everything they kill blow up.
-  if (reaper && reaper !== target && !reaper.dead && reaper.passive === 'revolver') {
-    const x = cx(target), y = cy(target), dmg = Math.max(1, Math.round(weapon(reaper).damage * BLAST_MULT));
-    room.particles.push({ type: 'shockwave', x, y, maxR: BLAST_R, timer: 380, max: 380, color: PASSIVES.revolver.color });
-    for (const t of enemyTargets(attackerKey)) {
-      if (t === target || t.dead || Math.hypot(cx(t) - x, cy(t) - y) > BLAST_R + t.w / 2) continue;
-      if (!t.num) t.invincible = 0;
-      applyDamage(t, dmg, attackerKey);
-    }
-  }
   const isPlayer = !!target.num;
   let baseGain = isPlayer ? 15 : 6;
   // Bigger (tankier) monsters reward more XP, scaled by their max HP over the base
@@ -1780,6 +1770,22 @@ function handleKill(target, attackerKey) {
     room.monsters = room.monsters.filter(m => m !== target);
     room.wave.monstersLeft--;
     monsterDied(target, attackerKey);
+  }
+  chainReaction(target, attackerKey);
+}
+
+// CHAIN REACTION: what the revolver's holder kills blows up. Runs once the kill is
+// settled (the victim is already dead), so a blast can never re-kill it or loop
+// back through its neighbours; each monster can only die once.
+function chainReaction(target, attackerKey) {
+  const owner = room.players[attackerKey];
+  if (!owner || owner === target || owner.dead || owner.passive !== 'revolver') return;
+  const x = cx(target), y = cy(target), dmg = Math.max(1, Math.round(weapon(owner).damage * BLAST_MULT));
+  room.particles.push({ type: 'shockwave', x, y, maxR: BLAST_R, timer: 380, max: 380, color: PASSIVES.revolver.color });
+  for (const t of enemyTargets(attackerKey).slice()) {
+    if (t === target || t.dead || Math.hypot(cx(t) - x, cy(t) - y) > BLAST_R + t.w / 2) continue;
+    if (!t.num) t.invincible = 0;
+    applyDamage(t, dmg, attackerKey);
   }
 }
 
