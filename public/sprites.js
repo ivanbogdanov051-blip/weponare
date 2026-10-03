@@ -896,6 +896,57 @@ function itemSymbol(b, type, c) {
     rect(b, cx - 1, cy - 5, 3, 11, '#ffffff');
     rect(b, cx - 5, cy - 1, 11, 3, '#ffffff');
     rect(b, cx, cy - 4, 1, 9, '#ffd8dc');
+  } else if (type === 'thorns') {
+    // A thorny vine ring.
+    ringPx(b, cx, cy, 4, 1.4, ink);
+    for (const [dx, dy] of [[0, -6], [5, -3], [5, 3], [0, 6], [-5, 3], [-5, -3]]) setPx(b, cx + dx, cy + dy, ink);
+    setPx(b, cx - 1, cy - 3, hi);
+  } else if (type === 'cloak') {
+    // A hooded cloak with an empty face.
+    poly(b, [[cx, cy - 6], [cx + 5, cy + 5], [cx - 5, cy + 5]], ink);
+    rect(b, cx - 1, cy - 2, 3, 3, c[3]);
+    setPx(b, cx - 1, cy - 4, hi);
+  } else if (type === 'zap') {
+    // A jar with a bolt inside.
+    rect(b, cx - 4, cy - 4, 9, 9, ink);
+    rect(b, cx - 2, cy - 6, 5, 2, ink);
+    line(b, cx + 1, cy - 3, cx - 1, cy, '#ffe45a'); line(b, cx - 1, cy, cx + 2, cy + 1, '#ffe45a'); line(b, cx + 2, cy + 1, cx, cy + 4, '#ffe45a');
+  } else if (type === 'turret') {
+    // A little cannon on a stand.
+    rect(b, cx - 4, cy + 1, 9, 4, ink);
+    rect(b, cx - 1, cy - 4, 7, 3, ink);
+    setPx(b, cx + 5, cy - 3, '#ffb030');
+    setPx(b, cx - 3, cy + 2, hi);
+  } else if (type === 'egg') {
+    // A speckled egg with a crack.
+    disc(b, cx, cy + 1, 4.4, ink);
+    setPx(b, cx - 2, cy - 1, c[3]); setPx(b, cx + 1, cy + 2, c[3]);
+    line(b, cx - 3, cy, cx - 1, cy + 1, hi); line(b, cx - 1, cy + 1, cx + 1, cy - 1, hi);
+  } else if (type === 'frenzy') {
+    // Three rising chevrons.
+    for (let i = 0; i < 3; i++) {
+      line(b, cx - 4, cy + 3 - i * 3, cx, cy - 1 - i * 3, ink);
+      line(b, cx, cy - 1 - i * 3, cx + 4, cy + 3 - i * 3, ink);
+    }
+    setPx(b, cx, cy - 7, hi);
+  } else if (type === 'ironskin') {
+    // A riveted chest plate.
+    poly(b, [[cx - 5, cy - 4], [cx + 5, cy - 4], [cx + 4, cy + 5], [cx - 4, cy + 5]], ink);
+    rect(b, cx, cy - 3, 1, 7, c[3]);
+    setPx(b, cx - 3, cy - 2, hi); setPx(b, cx + 3, cy - 2, hi);
+  } else if (type === 'hourglass') {
+    poly(b, [[cx - 4, cy - 5], [cx + 4, cy - 5], [cx, cy]], ink);
+    poly(b, [[cx - 4, cy + 5], [cx + 4, cy + 5], [cx, cy]], ink);
+    setPx(b, cx, cy + 3, '#ffe0a0'); setPx(b, cx - 1, cy + 4, '#ffe0a0'); setPx(b, cx + 1, cy + 4, '#ffe0a0');
+  } else if (type === 'goldrush') {
+    // A stack of coins.
+    for (let i = 0; i < 3; i++) rect(b, cx - 4 + i, cy + 3 - i * 3, 7, 2, ink);
+    setPx(b, cx - 1, cy - 4, hi); setPx(b, cx, cy - 4, '#fff6c0');
+  } else if (type === 'elixir') {
+    // A round flask.
+    disc(b, cx, cy + 2, 4.2, ink);
+    rect(b, cx - 1, cy - 6, 3, 5, ink);
+    setPx(b, cx - 2, cy + 1, hi); setPx(b, cx - 1, cy, hi);
   } else if (type === 'frost') {
     // Snowflake.
     rect(b, cx, cy - 5, 1, 11, ink);
@@ -1100,6 +1151,95 @@ function trapBuf(type, size, armed) {
         line(b, cx2, cy2, cx2 + Math.cos(an) * s * 0.3, cy2 + Math.sin(an) * s * 0.3, '#9fe8ff');
       }
     }
+  } else if (type === 'ice') {
+    // A frosted plate of blue ice with cracks across it.
+    const cx2 = o + s / 2, cy2 = o + s / 2;
+    rect(b, o, o, s, s, '#3a6a8a');
+    rect(b, o + 1, o + 1, s - 2, s - 2, '#7ac8e8');
+    ditherRect(b, o + 2, o + 2, s - 4, s - 4, '#7ac8e8', '#bfefff', 'sparse');
+    line(b, o + 3, o + 4, cx2, cy2, '#e8faff'); line(b, cx2, cy2, o + s - 4, o + s - 6, '#e8faff'); line(b, cx2, cy2, o + 6, o + s - 3, '#e8faff');
+    if (armed) disc(b, cx2, cy2, s * 0.15, '#ffffff');
+  } else if (type === 'saw') {
+    // A steel pit with a toothed saw blade.
+    const cx2 = o + s / 2, cy2 = o + s / 2, r = s * 0.42;
+    rect(b, o, o, s, s, MAT5.stone[0]);
+    rect(b, o + 1, o + 1, s - 2, s - 2, MAT5.iron[0]);
+    disc(b, cx2, cy2, r, MAT5.steel[2]);
+    for (let a = 0; a < 10; a++) {
+      const an = a * Math.PI / 5;
+      poly(b, [[cx2 + Math.cos(an) * r, cy2 + Math.sin(an) * r], [cx2 + Math.cos(an + 0.2) * (r + 3), cy2 + Math.sin(an + 0.2) * (r + 3)],
+               [cx2 + Math.cos(an + 0.4) * r, cy2 + Math.sin(an + 0.4) * r]], MAT5.steel[3]);
+    }
+    disc(b, cx2, cy2, r * 0.3, MAT5.iron[2]);
+    setPx(b, Math.round(cx2), Math.round(cy2), MAT5.steel[4]);
+  } else if (type === 'gravity') {
+    // A dark disc with a purple spiral.
+    const cx2 = o + s / 2, cy2 = o + s / 2;
+    disc(b, cx2, cy2, s * 0.46, '#1a0e2a');
+    for (let i = 0; i < 40; i++) {
+      const a = i * 0.45, r = 1 + i * s * 0.011;
+      setPx(b, Math.round(cx2 + Math.cos(a) * r), Math.round(cy2 + Math.sin(a) * r), armed ? '#d8b8ff' : '#8a5aff');
+    }
+    disc(b, cx2, cy2, 1.5, '#000000');
+  } else if (type === 'lava') {
+    // Cracked basalt glowing through.
+    const cx2 = o + s / 2, cy2 = o + s / 2;
+    rect(b, o, o, s, s, '#2a1a14');
+    ditherRect(b, o + 1, o + 1, s - 2, s - 2, '#2a1a14', '#3a2a22', 'sparse');
+    const glow = armed ? '#ffd84a' : '#ff5a1a';
+    line(b, o + 2, cy2 - 3, cx2, cy2, glow); line(b, cx2, cy2, o + s - 3, cy2 - 6, glow);
+    line(b, cx2, cy2, cx2 + 2, o + s - 2, glow); line(b, cx2, cy2, cx2 - 4, o + 3, glow);
+    disc(b, cx2, cy2, s * (armed ? 0.16 : 0.1), glow);
+  } else if (type === 'root') {
+    // Knotted green roots in a ring of soil.
+    const cx2 = o + s / 2, cy2 = o + s / 2;
+    disc(b, cx2, cy2, s * 0.46, '#3a2a14');
+    for (let i = 0; i < 5; i++) {
+      const a = i * Math.PI * 2 / 5;
+      line(b, cx2, cy2, cx2 + Math.cos(a) * s * 0.44, cy2 + Math.sin(a) * s * 0.44, '#3a8a2a');
+      line(b, cx2 + Math.cos(a) * s * 0.2, cy2 + Math.sin(a) * s * 0.2, cx2 + Math.cos(a + 0.5) * s * 0.36, cy2 + Math.sin(a + 0.5) * s * 0.36, '#5aa83a');
+    }
+    disc(b, cx2, cy2, 2.5, armed ? '#9aff7a' : '#5aa83a');
+  } else if (type === 'keg') {
+    // A banded powder barrel with a skull mark.
+    const wd = MAT5.wood, cx2 = o + s / 2;
+    rect(b, o + 3, o + 1, s - 6, s - 2, wd[1]);
+    ditherRect(b, o + 4, o + 2, s - 8, s - 4, wd[1], wd[2], 'grain');
+    for (const y of [o + 4, o + s - 6]) rect(b, o + 3, y, s - 6, 2, MAT5.iron[2]);
+    rect(b, cx2 - 3, o + s / 2 - 2, 6, 4, '#e8e0c8');
+    setPx(b, cx2 - 2, o + s / 2 - 1, '#1a1a1a'); setPx(b, cx2 + 1, o + s / 2 - 1, '#1a1a1a');
+    line(b, cx2, o + 1, cx2 + 3, o - 1, '#c8a070');
+    if (armed) { setPx(b, cx2 + 3, o - 2, '#ffd84a'); setPx(b, cx2 + 4, o - 2, '#ff6a1a'); }
+  } else if (type === 'healspring') {
+    // A stone basin of glowing green water.
+    const cx2 = o + s / 2, cy2 = o + s / 2, r = s * 0.46;
+    disc(b, cx2, cy2, r, MAT5.stone[2]);
+    disc(b, cx2, cy2, r - 2.5, '#1a6a4a');
+    disc(b, cx2 - 1, cy2 - 1, r - 4.5, armed ? '#9affc0' : '#3ac88a');
+    rect(b, cx2 - 1, cy2 - 4, 3, 9, '#e8fff0'); rect(b, cx2 - 4, cy2 - 1, 9, 3, '#e8fff0');
+  } else if (type === 'mirror') {
+    // A pink rune circle with two arrows chasing each other.
+    const cx2 = o + s / 2, cy2 = o + s / 2;
+    disc(b, cx2, cy2, s * 0.46, '#2a1424');
+    ringPx(b, cx2, cy2, s * 0.4, 1.2, '#ff7ac8');
+    line(b, cx2 - 5, cy2 - 3, cx2 + 5, cy2 - 3, '#ffc8e8'); setPx(b, cx2 + 4, cy2 - 4, '#ffc8e8'); setPx(b, cx2 + 4, cy2 - 2, '#ffc8e8');
+    line(b, cx2 - 5, cy2 + 3, cx2 + 5, cy2 + 3, '#ffc8e8'); setPx(b, cx2 - 4, cy2 + 2, '#ffc8e8'); setPx(b, cx2 - 4, cy2 + 4, '#ffc8e8');
+    if (armed) disc(b, cx2, cy2, 2, '#ffffff');
+  } else if (type === 'nullfield') {
+    // A grey plate with a crossed-out circle.
+    const cx2 = o + s / 2, cy2 = o + s / 2;
+    rect(b, o, o, s, s, '#3a3a4a');
+    ditherRect(b, o + 1, o + 1, s - 2, s - 2, '#3a3a4a', '#4a4a5a', 'checker');
+    ringPx(b, cx2, cy2, s * 0.3, 1.6, armed ? '#ffffff' : '#9a9ab8');
+    line(b, cx2 - s * 0.22, cy2 + s * 0.22, cx2 + s * 0.22, cy2 - s * 0.22, armed ? '#ffffff' : '#9a9ab8');
+  } else if (type === 'quake') {
+    // Cracked earth with a jagged fault.
+    const cx2 = o + s / 2, cy2 = o + s / 2;
+    rect(b, o, o, s, s, '#5a4028');
+    ditherRect(b, o + 1, o + 1, s - 2, s - 2, '#5a4028', '#7a5a38', 'sparse');
+    const c2 = armed ? '#ffd84a' : '#1a0e04';
+    line(b, o + 1, cy2 - 4, o + s * 0.3, cy2 + 2, c2); line(b, o + s * 0.3, cy2 + 2, cx2, cy2 - 3, c2);
+    line(b, cx2, cy2 - 3, o + s * 0.7, cy2 + 4, c2); line(b, o + s * 0.7, cy2 + 4, o + s - 2, cy2, c2);
   } else if (type === 'warp') {
     // A glowing rune circle.
     const cx2 = o + s / 2, cy2 = o + s / 2, pu = ['#1a0a30', '#3a1a6a', '#7a3ad0', '#b07aff', '#e8d0ff'];

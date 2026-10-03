@@ -505,6 +505,124 @@ const WEAPON_ART = {
     k.r(8, -1.6, 2.4, 1, '#ff7a1a'); k.r(8, 0.6, 2.4, 1, '#ff7a1a');   // fletching
   }},
 
+  // ── The 10 update ──
+  scimitar: { draw(k, wc) {
+    // A curved desert blade with a brass guard.
+    grip(k, 5);
+    k.circ(-0.8, 0, 1.8, MAT.gold);
+    k.r(5, -3.6, 1.8, 7.2, MAT.gold);
+    k.poly([[6.8, -1.8], [14, -2.6], [21, -3.6], [26, -6], [24, -2], [18, 1], [12, 2], [6.8, 1.8]], wc);
+    k.poly([[6.8, -1.8], [14, -2.6], [21, -3.6], [26, -6], [22, -3.2], [14, -1.4], [6.8, -0.8]], MAT.steelLight);
+  }},
+
+  slingshot: { draw(k, wc) {
+    // A forked branch with a leather pouch on the band.
+    k.r(-2, -1.4, 8, 2.8, MAT.wood);
+    k.poly([[5, -1.4], [12, -7], [13.5, -6], [7, 0]], MAT.wood);
+    k.poly([[5, 1.4], [12, 7], [13.5, 6], [7, 0]], MAT.wood);
+    k.r(12, -7.4, 1.6, 1.6, MAT.woodLight); k.r(12, 5.8, 1.6, 1.6, MAT.woodLight);
+    k.line(13, -6.5, 8, 0, 0.7, '#c8a070'); k.line(13, 6.5, 8, 0, 0.7, '#c8a070');
+    k.r(6.5, -1.6, 3, 3.2, MAT.leather);
+    k.circ(8, 0, 1.3, '#7a6a58');
+  }},
+
+  mace: { draw(k, wc) {
+    // A flanged steel head on a short iron haft.
+    grip(k, 7, MAT.leather, MAT.leatherLt, 2);
+    k.r(7, -1.2, 9, 2.4, MAT.iron);
+    k.circ(19, 0, 5, MAT.steelDark);
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3;
+      k.poly([[19 + Math.cos(a - 0.3) * 4, Math.sin(a - 0.3) * 4], [19 + Math.cos(a) * 7.5, Math.sin(a) * 7.5], [19 + Math.cos(a + 0.3) * 4, Math.sin(a + 0.3) * 4]], wc);
+    }
+    k.circ(18, -1.4, 2, MAT.steelLight);
+  }},
+
+  javelin: { draw(k, wc) {
+    // A long light shaft with a leaf-shaped steel tip.
+    k.r(-6, -0.9, 28, 1.8, MAT.wood);
+    k.r(-6, -0.9, 28, 0.6, MAT.woodLight);
+    k.r(4, -1.3, 4, 2.6, MAT.leather);
+    k.poly([[22, -2.6], [30, 0], [22, 2.6], [20.5, 0]], wc);
+    k.poly([[22, -2.6], [30, 0], [22, -0.3]], MAT.steelLight);
+  }},
+
+  claws: { draw(k, wc) {
+    // A knuckle grip with three long hooked blades.
+    k.r(-1, -4, 5, 8, MAT.leather);
+    k.r(0, -4, 1.2, 8, MAT.leatherLt);
+    for (const y of [-3, 0, 3]) {
+      k.poly([[4, y - 0.8], [14, y - 1.4], [18, y - 3], [15, y + 0.4], [4, y + 0.8]], wc);
+      k.r(4, y - 0.8, 8, 0.6, MAT.steelLight);
+    }
+  }},
+
+  emberstaff: { draw(k, wc) {
+    // A charred staff with a burning coal in iron prongs.
+    k.r(0, -1.2, 17, 2.4, '#3a2418');
+    k.r(0, -1.2, 17, 0.8, '#5a3a24');
+    k.r(5, -1.7, 1.2, 3.4, MAT.iron); k.r(11, -1.7, 1.2, 3.4, MAT.iron);
+    k.poly([[16, -1.6], [19, -5], [20.5, -4], [18.5, -1]], MAT.iron);
+    k.poly([[16, 1.6], [19, 5], [20.5, 4], [18.5, 1]], MAT.iron);
+    k.glow(21, 0, 8, wc, 0.5);
+    k.circ(21, 0, 3.4, '#c8340e');
+    k.circ(20.5, -0.6, 2, '#ffb030');
+    k.poly([[19, -3], [21, -9], [23, -3.5]], '#ff7a2a');
+  }},
+
+  halberd: { draw(k, wc) {
+    // A long pole topped by an axe blade, a spike and a back hook.
+    haft(k, 26, 2.2);
+    collar(k, 22, 3.6);
+    k.poly([[24, -1.2], [24, -8], [30, -10], [31, -3], [28, -1.2]], wc);
+    k.poly([[24, -1.2], [24, -8], [30, -10], [27, -6], [26, -1.2]], MAT.steelLight);
+    k.poly([[24, 1.2], [27, 5], [25, 1.2]], MAT.steelDark);
+    k.poly([[28, -1], [35, 0], [28, 1]], wc);
+  }},
+
+  frostbow: { draw(k, wc) {
+    // A pale bow of blue ice with an icicle arrow nocked.
+    const cxA = -9, R = 11.5, SPAN = Math.PI * 0.44;
+    const tipX = cxA + Math.cos(SPAN) * R, tipY = Math.sin(SPAN) * R;
+    k.ring(cxA, 0, R, 2.6, '#5aa8d0', -SPAN, SPAN);
+    k.ring(cxA, 0, R - 0.7, 1.1, '#e8faff', -SPAN * 0.96, SPAN * 0.96);
+    k.poly([[tipX, -tipY], [tipX + 3, -tipY - 3], [tipX + 1.2, -tipY + 1.4]], '#bfefff');
+    k.poly([[tipX, tipY], [tipX + 3, tipY + 3], [tipX + 1.2, tipY - 1.4]], '#bfefff');
+    k.line(tipX, -tipY - 1, tipX, tipY + 1, 0.8, '#e8faff');
+    k.r(0.4, -4, 3, 8, '#2a4a5a');
+    k.r(tipX, -0.55, 18, 1.1, '#9fe8ff');
+    k.poly([[12, -2.2], [17, 0], [12, 2.2]], '#ffffff');
+    k.glow(15, 0, 5, wc, 0.35);
+  }},
+
+  chronostaff: { draw(k, wc) {
+    // A brass staff crowned with a clock face in a ring of gears.
+    k.r(0, -1.2, 18, 2.4, '#5a4022');
+    k.r(0, -1.2, 18, 0.8, '#8a6438');
+    k.r(4, -1.7, 1.2, 3.4, MAT.gold); k.r(10, -1.7, 1.2, 3.4, MAT.gold);
+    k.glow(24, 0, 9, wc, 0.45);
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      k.r(24 + Math.cos(a) * 6.4 - 0.9, Math.sin(a) * 6.4 - 0.9, 1.8, 1.8, MAT.gold);
+    }
+    k.circ(24, 0, 5.6, MAT.gold);
+    k.circ(24, 0, 4.4, '#fff6e0');
+    k.line(24, 0, 24, -3.4, 0.8, '#3a2a14');
+    k.line(24, 0, 26.6, 0.8, 0.8, '#3a2a14');
+    k.circ(24, 0, 0.8, '#3a2a14');
+  }},
+
+  voidblade: { draw(k, wc) {
+    // A black blade split by a seam of violet light, with a starry edge.
+    grip(k, 5.5, '#1a1026', '#3a2652');
+    k.circ(-1, 0, 2, '#3a2652');
+    k.poly([[5.5, -5], [8, -2.6], [8, 2.6], [5.5, 5]], '#2a1a40');
+    k.glow(18, 0, 8, wc, 0.4);
+    k.poly([[8, -2.8], [27, -2], [31, 0], [27, 2], [8, 2.8]], '#140a22');
+    k.poly([[8, -0.6], [29, -0.3], [31, 0], [29, 0.3], [8, 0.6]], wc);
+    k.r(12, -2.2, 0.8, 0.8, '#ffffff'); k.r(19, 1.4, 0.8, 0.8, '#d8b8ff'); k.r(25, -1.6, 0.8, 0.8, '#ffffff');
+  }},
+
   ghostdagger: { draw(k, wc) {
     // A slim, wavy spectral blade on a dark, rune-wrapped hilt: wisps trail off
     // the edge, and a ghostly glow hangs around the whole thing.

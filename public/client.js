@@ -33,6 +33,8 @@ let WEAPON_COLOR = {
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
   fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff',
   ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
+  scimitar:'#e8e0c8', slingshot:'#b08a5a', mace:'#9aa4b0', javelin:'#d8c8a0', claws:'#e0e4ec',
+  emberstaff:'#ff7a2a', halberd:'#c0c8d8', frostbow:'#9fe8ff', chronostaff:'#e8c87a', voidblade:'#9a5aff',
 };
 const WEAPON_DESC = {
   sword:'Balanced blade', dagger:'Fast, low damage', axe:'Slow, heavy hit',
@@ -55,6 +57,11 @@ const WEAPON_DESC = {
   stormhammer:'A war hammer full of lightning that comes back when you throw it',
   frostscythe:'A sweeping scythe of ice that freezes whatever it keeps cutting',
   sunbow:'Arrows of sunlight, a little sun that fights for you, and a beam that burns across the arena',
+  scimitar:'Quick curved cuts, dash special', slingshot:'Stones that knock foes back',
+  mace:'Heavy blows that stun', javelin:'Piercing long throw', claws:'Rapid slashes that heal you',
+  emberstaff:'Fiery blasts that burn', halberd:'Huge reach, knockback, dash special', frostbow:'Piercing ice arrows that slow',
+  chronostaff:'Bend time: freeze foes in place and rewind your own wounds',
+  voidblade:'A blade of the void: waves on every swing, rift steps and a SUPER singularity',
 };
 
 // Filled from the server catalog: { id: {type, atkSpd, ...} }
@@ -484,6 +491,7 @@ function updatePrediction(frameDt, now) {
   if (ghostNow(me, now)) spd *= 1.75;
   if (me.passive === 'dagger') spd *= 1.45;   // SWIFTNESS
   if (me.effects && me.effects.slow  > 0) spd *= 0.4;
+  if (me.effects && me.effects.root  > 0) spd = 0;            // ROOT VINES
 
   // Apply currently-held inputs immediately (instant response)
   let vx = 0, vy = 0;
@@ -492,6 +500,7 @@ function updatePrediction(frameDt, now) {
   if (inp.up)    vy = -spd;
   if (inp.down)  vy =  spd;
   if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
+  if (me.effects && me.effects.confuse > 0) { vx = -vx; vy = -vy; if (vx) pred.facing = vx > 0 ? 1 : -1; }   // MIRROR RUNE
   const f = frameDt / 16.67;
   pred.x = Math.max(ARENA_X + 2, Math.min(ARENA_X + ARENA_W - me.w - 2, pred.x + vx * f));
   pred.y = Math.max(ARENA_Y + 2, Math.min(ARENA_Y + ARENA_H - me.h - 2, pred.y + vy * f));
@@ -574,6 +583,8 @@ const ATTACK_ANIM = {
   chakram: 'throw', boomerang: 'throw', shuriken: 'throw',
   fireglove: 'punch', vortex: 'shieldup', windwand: 'flick', revolver: 'recoil', portalwand: 'cast', ghostdagger: 'stab',
   stormhammer: 'chop', frostscythe: 'spin', sunbow: 'draw',
+  scimitar: 'slash', slingshot: 'draw', mace: 'chop', javelin: 'throw', claws: 'stab',
+  emberstaff: 'cast', halberd: 'sweep', frostbow: 'draw', chronostaff: 'cast', voidblade: 'slash',
 };
 const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
                   heavy: 300, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
@@ -1169,6 +1180,21 @@ function drawSunbeam(f, now) {
   ctx.restore();
 }
 
+// LANDMINES: a small disc with a lamp that blinks red once it is armed.
+function drawPlayerMine(f, now) {
+  const armed = (f.k || 0) > 0.025;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(f.x, f.y + 3, 7, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3a3e46'; ctx.beginPath(); ctx.arc(f.x, f.y, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#5a606c'; ctx.beginPath(); ctx.arc(f.x - 1.5, f.y - 1.5, 3, 0, Math.PI * 2); ctx.fill();
+  const on = armed && Math.floor(now / 250) % 2 === 0;
+  ctx.fillStyle = armed ? (on ? '#ff3a2a' : '#7a1a10') : '#ffd84a';
+  ctx.fillRect(Math.round(f.x) - 1, Math.round(f.y) - 1, 3, 3);
+  ctx.globalAlpha = 0.3; ctx.strokeStyle = '#ff6a3a'; ctx.setLineDash([2, 3]);
+  ctx.beginPath(); ctx.arc(f.x, f.y, 20, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  ctx.restore();
+}
+
 // BARRIER: a shimmering dome riding on its caster; it flickers as it runs out.
 function drawBarrier(f, now) {
   const k = Math.max(0, f.k || 0);
@@ -1223,6 +1249,7 @@ function drawFireRings(fires) {
     if (f.kind === 'blackhole') { drawBlackhole(f, now); continue; }
     if (f.kind === 'drain') { drawDrain(f, now); continue; }
     if (f.kind === 'barrier') { drawBarrier(f, now); continue; }
+    if (f.kind === 'mine') { drawPlayerMine(f, now); continue; }
     if (f.kind === 'blizzard') { drawBlizzard(f, now); continue; }
     if (f.kind === 'sunorb') { drawSunorb(f, now); continue; }
     if (f.kind === 'sunbeam') { drawSunbeam(f, now); continue; }
@@ -2031,6 +2058,14 @@ function legendPassive(id) {
 }
 
 const LEGEND_MOVES = {
+  chronostaff: '<b>ATK</b> bolts of slowed time that drag whatever they hit to a crawl · <b>SPECIAL</b> TIME STOP:'
+             + ' every foe close around you is frozen where it stands for 2s, and enemy shots nearby vanish ·'
+             + ' <b>SUPER</b> REWIND: your health goes back to the best it was in the last 4s, burns and curses'
+             + ' are undone, your special is ready again and you get 4s of speed and haste. Needs another legendary.',
+  voidblade:   '<b>ATK</b> a heavy cut, and a piercing wave of void flies on ahead of every swing ·'
+             + ' <b>SPECIAL</b> RIFT STEP: through a rift to the nearest foe, cutting and stunning everything around'
+             + ' where you land · <b>SUPER</b> SINGULARITY: a huge black hole drags the whole area in for 3s, then'
+             + ' collapses in a massive blast. Needs another legendary.',
   stormhammer: '<b>ATK</b> a heavy hammer blow; lightning arcs from every foe it hits on to 2 more nearby, for half'
              + ' the damage · <b>SPECIAL</b> hurl the hammer: it smashes through everything in its path, stunning'
              + ' them, then flies back to your hand and hits them again · <b>SUPER</b> THUNDER GOD: for 6s, lightning'
@@ -2502,6 +2537,61 @@ function drawAbilityIcon(g, id, w, h) {
 // Icons for the second shelf of abilities (each drawn around the centre x, y
 // of a ~32px canvas, in the ability's colour).
 const ABILITY_ICONS = {
+  perfectguard(g, x, y, col) {
+    g.strokeStyle = col; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(x - 10, y + 10); g.lineTo(x + 10, y - 10); g.stroke();
+    g.beginPath(); g.moveTo(x - 10, y - 10); g.lineTo(x + 10, y + 10); g.stroke();
+    g.fillStyle = '#ffe080'; for (const [a, b] of [[0, -12], [12, 0], [0, 12], [-12, 0]]) g.fillRect(x + a - 1.5, y + b - 1.5, 3, 3);
+  },
+  haven(g, x, y, col) {
+    g.fillStyle = '#1a4a40'; g.beginPath(); g.ellipse(x, y + 8, 12, 4, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.ellipse(x, y + 8, 12, 4, 0, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = col; g.fillRect(x - 2, y - 10, 4, 14); g.fillRect(x - 7, y - 5, 14, 4);
+  },
+  flurry(g, x, y, col) {
+    g.fillStyle = col;
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      g.save(); g.translate(x + Math.cos(a) * 8, y + Math.sin(a) * 8); g.rotate(a);
+      g.beginPath(); g.moveTo(6, 0); g.lineTo(-2, -2); g.lineTo(-2, 2); g.closePath(); g.fill(); g.restore();
+    }
+  },
+  mines(g, x, y, col) {
+    for (const [dx, dy] of [[-7, 4], [7, 4], [0, -6]]) {
+      g.fillStyle = '#3a3e46'; g.beginPath(); g.arc(x + dx, y + dy, 5, 0, Math.PI * 2); g.fill();
+      g.fillStyle = col; g.fillRect(x + dx - 1.5, y + dy - 1.5, 3, 3);
+    }
+  },
+  soulchain(g, x, y, col) {
+    g.strokeStyle = col; g.lineWidth = 2;
+    for (let i = 0; i < 4; i++) { g.beginPath(); g.ellipse(x - 10 + i * 6.5, y + (i % 2 ? -1 : 1) * 2, 4, 2.5, 0.6, 0, Math.PI * 2); g.stroke(); }
+    g.fillStyle = '#c8d8ff'; g.beginPath(); g.arc(x + 12, y - 3, 3, 0, Math.PI * 2); g.fill();
+  },
+  warcry(g, x, y, col) {
+    g.fillStyle = col; g.beginPath(); g.moveTo(x - 10, y - 4); g.lineTo(x - 2, y - 4); g.lineTo(x + 4, y - 10); g.lineTo(x + 4, y + 10); g.lineTo(x - 2, y + 4); g.lineTo(x - 10, y + 4); g.closePath(); g.fill();
+    g.strokeStyle = col; g.lineWidth = 1.5;
+    for (const r of [8, 12]) { g.beginPath(); g.arc(x + 4, y, r, -0.7, 0.7); g.stroke(); }
+  },
+  overcharge(g, x, y, col) {
+    g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 11, 0.4, Math.PI * 2 - 0.4); g.stroke();
+    g.fillStyle = col; g.beginPath(); g.moveTo(x + 2, y - 9); g.lineTo(x - 5, y + 1); g.lineTo(x, y + 1); g.lineTo(x - 2, y + 9); g.lineTo(x + 5, y - 1); g.lineTo(x, y - 1); g.closePath(); g.fill();
+  },
+  fireball(g, x, y, col) {
+    g.fillStyle = 'rgba(255,90,26,0.35)'; g.beginPath(); g.arc(x - 4, y + 4, 10, 0, Math.PI * 2); g.fill();
+    g.fillStyle = col; g.beginPath(); g.arc(x + 2, y - 2, 8, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#ffd84a'; g.beginPath(); g.arc(x, y - 4, 4, 0, Math.PI * 2); g.fill();
+  },
+  smite(g, x, y, col) {
+    g.fillStyle = 'rgba(255,242,160,0.3)'; g.fillRect(x - 6, y - 14, 12, 26);
+    g.fillStyle = col; g.fillRect(x - 3, y - 14, 6, 24);
+    g.fillStyle = '#ffffff'; g.fillRect(x - 1, y - 14, 2, 24);
+    g.strokeStyle = col; g.lineWidth = 1.5; g.beginPath(); g.ellipse(x, y + 10, 11, 3, 0, 0, Math.PI * 2); g.stroke();
+  },
+  frostarmor(g, x, y, col) {
+    g.fillStyle = '#2a4a5a'; g.beginPath(); g.moveTo(x, y - 12); g.lineTo(x + 10, y - 7); g.lineTo(x + 8, y + 6); g.lineTo(x, y + 12); g.lineTo(x - 8, y + 6); g.lineTo(x - 10, y - 7); g.closePath(); g.fill();
+    g.strokeStyle = col; g.lineWidth = 2; g.stroke();
+    g.strokeStyle = '#ffffff'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x, y + 6); g.moveTo(x - 5, y - 3); g.lineTo(x + 5, y + 3); g.moveTo(x + 5, y - 3); g.lineTo(x - 5, y + 3); g.stroke();
+  },
   shadowstep(g, x, y, col) {
     g.fillStyle = '#2a2050'; g.beginPath(); g.arc(x - 6, y + 2, 7, 0, Math.PI * 2); g.fill();
     g.fillStyle = col; g.beginPath(); g.arc(x + 5, y - 2, 7, 0, Math.PI * 2); g.fill();
@@ -2863,6 +2953,40 @@ function paintArena(g) {
 function drawTraps(traps) {
   for (const tr of traps) {
     const cx = tr.x + tr.w / 2, cy = tr.y + tr.h / 2;
+    if (tr.state === 'firing' && (tr.type === 'saw' || tr.type === 'gravity' || tr.type === 'healspring')) {
+      const t = performance.now() / 1000;
+      const cv0 = trapSprite(tr.type, tr.w, true);
+      ctx.save();
+      ctx.globalAlpha = 0.14; ctx.fillStyle = tr.color;
+      ctx.beginPath(); ctx.arc(cx, cy, tr.radius, 0, Math.PI * 2); ctx.fill();
+      if (tr.type === 'gravity') {       // rings sliding inward
+        ctx.strokeStyle = tr.color; ctx.lineWidth = 1.5;
+        for (let i = 0; i < 4; i++) {
+          const k = 1 - ((t * 0.8 + i / 4) % 1);
+          ctx.globalAlpha = 0.6 * (1 - k * 0.5);
+          ctx.beginPath(); ctx.arc(cx, cy, tr.radius * k, 0, Math.PI * 2); ctx.stroke();
+        }
+      } else if (tr.type === 'healspring') {   // green motes rising
+        ctx.fillStyle = '#9affc0';
+        for (let i = 0; i < 12; i++) {
+          const a = i * 2.4, rr = tr.radius * ((i * 37 % 100) / 100);
+          const py = cy + Math.sin(a) * rr * 0.7 - ((t * 20 + i * 9) % 24);
+          ctx.globalAlpha = 0.7; ctx.fillRect(Math.round(cx + Math.cos(a) * rr), Math.round(py), 2, 2);
+        }
+      } else {                             // blades whirling round the pit
+        ctx.strokeStyle = '#eef4fb'; ctx.lineWidth = 2;
+        for (let i = 0; i < 3; i++) {
+          const a = t * 9 + i * 2.1;
+          ctx.globalAlpha = 0.8;
+          ctx.beginPath(); ctx.arc(cx, cy, tr.radius * 0.6, a, a + 0.7); ctx.stroke();
+        }
+      }
+      ctx.globalAlpha = 0.6; ctx.strokeStyle = tr.color; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.arc(cx, cy, tr.radius, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      ctx.restore();
+      if (cv0) ctx.drawImage(cv0, Math.round(tr.x) - 2, Math.round(tr.y) - 2);
+      continue;
+    }
     if (tr.state === 'firing' && tr.type === 'poison') {
       // A lingering toxic cloud: drifting dithered puffs over the pool.
       const cv0 = trapSprite(tr.type, tr.w, true);
@@ -2952,11 +3076,15 @@ function drawCoins(coins) {
 const ITEM_COLOR = {
   speed:'#44ddee', strength:'#ff5544', shield:'#ffdd44', haste:'#aa66ff', heal:'#44ff66',
   magnet:'#ffc24a', regen:'#ff7ac8', vampire:'#d8304a', bomb:'#ff8a2a', frost:'#9fe8ff',
+  thorns:'#7ac850', cloak:'#8a8ab8', zap:'#ffe45a', turret:'#ff5a3a', egg:'#7affc8',
+  frenzy:'#ff3a8a', ironskin:'#a8b4c4', hourglass:'#e8c87a', goldrush:'#ffd84a', elixir:'#ff4ab8',
 };
 // Timed effects that come from a power-up, so the active ones can show their icon.
 const EFFECT_ITEM = { speed:'speed', strength:'strength', shield:'shield', haste:'haste',
-                      magnet:'magnet', regen:'regen', vampire:'vampire' };
-const EFFECT_MAX = { speed:6000, strength:6000, shield:4500, haste:6000, magnet:10000, regen:8000, vampire:7000 };
+                      magnet:'magnet', regen:'regen', vampire:'vampire',
+                      thorns:'thorns', ironskin:'ironskin', gold:'goldrush' };
+const EFFECT_MAX = { speed:6000, strength:6000, shield:4500, haste:6000, magnet:10000, regen:8000, vampire:7000,
+                     thorns:8000, ironskin:8000, gold:12000 };
 // A compact row tucked into the corner under the cooldown bars. Slots are a
 // little bigger on touch screens so they stay easy to tap.
 const INV_SLOT = isTouchDevice ? 24 : 20, INV_ICON = INV_SLOT - 6, INV_GAP = 2, INV_X = 3, INV_Y = 43;
@@ -3109,7 +3237,9 @@ function drawChains(chains) {
 
 const EFFECT_GLOW = { speed:'#44ddee', strength:'#ff5544', shield:'#ffdd44', haste:'#aa66ff', slow:'#3366aa',
                       burn:'#ff6a1a', poison:'#8ad048', magnet:'#ffc24a', regen:'#ff7ac8', vampire:'#d8304a',
-                      vanish:'#6a6a9a', phoenix:'#ffa03a', ghost:'#a8f0ff', thunder:'#7ac8ff' };
+                      vanish:'#6a6a9a', phoenix:'#ffa03a', ghost:'#a8f0ff', thunder:'#7ac8ff',
+                      thorns:'#7ac850', ironskin:'#a8b4c4', gold:'#ffd84a', frostarmor:'#9fe8ff',
+                      root:'#5aa83a', confuse:'#ff7ac8', silence:'#9a9ab8' };
 
 // Flickering pixel flames over something that's on fire.
 function drawFlames(x, y, w, h) {
@@ -3295,6 +3425,52 @@ function drawPassiveFx(p, key, x, y) {
   ctx.restore();
 }
 
+// Curses and buffs from the 10 update, drawn on the player so they read at a glance.
+function drawStatusMarks(p, x, y) {
+  const e = p.effects; if (!e) return;
+  const now = performance.now(), mx = x + p.w / 2;
+  ctx.save();
+  if (e.root > 0) {            // vines wound round the legs
+    ctx.strokeStyle = '#3a8a2a'; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath(); ctx.moveTo(x + 2 + i * 6, y + p.h + 2);
+      ctx.quadraticCurveTo(x + i * 6 + 6, y + p.h - 6, x + 4 + i * 5, y + p.h - 10); ctx.stroke();
+    }
+    ctx.fillStyle = '#7ad85a'; ctx.fillRect(x + 3, y + p.h - 8, 2, 2); ctx.fillRect(x + p.w - 5, y + p.h - 5, 2, 2);
+  }
+  if (e.confuse > 0) {         // a spinning question mark
+    ctx.fillStyle = '#ff7ac8'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+    ctx.globalAlpha = 0.9;
+    ctx.fillText('?', mx + Math.sin(now / 150) * 5, y - 16);
+    ctx.textAlign = 'left';
+  }
+  if (e.silence > 0) {         // a struck-through spark
+    const sx = mx + 10, sy = y - 14;
+    ctx.strokeStyle = '#c8c8e0'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(sx, sy, 4, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx - 3, sy + 3); ctx.lineTo(sx + 3, sy - 3); ctx.stroke();
+  }
+  if (e.thorns > 0) {          // a ring of thorns
+    ctx.fillStyle = '#7ac850';
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4 + now / 2000, r = p.w * 0.95;
+      const tx = mx + Math.cos(a) * r, ty = y + p.h / 2 + Math.sin(a) * r * 0.8;
+      ctx.beginPath(); ctx.moveTo(tx + Math.cos(a) * 4, ty + Math.sin(a) * 4);
+      ctx.lineTo(tx + Math.cos(a + 1.6) * 1.5, ty + Math.sin(a + 1.6) * 1.5); ctx.lineTo(tx - Math.cos(a + 1.6) * 1.5, ty - Math.sin(a + 1.6) * 1.5); ctx.fill();
+    }
+  }
+  if (e.frostarmor > 0 || e.ironskin > 0) {   // plated outline
+    ctx.globalAlpha = 0.7; ctx.strokeStyle = e.frostarmor > 0 ? '#bfefff' : '#c8d0dc'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(x - 2, y - 2, p.w + 4, p.h + 4);
+    ctx.globalAlpha = 0.25; ctx.fillStyle = ctx.strokeStyle; ctx.fillRect(x - 2, y - 2, p.w + 4, p.h + 4);
+  }
+  if (e.gold > 0 && Math.floor(now / 140) % 3 === 0) {
+    ctx.globalAlpha = 1; ctx.fillStyle = '#ffd84a';
+    ctx.fillRect(Math.round(mx + (Math.random() - 0.5) * p.w * 1.6), Math.round(y + Math.random() * p.h), 2, 2);
+  }
+  ctx.restore();
+}
+
 function drawPlayerBody(p, baseColor, label, key) {
   const skinCol = getSkinColor(p, baseColor);
   const x = Math.round(p.x), y = Math.round(p.y);
@@ -3320,6 +3496,7 @@ function drawPlayerBody(p, baseColor, label, key) {
 
   drawNametag(x + p.w / 2, y - 13, label, skinCol);
   drawWeaponSprite(p, x, y, key);
+  drawStatusMarks(p, x, y);
   drawVortexShield(p, x, y);
   if (p.effects && p.effects.burn > 0) drawFlames(x, y, p.w, p.h);
 
@@ -3761,6 +3938,48 @@ function drawProjectiles(projs) {
       ctx.beginPath(); ctx.arc(pr.x - 0.8, pr.y - 1, 1.8, 0, Math.PI*2); ctx.fill();
       ctx.restore();
       continue;
+    }
+    // ── The 10 update ──
+    if (pr.weaponId === 'slingshot') {          // a pebble
+      ctx.save(); ctx.fillStyle = '#7a6a58'; ctx.beginPath(); ctx.arc(pr.x, pr.y, 2.6 * u.size, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#b8a890'; ctx.fillRect(Math.round(pr.x) - 1, Math.round(pr.y) - 2, 1.5, 1.5); ctx.restore(); continue;
+    }
+    if (pr.weaponId === 'javelin') {            // a long spear in flight
+      ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+      ctx.fillStyle = '#8a6438'; ctx.fillRect(-16, -0.8, 16, 1.6);
+      ctx.fillStyle = '#d8dde6'; ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(-1, -2.4); ctx.lineTo(-1, 2.4); ctx.closePath(); ctx.fill();
+      ctx.restore(); continue;
+    }
+    if (pr.weaponId === 'emberstaff' || pr.weaponId === 'fireball') {   // a ball of flame
+      const big = pr.weaponId === 'fireball' ? 2.2 : 1;
+      ctx.save();
+      ctx.globalAlpha = 0.35; ctx.fillStyle = '#ff5a1a';
+      ctx.beginPath(); ctx.arc(pr.x - pr.dx * 1.5, pr.y - pr.dy * 1.5, 6 * big, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1; ctx.fillStyle = '#ff7a2a'; ctx.beginPath(); ctx.arc(pr.x, pr.y, 4 * big, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffd84a'; ctx.beginPath(); ctx.arc(pr.x - big, pr.y - big, 2 * big, 0, Math.PI * 2); ctx.fill();
+      ctx.restore(); continue;
+    }
+    if (pr.weaponId === 'frostbow') {           // an arrow of ice
+      ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+      ctx.globalAlpha = 0.35; ctx.fillStyle = '#bfefff'; ctx.fillRect(-16, -1.5, 10, 3);
+      ctx.globalAlpha = 1; ctx.fillStyle = '#9fe8ff'; ctx.fillRect(-9, -0.7, 12, 1.4);
+      ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(2, -2.6); ctx.lineTo(2, 2.6); ctx.closePath(); ctx.fill();
+      ctx.restore(); continue;
+    }
+    if (pr.weaponId === 'chronostaff') {        // a little clock face, its hand spinning
+      ctx.save();
+      ctx.globalAlpha = 0.3; ctx.fillStyle = '#e8c87a'; ctx.beginPath(); ctx.arc(pr.x, pr.y, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1; ctx.strokeStyle = '#e8c87a'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(pr.x, pr.y, 4, 0, Math.PI * 2); ctx.stroke();
+      const ha = now / 80; ctx.beginPath(); ctx.moveTo(pr.x, pr.y); ctx.lineTo(pr.x + Math.cos(ha) * 3.5, pr.y + Math.sin(ha) * 3.5); ctx.stroke();
+      ctx.restore(); continue;
+    }
+    if (pr.weaponId === 'voidblade') {          // a crescent of void
+      ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+      ctx.globalAlpha = 0.35; ctx.fillStyle = '#5a2aa8'; ctx.beginPath(); ctx.ellipse(-4, 0, 6, 11, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.95; ctx.strokeStyle = '#c8a0ff'; ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.arc(-4, 0, 9, -1.2, 1.2); ctx.stroke();
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.arc(-4, 0, 9, -0.8, 0.8); ctx.stroke();
+      ctx.restore(); continue;
     }
     // Stormbreaker, thrown: a spinning hammer crackling with lightning.
     if (pr.weaponId === 'stormhammer') {

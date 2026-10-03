@@ -518,8 +518,8 @@ body {
 .dpad-btn {
   width: var(--dpad-size, 52px);
   height: var(--dpad-size, 52px);
-  background: rgba(15, 15, 40, 0.96);
-  border: 2px solid rgba(90, 110, 210, 0.95);
+  background: rgba(15, 15, 40, 0.32);
+  border: 2px solid rgba(90, 110, 210, 0.6);
   color: rgb(190, 210, 255);
   font-size: 20px;
   cursor: pointer;
@@ -536,8 +536,8 @@ body {
 }
 
 .dpad-btn:active {
-  background: rgba(40, 40, 110, 0.92);
-  border-color: rgba(120, 150, 255, 0.9);
+  background: rgba(40, 40, 110, 0.6);
+  border-color: rgba(120, 150, 255, 0.85);
 }
 
 .action-btns {
@@ -548,8 +548,8 @@ body {
 }
 
 .action-btn {
-  background: rgba(15, 15, 40, 0.96);
-  border: 2px solid rgba(200, 95, 50, 0.95);
+  background: rgba(15, 15, 40, 0.32);
+  border: 2px solid rgba(200, 95, 50, 0.6);
   color: rgb(255, 205, 160);
   font-family: 'Courier New', monospace;
   font-size: 11px;
@@ -570,44 +570,44 @@ body {
   padding: 18px 24px;
   font-size: 15px;
   letter-spacing: 3px;
-  border-color: rgba(255, 85, 45, 1);
-  background: rgba(55, 14, 12, 0.97);
+  border-color: rgba(255, 85, 45, 0.7);
+  background: rgba(55, 14, 12, 0.36);
   min-width: 88px;
 }
 
-.action-btn:active { background: rgba(60, 20, 10, 0.92); border-color: rgba(255, 130, 80, 0.95); }
-.action-btn.big-btn:active { background: rgba(100, 25, 15, 0.95); }
+.action-btn:active { background: rgba(60, 20, 10, 0.6); border-color: rgba(255, 130, 80, 0.9); }
+.action-btn.big-btn:active { background: rgba(100, 25, 15, 0.6); }
 
 .action-btn.special-btn {
-  border-color: rgba(175, 125, 255, 1);
+  border-color: rgba(175, 125, 255, 0.65);
   color: rgba(220, 190, 255, 0.95);
-  background: rgba(38, 20, 60, 0.97);
+  background: rgba(38, 20, 60, 0.34);
   font-size: 12px;
   padding: 12px 18px;
 }
-.action-btn.special-btn:active { background: rgba(80, 40, 130, 0.95); border-color: rgba(200, 150, 255, 0.95); }
+.action-btn.special-btn:active { background: rgba(80, 40, 130, 0.6); border-color: rgba(200, 150, 255, 0.9); }
 
 .action-btn.parry-btn {
-  border-color: rgba(85, 175, 235, 1);
+  border-color: rgba(85, 175, 235, 0.65);
   color: rgba(190, 230, 255, 0.95);
-  background: rgba(16, 38, 60, 0.97);
+  background: rgba(16, 38, 60, 0.34);
   font-size: 12px;
   padding: 12px 18px;
 }
-.action-btn.parry-btn:active { background: rgba(30, 80, 130, 0.95); border-color: rgba(140, 210, 255, 0.95); }
+.action-btn.parry-btn:active { background: rgba(30, 80, 130, 0.6); border-color: rgba(140, 210, 255, 0.9); }
 
 /* Only shown while holding a weapon that has a SUPER (the fire glove). */
 .action-btn.super-btn {
-  border-color: rgba(255, 140, 40, 0.85);
+  border-color: rgba(255, 140, 40, 0.6);
   color: #ffd8a0;
-  background: linear-gradient(180deg, rgba(125, 32, 6, 0.98), rgba(64, 12, 0, 0.98));
+  background: linear-gradient(180deg, rgba(125, 32, 6, 0.42), rgba(64, 12, 0, 0.42));
   font-size: 12px;
   font-weight: bold;
   padding: 12px 18px;
-  box-shadow: 0 0 8px rgba(255, 110, 20, 0.55);
+  box-shadow: 0 0 8px rgba(255, 110, 20, 0.4);
 }
-.action-btn.super-btn:active { background: rgba(190, 60, 10, 0.95); border-color: #ffc070; }
-.action-btn.super-btn.cooling { opacity: 0.7; box-shadow: none; }
+.action-btn.super-btn:active { background: rgba(190, 60, 10, 0.65); border-color: #ffc070; }
+.action-btn.super-btn.cooling { opacity: 0.55; box-shadow: none; }
 .action-btn.hidden-btn { display: none; }
 
 /* Short screens (landscape phones): shrink the pads so they never eat the map. */
@@ -657,10 +657,10 @@ body {
 .ability-btns { display: flex; gap: 6px; }
 .action-btn.ability-btn {
   min-width: 0; padding: 8px 10px; font-size: 10px; letter-spacing: 1px;
-  border-color: #8fd8ff; color: #dff6ff; background: rgba(10, 32, 48, 0.97);
+  border-color: rgba(143, 216, 255, 0.65); color: #dff6ff; background: rgba(10, 32, 48, 0.34);
 }
-.action-btn.ability-btn:active { background: rgba(30, 80, 110, 0.95); }
-.action-btn.ability-btn.cooling { opacity: 0.7; }
+.action-btn.ability-btn:active { background: rgba(30, 80, 110, 0.6); }
+.action-btn.ability-btn.cooling { opacity: 0.55; }
 @media (max-height: 420px) {
   .action-btn.ability-btn { padding: 6px 8px; font-size: 9px; }
 }

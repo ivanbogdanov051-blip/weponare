@@ -59,6 +59,27 @@ const TRAP_TYPES = {
   tesla:  { mode: 'delayed', armTime: 900, size: 32, radius: 115, damage: 24, effect: 'shock', count: 3, color: '#9fe8ff', name: 'TESLA COIL' },
   // Teleports whoever steps on it somewhere random.
   warp:   { mode: 'instant',              size: 34, radius: 24, effect: 'warp', color: '#b07aff', name: 'WARP RUNE' },
+  // ── The 10 update ──
+  // Freezes monsters solid and chills players to a crawl.
+  ice:    { mode: 'instant',              size: 32, radius: 56, effect: 'freeze', dur: 1800, color: '#bfefff', name: 'FROST PLATE' },
+  // Spinning blades that keep cutting whoever stays in the pit.
+  saw:    { mode: 'instant',              size: 34, radius: 50, damage: 7, effect: 'saw', linger: 3500, tick: 300, color: '#d8dde6', name: 'SAW PIT' },
+  // Drags everything nearby into its middle for a while.
+  gravity:{ mode: 'instant',              size: 32, radius: 120, damage: 4, effect: 'gravity', linger: 2600, tick: 400, color: '#8a5aff', name: 'GRAVITY WELL' },
+  // Cracks open after a beat: a big burst of magma that sets you on fire.
+  lava:   { mode: 'delayed', armTime: 800, size: 36, radius: 64, damage: 38, effect: 'burn', dur: 4000, color: '#ff4a1a', name: 'LAVA CRACK' },
+  // Vines grab your legs: you can't move for a moment.
+  root:   { mode: 'instant',              size: 32, radius: 50, effect: 'root', dur: 1500, color: '#5aa83a', name: 'ROOT VINES' },
+  // A powder keg on a long fuse: a huge blast that throws everyone back.
+  keg:    { mode: 'delayed', armTime: 1300, size: 30, radius: 95, damage: 60, effect: 'keg', force: 110, color: '#c8742a', name: 'POWDER KEG' },
+  // The kind trap: heals everyone standing in it (monsters too).
+  healspring:{ mode: 'instant',              size: 34, radius: 60, damage: 6, effect: 'healspring', linger: 3000, tick: 500, color: '#5aff9a', name: 'HEALING SPRING' },
+  // Turns your controls back to front for a few seconds.
+  mirror: { mode: 'instant',              size: 32, radius: 46, effect: 'confuse', dur: 3500, color: '#ff7ac8', name: 'MIRROR RUNE' },
+  // No specials, supers or abilities while it hums.
+  nullfield:{ mode: 'instant',              size: 34, radius: 60, effect: 'silence', dur: 3500, color: '#9a9ab8', name: 'NULL FIELD' },
+  // The ground splits after a beat: hurts and staggers everyone around it.
+  quake:  { mode: 'delayed', armTime: 1000, size: 36, radius: 100, damage: 26, effect: 'quake', dur: 900, color: '#c89a5a', name: 'FAULT LINE' },
 };
 
 // Dev hook: limit which traps spawn (comma list). Unset in production.
@@ -85,6 +106,17 @@ const ITEM_TYPES = {
   bomb:     { effect: 'bomb',     instant: true, amount: 70, radius: 110, color: '#ff8a2a', name: 'BOMB', desc: 'Blast everything nearby' },
   frost:    { effect: 'frost',    instant: true, radius: 160, dur: 3500, color: '#9fe8ff', name: 'FROST NOVA', desc: 'Freeze nearby foes' },
   // Only ever left behind by the Dagger of Ghosts' knife storm: heals on touch.
+  // ── The 10 update ──
+  thorns:   { effect: 'thorns',   dur: 8000, color: '#7ac850', name: 'THORNS',        desc: 'Attackers take half their hit back' },
+  cloak:    { effect: 'vanish',   dur: 5000, color: '#8a8ab8', name: 'CLOAK',         desc: 'Turn invisible for 5s' },
+  zap:      { effect: 'zap',      instant: true, amount: 55, count: 5, radius: 320, color: '#ffe45a', name: 'LIGHTNING JAR', desc: 'Zap the 5 nearest foes' },
+  turret:   { effect: 'turret',   instant: true, color: '#ff5a3a', name: 'TURRET',        desc: 'A fire portal shoots your foes' },
+  egg:      { effect: 'egg',      instant: true, color: '#7affc8', name: 'MONSTER EGG',   desc: 'Hatch 2 monsters that fight for you' },
+  frenzy:   { effect: 'frenzy',   instant: true, dur: 4500, color: '#ff3a8a', name: 'FRENZY',  desc: 'Faster, stronger, quicker for 4.5s' },
+  ironskin: { effect: 'ironskin', dur: 8000, color: '#a8b4c4', name: 'IRON SKIN',     desc: 'Take half damage' },
+  hourglass:{ effect: 'hourglass', instant: true, dur: 5000, color: '#e8c87a', name: 'HOURGLASS', desc: 'Slow every foe for 5s' },
+  goldrush: { effect: 'gold',     dur: 12000, color: '#ffd84a', name: 'GOLD RUSH',    desc: 'Kills drop double coins' },
+  elixir:   { effect: 'elixir',   instant: true, color: '#ff4ab8', name: 'ELIXIR',       desc: 'Full heal and cure' },
   medkit:   { effect: 'heal',     instant: true, touch: true, share: 0.3, noSpawn: true, color: '#ff4a5a', name: 'MEDKIT', desc: 'Heals 30% at once' },
 };
 
@@ -131,6 +163,16 @@ const WEAPONS = [
   { id: 'blunderbuss', name: 'BLUNDERBUSS', damage: 11, range: 150, atkSpd: 900,  type: 'ranged', unlockXp: 18000, pellets: 5, projSpeed: 5.6, special: { kind: 'aoeshot', dmg: 120, range: 200, cd: 8000, aoe: 72 } },
   { id: 'lance',       name: 'LANCE',       damage: 34, range: 96,  atkSpd: 650,  type: 'melee',  unlockXp: 20000, special: { kind: 'dash',    dmg: 70,  range: 140, cd: 6000 } },
   { id: 'stormtome',   name: 'STORM TOME',  damage: 20, range: 240, atkSpd: 700,  type: 'ranged', unlockXp: 22000, chain: 2,  special: { kind: 'storm',   dmg: 65,  range: 260, cd: 8500, count: 5 } },
+  // ── The 10 update: eight more common weapons ──
+  // stunHit: ms a melee hit stuns for. lifesteal / knock: built in, on top of upgrades.
+  { id: 'scimitar',    name: 'SCIMITAR',    damage: 17, range: 52,  atkSpd: 300,  type: 'melee',  unlockXp: 1000,  special: { kind: 'dash',    dmg: 42,  range: 130, cd: 4500 } },
+  { id: 'slingshot',   name: 'SLINGSHOT',   damage: 12, range: 240, atkSpd: 320,  type: 'ranged', unlockXp: 2800,  gust: 14, projSpeed: 5.5, special: { kind: 'spread', dmg: 18, range: 250, cd: 5000, count: 4 } },
+  { id: 'mace',        name: 'MACE',        damage: 36, range: 50,  atkSpd: 750,  type: 'melee',  unlockXp: 5200,  stunHit: 450, special: { kind: 'slam', dmg: 80, range: 82, cd: 7500 } },
+  { id: 'javelin',     name: 'JAVELIN',     damage: 34, range: 320, atkSpd: 750,  type: 'ranged', unlockXp: 8200,  pierce: true, projSpeed: 7.5, special: { kind: 'pierce', dmg: 75, range: 380, cd: 6000 } },
+  { id: 'claws',       name: 'CLAWS',       damage: 13, range: 42,  atkSpd: 150,  type: 'melee',  unlockXp: 12500, lifesteal: 0.06, special: { kind: 'slam', dmg: 40, range: 72, cd: 4000 } },
+  { id: 'emberstaff',  name: 'EMBER STAFF', damage: 22, range: 250, atkSpd: 650,  type: 'ranged', unlockXp: 17500, burn: 2000, aoeRadius: 30, special: { kind: 'aoeshot', dmg: 95, range: 280, cd: 7500, aoe: 90 } },
+  { id: 'halberd',     name: 'HALBERD',     damage: 48, range: 100, atkSpd: 900,  type: 'melee',  unlockXp: 23000, knock: 10, special: { kind: 'dash', dmg: 90, range: 160, cd: 7000 } },
+  { id: 'frostbow',    name: 'FROST BOW',   damage: 24, range: 320, atkSpd: 560,  type: 'ranged', unlockXp: 25500, pierce: true, chill: 1200, projSpeed: 6.5, special: { kind: 'spread', dmg: 30, range: 320, cd: 6500, count: 5 } },
   // Shop-only: never unlocked by XP. Bought for `price` coins once every other
   // weapon is unlocked. Attack = a growing ring of fire (range = its final
   // radius), special = a homing hand of fire, and it alone has a SUPER.
@@ -193,6 +235,23 @@ const WEAPONS = [
     shopOnly: true, noRequirement: true, needLegendary: true, price: 15000, pierce: true, projSpeed: 7.5, burn: 1200,
     special: { kind: 'sunorb',    dmg: 26, range: 230, cd: 9000 },
     super:   { kind: 'supernova', dmg: 30, cd: 22000 } },
+  // ── The 10 update: two more legendaries (each needs another legendary first) ──
+  // CHRONO STAFF: bolts that slow time around whatever they hit. Special: TIME
+  // STOP — every foe close by is frozen in place. SUPER: REWIND — your health
+  // goes back to the best it was in the last 4s, your special is ready again
+  // and you get 4s of haste.
+  { id: 'chronostaff', name: 'CHRONO STAFF', damage: 26, range: 300, atkSpd: 450, type: 'ranged', unlockXp: 0,
+    shopOnly: true, noRequirement: true, needLegendary: true, price: 17000, chill: 1500, projSpeed: 5,
+    special: { kind: 'timestop', dmg: 30, range: 230, cd: 9000 },
+    super:   { kind: 'rewind',   dmg: 0,  cd: 20000 } },
+  // VOID BLADE: every swing also sends a piercing wave of void ahead of it.
+  // Special: RIFT STEP — through a rift to the nearest foe, cutting everything
+  // around where you land. SUPER: SINGULARITY — a huge black hole that drags
+  // the field in, then collapses in a massive blast.
+  { id: 'voidblade',   name: 'VOID BLADE', damage: 38, range: 60, atkSpd: 520, type: 'melee', unlockXp: 0,
+    shopOnly: true, noRequirement: true, needLegendary: true, price: 19000, voidWave: true,
+    special: { kind: 'riftstep',    dmg: 70, range: 320, cd: 5000 },
+    super:   { kind: 'singularity', dmg: 40, cd: 22000 } },
   // The rarest weapon: free to claim, but only once you own every other weapon
   // in the game (needAll). Attack: melt into the shadows — invisible (you still
   // see yourself) and 75% faster; the next attack is a double-damage ghost
@@ -208,6 +267,8 @@ const WEAPONS = [
 const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
 
 const WEAPON_COLORS = {
+  scimitar: '#e8e0c8', slingshot: '#b08a5a', mace: '#9aa4b0', javelin: '#d8c8a0', claws: '#e0e4ec',
+  emberstaff: '#ff7a2a', halberd: '#c0c8d8', frostbow: '#9fe8ff', chronostaff: '#e8c87a', voidblade: '#9a5aff',
   sword: '#c8d8e8', dagger: '#d4e8b0', axe: '#e8a040', spear: '#c0c8d0',
   bow: '#b89060', staff: '#cc66ff', hammer: '#aab0b8', wand: '#88ddff',
   crossbow: '#cc8844', flail: '#dd4444', greatsword: '#ddeeff',
@@ -278,7 +339,17 @@ const WEAPON_UPGRADES = {
   ghostdagger: ['dmg', 'spd', 'crit', 'cdr'],
   stormhammer: ['dmg', 'spd', 'crit', 'cdr', 'knock'],
   frostscythe: ['dmg', 'rng', 'chill', 'cdr', 'aoe'],
-  sunbow:      ['dmg', 'spd', 'rng', 'crit', 'cdr'],   // no SPD or MLT: its portals come fast enough
+  sunbow:      ['dmg', 'spd', 'rng', 'crit', 'cdr'],
+  scimitar:    ['spd', 'crit', 'cdr'],
+  slingshot:   ['dmg', 'spd', 'knock'],
+  mace:        ['dmg', 'knock', 'cdr'],
+  javelin:     ['dmg', 'rng', 'crit'],
+  claws:       ['spd', 'life', 'crit'],
+  emberstaff:  ['dmg', 'aoe', 'cdr'],
+  halberd:     ['dmg', 'rng', 'knock'],
+  frostbow:    ['dmg', 'chill', 'multi'],
+  chronostaff: ['dmg', 'spd', 'chill', 'cdr'],
+  voidblade:   ['dmg', 'spd', 'crit', 'cdr', 'rng'],   // no SPD or MLT: its portals come fast enough
 };
 // ── Weapon passives ──
 // Max out every upgrade on one of these weapons and, whenever you hold it, you
@@ -303,6 +374,8 @@ const PASSIVES = {
   ghostdagger: { name: 'BACKSTABBER',    color: '#a8f0ff', desc: '+80% damage on foes facing away from you' },
   stormhammer: { name: 'THUNDERSTRUCK',  color: '#7ac8ff', desc: '35% of your hits call down lightning for +80% damage' },
   frostscythe: { name: 'SHATTERPOINT',   color: '#bfefff', desc: '+50% damage to slowed or frozen foes' },
+  chronostaff: { name: 'TIME DILATION',  color: '#e8c87a', desc: 'your special and super recharge 40% faster' },
+  voidblade:   { name: 'VOID HUNGER',    color: '#9a5aff', desc: 'every kill takes 1.5s off your special and super' },
   sunbow:      { name: 'SUNLIT',         color: '#ffd24a', desc: 'heal 5% of your health every second' },
 };
 const AEGIS_CD = 4000, GALE_CD = 500, GALE_R = 75;
@@ -421,6 +494,27 @@ const ABILITIES = [
     desc: 'A line of ice spikes toward the nearest enemy that hurts and freezes all in its path' },
   { id: 'phoenix',   name: 'PHOENIX',     price: 15000, cd: 60000, color: '#ffa03a',
     desc: 'For 10s, a killing blow brings you straight back with half your health' },
+  // ── The 10 update ──
+  { id: 'perfectguard', name: 'PERFECT GUARD', price: 6000, cd: 16000, color: '#ffffff',
+    desc: 'A 2.5s parry: every blow and shot that reaches you is thrown back' },
+  { id: 'haven',     name: 'SAFE HAVEN',  price: 4000,  cd: 18000, color: '#7affe0',
+    desc: 'Warp to the safest spot on the map and heal 15%' },
+  { id: 'flurry',    name: 'BLADE FLURRY', price: 3500, cd: 9000,  color: '#d8dde6',
+    desc: 'Twelve blades fly out all around you, slicing through everything' },
+  { id: 'mines',     name: 'LANDMINES',   price: 5000,  cd: 14000, color: '#ff6a3a',
+    desc: 'Drop three mines around you that blow up when an enemy steps close' },
+  { id: 'soulchain', name: 'SOUL CHAIN',  price: 4500,  cd: 10000, color: '#7a9aff',
+    desc: 'Chain the nearest enemy, drag it to you and stun it' },
+  { id: 'warcry',    name: 'WAR CRY',     price: 5500,  cd: 20000, color: '#ff8a3a',
+    desc: 'Hit 80% harder for 5s and stun every enemy close around you' },
+  { id: 'overcharge', name: 'OVERCHARGE', price: 13000, cd: 45000, color: '#5ae8ff',
+    desc: 'Your special and super are ready again, right now' },
+  { id: 'fireball',  name: 'FIREBALL',    price: 4000,  cd: 8000,  color: '#ff5a1a',
+    desc: 'Hurl a huge fireball that explodes and sets everything around it alight' },
+  { id: 'smite',     name: 'SMITE',       price: 8000,  cd: 12000, color: '#fff2a0',
+    desc: 'A pillar of light crashes down on the toughest enemy near you' },
+  { id: 'frostarmor', name: 'FROST ARMOR', price: 6500, cd: 22000, color: '#9fe8ff',
+    desc: 'Ice armour for 6s: take 25% less damage and freeze whoever hits you' },
 ];
 const ABILITY_BY_ID = Object.fromEntries(ABILITIES.map(a => [a.id, a]));
 // Everyone starts with two slots (Q, E); up to four more can be bought, each
@@ -849,8 +943,8 @@ function applyUpgrades(w, levels) {
     atkSpd: Math.max(70, Math.round(w.atkSpd * spdM)),
     aoeRadius: w.aoeRadius ? Math.round(w.aoeRadius * aoeM) : w.aoeRadius,
     crit: L('crit') * per('crit'),
-    lifesteal: L('life') * per('life'),
-    knock: L('knock') * per('knock'),
+    lifesteal: (w.lifesteal || 0) + L('life') * per('life'),
+    knock: (w.knock || 0) + L('knock') * per('knock'),
     multi,
     chill: w.chill ? Math.round(w.chill * chillM) : w.chill,
     chain: (w.chain || 0) + L('chain'),
@@ -1070,6 +1164,7 @@ function effectiveSpeed(p) {
   if (hasEffect(p, 'ghost')) s *= 1.75;
   if (p.passive === 'dagger') s *= PASSIVE_SPEED;
   if (hasEffect(p, 'slow'))  s *= 0.4;
+  if (hasEffect(p, 'root'))  s = 0;          // ROOT VINES
   return s;
 }
 
@@ -1133,8 +1228,9 @@ function fireTrap(tr, trigger) {
     if (trigger && !trigger.dead) warpPlayer(trigger);
     return;
   }
-  if (tr.effect === 'poison') {
-    // The cloud lingers; its damage ticks come from the trap update.
+  if (def.linger) {
+    // Poison, saws, gravity, the healing spring: they linger, and their ticks
+    // come from the trap update.
     tr.fireTimer = def.linger;
     tr.tickTimer = 0;
     return;
@@ -1153,7 +1249,18 @@ function fireTrap(tr, trigger) {
   for (const t of inRange) {
     if (tr.effect === 'slow') {
       chillTarget(t, tr.dur);
-    } else if (tr.effect === 'launch') {
+    } else if (tr.effect === 'freeze') {
+      if (t.num) chillTarget(t, tr.dur * 1.4); else stagger(t, tr.dur);
+    } else if (tr.effect === 'root') {
+      if (t.num) applyEffect(t, 'root', tr.dur); else stagger(t, tr.dur);
+    } else if (tr.effect === 'confuse') {
+      if (t.num) applyEffect(t, 'confuse', tr.dur); else chillTarget(t, tr.dur);
+    } else if (tr.effect === 'silence') {
+      if (t.num) applyEffect(t, 'silence', tr.dur); else stagger(t, 900);
+    } else if (tr.effect === 'quake') {
+      applyDamage(t, tr.damage, 'trap');
+      stagger(t, tr.dur);
+    } else if (tr.effect === 'keg' || tr.effect === 'launch') {
       applyDamage(t, tr.damage, 'trap');
       let dx = cx(t) - tx, dy = cy(t) - ty, d = Math.hypot(dx, dy);
       if (d < 1) { const a = Math.random() * Math.PI * 2; dx = Math.cos(a); dy = Math.sin(a); d = 1; }
@@ -1355,6 +1462,8 @@ function monsterMelee(m, t) {
     spawnParrySpark(cx(t), cy(t));
   } else {
     applyDamage(t, m.atkDamage, 'monster');
+    if (t.num && hasEffect(t, 'thorns')) { m.invincible = 0; applyDamage(m, Math.max(1, Math.round(m.atkDamage * THORNS_SHARE * 2)), playerKeyOf(t)); }
+    if (t.num && hasEffect(t, 'frostarmor')) stagger(m, 1000);
     if (t.passive === 'fireglove') {                                                  // EMBER SKIN
       m.burnTimer = Math.max(m.burnTimer || 0, EMBER_BURN);
       m.invincible = 0;
@@ -1643,6 +1752,8 @@ function applyDamage(target, dmg, attackerKey) {
   const atk = (attackerKey === 'p1' || attackerKey === 'p2') ? room.players[attackerKey] : null;
   const aw = atk && atk !== target ? weapon(atk) : null;
   if (aw && atk.passive === 'axe') dmg *= 1 + PASSIVE_RAGE * Math.max(0, 1 - atk.hp / atk.maxHp);   // BERSERKER
+  if (target.num && hasEffect(target, 'ironskin')) dmg *= 0.5;                                     // IRON SKIN
+  if (target.num && hasEffect(target, 'frostarmor')) dmg *= 0.75;                                  // FROST ARMOR
   if (target.num && target.passive === 'sword') dmg *= PASSIVE_GUARD;                              // GUARDIAN
   if (aw && atk.passive === 'ghostdagger' && hitFromBehind(target, cx(target) - cx(atk))) {        // BACKSTABBER
     dmg *= BACKSTAB;
@@ -1712,6 +1823,10 @@ function applyDamage(target, dmg, attackerKey) {
   if (target.mage) mageFloor(target);
   target.hitFlash  = 200;
   target.invincible = target.num ? 500 : 300;
+  // THORNS: another player who hits you takes half of it back.
+  if (target.num && atk && atk !== target && hasEffect(target, 'thorns') && !atk.dead) {
+    applyDamage(atk, Math.max(1, Math.round(dmg * THORNS_SHARE)), playerKeyOf(target));
+  }
   if (target.hp <= 0) handleKill(target, attackerKey);
 }
 
@@ -1737,6 +1852,11 @@ function handleKill(target, attackerKey) {
     reaper.hp = Math.min(reaper.maxHp, reaper.hp + heal);
     room.particles.push({ type: 'bolt', x: cx(target), y: cy(target), x2: cx(reaper), y2: cy(reaper), timer: 300, max: 300, color: PASSIVES.reaper.color });
     room.particles.push({ type: 'xp', x: cx(reaper), y: reaper.y - 4, text: '+' + heal, timer: 800, color: PASSIVES.reaper.color });
+  }
+  // VOID HUNGER: the void blade's holder feeds cooldowns on every kill.
+  if (reaper && reaper !== target && !reaper.dead && reaper.passive === 'voidblade') {
+    reaper.specialCooldown = Math.max(0, (reaper.specialCooldown || 0) - VOID_HUNGER_MS);
+    reaper.superCooldown = Math.max(0, (reaper.superCooldown || 0) - VOID_HUNGER_MS);
   }
   const isPlayer = !!target.num;
   let baseGain = isPlayer ? 15 : 6;
@@ -1764,7 +1884,8 @@ function handleKill(target, attackerKey) {
   // drops nothing — otherwise you could farm coins off your own deaths.
   const killedByRival = attackerKey === 'p1' || attackerKey === 'p2';
   if (!isPlayer || killedByRival) {
-    dropCoins(cx(target), cy(target), coinsForKill(target, isPlayer));
+    const rich = room.players[attackerKey] && hasEffect(room.players[attackerKey], 'gold') ? 2 : 1;   // GOLD RUSH
+    dropCoins(cx(target), cy(target), coinsForKill(target, isPlayer) * rich);
   }
 
   if (isPlayer) {
@@ -1970,6 +2091,7 @@ function tickRoom(dt) {
     if (inp.up)    vy = -spd;
     if (inp.down)  vy =  spd;
     if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
+    if (hasEffect(p, 'confuse')) { vx = -vx; vy = -vy; if (vx) p.facing = vx > 0 ? 1 : -1; }   // MIRROR RUNE
 
     p.x += vx * factor;
     p.y += vy * factor;
@@ -2003,6 +2125,13 @@ function tickRoom(dt) {
     for (const id in p.abCd) if (p.abCd[id] > 0) p.abCd[id] -= dt;
     if (hasEffect(p, 'thunder')) thunderTick(p, key, dt);
     if (p.passive && !p.dead) passiveTick(p, key, dt);
+    // A few seconds of health history, for the Chrono Staff's REWIND.
+    p.hpHistAcc = (p.hpHistAcc || 0) + dt;
+    if (p.hpHistAcc >= 250) {
+      p.hpHistAcc = 0;
+      (p.hpHist = p.hpHist || []).push(p.hp);
+      if (p.hpHist.length > REWIND_SAMPLES) p.hpHist.shift();
+    }
     if (room.gameMode === 'sandbox') sandboxCheats(p);
 
     if (room.swapJustPressed[key] && p.unlockedWeapons.length > 0) {
@@ -2190,15 +2319,28 @@ function tickRoom(dt) {
       tr.armTimer -= dt;
       if (tr.armTimer <= 0) fireTrap(tr, room.players[tr.trigger]);
     } else if (tr.state === 'firing') {
-      if (tr.effect === 'poison') {
+      const ldef = TRAP_TYPES[tr.type];
+      if (ldef.linger) {
+        const tx = tr.x + tr.w / 2, ty = tr.y + tr.h / 2;
+        const inside = [room.players.p1, room.players.p2, ...room.monsters]
+          .filter(t => t && !t.dead && Math.hypot(cx(t) - tx, cy(t) - ty) <= tr.radius);
+        // The gravity well drags all the time, not just on its ticks.
+        if (tr.effect === 'gravity') {
+          for (const t of inside) {
+            if (t.boss) continue;
+            const dx = tx - cx(t), dy = ty - cy(t), d = Math.hypot(dx, dy) || 1;
+            const pull = Math.min(d, 1.5 * factor);
+            t.x += dx / d * pull; t.y += dy / d * pull;
+            clampToArena(t);
+          }
+        }
         tr.tickTimer -= dt;
         if (tr.tickTimer <= 0) {
-          tr.tickTimer = TRAP_TYPES.poison.tick;
-          const tx = tr.x + tr.w / 2, ty = tr.y + tr.h / 2;
-          for (const t of [room.players.p1, room.players.p2, ...room.monsters]) {
-            if (!t || t.dead || Math.hypot(cx(t) - tx, cy(t) - ty) > tr.radius) continue;
-            dotDamage(t, tr.damage);
-            if (t.num) applyEffect(t, 'poison', 500);
+          tr.tickTimer = ldef.tick;
+          for (const t of inside) {
+            if (tr.effect === 'poison') { dotDamage(t, tr.damage); if (t.num) applyEffect(t, 'poison', 500); }
+            else if (tr.effect === 'healspring') t.hp = Math.min(t.maxHp, t.hp + tr.damage);
+            else dotDamage(t, tr.damage);
           }
         }
       }
@@ -2631,6 +2773,19 @@ function doAttack(p, pKey) {
         applyDamage(t, Math.round(w.damage * dmgMult), pKey);
         if (w.arcHit) arcLightning(t, Math.round(w.damage * dmgMult * 0.5), w.arcHit, pKey);
         if (w.frostbite) addFrostbite(t);
+        if (w.stunHit) stagger(t, w.stunHit);              // MACE
+        if (w.burn) ignite(t, w.burn);
+        if (w.chill) chillTarget(t, w.chill);
+      }
+    }
+    // VOID BLADE: a wave of void flies on ahead of every swing.
+    if (w.voidWave) {
+      for (let i = 0; i < 1 + (w.multi || 0); i++) {
+        const a = aim + (i - (w.multi || 0) / 2) * 0.25;
+        room.projectiles.push({ id: nextId(), x: cx(p), y: cy(p), dx: Math.cos(a) * 6, dy: Math.sin(a) * 6,
+          damage: Math.round(w.damage * dmgMult * VOID_WAVE_MULT), owner: pKey, traveled: 0, maxRange: VOID_WAVE_RANGE,
+          weaponId: 'voidblade', isAoe: false, aoeRadius: 0, pierce: true, grapple: false, boomerang: false,
+          returning: false, life: 0, hitTargets: new Set() });
       }
     }
   } else {
@@ -2729,11 +2884,35 @@ function explodeHand(f) {
 
 function doSuper(p, pKey) {
   const su = weapon(p).super;
-  if (!su) return;
+  if (!su || hasEffect(p, 'silence')) return;
   if (hasEffect(p, 'ghost')) breakGhost(p);
   p.superCooldown = su.cd;
   p.swingTimer = 300;
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
+  if (su.kind === 'rewind') {
+    // REWIND: back to your best health of the last few seconds, bad effects
+    // undone, the special ready again, and a burst of haste.
+    const best = Math.max(p.hp, ...(p.hpHist || []));
+    const gain = Math.round(best - p.hp);
+    p.hp = Math.min(p.maxHp, best);
+    if (p.effects) for (const k of ['burn', 'poison', 'slow', 'root', 'confuse', 'silence']) delete p.effects[k];
+    p.specialCooldown = 0;
+    applyEffect(p, 'haste', REWIND_HASTE_MS);
+    applyEffect(p, 'speed', REWIND_HASTE_MS);
+    room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 70, timer: 700, max: 700, color: WEAPON_COLORS.chronostaff });
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 40, timer: 800, max: 800, color: WEAPON_COLORS.chronostaff,
+                          text: gain > 0 ? 'REWIND +' + gain : 'REWIND' });
+    return;
+  }
+  if (su.kind === 'singularity') {
+    // SINGULARITY: a huge black hole on the nearest foe; it collapses in a blast.
+    const t = nearestFoe(p, pKey);
+    const at = t ? { x: cx(t), y: cy(t) } : { x: cx(p) + (p.facing || 1) * 120, y: cy(p) };
+    room.fires.push({ id: nextId(), kind: 'blackhole', owner: pKey, x: at.x, y: at.y, r: SING_R, t: 0, life: SING_MS, tick: 0,
+                      dmg: Math.round(su.dmg * dmgMult), pullR: SING_PULL_R, boom: Math.round(su.dmg * SING_BOOM * dmgMult), boomR: SING_BOOM_R });
+    room.particles.push({ type: 'trapburst', x: at.x, y: at.y, maxR: 60, timer: 800, max: 800, color: WEAPON_COLORS.voidblade, text: 'SINGULARITY' });
+    return;
+  }
   if (su.kind === 'absorbheal') {
     // Nothing banked: nothing to heal, and the cooldown isn't spent.
     const bank = p.vortexStore || 0;
@@ -2959,6 +3138,10 @@ const THROW_SHARE = 0.25, THROW_BACK_SHARE = 0.5, THROW_BOSS_SHARE = 0.06, THROW
 
 // The passives that act every tick rather than on a stat.
 function passiveTick(p, key, dt) {
+  if (p.passive === 'chronostaff') {                                  // TIME DILATION
+    if (p.specialCooldown > 0) p.specialCooldown -= dt * CHRONO_DILATION;
+    if (p.superCooldown > 0) p.superCooldown -= dt * CHRONO_DILATION;
+  }
   if (p.aegisCd > 0) p.aegisCd -= dt;
   if (p.escapeCd > 0) p.escapeCd -= dt;
   if (p.passive === 'sunbow' && p.hp < p.maxHp) {                     // SUNLIT
@@ -3317,11 +3500,13 @@ function updateFires(factor, dt) {
       if (f.kind === 'meteor') explodeMeteor(f);
       if (f.kind === 'knife') explodeKnife(f);
       if (f.kind === 'runecast') placeMageTrap(f);
+      if (f.kind === 'blackhole' && f.boom) collapseSingularity(f);
       return false;
     }
     if (f.kind === 'runecast') return true;   // the warning circle, still drawing itself
     if (f.kind === 'meteor' || f.kind === 'knife') return true;   // still falling: only the warning shows
     if (f.kind === 'portal') return updatePortal(f, dt);
+    if (f.kind === 'mine') return updatePlayerMine(f);
     if (f.kind === 'barrier') return updateBarrier(f);
     if (f.kind === 'blizzard') return updateBlizzard(f, dt);
     if (f.kind === 'sunorb') return updateSunorb(f, dt);
@@ -3975,7 +4160,7 @@ function adminSkipWave() {
 function useAbility(p, pKey, slot) {
   const id = p.abilities?.[slot];
   const ab = ABILITY_BY_ID[id];
-  if (!ab || p.dead || (p.abCd[id] || 0) > 0) return;
+  if (!ab || p.dead || (p.abCd[id] || 0) > 0 || hasEffect(p, 'silence')) return;
   let used = true;
   if (id === 'dash') used = abilityDash(p, pKey);
   else if (id === 'heal') used = abilityHeal(p);
@@ -4027,7 +4212,170 @@ function stagger(t, ms) {
   else { t.freeze = Math.max(t.freeze || 0, ms); t.swing = 0; }
 }
 
+// ── The 10 update ──
+const THORNS_SHARE = 0.5, VOID_WAVE_MULT = 0.6, VOID_WAVE_RANGE = 170, VOID_HUNGER_MS = 1500, CHRONO_DILATION = 0.4;
+const TIMESTOP_MS = 2000, RIFT_R = 55, REWIND_SAMPLES = 16, REWIND_HASTE_MS = 4000;
+const SING_R = 46, SING_MS = 3200, SING_PULL_R = 260, SING_BOOM = 4, SING_BOOM_R = 130;
+const MINE_ARM = 500, MINE_LIFE = 20000, MINE_R = 64, MINE_TRIP = 20;
+
+// The singularity's end: one big blast where it stood.
+function collapseSingularity(f) {
+  for (const t of enemyTargets(f.owner)) {
+    if (Math.hypot(cx(t) - f.x, cy(t) - f.y) > f.boomR + t.w / 2) continue;
+    if (!t.num) t.invincible = 0;
+    applyDamage(t, f.boom + Math.round(t.num ? 0 : (t.maxHp || 0) * (t.boss ? 0.01 : 0.08)), f.owner);
+  }
+  room.particles.push({ type: 'shockwave', x: f.x, y: f.y, maxR: f.boomR, timer: 600, max: 600, color: WEAPON_COLORS.voidblade });
+  room.particles.push({ type: 'trapburst', x: f.x, y: f.y, maxR: f.boomR, timer: 700, max: 700, color: '#d8b8ff', text: 'COLLAPSE' });
+}
+
+// A player's landmine: armed after MINE_ARM, it blows when a foe comes close.
+function updatePlayerMine(f) {
+  if (f.t < MINE_ARM) return true;
+  const trip = enemyTargets(f.owner).some(t => Math.hypot(cx(t) - f.x, cy(t) - f.y) <= MINE_TRIP + t.w / 2);
+  if (!trip) return true;
+  for (const t of enemyTargets(f.owner)) {
+    if (Math.hypot(cx(t) - f.x, cy(t) - f.y) > MINE_R + t.w / 2) continue;
+    if (!t.num) t.invincible = 0;
+    applyDamage(t, abDmg(t, f.dmg, 0.05, 1), f.owner);
+  }
+  room.particles.push({ type: 'shockwave', x: f.x, y: f.y, maxR: MINE_R, timer: 450, max: 450, color: ABILITY_BY_ID.mines.color });
+  room.particles.push({ type: 'trapburst', x: f.x, y: f.y, maxR: MINE_R, timer: 500, max: 500, color: '#ffb030', text: 'BOOM' });
+  return false;
+}
+
+// Using one of the new items. Returns false for items handled the old way.
+function useItemEffect(p, key, def) {
+  const m = hasEffect(p, 'strength') ? 1.8 : 1;
+  if (def.effect === 'zap') {
+    const foes = enemyTargets(key)
+      .map(t => ({ t, d: Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) }))
+      .filter(o => o.d <= def.radius).sort((a, b) => a.d - b.d).slice(0, def.count);
+    for (const { t } of foes) {
+      room.particles.push({ type: 'bolt', x: cx(p), y: cy(p), x2: cx(t), y2: cy(t), timer: 320, max: 320, color: def.color });
+      strikeTarget(t, abDmg(t, def.amount, 0.04, m), key);
+    }
+    return true;
+  }
+  if (def.effect === 'turret') {
+    const at = arenaClamp(cx(p) + (p.facing || 1) * 30, cy(p) - 10, 18);
+    openFirePortal(key, at.x, at.y, Math.round(30 * m), 0, [400, 1000, 1600, 2200, 2800, 3400, 4000, 4600, 5200, 5800], { r: 16, aoe: 22 });
+    return true;
+  }
+  if (def.effect === 'egg') {
+    for (let i = 0; i < 2; i++) {
+      const at = arenaClamp(cx(p) + (i ? 30 : -30), cy(p) + 10, 16);
+      spawnAlly(key, at.x, at.y, Math.round(34 * m), { type: i ? 'brute' : 'wraith', hp: 260, life: 12000, force: true });
+      room.particles.push({ type: 'teleport', x: at.x, y: at.y, timer: 380, max: 380, color: def.color });
+    }
+    return true;
+  }
+  if (def.effect === 'frenzy') {
+    for (const e of ['speed', 'strength', 'haste']) applyEffect(p, e, def.dur);
+    return true;
+  }
+  if (def.effect === 'hourglass') {
+    for (const t of enemyTargets(key)) {
+      if (t.num) chillTarget(t, 2500);
+      else t.slowTimer = Math.max(t.slowTimer || 0, def.dur);
+    }
+    room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 400, timer: 800, max: 800, color: def.color });
+    return true;
+  }
+  if (def.effect === 'elixir') {
+    p.hp = p.maxHp;
+    if (p.effects) for (const k of ['burn', 'poison', 'slow', 'root', 'confuse', 'silence']) delete p.effects[k];
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 36, timer: 700, max: 700, color: def.color, text: 'FULL HEAL' });
+    return true;
+  }
+  if (['thorns', 'vanish', 'ironskin', 'gold'].includes(def.effect)) {
+    applyEffect(p, def.effect, def.dur);
+    return true;
+  }
+  return false;
+}
+
 const ABILITY_FNS = {
+  perfectguard(p, pKey, ab) {
+    p.parryTimer = Math.max(p.parryTimer || 0, 2500);
+    spawnParrySpark(cx(p), cy(p));
+    abBurst(p, ab, 'PERFECT GUARD');
+  },
+  haven(p, pKey, ab) {
+    const to = safestSpot(p, pKey);
+    if (!to) return false;
+    room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 380, max: 380, color: ab.color });
+    p.x = to.x - p.w / 2; p.y = to.y - p.h / 2;
+    clampToArena(p, 2);
+    p.pull = null;
+    p.invincible = Math.max(p.invincible || 0, 600);
+    p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.15));
+    room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 380, max: 380, color: '#ffffff' });
+    abBurst(p, ab, 'SAFE HAVEN');
+  },
+  flurry(p, pKey, ab, m) {
+    for (let i = 0; i < 12; i++) {
+      const a = i * Math.PI / 6;
+      room.projectiles.push({ id: nextId(), x: cx(p), y: cy(p), dx: Math.cos(a) * 6, dy: Math.sin(a) * 6,
+        damage: Math.round(30 * m), owner: pKey, traveled: 0, maxRange: 230, weaponId: 'shuriken',
+        isAoe: false, aoeRadius: 0, pierce: true, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: new Set() });
+    }
+    abBurst(p, ab, 'BLADE FLURRY');
+  },
+  mines(p, pKey, ab, m) {
+    for (let i = 0; i < 3; i++) {
+      const a = i * Math.PI * 2 / 3 + Math.random() * 0.5;
+      const at = arenaClamp(cx(p) + Math.cos(a) * 34, cy(p) + Math.sin(a) * 34, 8);
+      room.fires.push({ id: nextId(), kind: 'mine', owner: pKey, x: at.x, y: at.y, r: 7, t: 0, life: MINE_LIFE, dmg: Math.round(60 * m) });
+    }
+    abBurst(p, ab, 'LANDMINES');
+  },
+  soulchain(p, pKey, ab, m) {
+    const t = nearestFoe(p, pKey, 380);
+    if (!t) return false;
+    room.particles.push({ type: 'streak', x: cx(p), y: cy(p), x2: cx(t), y2: cy(t), timer: 400, max: 400, color: ab.color });
+    strikeTarget(t, abDmg(t, 30, 0.03, m), pKey);
+    if (!t.boss) startPull(t, pKey);
+    stagger(t, 1400);
+  },
+  warcry(p, pKey, ab, m) {
+    applyEffect(p, 'strength', 5000);
+    for (const t of enemyTargets(pKey)) {
+      if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) <= 160 + t.w / 2) stagger(t, 1000);
+    }
+    room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 160, timer: 500, max: 500, color: ab.color });
+    abBurst(p, ab, 'WAR CRY');
+  },
+  overcharge(p, pKey, ab) {
+    if (!(p.specialCooldown > 0) && !(p.superCooldown > 0)) return false;   // nothing to recharge
+    p.specialCooldown = 0; p.superCooldown = 0;
+    abBurst(p, ab, 'OVERCHARGE');
+  },
+  fireball(p, pKey, ab, m) {
+    const a = nearestTargetAngle(p, pKey);
+    p.facing = Math.cos(a) < 0 ? -1 : 1;
+    room.projectiles.push({ id: nextId(), x: cx(p), y: cy(p), dx: Math.cos(a) * 5, dy: Math.sin(a) * 5,
+      damage: Math.round(70 * m), owner: pKey, traveled: 0, maxRange: 380, weaponId: 'fireball',
+      isAoe: true, aoeRadius: 62, pierce: false, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: null, burn: 2500 });
+    abBurst(p, ab, 'FIREBALL');
+  },
+  smite(p, pKey, ab, m) {
+    let best = null;
+    for (const t of enemyTargets(pKey)) {
+      if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) > 320) continue;
+      if (!best || t.hp > best.hp) best = t;
+    }
+    if (!best) return false;
+    room.particles.push({ type: 'bolt', x: cx(best), y: ARENA_Y + 2, x2: cx(best), y2: cy(best), timer: 450, max: 450, color: ab.color });
+    room.particles.push({ type: 'shockwave', x: cx(best), y: cy(best), maxR: 40, timer: 450, max: 450, color: ab.color });
+    if (!best.num) best.invincible = 0;
+    applyDamage(best, abDmg(best, 110, 0.12, m), pKey);
+    stagger(best, 600);
+  },
+  frostarmor(p, pKey, ab) {
+    applyEffect(p, 'frostarmor', 6000);
+    abBurst(p, ab, 'FROST ARMOR');
+  },
   shadowstep(p, pKey, ab, m) {
     const t = nearestFoe(p, pKey, 420);
     if (!t) return false;
@@ -4281,10 +4629,11 @@ function updateBlackhole(f, factor, dt) {
   if (hurt) f.tick = HOLE_TICK;
   for (const t of enemyTargets(f.owner)) {
     const dx = f.x - cx(t), dy = f.y - cy(t), d = Math.hypot(dx, dy) || 1;
-    if (d > HOLE_PULL_R) continue;
+    const pullR = f.pullR || HOLE_PULL_R;
+    if (d > pullR) continue;
     if (!t.boss && d > 3) {
       // Pulls harder the closer it gets.
-      const pull = Math.min(d, (1.2 + 2.6 * (1 - d / HOLE_PULL_R)) * factor);
+      const pull = Math.min(d, (1.2 + 2.6 * (1 - d / pullR)) * factor);
       t.x += dx / d * pull; t.y += dy / d * pull;
       clampToArena(t);
     }
@@ -4419,7 +4768,7 @@ function nearestTargetAngle(p, pKey) {
 function doSpecial(p, pKey) {
   const w = weapon(p);
   const sp = w.special;
-  if (!sp) return;
+  if (!sp || hasEffect(p, 'silence')) return;   // NULL FIELD
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
   if (hasEffect(p, 'ghost')) breakGhost(p);
   p.specialCooldown = sp.cd;
@@ -4431,6 +4780,38 @@ function doSpecial(p, pKey) {
 
   if (sp.kind === 'firehand') {
     castFireHand(p, pKey, sp, dmgMult);
+    return;
+  }
+  if (sp.kind === 'timestop') {
+    // TIME STOP: everything close is frozen where it stands.
+    for (const t of enemyTargets(pKey)) {
+      if (Math.hypot(cx(t) - px, cy(t) - py) > sp.range + t.w / 2) continue;
+      applyDamage(t, spDmg, pKey);
+      stagger(t, TIMESTOP_MS);
+    }
+    room.projectiles = room.projectiles.filter(pr => !(pr.owner === 'monster' && Math.hypot(pr.x - px, pr.y - py) < sp.range));
+    room.particles.push({ type: 'shockwave', x: px, y: py, maxR: sp.range, timer: 700, max: 700, color: wc });
+    room.particles.push({ type: 'trapburst', x: px, y: py, maxR: 40, timer: 700, max: 700, color: wc, text: 'TIME STOP' });
+    return;
+  }
+  if (sp.kind === 'riftstep') {
+    // RIFT STEP: through a rift to the nearest foe, cutting all around the landing.
+    const t = nearestFoe(p, pKey, sp.range);
+    if (!t) { p.specialCooldown = 0; p.swingTimer = 0; return; }
+    room.particles.push({ type: 'teleport', x: px, y: py, timer: 380, max: 380, color: wc });
+    const dx = cx(t) - px, dy = cy(t) - py, d = Math.hypot(dx, dy) || 1;
+    const back = t.w / 2 + p.w / 2 + 6;
+    p.x = cx(t) + dx / d * back - p.w / 2; p.y = cy(t) + dy / d * back - p.h / 2;
+    clampToArena(p, 2);
+    p.pull = null; p.facing = dx > 0 ? -1 : 1;
+    p.invincible = Math.max(p.invincible || 0, 350);
+    for (const o of enemyTargets(pKey)) {
+      if (Math.hypot(cx(o) - cx(p), cy(o) - cy(p)) > RIFT_R + o.w / 2) continue;
+      strikeTarget(o, spDmg, pKey);
+      stagger(o, 500);
+    }
+    room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 380, max: 380, color: '#ffffff' });
+    room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: RIFT_R, timer: 380, max: 380, color: wc });
     return;
   }
   if (sp.kind === 'blink') {
@@ -5173,7 +5554,10 @@ wss.on('connection', (ws) => {
           if (Number.isInteger(idx) && idx >= 0 && idx < p.inventory.length) {
             const type = p.inventory[idx];
             const def = ITEM_TYPES[type];
-            if (def) {
+            if (def && useItemEffect(p, myKey, def)) {
+              p.inventory.splice(idx, 1);
+              room.particles.push({ type: 'useitem', x: cx(p), y: p.y, timer: 900, max: 900, color: def.color, text: def.name });
+            } else if (def) {
               if (def.instant && def.effect === 'heal') {
                 p.hp = Math.min(p.maxHp, p.hp + def.amount);
               } else if (def.effect === 'bomb') {
