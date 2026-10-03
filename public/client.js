@@ -481,6 +481,7 @@ function updatePrediction(frameDt, now) {
   // Mirror server speed modifiers so prediction matches authoritative movement.
   let spd = me.speed || serverPlayerSpeed;
   if (me.effects && me.effects.speed > 0) spd *= 1.7;
+  if (ghostNow(me, now)) spd *= 1.75;
   if (me.effects && me.effects.slow  > 0) spd *= 0.4;
 
   // Apply currently-held inputs immediately (instant response)
@@ -505,8 +506,36 @@ function applyPrediction(state) {
   if (!me || me.dead) return state;
   // Clone so we never mutate the stored authoritative currState.
   const players = { ...state.players };
-  players[key] = { ...me, x: pred.x, y: pred.y, facing: pred.facing };
+  // The cloak shows (or drops) the moment it's predicted, not a round trip later.
+  const effects = { ...(me.effects || {}) };
+  if (ghostNow(me)) effects.ghost = effects.ghost || 1; else delete effects.ghost;
+  players[key] = { ...me, x: pred.x, y: pred.y, facing: pred.facing, effects };
   return { ...state, players };
+}
+
+// Fires that ride on a player (barrier, hurricane, blizzard, life drain...)
+// and rope chains are pinned to wherever that player is drawn this frame: the
+// local prediction for you, the smoothed position for anyone else. Drawn at
+// the server's position they trailed a step behind the body they belong to.
+function pinToOwners(state) {
+  const at = k => {
+    const p = state.players?.[k];
+    return p && !p.dead ? { x: p.x + p.w / 2, y: p.y + p.h / 2 } : null;
+  };
+  const fires = (state.fires || []).map(f => { const o = f.fo && at(f.fo); return o ? { ...f, x: o.x, y: o.y } : f; });
+  const chains = (state.chains || []).map(ch => { const o = ch.o && at(ch.o); return o ? { ...ch, x1: o.x, y1: o.y } : ch; });
+  return { ...state, fires, chains };
+}
+
+// The Dagger of Ghosts' cloak, predicted: it goes on (or comes off) the moment
+// you press, so its 75% speed and the shimmer start at once instead of a round
+// trip later (which made you crawl, then get yanked forward). The server's word
+// takes over again as soon as it has had time to catch up.
+let localGhost = null;   // { on, at }
+function ghostNow(me, now = performance.now()) {
+  if (localGhost && now - localGhost.at < rttMs + stateIntervalMs * 2 + 120) return localGhost.on;
+  localGhost = null;
+  return !!(me && me.effects && me.effects.ghost > 0);
 }
 
 // ─── Slash Effects ────────────────────────────────────────────────────────────
@@ -1515,7 +1544,7 @@ function currentInputs() {
   };
 }
 
-let localPrevAttack = false;
+let localPrevAttack = false, localPrevSwap = false;
 let localAtkCd = 0;          // client-mirrored attack cooldown (ms)
 let lastLocalSlashTime = 0;  // suppress the server echo of a slash we already showed
 
@@ -1525,7 +1554,13 @@ function sendInput() {
   ws.send(JSON.stringify({ type:'input', keys: inp }));
   // Predict the attack swing locally for instant feedback (rising edge only).
   if (inp.attack && !localPrevAttack) tryLocalAttack();
+  // Swapping off the dagger drops the cloak.
+  if (inp.swap && !localPrevSwap && localGhost?.on !== false && currState?.players) {
+    const me = currState.players[myNum === 1 ? 'p1' : 'p2'];
+    if (me && ghostNow(me)) localGhost = { on: false, at: performance.now() };
+  }
   localPrevAttack = inp.attack;
+  localPrevSwap = inp.swap;
 }
 
 function tryLocalAttack() {
@@ -1536,6 +1571,13 @@ function tryLocalAttack() {
   const haste = me.effects && me.effects.haste > 0;
   // atkSpd comes from the server so weapon upgrades stay in sync.
   localAtkCd = (me.atkSpd || WEAPON_META[me.weaponId]?.atkSpd || 400) * (haste ? 0.5 : 1);
+  if (me.weaponId === 'ghostdagger') {
+    // Out in the open the attack is the cloak itself (no stab); cloaked, it's
+    // the ghost strike, which ends it.
+    const was = ghostNow(me);
+    localGhost = { on: !was, at: performance.now() };
+    if (!was) { localAtkCd = Math.max(localAtkCd, 700); lastLocalSlashTime = performance.now(); return; }
+  }
   spawnLocalSlash(me, key);
 }
 
@@ -2715,7 +2757,7 @@ function renderLoop(now) {
     // Blend over the real gap between states, so others move smoothly instead
     // of finishing early and stalling until the next message.
     const t = Math.min(1, (now - stateRecvTime) / Math.max(SERVER_TICK_MS, stateIntervalMs));
-    draw(applyPrediction(interpState(prevState, currState, t)));
+    draw(pinToOwners(applyPrediction(interpState(prevState, currState, t))));
   } else {
     pred = null;
     slashes.length = 0;
@@ -3210,6 +3252,7 @@ function drawMonster(m) {
   drawMonsterArms(m, x, y);
   if (m.burning) drawFlames(x, y, m.w, m.h);
   if (m.frozen) drawIceBlock(x, y, m.w, m.h);
+  drawMonsterTells(m, x, y);
   if (m.boss) { drawBossMarks(m, x, y); return; }
 
   drawHpBar(x - 1, y - 5, m.w + 2, 2, m.hp / m.maxHp, '#44ff44', '#003300');
@@ -3220,6 +3263,63 @@ function drawMonster(m) {
   }
 }
 function drawMonsters(ms) { for(const m of ms) drawMonster(m); }
+
+// Warnings for the monsters with tricks, so each one can be read and dodged:
+// a bomber's blast ring, a charger's ram line, a necromancer's grave marks,
+// a shaman's ward, and stars over a dazed charger.
+const BOMB_R = 62, CHARGE_DIST = 380;   // mirror the server
+function drawMonsterTells(m, x, y) {
+  const now = performance.now();
+  const mx = x + m.w / 2, my = y + m.h / 2;
+  ctx.save();
+  if (m.fuse > 0) {
+    const k = 1 - Math.min(1, m.fuse / 900);
+    const blink = Math.sin(now / (60 - k * 35)) > 0;
+    ctx.globalAlpha = 0.10 + 0.18 * k; ctx.fillStyle = '#ff4a1a';
+    ctx.beginPath(); ctx.arc(mx, my, BOMB_R, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = blink ? 0.9 : 0.4; ctx.strokeStyle = '#ffb030'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(mx, my, BOMB_R * (0.25 + 0.75 * k), 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([4, 4]); ctx.globalAlpha = 0.7;
+    ctx.beginPath(); ctx.arc(mx, my, BOMB_R, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    if (blink) { ctx.globalAlpha = 0.5; ctx.fillStyle = '#ffffff'; ctx.fillRect(x, y, m.w, m.h); }
+  }
+  if (m.ward) {
+    ctx.globalAlpha = 0.35 + 0.15 * Math.sin(now / 150); ctx.strokeStyle = '#5aff9a'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.ellipse(mx, my, m.w * 0.8 + 2, m.h * 0.7 + 2, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+  if (m.charge && m.charge.wind) {
+    const a = m.charge.a, L = CHARGE_DIST;
+    ctx.translate(mx, my); ctx.rotate(a);
+    ctx.globalAlpha = 0.18 + 0.12 * Math.sin(now / 50); ctx.fillStyle = '#ff5a3a';
+    ctx.fillRect(0, -m.h / 2, L, m.h);
+    ctx.globalAlpha = 0.8; ctx.strokeStyle = '#ff8a5a'; ctx.lineWidth = 1;
+    ctx.setLineDash([6, 4]); ctx.lineDashOffset = -now / 20;
+    ctx.beginPath(); ctx.moveTo(0, -m.h / 2); ctx.lineTo(L, -m.h / 2); ctx.moveTo(0, m.h / 2); ctx.lineTo(L, m.h / 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#ff8a5a';
+    ctx.beginPath(); ctx.moveTo(L + 8, 0); ctx.lineTo(L - 4, -7); ctx.lineTo(L - 4, 7); ctx.closePath(); ctx.fill();
+    ctx.restore(); ctx.save();   // back to world space
+  }
+  if (m.dazed) {
+    ctx.fillStyle = '#ffe25a'; ctx.globalAlpha = 0.9;
+    for (let i = 0; i < 3; i++) {
+      const a = now / 200 + i * 2.1;
+      ctx.fillRect(Math.round(mx + Math.cos(a) * m.w * 0.5) - 1, Math.round(y - 5 + Math.sin(a) * 2) - 1, 2, 2);
+    }
+  }
+  if (m.raise) {
+    for (const r of m.raise) {
+      ctx.globalAlpha = 0.5 + 0.3 * Math.sin(now / 80); ctx.strokeStyle = '#9aff7a'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.ellipse(r.x, r.y + 6, 9, 3.5, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 0.25; ctx.fillStyle = '#9aff7a';
+      ctx.fillRect(r.x - 1, r.y - 10, 2, 16);
+    }
+    ctx.globalAlpha = 0.4; ctx.strokeStyle = '#9aff7a';
+    ctx.beginPath(); ctx.arc(mx, my, m.w * 0.9, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+}
 
 // Portal Wand allies: the same monsters, washed in their owner's colour, with
 // a ring at their feet and a bar in that colour. They flicker as they fade.
@@ -3375,6 +3475,11 @@ const MONSTER_ARMS = {
   titan:    { art: 'm_warhammer', color: '#8fa0b4', size: 0.62, rest: -1.1,  move: 'slam'   },
   wraith:   { art: 'm_scythe',    color: '#9a7aff', size: 0.78, rest: -0.7,  move: 'chop'   },
   infernal: { art: 'm_hellstaff', color: '#ff6a1a', size: 0.68, rest: -1.1,  move: 'cast'   },
+  // Monsters with tricks (the splitter, its slimelets and the charger fight with their bodies)
+  bomber:      { art: 'm_bomb',      color: '#ff9a1a', size: 0.8,  rest:  0.2,  move: 'stab'   },
+  shaman:      { art: 'm_totem',     color: '#5aff9a', size: 0.68, rest: -1.1,  move: 'cast'   },
+  necromancer: { art: 'm_bonestaff', color: '#9aff7a', size: 0.66, rest: -1.1,  move: 'cast'   },
+  skeleton:    { art: 'm_shiv',      color: '#c8c0a8', size: 0.8,  rest:  0.3,  move: 'stab'   },
   // Boss
   giant:    { art: 'm_tree',      color: '#4e8a3a', size: 0.62, rest: -0.95, move: 'giant'  },
   portalmage: { art: 'm_portalstaff', color: '#b07aff', size: 0.6, rest: -1.15, move: 'cast' },
@@ -3780,7 +3885,7 @@ function drawParticles(particles) {
   for (const p of particles) {
     if (p.type==='xp') {
       const alpha=Math.max(0,p.timer/900), rise=(1-p.timer/900)*14;
-      ctx.globalAlpha=alpha; ctx.fillStyle=PAL.xp;
+      ctx.globalAlpha=alpha; ctx.fillStyle=p.color||PAL.xp;
       pixelText(p.text,Math.round(p.x),Math.round(p.y-rise));
       ctx.globalAlpha=1;
     } else if (p.type==='coin') {

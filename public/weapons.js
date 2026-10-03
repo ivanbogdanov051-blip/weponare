@@ -778,6 +778,43 @@ const MONSTER_ARMS_ART = {
     k.r(20, -0.8, 1.3, 1.3, '#ffd84a');                                     // burning eyes
     k.r(22.4, -0.8, 1.3, 1.3, '#ffd84a');
   }},
+
+  // Bomber: a round black bomb held out in front, its fuse spitting sparks.
+  m_bomb: { draw(k, wc) {
+    k.r(0, -1, 5, 2, MON_MAT.boneDark);                                     // the arm holding it
+    k.circ(9, 0, 5, '#26242a');
+    k.circ(7.8, -1.4, 2, '#4a4852');
+    k.r(8, -6.5, 2, 2, MAT.iron);                                           // cap
+    k.line(9, -6.5, 11, -9, 0.8, '#c8a070');                                // fuse
+    k.glow(11.5, -9.5, 4, wc, 0.6);
+    k.r(11, -10, 1.4, 1.4, '#ffffff');
+    k.r(12.5, -11, 1, 1, wc); k.r(10, -11.5, 1, 1, '#ffd84a');
+  }},
+
+  // Shaman: a crooked wooden totem hung with feathers, a green gem on top.
+  m_totem: { draw(k, wc) {
+    k.r(0, -1.2, 17, 2.4, MAT.wood);
+    k.r(0, -1.2, 17, 0.8, MAT.woodLight);
+    k.r(5, -1.6, 1.2, 3.2, MAT.leather); k.r(10, -1.6, 1.2, 3.2, MAT.leather);
+    k.poly([[9, 1.4], [8, 6], [10, 6.5], [10.5, 1.4]], '#e0c060');          // feathers
+    k.poly([[12, 1.4], [12.5, 5.5], [14, 5], [13.4, 1.4]], '#c04a3a');
+    k.poly([[16, -3], [19, -4.5], [22, -3], [22, 3], [19, 4.5], [16, 3]], MAT.woodDark);   // head
+    k.glow(19, 0, 7, wc, 0.5);
+    k.circ(19, 0, 2.4, wc);
+    k.r(18.4, -1, 1, 1, '#ffffff');
+  }},
+
+  // Necromancer: a black staff topped with a skull wreathed in green flame.
+  m_bonestaff: { draw(k, wc) {
+    k.r(0, -1.1, 18, 2.2, '#1e1a26');
+    k.r(0, -1.1, 18, 0.7, '#3a3248');
+    k.r(4, -1.6, 1, 3.2, MON_MAT.bone); k.r(9, -1.6, 1, 3.2, MON_MAT.bone);   // bone rings
+    k.glow(22, -1, 8, wc, 0.45);
+    k.poly([[19, -4], [21, -9], [22.5, -5], [25, -8.5], [25, -3]], wc);     // ghost flame
+    k.circ(22, 0, 3.6, MON_MAT.bone);                                       // skull
+    k.r(20, 2.4, 4, 1.8, MON_MAT.boneDark);
+    k.r(20.4, -0.8, 1.3, 1.3, wc); k.r(22.8, -0.8, 1.3, 1.3, wc);           // eyes
+  }},
 };
 for (const art of Object.values(MONSTER_ARMS_ART)) art.box = measureArt(art.draw);
 

@@ -462,6 +462,14 @@ const MONSTER_SKIN = {
   titan:    { base: '#5a6a7a', eye: '#8ee8ff', eyes: 2 },
   wraith:   { base: '#3a2a5a', eye: '#c8f0ff', eyes: 2 },
   infernal: { base: '#b8340e', eye: '#ffd84a', eyes: 2 },
+  // Monsters with tricks, and their minions
+  bomber:      { base: '#e0a020', eye: '#ff3322', eyes: 2 },
+  shaman:      { base: '#3ac08a', eye: '#eaff6a', eyes: 2 },
+  splitter:    { base: '#4ad0c8', eye: '#10302e', eyes: 2 },
+  slimelet:    { base: '#7ae8e0', eye: '#10302e', eyes: 2 },
+  charger:     { base: '#9a7050', eye: '#ff4422', eyes: 2 },
+  necromancer: { base: '#5a4a7a', eye: '#9aff7a', eyes: 2 },
+  skeleton:    { base: '#d8d0b8', eye: '#ff5a3a', eyes: 2 },
   // Boss
   giant:    { base: '#7a9a56', eye: '#ffe25a', eyes: 2 },
   portalmage: { base: '#5a2aa8', eye: '#ff9aff', eyes: 2 },
@@ -520,6 +528,40 @@ const MONSTER_SHAPE = {
     // A tall pointed hood over a robe that flares to the floor — no legs show.
     body: [[0.50,0.00],[0.60,0.10],[0.68,0.22],[0.80,0.30],[0.84,0.50],[0.96,0.98],[0.04,0.98],[0.16,0.50],[0.20,0.30],[0.32,0.22],[0.40,0.10]],
     legs: [], legTop: 1, headV: 0.30,
+  },
+  bomber: {
+    // A squat round body: mostly bomb.
+    body: [[0.24,0.06],[0.76,0.06],[0.94,0.26],[1.00,0.50],[0.92,0.74],[0.70,0.86],[0.30,0.86],[0.08,0.74],[0.00,0.50],[0.06,0.26]],
+    legs: [[0.20,0.16],[0.62,0.16]], legTop: 0.84, headV: 0.34,
+  },
+  shaman: {
+    // Hunched under a cloak of leaves, with a bone mask.
+    body: [[0.40,0.02],[0.62,0.04],[0.78,0.18],[0.90,0.42],[0.94,0.84],[0.06,0.84],[0.12,0.42],[0.24,0.16]],
+    legs: [[0.22,0.18],[0.58,0.18]], legTop: 0.82, headV: 0.26,
+  },
+  splitter: {
+    // A wobbling dome of slime, wide at the base.
+    body: [[0.30,0.10],[0.50,0.04],[0.70,0.10],[0.88,0.34],[1.00,0.70],[0.94,1.00],[0.06,1.00],[0.00,0.70],[0.12,0.34]],
+    legs: [], legTop: 1, headV: 0.42,
+  },
+  slimelet: {
+    body: [[0.30,0.16],[0.50,0.08],[0.70,0.16],[0.90,0.44],[1.00,0.80],[0.92,1.00],[0.08,1.00],[0.00,0.80],[0.10,0.44]],
+    legs: [], legTop: 1, headV: 0.46,
+  },
+  charger: {
+    // A low, heavy beast with its head down and a horn out front.
+    body: [[0.00,0.36],[0.10,0.20],[0.36,0.12],[0.70,0.14],[0.90,0.24],[1.00,0.44],[0.94,0.70],[0.70,0.76],[0.30,0.76],[0.06,0.66]],
+    legs: [[0.14,0.26],[0.36,0.26],[0.58,0.26],[0.78,0.26]], legTop: 0.72, headV: 0.34, lean: true,
+  },
+  necromancer: {
+    // A tall hood and a tattered robe.
+    body: [[0.50,0.00],[0.66,0.10],[0.76,0.28],[0.80,0.52],[0.92,0.98],[0.66,0.90],[0.50,0.98],[0.34,0.90],[0.08,0.98],[0.20,0.52],[0.24,0.28],[0.34,0.10]],
+    legs: [], legTop: 1, headV: 0.28,
+  },
+  skeleton: {
+    // A skull on a thin ribcage.
+    body: [[0.30,0.00],[0.70,0.00],[0.76,0.26],[0.60,0.32],[0.74,0.40],[0.70,0.70],[0.30,0.70],[0.26,0.40],[0.40,0.32],[0.24,0.26]],
+    legs: [[0.30,0.30],[0.56,0.30]], legTop: 0.68, headV: 0.16,
   },
   infernal: {
     // A lean, horned demon.
@@ -678,6 +720,43 @@ function monsterBuf(type, w, h) {
     K.ditherRect(b, X(0.12), Y(0.70), w * 0.76, h * 0.26, c[1], c[0], 'sparse');
     rect(b, X(0.48), Y(0.00) - 2, 2, 2, '#ffe25a');                                                        // star on the tip
     setPx(b, X(0.48) - 1, Y(0.00) - 1, '#fff6c0'); setPx(b, X(0.48) + 2, Y(0.00) - 1, '#fff6c0');
+  } else if (type === 'bomber') {
+    // Riveted band round the middle and a lit fuse on top.
+    rect(b, X(0.04), Y(0.48), w * 0.92, Math.max(1, h * 0.07), MAT5.iron[1]);
+    for (const u of [0.16, 0.40, 0.64, 0.86]) setPx(b, X(u), Y(0.50), MAT5.steel[4]);
+    rect(b, X(0.46), Y(0.06) - 2, 2, 2, MAT5.iron[1]);
+    line(b, X(0.50), Y(0.06) - 2, X(0.60), Y(0.06) - Math.max(4, h * 0.2), '#c8a070');
+    setPx(b, X(0.60), Y(0.06) - Math.max(4, h * 0.2) - 1, '#ffd84a');
+    setPx(b, X(0.60) + 1, Y(0.06) - Math.max(4, h * 0.2) - 1, '#ff6a1a');
+  } else if (type === 'shaman') {
+    // A pale bone mask, a headdress of feathers, leaves in the cloak.
+    poly(b, P([[0.32,0.14],[0.68,0.14],[0.64,0.40],[0.50,0.46],[0.36,0.40]]), MAT5.bone[3]);
+    for (const [u, col] of [[0.34, '#e0c060'], [0.48, '#c04a3a'], [0.62, '#e0c060']]) {
+      poly(b, [[X(u), Y(0.08)], [X(u + 0.04), Y(0.08) - Math.max(3, h * 0.2)], [X(u + 0.08), Y(0.08)]], col);
+    }
+    K.ditherRect(b, X(0.14), Y(0.52), w * 0.72, h * 0.30, c[2], '#2a8a4a', 'sparse');
+  } else if (type === 'splitter' || type === 'slimelet') {
+    // Glossy highlights and a darker core that hints at two blobs inside.
+    K.ditherRect(b, X(0.20), Y(0.50), w * 0.60, h * 0.40, c[1], c[2], 'checker');
+    if (type === 'splitter') line(b, X(0.50), Y(0.40), X(0.50), Y(0.96), c[0]);
+    rect(b, X(0.24), Y(0.20), Math.max(1, w * 0.12), Math.max(1, h * 0.08), '#ffffff');
+    setPx(b, X(0.40), Y(0.16), '#e8fffd');
+  } else if (type === 'charger') {
+    // A bone horn on the snout, a shaggy mane and hooves.
+    const hy = Y(0.30);
+    poly(b, [[X(0.92), hy], [X(1.00) + Math.max(3, w * 0.18), hy - Math.max(3, h * 0.24)], [X(0.98), hy + 2]], MAT5.bone[3]);
+    K.ditherRect(b, X(0.30), Y(0.12), w * 0.36, h * 0.24, c[1], c[0], 'dense');
+    for (const u of [0.14, 0.36, 0.58, 0.78]) rect(b, X(u), Y(0.96), Math.max(1, w * 0.17), 1, '#2a1a10');
+  } else if (type === 'necromancer') {
+    // A void face under the hood, bone trim and glowing green runes.
+    poly(b, P([[0.36,0.16],[0.64,0.16],[0.66,0.36],[0.34,0.36]]), '#0c0816');
+    line(b, X(0.20), Y(0.52), X(0.80), Y(0.52), MAT5.bone[3]);
+    for (const [u, v] of [[0.30, 0.66], [0.66, 0.70], [0.46, 0.84]]) setPx(b, X(u), Y(v), '#9aff7a');
+    K.ditherRect(b, X(0.14), Y(0.60), w * 0.72, h * 0.34, c[1], c[0], 'sparse');
+  } else if (type === 'skeleton') {
+    // Hollow eye sockets, a jaw line and ribs.
+    rect(b, X(0.34), Y(0.22), w * 0.32, 1, c[0]);
+    for (let i = 0; i < 3; i++) rect(b, X(0.32), Y(0.42 + i * 0.08), w * 0.36, 1, c[0]);
   } else if (type === 'infernal') {
     // Swept horns, molten cracks, and a flame licking off the crown.
     const hornH = Math.max(3, h * 0.24), hy = Y(0.10);

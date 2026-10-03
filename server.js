@@ -461,6 +461,43 @@ const MONSTER_TYPES = {
     name: 'BEHEMOTH', minWave: 10, weight: 2,  hp: 7.0,  dmg: 2.8, speed: 0.5,  size: 1.9,
     color: '#8a3a6a', xp: 2.2, coins: 2.4, armor: 0.2,
   },
+  // ── Monsters with their own tricks (see MONSTER_AI) ──
+  // Rushes in, lights its fuse when it's next to you and blows up a beat later.
+  // Kill it first and it pops on its own pack instead.
+  bomber: {
+    name: 'BOMBER',   minWave: 4,  weight: 4,  hp: 0.7,  dmg: 1.0, speed: 1.55, size: 0.9,
+    color: '#e0a020', xp: 1.1, coins: 1.1, ai: 'bomber',
+  },
+  // Hangs back behind the pack, healing everything near it and warding it
+  // against damage.
+  shaman: {
+    name: 'SHAMAN',   minWave: 6,  weight: 3,  hp: 1.1,  dmg: 0.8, speed: 0.85, size: 1.0,
+    color: '#3ac08a', xp: 1.5, coins: 1.6, ai: 'shaman',
+  },
+  // A big slime that bursts into two quick slimelets when it dies.
+  splitter: {
+    name: 'SPLITTER', minWave: 8,  weight: 3,  hp: 1.8,  dmg: 1.2, speed: 0.75, size: 1.3,
+    color: '#4ad0c8', xp: 1.3, coins: 1.3, split: 'slimelet', splitCount: 2,
+  },
+  // Lowers its head, then rams in a straight line; it is dazed if it hits a wall.
+  charger: {
+    name: 'CHARGER',  minWave: 9,  weight: 3,  hp: 2.2,  dmg: 1.4, speed: 0.8,  size: 1.3,
+    color: '#9a7050', xp: 1.6, coins: 1.7, armor: 0.15, ai: 'charger',
+  },
+  // Raises skeletons from the floor; they crumble when it dies.
+  necromancer: {
+    name: 'NECROMANCER', minWave: 12, weight: 2, hp: 1.6, dmg: 1.0, speed: 0.8, size: 1.1,
+    color: '#5a4a7a', xp: 2.0, coins: 2.2, ai: 'necro',
+  },
+  // ── Minions (never spawned by waves, only by the monsters above) ──
+  slimelet: {
+    name: 'SLIMELET', minWave: 1, weight: 0, hp: 0.45, dmg: 0.6, speed: 1.6, size: 0.7,
+    color: '#7ae8e0', xp: 0.4, coins: 0.4, minion: true,
+  },
+  skeleton: {
+    name: 'SKELETON', minWave: 1, weight: 0, hp: 0.5, dmg: 0.8, speed: 1.2, size: 0.85,
+    color: '#d8d0b8', xp: 0.3, coins: 0.2, minion: true,
+  },
   // ── Boss (never picked at random: see isBossWave) ──
   // The Giant: the most health in the game, a fixed huge body, and a whole tree
   // for a club. No ordinary attacks — see updateGiant.
@@ -495,7 +532,8 @@ const MONSTER_TYPES = {
 
 // EXTREME mode fields only the strongest monsters, starts as hard as a deep
 // normal run (EXTREME_LEVEL_OFFSET waves in) and pays far more.
-const EXTREME_ROSTER = { brute: 2, warden: 3, behemoth: 3, titan: 2, wraith: 4, infernal: 3 };
+const EXTREME_ROSTER = { brute: 2, warden: 3, behemoth: 3, titan: 2, wraith: 4, infernal: 3,
+                         bomber: 2, shaman: 2, splitter: 2, charger: 3, necromancer: 2 };
 const EXTREME_LEVEL_OFFSET = 9;
 const EXTREME_COIN_MULT = 3;        // on top of the normal kill payout
 const EXTREME_WAVE_BONUS = 120;     // coins per wave number, paid on every clear
@@ -537,7 +575,7 @@ function pickMonsterType(wave) {
   const pool = [];
   let total = 0;
   for (const [id, def] of Object.entries(MONSTER_TYPES)) {
-    if (def.extremeOnly || def.boss || wave < def.minWave) continue;
+    if (def.extremeOnly || def.boss || def.minion || wave < def.minWave) continue;
     // The further past a type's debut, the more it crowds out the weaker ones.
     const maturity = 1 + Math.min(2.2, (wave - def.minWave) * 0.16);
     const toughness = Math.max(1, def.hp);
@@ -1165,7 +1203,7 @@ function spawnMonster(forceType) {
   const lvl = modeLevel(room.wave.num);
 
   // Call out a type the first time it appears in this run.
-  if (!def.boss && !room.seenTypes.has(type) && room.gameMode !== 'portal') {
+  if (!def.boss && !def.minion && !room.seenTypes.has(type) && room.gameMode !== 'portal') {
     room.seenTypes.add(type);
     if (room.wave.num > 1 || room.gameMode === 'extreme') {
       room.particles.push({
@@ -1266,6 +1304,210 @@ function monsterShoot(m, target) {
   });
 }
 
+// An ordinary melee blow; a parry throws it back onto the monster.
+function monsterMelee(m, t) {
+  if (t.parryTimer > 0) {
+    applyDamage(m, Math.round(m.atkDamage * reflectOf(t)) + 10, playerKeyOf(t));
+    spawnParrySpark(cx(t), cy(t));
+  } else {
+    applyDamage(t, m.atkDamage, 'monster');
+  }
+  m.atkCooldown = 1200;
+  m.swing = MONSTER_SWING_MS;
+}
+
+// Take a monster off the field with no reward (it blew itself up, or its
+// master fell).
+function removeMonster(m) {
+  if (m.dead) return;
+  m.dead = true;
+  room.monsters = room.monsters.filter(o => o !== m);
+  room.wave.monstersLeft--;
+}
+
+// Bring a minion in at (x, y); it counts toward the wave like any other monster.
+function spawnMinion(type, x, y, extra) {
+  spawnMonster(type);
+  const s = room.monsters[room.monsters.length - 1];
+  s.x = x - s.w / 2; s.y = y - s.h / 2;
+  s.invincible = 300;               // not cut down by the swing that made it
+  Object.assign(s, extra);
+  clampToArena(s);
+  room.wave.monstersLeft++;
+  return s;
+}
+
+const shieldFoes = () => [room.players.p1, room.players.p2, ...room.allies].filter(t => t && !t.dead);
+
+// Hold a distance from the target: close in when too far, back off when too near.
+function keepRange(m, dist, dx, dy, spd, factor, want) {
+  if (dist > want + 30)      { m.x += (dx / dist) * spd * factor;       m.y += (dy / dist) * spd * factor; }
+  else if (dist < want - 30) { m.x -= (dx / dist) * spd * 0.9 * factor; m.y -= (dy / dist) * spd * 0.9 * factor; }
+}
+
+// BOMBER: runs at you; next to you it stops and fizzes for BOMB_FUSE, then
+// blows up. Its own death (before the fuse burns out) is a blast that only
+// hurts other monsters.
+const BOMB_FUSE = 900, BOMB_R = 62, BOMB_MULT = 2.6;
+function aiBomber(m, t, dist, dx, dy, spd, factor, dt) {
+  if (m.fuse > 0) {
+    m.fuse -= dt;
+    if (m.fuse <= 0) bomberBlast(m, false);
+    return true;
+  }
+  if (dist < 26 + (t.w + m.w) / 2) { m.fuse = BOMB_FUSE; m.swing = MONSTER_SWING_MS; return true; }
+  m.x += (dx / dist) * spd * factor;
+  m.y += (dy / dist) * spd * factor;
+  return true;
+}
+function bomberBlast(m, killedBy) {
+  const x = cx(m), y = cy(m), dmg = Math.round(m.atkDamage * BOMB_MULT);
+  room.particles.push({ type: 'shockwave', x, y, maxR: BOMB_R, timer: 450, max: 450, color: '#ffb030' });
+  room.particles.push({ type: 'trapburst', x, y, maxR: BOMB_R, timer: 650, max: 650, color: '#ff6a1a', text: 'BOOM!' });
+  if (killedBy) {
+    // Popped early: the blast catches its own side.
+    for (const o of room.monsters.slice()) {
+      if (o.dead || o.boss || Math.hypot(cx(o) - x, cy(o) - y) > BOMB_R + o.w / 2) continue;
+      o.invincible = 0;
+      applyDamage(o, dmg * 2, killedBy === true ? null : killedBy);
+    }
+    return;
+  }
+  for (const t of shieldFoes()) {
+    if (Math.hypot(cx(t) - x, cy(t) - y) > BOMB_R + t.w / 2) continue;
+    if (t.parryTimer > 0) { spawnParrySpark(cx(t), cy(t)); continue; }   // a parry shrugs it off
+    applyDamage(t, dmg, 'monster');
+  }
+  removeMonster(m);
+}
+
+// SHAMAN: hangs back; every SHAMAN_PULSE it heals the monsters around it and
+// wards them (they take SHAMAN_WARD less damage) for a few seconds.
+const SHAMAN_PULSE = 3200, SHAMAN_R = 140, SHAMAN_HEAL = 0.25, SHAMAN_WARD = 0.4, SHAMAN_WARD_MS = 2600;
+function aiShaman(m, t, dist, dx, dy, spd, factor, dt) {
+  keepRange(m, dist, dx, dy, spd, factor, 170);
+  m.pulseCd = (m.pulseCd ?? 1500) - dt;
+  if (m.pulseCd <= 0) {
+    m.pulseCd = SHAMAN_PULSE;
+    m.swing = MONSTER_SWING_MS;
+    for (const o of room.monsters) {
+      if (o.dead || o.mage || Math.hypot(cx(o) - cx(m), cy(o) - cy(m)) > SHAMAN_R) continue;
+      if (o !== m && o.hp < o.maxHp) {
+        const heal = Math.round(o.maxHp * SHAMAN_HEAL * (o.boss ? 0.2 : 1));
+        o.hp = Math.min(o.maxHp, o.hp + heal);
+        room.particles.push({ type: 'xp', x: cx(o), y: o.y, text: '+' + heal, timer: 700, color: '#5aff9a' });
+      }
+      o.ward = SHAMAN_WARD_MS;
+    }
+    room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: SHAMAN_R, timer: 600, max: 600, color: '#5aff9a' });
+  }
+  if (dist <= 12 + (t.w + m.w) / 2 && m.atkCooldown <= 0) monsterMelee(m, t);   // a staff poke up close
+  return true;
+}
+
+// CHARGER: locks an angle and lowers its head for CHARGE_WIND (a line shows
+// where it will go), then rams along it, hitting and shoving everything in
+// the way. A wall stops it dead and dazes it; a parry dazes it for longer.
+const CHARGE_WIND = 750, CHARGE_SPEED = 8.5, CHARGE_DIST = 380, CHARGE_CD = 3600, CHARGE_MULT = 1.7, CHARGE_KNOCK = 42;
+function aiCharger(m, t, dist, dx, dy, spd, factor, dt) {
+  m.chargeCd = (m.chargeCd ?? 1200) - dt;
+  if (m.dazed > 0) { m.dazed -= dt; return true; }
+  const c = m.charge;
+  if (c) {
+    m.face = Math.cos(c.a) < 0 ? -1 : 1;
+    if (c.wind > 0) { c.wind -= dt; return true; }
+    const step = CHARGE_SPEED * factor, ox = m.x, oy = m.y;
+    m.x += Math.cos(c.a) * step; m.y += Math.sin(c.a) * step; c.left -= step;
+    clampToArena(m);
+    for (const o of shieldFoes()) {
+      if (c.hit.has(o) || (o.num && unseen(o)) || !aabb(m, o)) continue;
+      c.hit.add(o);
+      if (o.parryTimer > 0) {
+        applyDamage(m, Math.round(m.atkDamage * reflectOf(o)) + 10, playerKeyOf(o));
+        spawnParrySpark(cx(o), cy(o));
+        m.charge = null; m.dazed = 1600; m.chargeCd = CHARGE_CD;
+        return true;
+      }
+      applyDamage(o, Math.round(m.atkDamage * CHARGE_MULT), 'monster');
+      o.x += Math.cos(c.a) * CHARGE_KNOCK; o.y += Math.sin(c.a) * CHARGE_KNOCK;
+      clampToArena(o);
+    }
+    const wall = Math.hypot(m.x - ox, m.y - oy) < step * 0.5;
+    if (wall || c.left <= 0) {
+      m.charge = null; m.chargeCd = CHARGE_CD;
+      m.dazed = wall ? 1200 : 450;
+      if (wall) room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 30, timer: 350, max: 350, color: '#c8a070' });
+    }
+    return true;
+  }
+  if (m.chargeCd <= 0 && dist > 70 && dist < 330) {
+    m.charge = { a: Math.atan2(dy, dx), wind: CHARGE_WIND, left: CHARGE_DIST, hit: new Set() };
+    m.swing = MONSTER_SWING_MS;
+    return true;
+  }
+  return false;   // otherwise it walks up and gores like anyone else
+}
+
+// NECROMANCER: keeps away and, every RAISE_CD, channels for RAISE_CHANNEL
+// (green marks show where) and raises two skeletons, up to RAISE_MAX of its
+// own at once. When it falls, they all crumble.
+const RAISE_CD = 5200, RAISE_CHANNEL = 650, RAISE_MAX = 4;
+function aiNecro(m, t, dist, dx, dy, spd, factor, dt) {
+  if (m.raiseT > 0) {
+    m.raiseT -= dt;
+    if (m.raiseT <= 0) {
+      for (const s of m.raiseAt) {
+        spawnMinion('skeleton', s.x, s.y, { master: m.id });
+        room.particles.push({ type: 'teleport', x: s.x, y: s.y, timer: 380, max: 380, color: '#9aff7a' });
+      }
+      m.raiseAt = null;
+    }
+    return true;   // stands still while it channels
+  }
+  keepRange(m, dist, dx, dy, spd, factor, 190);
+  m.raiseCd = (m.raiseCd ?? 1800) - dt;
+  const mine = room.monsters.filter(o => o.master === m.id).length;
+  if (m.raiseCd <= 0 && mine < RAISE_MAX) {
+    m.raiseCd = RAISE_CD;
+    m.raiseT = RAISE_CHANNEL;
+    m.swing = MONSTER_SWING_MS;
+    m.raiseAt = [];
+    for (let i = 0; i < Math.min(2, RAISE_MAX - mine); i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = { x: cx(m) + Math.cos(a) * 34, y: cy(m) + Math.sin(a) * 34 };
+      s.x = Math.max(ARENA_X + 12, Math.min(ARENA_X + ARENA_W - 12, s.x));
+      s.y = Math.max(ARENA_Y + 12, Math.min(ARENA_Y + ARENA_H - 12, s.y));
+      m.raiseAt.push(s);
+    }
+    return true;
+  }
+  if (dist <= 12 + (t.w + m.w) / 2 && m.atkCooldown <= 0) monsterMelee(m, t);
+  return true;
+}
+
+const MONSTER_AI = { bomber: aiBomber, shaman: aiShaman, charger: aiCharger, necro: aiNecro };
+
+// After a monster is killed (and paid for): bombers pop, splitters split,
+// a necromancer's skeletons crumble.
+function monsterDied(m, killer) {
+  const def = MONSTER_TYPES[m.type] || {};
+  if (def.ai === 'bomber') bomberBlast(m, killer || true);
+  if (def.split) {
+    for (let i = 0; i < (def.splitCount || 2); i++) {
+      const a = Math.random() * Math.PI * 2;
+      spawnMinion(def.split, cx(m) + Math.cos(a) * 12, cy(m) + Math.sin(a) * 12);
+    }
+    room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 26, timer: 300, max: 300, color: def.color });
+  }
+  if (def.ai === 'necro') {
+    for (const o of room.monsters.slice()) {
+      if (o.master !== m.id) continue;
+      room.particles.push({ type: 'teleport', x: cx(o), y: cy(o), timer: 380, max: 380, color: '#d8d0b8' });
+      removeMonster(o);
+    }
+  }
+}
+
 function startWave(num) {
   let cfg;
   const lvl = modeLevel(num);
@@ -1357,6 +1599,7 @@ function applyDamage(target, dmg, attackerKey) {
   }
   // Armoured monsters shrug off a share of every hit, but never all of it.
   if (target.armor) dmg = Math.max(1, Math.round(dmg * (1 - target.armor)));
+  if (target.ward > 0) dmg = Math.max(1, Math.round(dmg * (1 - SHAMAN_WARD)));   // a shaman's ward
   if (target.num && target.defense) dmg = Math.max(1, Math.round(dmg * (1 - target.defense)));
   // The vortex shield blocks the hit outright, but still banks what it would have done.
   if (target.num && target.vortexShield > 0) {
@@ -1437,6 +1680,7 @@ function handleKill(target, attackerKey) {
     target.dead = true;
     room.monsters = room.monsters.filter(m => m !== target);
     room.wave.monstersLeft--;
+    monsterDied(target, attackerKey);
   }
 }
 
@@ -1472,11 +1716,16 @@ function creditXp(key, xpGain) {
   }
 }
 
+// Back in at the safest spot on the field (away from every foe, trap and shot),
+// not on the fixed spawn point, which may be in the middle of the fight.
 function respawnPlayer(p) {
-  const sp = spawnPointFor(p.num);
+  const safe = safestSpot(p, playerKeyOf(p));
+  const sp = safe ? { x: safe.x - p.w / 2, y: safe.y - p.h / 2 } : spawnPointFor(p.num);
   p.hp = p.maxHp;
   p.x  = sp.x;
   p.y  = sp.y;
+  clampToArena(p);
+  room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 420, max: 420, color: '#ffffff' });
   p.dead = false;
   p.pull = null;
   p.invincible = 2000;
@@ -1665,6 +1914,7 @@ function tickRoom(dt) {
     if (m.hitFlash    > 0) m.hitFlash    -= dt;
     if (m.invincible  > 0) m.invincible  -= dt;
     if (m.swing       > 0) m.swing       -= dt;
+    if (m.ward        > 0) m.ward        -= dt;
     // Frozen solid by a frost nova: no moving, no attacking.
     if (m.freeze > 0) { m.freeze -= dt; continue; }
     if (room.gameMode === 'sandbox' && room.sandbox.freeze) continue;   // sandbox: AI switched off
@@ -1679,6 +1929,13 @@ function tickRoom(dt) {
       if (m.boss) {
         if (m.mage) updateMage(m, nearest, dist, dx, dy, spd, factor, dt);
         else updateGiant(m, nearest, dist, dx, dy, spd, factor, dt);
+        applyPull(m, dt);
+        clampToArena(m);
+        continue;
+      }
+
+      // Monsters with their own tricks; true means it handled this tick itself.
+      if (def.ai && MONSTER_AI[def.ai](m, nearest, dist, dx, dy, spd, factor, dt)) {
         applyPull(m, dt);
         clampToArena(m);
         continue;
@@ -1716,17 +1973,7 @@ function tickRoom(dt) {
           m.x += (dx / dist) * spd * factor;
           m.y += (dy / dist) * spd * factor;
         }
-        if (dist <= reach + 4 && m.atkCooldown <= 0) {
-          if (nearest.parryTimer > 0) {
-            // Parried: reflect the blow back onto the monster
-            applyDamage(m, Math.round(m.atkDamage * reflectOf(nearest)) + 10, playerKeyOf(nearest));
-            spawnParrySpark(cx(nearest), cy(nearest));
-          } else {
-            applyDamage(nearest, m.atkDamage, 'monster');
-          }
-          m.atkCooldown = 1200;
-          m.swing = MONSTER_SWING_MS;
-        }
+        if (dist <= reach + 4 && m.atkCooldown <= 0) monsterMelee(m, nearest);
       }
     }
 
@@ -4174,16 +4421,20 @@ function buildChains() {
     if (!pr.grapple && !pr.hook) continue;
     const o = room.players[pr.owner];
     if (!o) continue;
-    out.push({ x1: cx(o), y1: cy(o), x2: pr.x, y2: pr.y, kind: pr.hook ? 'hook' : 'grapple' });
+    out.push({ x1: cx(o), y1: cy(o), x2: pr.x, y2: pr.y, kind: pr.hook ? 'hook' : 'grapple', o: pr.owner });
   }
   for (const e of [room.players.p1, room.players.p2, ...room.monsters]) {
     if (!e || e.dead || !e.pull || !e.pull.from) continue;
     const o = room.players[e.pull.from];
     if (!o || o.dead) continue;
-    out.push({ x1: cx(o), y1: cy(o), x2: cx(e), y2: cy(e), kind: 'grapple' });
+    out.push({ x1: cx(o), y1: cy(o), x2: cx(e), y2: cy(e), kind: 'grapple', o: e.pull.from });
   }
   return out;
 }
+
+// Fires that sit on their caster every tick. Clients pin them to wherever they
+// draw that player, so they never trail behind a predicted or smoothed position.
+const RIDES_OWNER = new Set(['barrier', 'hurricane', 'vortexfield', 'drain', 'blizzard', 'sunbeam']);
 
 // Positions go out 50×/s for every entity; full float precision is ~20 characters
 // each and 0.1 world units is well under a screen pixel, so round them.
@@ -4223,6 +4474,10 @@ function buildStateMsg(playerNum) {
     monsters:    room.monsters.map(m => ({ id: m.id, type: m.type, x: r1(m.x), y: r1(m.y), w: m.w, h: m.h,
                   hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash, slowed: (m.slowTimer || 0) > 0, frozen: (m.freeze || 0) > 0, burning: (m.burnTimer || 0) > 0, armor: m.armor || 0,
                   face: m.face, swing: m.swing > 0 ? Math.round(m.swing) : 0,
+                  ...(m.fuse > 0 ? { fuse: Math.round(m.fuse) } : {}), ...(m.ward > 0 ? { ward: true } : {}),
+                  ...(m.charge ? { charge: { a: Math.round(m.charge.a * 100) / 100, wind: m.charge.wind > 0 } } : {}),
+                  ...(m.dazed > 0 ? { dazed: true } : {}),
+                  ...(m.raiseT > 0 && m.raiseAt ? { raise: m.raiseAt.map(r => ({ x: r1(r.x), y: r1(r.y) })) } : {}),
                   ...(m.boss ? { boss: true, wind: m.windup > 0 ? m.wind : null, windup: Math.max(0, Math.round(m.windup)), stun: Math.max(0, Math.round(m.stun)) } : {}),
                   ...(m.mage ? { mage: true, hidden: !!m.hidden, phase: m.phase, cast: m.tpT > 0 ? 'teleport' : m.castT > 0 ? m.cast : null } : {}) })),
     allies:      room.allies.map(a => ({ id: a.id, type: a.type, owner: a.owner, x: r1(a.x), y: r1(a.y), w: a.w, h: a.h,
@@ -4233,8 +4488,9 @@ function buildStateMsg(playerNum) {
                   hook: !!pr.hook, boomerang: !!pr.boomerang })),
     fires:       room.fires.map(f => ({ id: f.id, kind: f.kind, x: r1(f.x), y: r1(f.y), r: r1(f.r || 0),
                                     a: Math.round((f.a || 0) * 100) / 100, v: f.v ? r1(f.v) : 0, k: Math.round(f.t / f.life * 100) / 100,
-                                    ...(f.color ? { c: f.color } : {}), ...(f.trapType ? { tt: f.trapType } : {}) })),
-    chains:      buildChains().map(c => ({ x1: r1(c.x1), y1: r1(c.y1), x2: r1(c.x2), y2: r1(c.y2), kind: c.kind })),
+                                    ...(f.color ? { c: f.color } : {}), ...(f.trapType ? { tt: f.trapType } : {}),
+                                    ...(RIDES_OWNER.has(f.kind) ? { fo: f.owner } : {}) })),
+    chains:      buildChains().map(c => ({ x1: r1(c.x1), y1: r1(c.y1), x2: r1(c.x2), y2: r1(c.y2), kind: c.kind, o: c.o })),
     traps:       room.traps.map(tr => ({ x: r1(tr.x), y: r1(tr.y), w: tr.w, h: tr.h, type: tr.type, state: tr.state, radius: tr.radius, color: tr.color,
                   armRatio: tr.state === 'arming' ? r1(1 - tr.armTimer / (TRAP_TYPES[tr.type].armTime || 1)) : 0 })),
     items:       room.items.map(it => ({ x: r1(it.x), y: r1(it.y), w: it.w, h: it.h, type: it.type, color: ITEM_TYPES[it.type].color })),
