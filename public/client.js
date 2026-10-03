@@ -2024,6 +2024,12 @@ function renderShop() {
   refreshShopButtons();
 }
 
+// A legendary's passive, shown on its card before you own it.
+function legendPassive(id) {
+  const pv = WEAPON_META[id]?.passive;
+  return pv ? `<div class="shop-passive" style="--pc:${pv.color}"><b>★ PASSIVE: ${pv.name}</b> &ndash; ${pv.desc} while you hold it. <span class="pv-state">Max every upgrade on it to unlock</span></div>` : '';
+}
+
 const LEGEND_MOVES = {
   stormhammer: '<b>ATK</b> a heavy hammer blow; lightning arcs from every foe it hits on to 2 more nearby, for half'
              + ' the damage · <b>SPECIAL</b> hurl the hammer: it smashes through everything in its path, stunning'
@@ -2079,7 +2085,7 @@ function legendaryCards(weapons, coins) {
           <span class="shop-name" style="color:${col}">${w.name}</span>
           <span class="legend-tag">LEGENDARY</span>
         </div>
-        <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>
+        <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>${legendPassive(w.id)}
         <div class="legend-buy">
           <button class="buy-weapon poor" disabled>BOSS REWARD</button>
           <span class="legend-need">Defeat the Portal Mage to earn it</span>
@@ -2094,7 +2100,7 @@ function legendaryCards(weapons, coins) {
           <span class="shop-name" style="color:${col}">${w.name}</span>
           <span class="legend-tag ghost-tag">RAREST</span>
         </div>
-        <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>
+        <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>${legendPassive(w.id)}
         <div class="legend-buy">
           <button class="buy-weapon${left ? ' poor' : ''}" onclick="buyWeapon('${w.id}')" ${left ? 'disabled' : ''}>CLAIM</button>
           <span class="legend-need">${left ? `Own every other weapon in the game first: ${left} to go` : 'Every weapon is yours - claim it!'}</span>
@@ -2110,7 +2116,7 @@ function legendaryCards(weapons, coins) {
         <span class="shop-name" style="color:${col}">${w.name}</span>
         <span class="legend-tag">LEGENDARY</span>
       </div>
-      <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>
+      <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>${legendPassive(w.id)}
       <div class="legend-buy">
         <button class="buy-weapon${ready && afford ? '' : ' poor'}" onclick="buyWeapon('${w.id}')"
           ${ready ? '' : 'disabled'}>BUY ◆${w.price.toLocaleString()}</button>
@@ -2176,7 +2182,7 @@ function refreshShopButtons() {
   document.getElementById('shopCoins').innerHTML =
     `<span class="coin-ic">◆</span> ${coins.toLocaleString()} COINS`;
   // Each passive line shows how close its weapon is to unlocking it.
-  for (const el of document.querySelectorAll('#shopList .shop-passive')) {
+  for (const el of document.querySelectorAll('#shopList .shop-passive[data-pw]')) {
     const id = el.dataset.pw, pv = WEAPON_META[id]?.passive;
     const stats = (WEAPON_META[id]?.upgrades || []).filter(k => upgradeDefs[k]);
     const done = stats.filter(k => (upgrades[id]?.[k] || 0) >= upgradeDefs[k].max).length;
@@ -3151,7 +3157,7 @@ function drawPassiveFx(p, key, x, y) {
 
   // New puffs.
   tr.acc += dt;
-  const every = id === 'dagger' ? 28 : id === 'fireglove' ? 70 : id === 'katana' ? 160 : 0;
+  const every = id === 'dagger' ? 28 : id === 'fireglove' ? 70 : id === 'katana' ? 160 : id === 'revolver' ? 140 : 0;
   while (every && tr.acc >= every) {
     tr.acc -= every;
     if (id === 'dagger' && spd > 0.6) {
@@ -3162,6 +3168,8 @@ function drawPassiveFx(p, key, x, y) {
                       vx: -ux * 1.2, vy: -uy * 1.2, len: 6 + rnd() * 8, ux, uy, life: 320, max: 320 });
     } else if (id === 'fireglove') {
       tr.puffs.push({ x: mx + (rnd() - 0.5) * p.w, y: y + p.h - rnd() * 4, vx: (rnd() - 0.5) * 0.3, vy: -0.6 - rnd() * 0.5, life: 650, max: 650 });
+    } else if (id === 'revolver') {
+      tr.puffs.push({ x: mx + (rnd() - 0.5) * p.w, y: y + 2, vx: (rnd() - 0.5) * 0.2, vy: -0.35, life: 900, max: 900, r: 1.5 + rnd() * 1.5 });
     } else if (id === 'katana') {
       tr.puffs.push({ x: mx + (rnd() - 0.5) * p.w * 2, y: y - 4, vx: (rnd() - 0.5) * 0.4, vy: 0.35 + rnd() * 0.2, life: 1100, max: 1100, spin: rnd() * 6 });
     }
@@ -3210,7 +3218,52 @@ function drawPassiveFx(p, key, x, y) {
       ctx.globalAlpha = 0.5 + 0.4 * Math.sin(now / 300 + i);
       ctx.fillRect(Math.round(mx + Math.cos(a) * d), Math.round(my + Math.sin(a) * d), 1.5, 1.5);
     }
-  } else if (id === 'stormtome') {
+  } else if (id === 'revolver') {
+    // Gun smoke curling up, with the odd spark.
+    for (const f of tr.puffs) {
+      const k = f.life / f.max;
+      ctx.globalAlpha = 0.35 * k; ctx.fillStyle = '#b8b0a8';
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r + (1 - k) * 3, 0, Math.PI * 2); ctx.fill();
+    }
+    if (Math.floor(now / 120) % 5 === 0) { ctx.globalAlpha = 1; ctx.fillStyle = '#ffd84a'; ctx.fillRect(Math.round(mx + (rnd() - 0.5) * p.w * 1.6), Math.round(my + (rnd() - 0.5) * p.h), 1.5, 1.5); }
+  } else if (id === 'vortex') {
+    // AEGIS: a turning hex of shield plates while it's ready; faint while it recharges.
+    const ready = p.aegis !== false;
+    ctx.globalAlpha = ready ? 0.85 : 0.2; ctx.strokeStyle = col; ctx.lineWidth = ready ? 1.5 : 1;
+    const r = p.w * 1.15;
+    ctx.beginPath();
+    for (let i = 0; i <= 6; i++) {
+      const a = now / 900 + i * Math.PI / 3;
+      const px = mx + Math.cos(a) * r, py = my + Math.sin(a) * r * 0.8;
+      if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+    }
+    ctx.stroke();
+  } else if (id === 'windwand') {
+    // GALE GUARD: wind arcs whirling round you.
+    ctx.strokeStyle = col; ctx.lineWidth = 1.2; ctx.lineCap = 'round';
+    for (let i = 0; i < 3; i++) {
+      const a = now / 260 + i * Math.PI * 2 / 3, r = p.w * (1.1 + 0.15 * Math.sin(now / 300 + i));
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath(); ctx.ellipse(mx, my, r, r * 0.75, 0, a, a + 1.1); ctx.stroke();
+    }
+  } else if (id === 'portalwand') {
+    // ESCAPE PORTAL: a small portal turning under your feet.
+    const fy = y + p.h;
+    ctx.globalAlpha = 0.3; ctx.fillStyle = '#12051f';
+    ctx.beginPath(); ctx.ellipse(mx, fy, p.w * 0.9, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.85; ctx.strokeStyle = col; ctx.lineWidth = 1.2;
+    ctx.setLineDash([4, 3]); ctx.lineDashOffset = -now / 40;
+    ctx.beginPath(); ctx.ellipse(mx, fy, p.w * 0.9, 4, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  } else if (id === 'sunbow') {
+    // SUNLIT: slow-turning rays of sunlight behind you.
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 8; i++) {
+      const a = now / 1500 + i * Math.PI / 4;
+      ctx.globalAlpha = 0.35 + 0.2 * Math.sin(now / 200 + i);
+      ctx.beginPath(); ctx.moveTo(mx + Math.cos(a) * p.w * 0.8, my + Math.sin(a) * p.w * 0.8);
+      ctx.lineTo(mx + Math.cos(a) * p.w * 1.4, my + Math.sin(a) * p.w * 1.4); ctx.stroke();
+    }
+  } else if (id === 'stormtome' || id === 'stormhammer') {
     ctx.strokeStyle = col; ctx.lineWidth = 1;
     if (Math.floor(now / 90) % 3 === 0) {
       const a = rnd() * Math.PI * 2, r0 = p.w * 0.7, r1 = p.w * 1.3;
@@ -3221,13 +3274,16 @@ function drawPassiveFx(p, key, x, y) {
     }
   } else {
     // Orbiting motes: sword sparkles, bow glints, staff runes, reaper souls.
-    const n = id === 'reaper' ? 2 : 3, r = p.w * 1.1;
+    const n = id === 'reaper' || id === 'ghostdagger' ? 2 : 3, r = p.w * 1.1;
     for (let i = 0; i < n; i++) {
-      const a = now / (id === 'reaper' ? 500 : 700) + i * Math.PI * 2 / n;
+      const a = now / (id === 'reaper' || id === 'ghostdagger' ? 500 : 700) + i * Math.PI * 2 / n;
       const ox = mx + Math.cos(a) * r, oy = my + Math.sin(a) * r * 0.55;
       ctx.globalAlpha = 0.85; ctx.fillStyle = col;
       if (id === 'staff') ctx.fillRect(Math.round(ox) - 1.5, Math.round(oy) - 1.5, 3, 3);
-      else if (id === 'reaper') {
+      else if (id === 'frostscythe') {
+        ctx.beginPath(); ctx.moveTo(ox, oy - 3); ctx.lineTo(ox + 1.8, oy); ctx.lineTo(ox, oy + 3); ctx.lineTo(ox - 1.8, oy); ctx.closePath(); ctx.fill();
+      }
+      else if (id === 'reaper' || id === 'ghostdagger') {
         ctx.beginPath(); ctx.arc(ox, oy, 2, 0, Math.PI * 2); ctx.fill();
         ctx.globalAlpha = 0.35; ctx.fillRect(Math.round(ox - Math.sin(a) * 4) - 1, Math.round(oy) - 1, 2, 2);
       } else {

@@ -295,7 +295,19 @@ const PASSIVES = {
   frostrod:  { name: 'FROST AURA',    color: '#9fe8ff', desc: 'monsters close to you are slowed' },
   fireglove: { name: 'EMBER SKIN',    color: '#ff8a2a', desc: 'you never burn, and monsters that hit you catch fire' },
   stormtome: { name: 'STATIC CHARGE', color: '#c8a0ff', desc: 'zaps the nearest foe every 2s' },
+  // Every legendary has one too (the Fire Glove's is EMBER SKIN above).
+  vortex:      { name: 'AEGIS',          color: '#7ad8ff', desc: 'blocks one hit completely every 6s' },
+  windwand:    { name: 'GALE GUARD',     color: '#d8f4ff', desc: 'blows away an enemy shot that comes close, every 1.2s' },
+  revolver:    { name: 'CHAIN REACTION', color: '#ffa040', desc: 'everything you kill explodes, hurting the foes around it' },
+  portalwand:  { name: 'ESCAPE PORTAL',  color: '#b07aff', desc: 'when a hit drops you below 30% health you warp to safety (every 12s)' },
+  ghostdagger: { name: 'BACKSTABBER',    color: '#a8f0ff', desc: '+50% damage on foes facing away from you' },
+  stormhammer: { name: 'THUNDERSTRUCK',  color: '#7ac8ff', desc: '25% of your hits call down lightning for +60% damage' },
+  frostscythe: { name: 'SHATTERPOINT',   color: '#bfefff', desc: '+35% damage to slowed or frozen foes' },
+  sunbow:      { name: 'SUNLIT',         color: '#ffd24a', desc: 'heal 3% of your health every second' },
 };
+const AEGIS_CD = 6000, GALE_CD = 1200, GALE_R = 55, BLAST_R = 50, BLAST_MULT = 0.7;
+const ESCAPE_CD = 12000, ESCAPE_AT = 0.3, BACKSTAB = 1.5, THUNDER_CHANCE = 0.25, THUNDER_MULT = 1.6;
+const SHATTER_MULT = 1.35, SUNLIT_SHARE = 0.03;
 const PASSIVE_SPEED = 1.3, PASSIVE_GUARD = 0.8, PASSIVE_RAGE = 0.6, PASSIVE_HARVEST = 0.08;
 const FROST_AURA_R = 85, STATIC_CD = 2000, STATIC_R = 180, STATIC_MULT = 0.6;
 
@@ -1627,6 +1639,26 @@ function applyDamage(target, dmg, attackerKey) {
   const aw = atk && atk !== target ? weapon(atk) : null;
   if (aw && atk.passive === 'axe') dmg *= 1 + PASSIVE_RAGE * Math.max(0, 1 - atk.hp / atk.maxHp);   // BERSERKER
   if (target.num && target.passive === 'sword') dmg *= PASSIVE_GUARD;                              // GUARDIAN
+  if (aw && atk.passive === 'ghostdagger' && hitFromBehind(target, cx(target) - cx(atk))) {        // BACKSTABBER
+    dmg *= BACKSTAB;
+    room.particles.push({ type: 'crit', x: cx(target), y: target.y - 10, text: 'BACKSTAB', timer: 500, max: 500 });
+  }
+  if (aw && atk.passive === 'frostscythe' && ((target.freeze || 0) > 0 || (target.slowTimer || 0) > 0
+      || (target.num && hasEffect(target, 'slow')))) dmg *= SHATTER_MULT;                          // SHATTERPOINT
+  if (aw && atk.passive === 'stormhammer' && Math.random() < THUNDER_CHANCE) {                    // THUNDERSTRUCK
+    dmg *= THUNDER_MULT;
+    room.particles.push({ type: 'bolt', x: cx(target) + (Math.random() - 0.5) * 20, y: ARENA_Y + 2, x2: cx(target), y2: cy(target),
+                          timer: 300, max: 300, color: PASSIVES.stormhammer.color });
+  }
+  // AEGIS: the vortex's holder shrugs off a whole hit every AEGIS_CD.
+  if (target.num && target.passive === 'vortex' && !(target.aegisCd > 0)) {
+    target.aegisCd = AEGIS_CD;
+    target.hitFlash = 80;
+    target.invincible = 300;
+    room.particles.push({ type: 'shockwave', x: cx(target), y: cy(target), maxR: target.w + 12, timer: 300, max: 300, color: PASSIVES.vortex.color });
+    room.particles.push({ type: 'crit', x: cx(target), y: target.y - 10, text: 'BLOCKED', timer: 500, max: 500 });
+    return;
+  }
   dmg = Math.max(1, Math.round(dmg));
   if (aw && aw.crit && Math.random() < aw.crit) {
     dmg *= 2;
@@ -1645,6 +1677,20 @@ function applyDamage(target, dmg, attackerKey) {
     return;
   }
   target.hp -= dmg;
+  // ESCAPE PORTAL: a hit that leaves the portal wand's holder low warps them out.
+  if (target.num && target.passive === 'portalwand' && target.hp > 0 && target.hp < target.maxHp * ESCAPE_AT
+      && !(target.escapeCd > 0)) {
+    const spot = safestSpot(target, playerKeyOf(target));
+    if (spot) {
+      target.escapeCd = ESCAPE_CD;
+      room.particles.push({ type: 'teleport', x: cx(target), y: cy(target), timer: 420, max: 420, color: PASSIVES.portalwand.color });
+      target.x = spot.x - target.w / 2; target.y = spot.y - target.h / 2;
+      clampToArena(target);
+      target.pull = null;
+      room.particles.push({ type: 'teleport', x: cx(target), y: cy(target), timer: 420, max: 420, color: PASSIVES.portalwand.color });
+      room.particles.push({ type: 'crit', x: cx(target), y: target.y - 10, text: 'ESCAPE!', timer: 600, max: 600 });
+    }
+  }
   const steal = (aw ? aw.lifesteal || 0 : 0) + (atk && atk !== target && hasEffect(atk, 'vampire') ? 0.25 : 0);
   if (steal && !atk.dead) {
     const heal = Math.round(dmg * steal);
@@ -1681,6 +1727,16 @@ function handleKill(target, attackerKey) {
     reaper.hp = Math.min(reaper.maxHp, reaper.hp + heal);
     room.particles.push({ type: 'bolt', x: cx(target), y: cy(target), x2: cx(reaper), y2: cy(reaper), timer: 300, max: 300, color: PASSIVES.reaper.color });
     room.particles.push({ type: 'xp', x: cx(reaper), y: reaper.y - 4, text: '+' + heal, timer: 800, color: PASSIVES.reaper.color });
+  }
+  // CHAIN REACTION: the revolver's holder makes everything they kill blow up.
+  if (reaper && reaper !== target && !reaper.dead && reaper.passive === 'revolver') {
+    const x = cx(target), y = cy(target), dmg = Math.max(1, Math.round(weapon(reaper).damage * BLAST_MULT));
+    room.particles.push({ type: 'shockwave', x, y, maxR: BLAST_R, timer: 380, max: 380, color: PASSIVES.revolver.color });
+    for (const t of enemyTargets(attackerKey)) {
+      if (t === target || t.dead || Math.hypot(cx(t) - x, cy(t) - y) > BLAST_R + t.w / 2) continue;
+      if (!t.num) t.invincible = 0;
+      applyDamage(t, dmg, attackerKey);
+    }
   }
   const isPlayer = !!target.num;
   let baseGain = isPlayer ? 15 : 6;
@@ -2867,6 +2923,24 @@ const THROW_SHARE = 0.25, THROW_BACK_SHARE = 0.5, THROW_BOSS_SHARE = 0.06, THROW
 
 // The passives that act every tick rather than on a stat.
 function passiveTick(p, key, dt) {
+  if (p.aegisCd > 0) p.aegisCd -= dt;
+  if (p.escapeCd > 0) p.escapeCd -= dt;
+  if (p.passive === 'sunbow' && p.hp < p.maxHp) {                     // SUNLIT
+    p.sunAcc = (p.sunAcc || 0) + dt;
+    while (p.sunAcc >= 1000) { p.sunAcc -= 1000; p.hp = Math.min(p.maxHp, p.hp + Math.max(1, Math.round(p.maxHp * SUNLIT_SHARE))); }
+  }
+  if (p.passive === 'windwand') {                                     // GALE GUARD
+    p.galeCd = (p.galeCd || 0) - dt;
+    if (p.galeCd <= 0) {
+      const hostile = pr => pr.owner === 'monster' || (room.gameMode === 'pvp' && pr.owner !== key);
+      const shot = room.projectiles.find(pr => hostile(pr) && Math.hypot(pr.x - cx(p), pr.y - cy(p)) < GALE_R);
+      if (shot) {
+        p.galeCd = GALE_CD;
+        room.projectiles = room.projectiles.filter(pr => pr !== shot);
+        room.particles.push({ type: 'shockwave', x: shot.x, y: shot.y, maxR: 18, timer: 260, max: 260, color: PASSIVES.windwand.color });
+      }
+    }
+  }
   if (p.passive === 'fireglove' && p.effects) delete p.effects.burn;   // EMBER SKIN
   if (p.passive === 'frostrod') {                                     // FROST AURA
     for (const m of room.monsters) {
@@ -4526,6 +4600,7 @@ function playerView(p) {
     parryCd: Math.max(0, p.parryCooldown), parryMax: p.parryCd || PARRY_COOLDOWN, parryActive: p.parryTimer > 0,
     speed: Math.round(p.speed * 1000) / 1000,
     passive: p.passive || null,
+    ...(p.passive === 'vortex' ? { aegis: !(p.aegisCd > 0) } : {}),
     effects: p.effects,
     pulled: !!p.pull,
   };
