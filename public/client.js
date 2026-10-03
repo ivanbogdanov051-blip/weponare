@@ -482,7 +482,7 @@ function updatePrediction(frameDt, now) {
   let spd = me.speed || serverPlayerSpeed;
   if (me.effects && me.effects.speed > 0) spd *= 1.7;
   if (ghostNow(me, now)) spd *= 1.75;
-  if (me.passive === 'dagger') spd *= 1.3;   // SWIFTNESS
+  if (me.passive === 'dagger') spd *= 1.45;   // SWIFTNESS
   if (me.effects && me.effects.slow  > 0) spd *= 0.4;
 
   // Apply currently-held inputs immediately (instant response)
@@ -3211,10 +3211,10 @@ function drawPassiveFx(p, key, x, y) {
     }
   } else if (id === 'frostrod') {
     ctx.globalAlpha = 0.35; ctx.strokeStyle = col; ctx.setLineDash([3, 5]); ctx.lineDashOffset = -now / 60;
-    ctx.beginPath(); ctx.arc(mx, my, 85, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(mx, my, 115, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = '#ffffff';
     for (let i = 0; i < 10; i++) {
-      const a = i * 0.63 + now / 1400, d = 30 + ((i * 37) % 50);
+      const a = i * 0.63 + now / 1400, d = 30 + ((i * 37) % 80);
       ctx.globalAlpha = 0.5 + 0.4 * Math.sin(now / 300 + i);
       ctx.fillRect(Math.round(mx + Math.cos(a) * d), Math.round(my + Math.sin(a) * d), 1.5, 1.5);
     }

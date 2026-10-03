@@ -285,31 +285,32 @@ const WEAPON_UPGRADES = {
 // get its passive. Clients draw each one (an aura and its own effect) so it
 // can be seen; WEAPON_META[id].passive carries these to the upgrade menu.
 const PASSIVES = {
-  dagger:    { name: 'SWIFTNESS',     color: '#5ac8ff', desc: '+30% move speed' },
-  sword:     { name: 'GUARDIAN',      color: '#e8f0ff', desc: 'take 20% less damage' },
-  axe:       { name: 'BERSERKER',     color: '#ff4a3a', desc: 'up to +60% damage the lower your health' },
-  bow:       { name: 'EAGLE EYE',     color: '#ffd24a', desc: '+20% range and +10% critical chance' },
-  staff:     { name: 'ARCANE FLOW',   color: '#b07aff', desc: 'your special recharges 35% faster' },
-  katana:    { name: 'BLADE DANCE',   color: '#ff7ac8', desc: '20% faster attacks' },
-  reaper:    { name: 'SOUL HARVEST',  color: '#7aff9a', desc: 'every kill heals 8% of your health' },
-  frostrod:  { name: 'FROST AURA',    color: '#9fe8ff', desc: 'monsters close to you are slowed' },
-  fireglove: { name: 'EMBER SKIN',    color: '#ff8a2a', desc: 'you never burn, and monsters that hit you catch fire' },
-  stormtome: { name: 'STATIC CHARGE', color: '#c8a0ff', desc: 'zaps the nearest foe every 2s' },
+  dagger:    { name: 'SWIFTNESS',     color: '#5ac8ff', desc: '+45% move speed' },
+  sword:     { name: 'GUARDIAN',      color: '#e8f0ff', desc: 'take 30% less damage' },
+  axe:       { name: 'BERSERKER',     color: '#ff4a3a', desc: 'up to +100% damage the lower your health' },
+  bow:       { name: 'EAGLE EYE',     color: '#ffd24a', desc: '+30% range and +18% critical chance' },
+  staff:     { name: 'ARCANE FLOW',   color: '#b07aff', desc: 'your special recharges 50% faster' },
+  katana:    { name: 'BLADE DANCE',   color: '#ff7ac8', desc: '30% faster attacks' },
+  reaper:    { name: 'SOUL HARVEST',  color: '#7aff9a', desc: 'every kill heals 12% of your health' },
+  frostrod:  { name: 'FROST AURA',    color: '#9fe8ff', desc: 'monsters close to you are heavily slowed' },
+  fireglove: { name: 'EMBER SKIN',    color: '#ff8a2a', desc: 'you never burn, and monsters that hit you get scorched and catch fire' },
+  stormtome: { name: 'STATIC CHARGE', color: '#c8a0ff', desc: 'zaps the nearest foe every 1.2s for 90% of your damage' },
   // Every legendary has one too (the Fire Glove's is EMBER SKIN above).
-  vortex:      { name: 'AEGIS',          color: '#7ad8ff', desc: 'blocks one hit completely every 6s' },
-  windwand:    { name: 'GALE GUARD',     color: '#d8f4ff', desc: 'blows away an enemy shot that comes close, every 1.2s' },
-  revolver:    { name: 'CHAIN REACTION', color: '#ffa040', desc: 'everything you kill explodes, hurting the foes around it' },
-  portalwand:  { name: 'ESCAPE PORTAL',  color: '#b07aff', desc: 'when a hit drops you below 30% health you warp to safety (every 12s)' },
-  ghostdagger: { name: 'BACKSTABBER',    color: '#a8f0ff', desc: '+50% damage on foes facing away from you' },
-  stormhammer: { name: 'THUNDERSTRUCK',  color: '#7ac8ff', desc: '25% of your hits call down lightning for +60% damage' },
-  frostscythe: { name: 'SHATTERPOINT',   color: '#bfefff', desc: '+35% damage to slowed or frozen foes' },
-  sunbow:      { name: 'SUNLIT',         color: '#ffd24a', desc: 'heal 3% of your health every second' },
+  vortex:      { name: 'AEGIS',          color: '#7ad8ff', desc: 'blocks one hit completely every 4s' },
+  windwand:    { name: 'GALE GUARD',     color: '#d8f4ff', desc: 'blows away an enemy shot that comes close, every 0.5s' },
+  revolver:    { name: 'CHAIN REACTION', color: '#ffa040', desc: 'every hit explodes onto the foes around it, and everything you kill blows up even bigger' },
+  portalwand:  { name: 'ESCAPE PORTAL',  color: '#b07aff', desc: 'when a hit drops you below 35% health you warp to safety and heal 20% (every 8s)' },
+  ghostdagger: { name: 'BACKSTABBER',    color: '#a8f0ff', desc: '+80% damage on foes facing away from you' },
+  stormhammer: { name: 'THUNDERSTRUCK',  color: '#7ac8ff', desc: '35% of your hits call down lightning for +80% damage' },
+  frostscythe: { name: 'SHATTERPOINT',   color: '#bfefff', desc: '+50% damage to slowed or frozen foes' },
+  sunbow:      { name: 'SUNLIT',         color: '#ffd24a', desc: 'heal 5% of your health every second' },
 };
-const AEGIS_CD = 6000, GALE_CD = 1200, GALE_R = 55, BLAST_R = 50, BLAST_MULT = 0.7;
-const ESCAPE_CD = 12000, ESCAPE_AT = 0.3, BACKSTAB = 1.5, THUNDER_CHANCE = 0.25, THUNDER_MULT = 1.6;
-const SHATTER_MULT = 1.35, SUNLIT_SHARE = 0.03;
-const PASSIVE_SPEED = 1.3, PASSIVE_GUARD = 0.8, PASSIVE_RAGE = 0.6, PASSIVE_HARVEST = 0.08;
-const FROST_AURA_R = 85, STATIC_CD = 2000, STATIC_R = 180, STATIC_MULT = 0.6;
+const AEGIS_CD = 4000, GALE_CD = 500, GALE_R = 75;
+const BLAST_R = 90, BLAST_MULT = 1.1, HIT_BLAST_R = 65, HIT_BLAST_MULT = 0.55, HIT_BLAST_GAP = 60;
+const ESCAPE_CD = 8000, ESCAPE_AT = 0.35, ESCAPE_HEAL = 0.2, BACKSTAB = 1.8, THUNDER_CHANCE = 0.35, THUNDER_MULT = 1.8;
+const SHATTER_MULT = 1.5, SUNLIT_SHARE = 0.05;
+const PASSIVE_SPEED = 1.45, PASSIVE_GUARD = 0.7, PASSIVE_RAGE = 1.0, PASSIVE_HARVEST = 0.12;
+const FROST_AURA_R = 115, STATIC_CD = 1200, STATIC_R = 220, STATIC_MULT = 0.9, EMBER_BURN = 4000, EMBER_SCORCH = 0.4;
 
 function weaponMaxed(p, wid) {
   const lv = p.upgrades?.[wid] || {};
@@ -879,9 +880,9 @@ function refreshWeapon(p) {
   // A maxed weapon's passive (the sandbox can switch them all on).
   const free = room && room.gameMode === 'sandbox' && room.sandbox?.passives;
   p.passive = PASSIVES[base.id] && (free || weaponMaxed(p, base.id)) ? base.id : null;
-  if (p.passive === 'bow')    p.w_ = { ...p.w_, range: Math.round(p.w_.range * 1.2), crit: (p.w_.crit || 0) + 0.1 };
-  if (p.passive === 'katana') p.w_ = { ...p.w_, atkSpd: Math.max(70, Math.round(p.w_.atkSpd * 0.8)) };
-  if (p.passive === 'staff' && p.w_.special) p.w_ = { ...p.w_, special: { ...p.w_.special, cd: Math.round(p.w_.special.cd * 0.65) } };
+  if (p.passive === 'bow')    p.w_ = { ...p.w_, range: Math.round(p.w_.range * 1.3), crit: (p.w_.crit || 0) + 0.18 };
+  if (p.passive === 'katana') p.w_ = { ...p.w_, atkSpd: Math.max(70, Math.round(p.w_.atkSpd * 0.7)) };
+  if (p.passive === 'staff' && p.w_.special) p.w_ = { ...p.w_, special: { ...p.w_.special, cd: Math.round(p.w_.special.cd * 0.5) } };
   // Swapping off the Dagger of Ghosts drops its cloak.
   if (!base.ghostCloak && p.effects && p.effects.ghost) breakGhost(p);
 }
@@ -1354,7 +1355,11 @@ function monsterMelee(m, t) {
     spawnParrySpark(cx(t), cy(t));
   } else {
     applyDamage(t, m.atkDamage, 'monster');
-    if (t.passive === 'fireglove') m.burnTimer = Math.max(m.burnTimer || 0, 2000);   // EMBER SKIN
+    if (t.passive === 'fireglove') {                                                  // EMBER SKIN
+      m.burnTimer = Math.max(m.burnTimer || 0, EMBER_BURN);
+      m.invincible = 0;
+      applyDamage(m, Math.max(1, Math.round(weapon(t).damage * EMBER_SCORCH)), playerKeyOf(t));
+    }
   }
   m.atkCooldown = 1200;
   m.swing = MONSTER_SWING_MS;
@@ -1628,7 +1633,7 @@ function resetToLobby() {
 }
 
 function applyDamage(target, dmg, attackerKey) {
-  if (target.dead || target.invincible > 0 || target.hidden) return;
+  if (target.dead || target.dying || target.invincible > 0 || target.hidden) return;
   if (target.num && hasEffect(target, 'shield')) {  // shield item: ignore all incoming damage
     target.hitFlash = 80;
     return;
@@ -1677,6 +1682,7 @@ function applyDamage(target, dmg, attackerKey) {
     return;
   }
   target.hp -= dmg;
+  if (atk && atk !== target && atk.passive === 'revolver') hitBlast(target, attackerKey, atk);
   // ESCAPE PORTAL: a hit that leaves the portal wand's holder low warps them out.
   if (target.num && target.passive === 'portalwand' && target.hp > 0 && target.hp < target.maxHp * ESCAPE_AT
       && !(target.escapeCd > 0)) {
@@ -1687,6 +1693,7 @@ function applyDamage(target, dmg, attackerKey) {
       target.x = spot.x - target.w / 2; target.y = spot.y - target.h / 2;
       clampToArena(target);
       target.pull = null;
+      target.hp = Math.min(target.maxHp, target.hp + Math.round(target.maxHp * ESCAPE_HEAL));
       room.particles.push({ type: 'teleport', x: cx(target), y: cy(target), timer: 420, max: 420, color: PASSIVES.portalwand.color });
       room.particles.push({ type: 'crit', x: cx(target), y: target.y - 10, text: 'ESCAPE!', timer: 600, max: 600 });
     }
@@ -1710,6 +1717,9 @@ function applyDamage(target, dmg, attackerKey) {
 
 function handleKill(target, attackerKey) {
   if (target.mage) { mageDefeated(target); return; }
+  // A monster dies once. Blasts set off inside its own death (a bomber, a
+  // chain reaction) could otherwise reach it again before it is marked dead.
+  if (!target.num) { if (target.dying || target.dead) return; target.dying = true; }
   if (target.ally) { killAlly(target); return; }   // a summoned ally: no reward for anyone
   // PHOENIX: the killing blow is undone, and nobody is paid for it.
   if (target.num && hasEffect(target, 'phoenix')) {
@@ -1780,13 +1790,33 @@ function handleKill(target, attackerKey) {
 function chainReaction(target, attackerKey) {
   const owner = room.players[attackerKey];
   if (!owner || owner === target || owner.dead || owner.passive !== 'revolver') return;
-  const x = cx(target), y = cy(target), dmg = Math.max(1, Math.round(weapon(owner).damage * BLAST_MULT));
-  room.particles.push({ type: 'shockwave', x, y, maxR: BLAST_R, timer: 380, max: 380, color: PASSIVES.revolver.color });
-  for (const t of enemyTargets(attackerKey).slice()) {
-    if (t === target || t.dead || Math.hypot(cx(t) - x, cy(t) - y) > BLAST_R + t.w / 2) continue;
-    if (!t.num) t.invincible = 0;
-    applyDamage(t, dmg, attackerKey);
-  }
+  room.particles.push({ type: 'trapburst', x: cx(target), y: cy(target), maxR: BLAST_R, timer: 450, max: 450, color: PASSIVES.revolver.color });
+  revolverBlast(target, attackerKey, BLAST_R, Math.max(1, Math.round(weapon(owner).damage * BLAST_MULT)));
+}
+
+// ...and every hit blows up onto the foes around it, in a smaller blast. Damage
+// from inside a blast never sets off another hit-blast (only kills chain), and
+// one owner's hit-blasts are spaced HIT_BLAST_GAP apart so a spread of bullets
+// doesn't stack a dozen at once.
+let blasting = false;
+function hitBlast(target, attackerKey, owner) {
+  if (blasting || owner.dead) return;
+  const now = Date.now();
+  if (now - (owner.lastHitBlast || 0) < HIT_BLAST_GAP) return;
+  owner.lastHitBlast = now;
+  room.particles.push({ type: 'shockwave', x: cx(target), y: cy(target), maxR: HIT_BLAST_R, timer: 320, max: 320, color: PASSIVES.revolver.color });
+  revolverBlast(target, attackerKey, HIT_BLAST_R, Math.max(1, Math.round(weapon(owner).damage * HIT_BLAST_MULT)));
+}
+function revolverBlast(target, attackerKey, r, dmg) {
+  const x = cx(target), y = cy(target), was = blasting;
+  blasting = true;
+  try {
+    for (const t of enemyTargets(attackerKey).slice()) {
+      if (t === target || t.dead || t.hp <= 0 || Math.hypot(cx(t) - x, cy(t) - y) > r + t.w / 2) continue;
+      if (!t.num) t.invincible = 0;
+      applyDamage(t, dmg, attackerKey);
+    }
+  } finally { blasting = was; }
 }
 
 // Bank XP for a player: unlocks anything it reaches and saves it.
@@ -2950,7 +2980,7 @@ function passiveTick(p, key, dt) {
   if (p.passive === 'fireglove' && p.effects) delete p.effects.burn;   // EMBER SKIN
   if (p.passive === 'frostrod') {                                     // FROST AURA
     for (const m of room.monsters) {
-      if (Math.hypot(cx(m) - cx(p), cy(m) - cy(p)) <= FROST_AURA_R + m.w / 2) m.slowTimer = Math.max(m.slowTimer || 0, 250);
+      if (Math.hypot(cx(m) - cx(p), cy(m) - cy(p)) <= FROST_AURA_R + m.w / 2) m.slowTimer = Math.max(m.slowTimer || 0, 400);
     }
   }
   if (p.passive === 'stormtome') {                                    // STATIC CHARGE
