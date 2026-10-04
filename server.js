@@ -267,9 +267,10 @@ const WEAPONS = [
   // The rarest weapon: free to claim, but only once you own every other weapon
   // in the game (needAll). Attack: melt into the shadows — invisible (you still
   // see yourself) and 75% faster; the next attack is a double-damage ghost
-  // strike that ends it, and so does any special, super or weapon swap.
-  // Special: a thrown dagger worth at least 25% of the target's max health
-  // (50% in the back). SUPER: throw it skyward and it rains knives.
+  // strike that ends it, and so does any special, super, ability or weapon swap.
+  // Special: a fan of five thrown daggers, the middle one worth at least 25% of
+  // the target's max health (50% in the back), the rest 40% of that. SUPER:
+  // throw it skyward and it rains 60 knives.
   { id: 'ghostdagger', name: 'DAGGER OF GHOSTS', damage: 45, range: 48, atkSpd: 450, type: 'melee', unlockXp: 0,
     shopOnly: true, needAll: true, noRequirement: true, price: 0, ghostCloak: true,
     special: { kind: 'ghostthrow', dmg: 60, range: 430, cd: 12000 },
@@ -2240,7 +2241,13 @@ function tickRoom(dt) {
       const def = MONSTER_TYPES[m.type] || MONSTER_TYPES.grunt;
       const dx = cx(nearest) - cx(m), dy = cy(nearest) - cy(m);
       const dist = Math.hypot(dx, dy) || 1;
-      if (Math.abs(dx) > 2) m.face = dx > 0 ? 1 : -1;
+      if (Math.abs(dx) > 2) {
+        // Monsters are slow to turn round once you slip behind them (bosses aren't),
+        // which leaves a window for backstabs.
+        const want = dx > 0 ? 1 : -1;
+        if (m.boss || !m.face || want === m.face) { m.face = want; m.turnT = 0; }
+        else if ((m.turnT = (m.turnT || 0) + dt) >= MONSTER_TURN_MS) { m.face = want; m.turnT = 0; }
+      }
       const spd = m.speed * (m.slowTimer > 0 ? 0.4 : 1);
 
       if (m.boss) {
@@ -3208,7 +3215,9 @@ function updateSunbeam(f, dt) {
 // ─── Dagger of Ghosts ─────────────────────────────────────────────────────────
 const GHOST_MS = 10 * 60 * 1000;    // the cloak lasts until something breaks it
 const GHOST_CLOAK_CD = 700;
-const KNIFE_COUNT = 26, KNIFE_MS = 3600, KNIFE_DELAY = 500, KNIFE_FALL_MS = 700, KNIFE_R = 24;
+const GHOST_FAN_SHARE = 0.4;
+const MONSTER_TURN_MS = 550;
+const KNIFE_COUNT = 60, KNIFE_MS = 4200, KNIFE_DELAY = 500, KNIFE_FALL_MS = 700, KNIFE_R = 24;
 const KNIFE_PVP_DMG = 40, KNIFE_MEDKIT_CHANCE = 0.25, MAX_MEDKITS = 10;
 // The thrown dagger: at least this share of the target's max health (bosses
 // take a much smaller share, or the fights would be over in a few throws).
@@ -3280,7 +3289,8 @@ function throwKey(t) { return t.num ? playerKeyOf(t) : t.id; }
 function ghostThrowHit(proj, t) {
   const back = proj.backOf ? proj.backOf.has(throwKey(t)) : hitFromBehind(t, proj.dx);
   const share = t.boss ? (back ? THROW_BOSS_BACK_SHARE : THROW_BOSS_SHARE) : (back ? THROW_BACK_SHARE : THROW_SHARE);
-  let dmg = Math.max(proj.damage, Math.round((t.maxHp || 0) * share));
+  const sm = proj.shareMult || 1;
+  let dmg = Math.max(Math.round(proj.damage * sm), Math.round((t.maxHp || 0) * share * sm));
   // "At least" means after armour and defense too.
   if (t.armor) dmg = Math.round(dmg / (1 - t.armor));
   if (t.num && t.defense) dmg = Math.round(dmg / (1 - t.defense));
@@ -4266,7 +4276,7 @@ function useAbility(p, pKey, slot) {
     room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 34, timer: 600, max: 600, color: ab.color, text: 'BERSERK' });
   } else if (id === 'meteor') used = abilityMeteor(p, pKey);
   else if (ABILITY_FNS[id]) used = ABILITY_FNS[id](p, pKey, ab, hasEffect(p, 'strength') ? 1.8 : 1) !== false;
-  if (used) p.abCd[id] = ab.cd;
+  if (used) { p.abCd[id] = ab.cd; if (hasEffect(p, 'ghost')) breakGhost(p); }   // an ability ends the ghost cloak
 }
 
 // ── The second shelf of abilities ──
@@ -5217,7 +5227,12 @@ function doSpecial(p, pKey) {
     // Who has their back to you right now? (Monsters turn the moment you
     // reappear, so it's decided as the dagger leaves your hand.)
     const backOf = new Set(enemyTargets(pKey).filter(t => hitFromBehind(t, cx(t) - px)).map(throwKey));
-    room.projectiles.push(mkProj(aim, { ghostThrow: true, backOf, dx: Math.cos(aim) * 8.5, dy: Math.sin(aim) * 8.5 }));
+    // A fan of five: the middle dagger is the full throw, the outer four hit for a share of it.
+    for (let i = -2; i <= 2; i++) {
+      const a = aim + i * 0.2;
+      room.projectiles.push(mkProj(a, { ghostThrow: true, backOf, shareMult: i === 0 ? 1 : GHOST_FAN_SHARE,
+                                        dx: Math.cos(a) * 8.5, dy: Math.sin(a) * 8.5 }));
+    }
   } else if (sp.kind === 'pierce') {
     room.projectiles.push(mkProj(aim, { pierce: true, hitTargets: new Set() }));
   } else if (sp.kind === 'fanhammer') {
