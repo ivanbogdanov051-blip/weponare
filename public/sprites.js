@@ -816,6 +816,8 @@ function monsterSprite(type, w, h, state) {
     else if (state === 'void') tint(b, '#7a3ad0', 0.5);           // caught in a rift
     else if (state === 'holy') tint(b, '#fff2a0', 0.5);           // smitten
     else if (state === 'shock') tint(b, '#bfe0ff', 0.4);          // jolted
+    else if (state === 'mind') tint(b, '#ff5ad8', 0.45);          // mind-locked
+    else if (state === 'slowmind') tint(b, '#ff9ae8', 0.35);
     else if (state.startsWith('ally:')) tint(b, state.slice(5), 0.5);   // a Portal Wand ally, in its owner's colour
     return b;
   });

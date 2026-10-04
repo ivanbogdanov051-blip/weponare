@@ -623,6 +623,24 @@ const WEAPON_ART = {
     k.r(12, -2.2, 0.8, 0.8, '#ffffff'); k.r(19, 1.4, 0.8, 0.8, '#d8b8ff'); k.r(25, -1.6, 0.8, 0.8, '#ffffff');
   }},
 
+  mindtome: { draw(k, wc) {
+    // A thick tome bound in dark plum leather, gold corners, a clasp, and a
+    // glowing pink eye on the cover with motes of thought drifting off it.
+    k.glow(10, 0, 11, wc, 0.35);
+    k.r(0, -8, 20, 16, '#2a0a24');                     // back cover
+    k.r(1.5, -7, 18, 14, '#f0e4d0');                   // pages
+    k.r(1.5, 5, 18, 1, '#c8b8a0');
+    k.r(0, -8, 18, 15, '#5a1a4a');                     // front cover
+    k.r(0, -8, 18, 2, '#7a2a64');
+    k.r(0, -8, 2, 15, '#3a0e30');                      // spine
+    for (const [x, y] of [[16, -8], [16, 5], [0, -8], [0, 5]]) k.r(x, y, 2, 2, MAT.gold);
+    k.r(17, -2, 3, 4, MAT.gold);                       // clasp
+    k.poly([[4.5, -0.5], [9, -4], [13.5, -0.5], [9, 3]], '#1a0414');   // eye
+    k.circ(9, -0.5, 2, wc);
+    k.r(8.4, -1.2, 1, 1, '#ffffff');
+    k.r(21, -9, 1.2, 1.2, wc); k.r(23, -5, 1, 1, '#ffb8f0'); k.r(22, 2, 1, 1, wc);
+  }},
+
   ghostdagger: { draw(k, wc) {
     // A slim, wavy spectral blade on a dark, rune-wrapped hilt: wisps trail off
     // the edge, and a ghostly glow hangs around the whole thing.

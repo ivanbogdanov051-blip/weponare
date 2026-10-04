@@ -35,6 +35,7 @@ let WEAPON_COLOR = {
   ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
   scimitar:'#e8e0c8', slingshot:'#b08a5a', mace:'#9aa4b0', javelin:'#d8c8a0', claws:'#e0e4ec',
   emberstaff:'#ff7a2a', halberd:'#c0c8d8', frostbow:'#9fe8ff', chronostaff:'#e8c87a', voidblade:'#9a5aff',
+  mindtome:'#ff5ad8',
 };
 const WEAPON_DESC = {
   sword:'Balanced blade', dagger:'Fast, low damage', axe:'Slow, heavy hit',
@@ -62,6 +63,7 @@ const WEAPON_DESC = {
   emberstaff:'Fiery blasts that burn', halberd:'Huge reach, knockback, dash special', frostbow:'Piercing ice arrows that slow',
   chronostaff:'Bend time: freeze foes in place and rewind your own wounds',
   voidblade:'A blade of the void: waves on every swing, rift steps and a SUPER singularity',
+  mindtome:'A book of mind power: set traps under your enemies, lock their minds, and take one over',
 };
 
 // Filled from the server catalog: { id: {type, atkSpd, ...} }
@@ -459,7 +461,7 @@ function updatePrediction(frameDt, now) {
   if (!currState || currState.gameState !== 'GAMEPLAY' || !myNum) { pred = null; predHist.length = 0; return; }
   const key = myNum === 1 ? 'p1' : 'p2';
   const me = currState.players?.[key];
-  if (!me || me.dead) { pred = null; predHist.length = 0; return; }
+  if (!me || me.dead || me.controlling) { pred = null; predHist.length = 0; return; }
   if (!pred) { pred = { x: me.x, y: me.y, facing: me.facing }; predHist.length = 0; }
 
   const inp = currentInputs();
@@ -584,7 +586,7 @@ const ATTACK_ANIM = {
   fireglove: 'punch', vortex: 'shieldup', windwand: 'flick', revolver: 'recoil', portalwand: 'cast', ghostdagger: 'stab',
   stormhammer: 'chop', frostscythe: 'spin', sunbow: 'draw',
   scimitar: 'slash', slingshot: 'draw', mace: 'chop', javelin: 'throw', claws: 'stab',
-  emberstaff: 'cast', halberd: 'sweep', frostbow: 'draw', chronostaff: 'cast', voidblade: 'slash',
+  emberstaff: 'cast', halberd: 'sweep', frostbow: 'draw', chronostaff: 'cast', voidblade: 'slash', mindtome: 'tome',
 };
 const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
                   heavy: 300, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
@@ -1180,6 +1182,118 @@ function drawSunbeam(f, now) {
   ctx.restore();
 }
 
+// ── MIND TOME ──
+const MIND_COL = '#ff5ad8';
+// A stylised eye: the mark of the Mind Tome.
+function drawMindEye(x, y, r, t) {
+  ctx.save();
+  ctx.fillStyle = '#2a0820';
+  ctx.beginPath(); ctx.ellipse(x, y, r * 1.6, r, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = MIND_COL; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.ellipse(x, y, r * 1.6, r, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = MIND_COL;
+  ctx.beginPath(); ctx.arc(x + Math.sin(t * 2) * r * 0.5, y, r * 0.55, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(x + Math.sin(t * 2) * r * 0.5) - 1, Math.round(y) - 1, 1.5, 1.5);
+  ctx.restore();
+}
+
+// The four spinning beams of the special.
+function drawMindBeams(f, now) {
+  const k = Math.max(0, f.k || 0);
+  const fade = Math.min(1, k / 0.08) * Math.min(1, (1 - k) / 0.12);
+  const a0 = f.a || 0;
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  for (let i = 0; i < 4; i++) {
+    const a = a0 + i * Math.PI / 2;
+    ctx.save(); ctx.rotate(a);
+    const w = 5 + Math.sin(now / 60 + i) * 1.2;
+    ctx.globalAlpha = 0.25 * fade; ctx.fillStyle = MIND_COL; ctx.fillRect(6, -w, f.r - 6, w * 2);
+    ctx.globalAlpha = 0.75 * fade; ctx.fillStyle = '#ff9ae8'; ctx.fillRect(6, -w * 0.45, f.r - 6, w * 0.9);
+    ctx.globalAlpha = 0.95 * fade; ctx.fillStyle = '#ffffff'; ctx.fillRect(6, -0.6, f.r - 6, 1.2);
+    // sparks running out along the beam
+    for (let s = 0; s < 3; s++) {
+      const d = 10 + ((now / 4 + s * 60 + i * 30) % (f.r - 10));
+      ctx.globalAlpha = fade; ctx.fillRect(d, (s - 1) * 2.5, 2, 2);
+    }
+    ctx.restore();
+  }
+  ctx.globalAlpha = 0.9 * fade; ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// Your own traps: a pink rune ring that turns, and sparkles rising out of it.
+function drawMindTrapGlyph(tr, cx, cy) {
+  const now = performance.now(), t = now / 1000, r = tr.w * 0.68;
+  ctx.save();
+  ctx.globalAlpha = 0.16 + 0.06 * Math.sin(t * 4); ctx.fillStyle = MIND_COL;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.95; ctx.strokeStyle = MIND_COL; ctx.lineWidth = 2;
+  ctx.setLineDash([4, 3]); ctx.lineDashOffset = -now / 30;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  for (let i = 0; i < 4; i++) {
+    const a = t * 1.5 + i * Math.PI / 2;
+    ctx.fillStyle = '#ffb8f0'; ctx.fillRect(Math.round(cx + Math.cos(a) * r) - 1, Math.round(cy + Math.sin(a) * r) - 1, 2.5, 2.5);
+  }
+  drawMindEye(cx, cy - tr.h / 2 - 6, 3, t);
+  for (let i = 0; i < 10; i++) {
+    const f = (t * 0.9 + i / 10) % 1;
+    const sx = cx + Math.cos(i * 2.3) * r * 0.7, sy = cy + Math.sin(i * 2.3) * r * 0.4 - f * 16;
+    ctx.globalAlpha = 0.9 * (1 - f); ctx.fillStyle = i % 2 ? '#ffffff' : MIND_COL;
+    ctx.fillRect(Math.round(sx), Math.round(sy), 1.5, 1.5);
+  }
+  ctx.restore();
+}
+
+// Over whoever you control: the eye, a ring, and the seconds left.
+function drawPuppetMark(x, y, m) {
+  const t = performance.now() / 1000;
+  ctx.save();
+  if (m) {
+    ctx.globalAlpha = 0.3 + 0.12 * Math.sin(t * 6); ctx.strokeStyle = MIND_COL; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(m.x + m.w / 2, m.y + m.h, m.w * 0.8, 4, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+  drawMindEye(x, y - 4, 4.5, t);
+  if (m && m.ctlLeft) {
+    ctx.globalAlpha = 1; ctx.font = 'bold 7px "Courier New",monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#000'; ctx.fillText(Math.ceil(m.ctlLeft / 1000) + 's', x + 0.5, y - 11.5);
+    ctx.fillStyle = '#ffb8f0'; ctx.fillText(Math.ceil(m.ctlLeft / 1000) + 's', x, y - 12);
+    ctx.textAlign = 'left';
+  }
+  ctx.restore();
+}
+
+// While you control someone: a faint marker where you'll come back.
+function drawMindHome(p) {
+  const t = performance.now() / 1000, x = p.x + p.w / 2, y = p.y + p.h / 2;
+  ctx.save();
+  ctx.globalAlpha = 0.35 + 0.15 * Math.sin(t * 4); ctx.strokeStyle = MIND_COL; ctx.lineWidth = 1;
+  ctx.setLineDash([2, 3]);
+  ctx.strokeRect(Math.round(p.x) + 0.5, Math.round(p.y) + 0.5, p.w - 1, p.h - 1);
+  ctx.setLineDash([]);
+  drawMindEye(x, y, 3, t);
+  ctx.restore();
+}
+
+// SHIFTING GROUND: seconds to the next shuffle, over your head; it grows and
+// pulses for the last five.
+function drawShuffleCountdown(p, x, y) {
+  const secs = Math.ceil(p.shuffleIn / 1000);
+  const hot = secs <= 5;
+  const mx = x + p.w / 2, my = y - 24;
+  ctx.save();
+  ctx.font = (hot ? 'bold 10px' : 'bold 7px') + ' "Courier New",monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const pulse = hot ? 1 + 0.15 * Math.abs(Math.sin(performance.now() / 120)) : 1;
+  ctx.translate(mx, my); ctx.scale(pulse, pulse);
+  const txt = '⇄ ' + secs;
+  const w = ctx.measureText(txt).width;
+  ctx.globalAlpha = 0.7; ctx.fillStyle = '#1a0614'; ctx.fillRect(-w / 2 - 3, -6, w + 6, 12);
+  ctx.globalAlpha = 1; ctx.fillStyle = hot ? '#ffffff' : MIND_COL; ctx.fillText(txt, 0, 0.5);
+  ctx.restore();
+}
+
 // LANDMINES: a small disc with a lamp that blinks red once it is armed.
 function drawPlayerMine(f, now) {
   const armed = (f.k || 0) > 0.025;
@@ -1250,6 +1364,7 @@ function drawFireRings(fires) {
     if (f.kind === 'drain') { drawDrain(f, now); continue; }
     if (f.kind === 'barrier') { drawBarrier(f, now); continue; }
     if (f.kind === 'mine') { drawPlayerMine(f, now); continue; }
+    if (f.kind === 'mindbeams') { drawMindBeams(f, now); continue; }
     if (f.kind === 'blizzard') { drawBlizzard(f, now); continue; }
     if (f.kind === 'sunorb') { drawSunorb(f, now); continue; }
     if (f.kind === 'sunbeam') { drawSunbeam(f, now); continue; }
@@ -1478,8 +1593,10 @@ function syncSuperButton(me) {
     touchZonesAt = -1e9;   // the button column changed size: re-measure
     if (!show) touchKeys.super = false;
   }
-  const cooling = show && (me.superCd || 0) > 0;
+  const cooling = show && (me.superCd || 0) > 0 && !me.controlling;
   if (cooling !== superBtnCooling) { superBtnCooling = cooling; el.classList.toggle('cooling', cooling); }
+  const label = me && me.controlling ? 'LET GO' : 'SUPER';
+  if (el.textContent !== label) el.textContent = label;
 }
 
 // Thrusting weapons: a straight lunge along the aim to the weapon's reach.
@@ -1599,7 +1716,7 @@ function tryLocalAttack() {
   if (!currState || currState.gameState !== 'GAMEPLAY' || !myNum) return;
   const key = myNum === 1 ? 'p1' : 'p2';
   const me = currState.players?.[key];
-  if (!me || me.dead || localAtkCd > 0) return;
+  if (!me || me.dead || me.controlling || localAtkCd > 0) return;
   const haste = me.effects && me.effects.haste > 0;
   // atkSpd comes from the server so weapon upgrades stay in sync.
   localAtkCd = (me.atkSpd || WEAPON_META[me.weaponId]?.atkSpd || 400) * (haste ? 0.5 : 1);
@@ -2062,6 +2179,13 @@ function legendPassive(id) {
 }
 
 const LEGEND_MOVES = {
+  mindtome:    '<b>ATK</b> (fast) a psychic trap appears right in the path of a nearby enemy: spikes, mines, ice,'
+             + ' lava, gravity wells and more, and they only ever hurt YOUR enemies (up to 6 out at once) ·'
+             + ' <b>SPECIAL</b> four beams of mind energy spin out from you; every enemy they touch is frozen for 5s'
+             + ' (bosses and players are slowed) · <b>SUPER</b> MIND CONTROL: take over the strongest enemy on the map'
+             + ' &ndash; 20s for a monster, 5s for a boss or another player. You vanish and can\'t be hurt; your moves'
+             + ' drive it, your attack uses ITS attack on its own side, and you can march it into traps. Press SUPER'
+             + ' again to let go. Needs the Storm Tome fully maxed and three other legendaries.',
   chronostaff: '<b>ATK</b> bolts of slowed time that drag whatever they hit to a crawl · <b>SPECIAL</b> TIME STOP:'
              + ' every foe close around you is frozen where it stands for 2s, and enemy shots nearby vanish ·'
              + ' <b>SUPER</b> REWIND: your health goes back to the best it was in the last 4s, burns and curses'
@@ -2128,6 +2252,30 @@ function legendaryCards(weapons, coins) {
         <div class="legend-buy">
           <button class="buy-weapon poor" disabled>BOSS REWARD</button>
           <span class="legend-need">Defeat the Portal Mage to earn it</span>
+        </div>
+      </div>`;
+    }
+    if (w.needMind) {
+      const up = (shopData && shopData.upgrades && shopData.upgrades.stormtome) || {};
+      const defs = (shopData && shopData.upgradeDefs) || {};
+      const tStats = (WEAPON_META.stormtome?.upgrades || []).filter(k => defs[k]);
+      const tDone = weapons.includes('stormtome') ? tStats.filter(k => (up[k] || 0) >= defs[k].max).length : 0;
+      const legends = all.filter(o => o.shopOnly && o.id !== w.id && weapons.includes(o.id)).length;
+      const ok = tDone === tStats.length && tStats.length > 0 && legends >= 3;
+      const need = !weapons.includes('stormtome') ? 'Unlock the Storm Tome, max every upgrade on it, and own 3 other legendaries'
+        : tDone < tStats.length ? `Max out the Storm Tome first: ${tDone}/${tStats.length} upgrades maxed &middot; legendaries ${Math.min(legends, 3)}/3`
+        : legends < 3 ? `Own 3 other legendary weapons first: ${legends}/3`
+        : (coins >= w.price ? 'Ready to buy!' : `Need ${(w.price - coins).toLocaleString()} more coins`);
+      return `<div class="shop-row legendary mind-row">
+        <div class="shop-head">
+          <canvas class="shop-ic" data-weapon="${w.id}" width="56" height="32"></canvas>
+          <span class="shop-name" style="color:${col}">${w.name}</span>
+          <span class="legend-tag mind-tag">MIND</span>
+        </div>
+        <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>${legendPassive(w.id)}
+        <div class="legend-buy">
+          <button class="buy-weapon${ok && coins >= w.price ? '' : ' poor'}" onclick="buyWeapon('${w.id}')" ${ok ? '' : 'disabled'}>BUY ◆${w.price.toLocaleString()}</button>
+          <span class="legend-need">${need}</span>
         </div>
       </div>`;
     }
@@ -3041,6 +3189,7 @@ function drawTraps(traps) {
 
     const cv = trapSprite(tr.type, tr.w, tr.state === 'arming');
     if (cv) ctx.drawImage(cv, Math.round(tr.x) - 2, Math.round(tr.y) - 2);
+    if (tr.o) drawMindTrapGlyph(tr, cx, cy);
   }
 }
 
@@ -3263,6 +3412,7 @@ function drawFlames(x, y, w, h) {
 
 function drawPlayer(p, baseColor, label, key) {
   if (p.dead) return;
+  if (p.controlling) { if (key === 'p' + myNum) drawMindHome(p); return; }
   // VANISH / ghost cloak: gone for everyone else; a faint shimmer for you.
   const unseen = p.effects && (p.effects.vanish > 0 || p.effects.ghost > 0);
   if (unseen && key !== 'p' + myNum) return;
@@ -3502,6 +3652,8 @@ function drawPlayerBody(p, baseColor, label, key) {
   drawNametag(x + p.w / 2, y - 13, label, skinCol);
   drawWeaponSprite(p, x, y, key);
   drawStatusMarks(p, x, y);
+  if (p.puppet) drawPuppetMark(x + p.w / 2, y - 6, null);
+  if (p.shuffleIn != null && key === 'p' + myNum) drawShuffleCountdown(p, x, y);
   drawVortexShield(p, x, y);
   if (p.effects && p.effects.burn > 0) drawFlames(x, y, p.w, p.h);
 
@@ -3614,6 +3766,7 @@ function drawMonster(m) {
   drawMonsterArms(m, x, y);
   if (m.burning) drawFlames(x, y, m.w, m.h);
   if (m.frozen) drawFreezeFx(m, x, y); else if (m.slowed) drawSlowFx(m, x, y);
+  if (m.ctl) drawPuppetMark(x + m.w / 2, y - 8, m);
   drawMonsterTells(m, x, y);
   if (m.boss) { drawBossMarks(m, x, y); return; }
 
@@ -3728,8 +3881,8 @@ function drawMageAura(m, x, y) {
 
 // ── Statuses, each drawn its own way ──
 // Which sprite tint a monster wears: what froze or slowed it decides.
-const SLOW_BODY = { chill: 'slow', time: 'slowtime', net: 'slownet', poison: 'slowpoison' };
-const FREEZE_BODY = { ice: 'ice', timestop: 'tstop', void: 'void', holy: 'holy', shock: 'shock' };
+const SLOW_BODY = { chill: 'slow', time: 'slowtime', net: 'slownet', poison: 'slowpoison', mind: 'slowmind' };
+const FREEZE_BODY = { ice: 'ice', timestop: 'tstop', void: 'void', holy: 'holy', shock: 'shock', mind: 'mind' };
 function monsterBodyState(m) {
   if (m.frozen && FREEZE_BODY[m.fk]) return FREEZE_BODY[m.fk];
   if (m.slowed) return SLOW_BODY[m.sk] || 'slow';
@@ -3842,6 +3995,13 @@ function drawFreezeFx(m, x, y) {
       ctx.beginPath(); ctx.ellipse(0, 0, m.w * 0.85, m.h * 0.7, 0, a, a + 1.2); ctx.stroke();
     }
     ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(Math.cos(t * 6) * m.w * 0.6), Math.round(Math.sin(t * 6) * m.h * 0.5), 1.5, 1.5);
+  } else if (k === 'mind') {
+    // MIND LOCK: a pink bubble with a slowly turning eye over its head.
+    ctx.globalAlpha = 0.2 + 0.08 * Math.sin(t * 5); ctx.fillStyle = '#ff5ad8';
+    ctx.beginPath(); ctx.ellipse(mx, my, m.w * 0.85, m.h * 0.75, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.85; ctx.strokeStyle = '#ffb8f0'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); ctx.lineDashOffset = -now / 40;
+    ctx.beginPath(); ctx.ellipse(mx, my, m.w * 0.85, m.h * 0.75, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    drawMindEye(mx, top - 6, 5, t);
   } else if (k === 'silence') {
     // A struck-through spark: no powers for a moment.
     ctx.globalAlpha = 0.85; ctx.strokeStyle = '#c8c8e0'; ctx.lineWidth = 1.3;
@@ -3876,6 +4036,8 @@ function drawSlowFx(m, x, y) {
   } else if (k === 'net') {           // rope strands dragging at the legs
     ctx.strokeStyle = '#c9b98e'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(x - 1, y + m.h * 0.6); ctx.lineTo(x + m.w + 1, y + m.h); ctx.moveTo(x + m.w + 1, y + m.h * 0.6); ctx.lineTo(x - 1, y + m.h); ctx.stroke();
+  } else if (k === 'mind') {          // a small pink eye
+    drawMindEye(mx, y - 8, 3.5, t);
   } else if (k === 'poison') {        // green bubbles rising
     ctx.strokeStyle = '#b8f070';
     for (let i = 0; i < 3; i++) {

@@ -252,6 +252,18 @@ const WEAPONS = [
     shopOnly: true, noRequirement: true, needLegendary: true, price: 19000, voidWave: true,
     special: { kind: 'riftstep',    dmg: 70, range: 320, cd: 5000 },
     super:   { kind: 'singularity', dmg: 40, cd: 22000 } },
+  // MIND TOME: a book of mind power. Only for a master of the Storm Tome (every
+  // upgrade maxed) who already owns three other legendaries (needMind).
+  // ATK: a psychic trap appears in the path of a nearby enemy — it only hurts
+  // your enemies. SPECIAL: four beams of mind energy spin out from you and
+  // freeze whatever they touch for 5s. SUPER: MIND CONTROL — take over the
+  // strongest enemy on the map (20s for a monster, 5s for a boss or a player):
+  // you vanish, your moves drive it and your attack uses its own attack on its
+  // friends. Press SUPER again to let go.
+  { id: 'mindtome', name: 'MIND TOME', damage: 30, range: 380, atkSpd: 600, type: 'ranged', unlockXp: 0,
+    shopOnly: true, noRequirement: true, needMind: true, price: 25000, mindTrap: true,
+    special: { kind: 'mindbeams',   dmg: 18, range: 170, cd: 9000 },
+    super:   { kind: 'mindcontrol', dmg: 0,  cd: 30000 } },
   // The rarest weapon: free to claim, but only once you own every other weapon
   // in the game (needAll). Attack: melt into the shadows — invisible (you still
   // see yourself) and 75% faster; the next attack is a double-damage ghost
@@ -269,6 +281,7 @@ const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
 const WEAPON_COLORS = {
   scimitar: '#e8e0c8', slingshot: '#b08a5a', mace: '#9aa4b0', javelin: '#d8c8a0', claws: '#e0e4ec',
   emberstaff: '#ff7a2a', halberd: '#c0c8d8', frostbow: '#9fe8ff', chronostaff: '#e8c87a', voidblade: '#9a5aff',
+  mindtome: '#ff5ad8',
   sword: '#c8d8e8', dagger: '#d4e8b0', axe: '#e8a040', spear: '#c0c8d0',
   bow: '#b89060', staff: '#cc66ff', hammer: '#aab0b8', wand: '#88ddff',
   crossbow: '#cc8844', flail: '#dd4444', greatsword: '#ddeeff',
@@ -349,7 +362,8 @@ const WEAPON_UPGRADES = {
   halberd:     ['dmg', 'rng', 'knock'],
   frostbow:    ['dmg', 'chill', 'multi'],
   chronostaff: ['dmg', 'spd', 'chill', 'cdr'],
-  voidblade:   ['dmg', 'spd', 'crit', 'cdr', 'rng'],   // no SPD or MLT: its portals come fast enough
+  voidblade:   ['dmg', 'spd', 'crit', 'cdr', 'rng'],
+  mindtome:    ['dmg', 'spd', 'cdr', 'rng'],   // no SPD or MLT: its portals come fast enough
 };
 // ── Weapon passives ──
 // Max out every upgrade on one of these weapons and, whenever you hold it, you
@@ -375,6 +389,7 @@ const PASSIVES = {
   stormhammer: { name: 'THUNDERSTRUCK',  color: '#7ac8ff', desc: '35% of your hits call down lightning for +80% damage' },
   frostscythe: { name: 'SHATTERPOINT',   color: '#bfefff', desc: '+50% damage to slowed or frozen foes' },
   chronostaff: { name: 'TIME DILATION',  color: '#e8c87a', desc: 'your special and super recharge 40% faster' },
+  mindtome:    { name: 'SHIFTING GROUND', color: '#ff5ad8', desc: 'every 30s every trap on the map jumps next to your enemies (a countdown over your head shows when)' },
   voidblade:   { name: 'VOID HUNGER',    color: '#9a5aff', desc: 'every kill takes 1.5s off your special and super' },
   sunbow:      { name: 'SUNLIT',         color: '#ffd24a', desc: 'heal 5% of your health every second' },
 };
@@ -1120,7 +1135,7 @@ function playerKeyOf(t) {
 // Everything `pKey` is allowed to hit. In co-op the other player is an ally, so
 // they are neither a target nor an obstacle for attacks and auto-aim.
 // VANISH or a ghost cloak: nobody can see (or aim at) this player.
-function unseen(p) { return hasEffect(p, 'vanish') || hasEffect(p, 'ghost'); }
+function unseen(p) { return hasEffect(p, 'vanish') || hasEffect(p, 'ghost') || !!p.controlling; }
 
 function enemyTargets(pKey) {
   const out = [];
@@ -1134,6 +1149,7 @@ function enemyTargets(pKey) {
       if (p && !p.dead && !unseen(p)) out.push(p);
     }
     for (const a of room.allies) if (!a.dead) out.push(a);
+    for (const m of room.monsters) if (m.controlledBy && !m.dead) out.push(m);   // a mind-controlled turncoat
     return out;
   }
   for (const k of ['p1', 'p2']) {
@@ -1221,8 +1237,10 @@ function fireTrap(tr, trigger) {
   tr.state = 'firing';
   tr.fireTimer = 280;
   const tx = tr.x + tr.w / 2, ty = tr.y + tr.h / 2;
-  const targets = [room.players.p1, room.players.p2, ...room.monsters].filter(t => t && !t.dead);
+  const targets = tr.owner ? enemyTargets(tr.owner)
+    : [room.players.p1, room.players.p2, ...room.monsters].filter(t => t && !t.dead && !t.controlling);
   const inRange = targets.filter(t => Math.hypot(cx(t) - tx, cy(t) - ty) <= tr.radius);
+  const by = tr.owner || 'trap';   // a mind trap's kills are its owner's
   room.particles.push({ type: 'trapburst', x: tx, y: ty, maxR: tr.radius, timer: 340, max: 340, color: tr.color, text: def.name });
 
   if (tr.effect === 'warp') {
@@ -1242,7 +1260,7 @@ function fireTrap(tr, trigger) {
       .slice(0, def.count || 3);
     for (const t of hits) {
       room.particles.push({ type: 'bolt', x: tx, y: ty - 6, x2: cx(t), y2: cy(t), timer: 300, max: 300, color: tr.color });
-      applyDamage(t, tr.damage, 'trap');
+      applyDamage(t, tr.damage, by);
       chillTarget(t, 700);
     }
     return;
@@ -1259,16 +1277,16 @@ function fireTrap(tr, trigger) {
     } else if (tr.effect === 'silence') {
       if (t.num) applyEffect(t, 'silence', tr.dur); else stagger(t, 900, 'silence');
     } else if (tr.effect === 'quake') {
-      applyDamage(t, tr.damage, 'trap');
+      applyDamage(t, tr.damage, by);
       stagger(t, tr.dur, 'quake');
     } else if (tr.effect === 'keg' || tr.effect === 'launch') {
-      applyDamage(t, tr.damage, 'trap');
+      applyDamage(t, tr.damage, by);
       let dx = cx(t) - tx, dy = cy(t) - ty, d = Math.hypot(dx, dy);
       if (d < 1) { const a = Math.random() * Math.PI * 2; dx = Math.cos(a); dy = Math.sin(a); d = 1; }
       const PULL = 300;   // ms the fling lasts; applyPull carries it
       t.pull = { vx: (dx / d) * def.force / PULL, vy: (dy / d) * def.force / PULL, timer: PULL, from: null };
     } else {
-      applyDamage(t, tr.damage, 'trap');
+      applyDamage(t, tr.damage, by);
       if (tr.effect === 'burn') ignite(t, tr.dur);
     }
   }
@@ -1832,6 +1850,10 @@ function applyDamage(target, dmg, attackerKey) {
 }
 
 function handleKill(target, attackerKey) {
+  if (target.controlledBy) {
+    const ctrl = room.players[target.controlledBy];
+    if (ctrl && ctrl.controlling) endMindControl(ctrl, target.controlledBy);
+  }
   if (target.mage) { mageDefeated(target); return; }
   // A monster dies once. Blasts set off inside its own death (a bomber, a
   // chain reaction) could otherwise reach it again before it is marked dead.
@@ -1976,6 +1998,7 @@ function creditXp(key, xpGain) {
 // Back in at the safest spot on the field (away from every foe, trap and shot),
 // not on the fixed spawn point, which may be in the middle of the fight.
 function respawnPlayer(p) {
+  if (p.controlling) endMindControl(p, playerKeyOf(p));
   const safe = safestSpot(p, playerKeyOf(p));
   const sp = safe ? { x: safe.x - p.w / 2, y: safe.y - p.h / 2 } : spawnPointFor(p.num);
   p.hp = p.maxHp;
@@ -2085,7 +2108,9 @@ function tickRoom(dt) {
       }
       continue;
     }
-    const inp = room.inputs[key];
+    // In someone's head: you stand still (hidden) and drive them instead.
+    if (p.controlling) tickMindControl(p, key, dt, factor);
+    const inp = p.controlling ? {} : p.mindControlledBy ? room.inputs[p.mindControlledBy] : room.inputs[key];
     const spd = effectiveSpeed(p);
     let vx = 0, vy = 0;
     if (inp.left)  { vx = -spd; p.facing = -1; }
@@ -2135,6 +2160,20 @@ function tickRoom(dt) {
       if (p.hpHist.length > REWIND_SAMPLES) p.hpHist.shift();
     }
     if (room.gameMode === 'sandbox') sandboxCheats(p);
+    // SUPER is held to auto-fire, so letting go of a mind is on a fresh press.
+    if (!room.prevSuperHeld) room.prevSuperHeld = {};
+    const superTap = room.superJustPressed[key] && !room.prevSuperHeld[key];
+    room.prevSuperHeld[key] = room.superJustPressed[key];
+    if (p.controlling) {
+      if (superTap) endMindControl(p, key);
+      continue;
+    }
+    if (p.mindControlledBy) {
+      // Puppeted: its own buttons do nothing; the controller's attack makes it attack.
+      const ck = p.mindControlledBy;
+      if (room.attackJustPressed[ck] && p.atkCooldown <= 0) doAttack(p, key);
+      continue;
+    }
 
     // > goes to the next weapon, < to the one before (they wrap round).
     const nWeapons = p.unlockedWeapons.length;
@@ -2168,7 +2207,7 @@ function tickRoom(dt) {
   for (const m of room.monsters.slice()) {
     if (m.dead) continue;
     let nearest = null, bestDist = Infinity;
-    for (const p of [room.players.p1, room.players.p2, ...room.allies]) {
+    for (const p of [room.players.p1, room.players.p2, ...room.allies, ...room.monsters.filter(o => o.controlledBy && o !== m)]) {
       if (!p || p.dead || (p.num && unseen(p))) continue;
       const d = distBetween(p, m);
       if (d < bestDist) { bestDist = d; nearest = p; }
@@ -2187,6 +2226,7 @@ function tickRoom(dt) {
     if (m.ward        > 0) m.ward        -= dt;
     // Frozen solid by a frost nova: no moving, no attacking.
     if (m.freeze > 0) { m.freeze -= dt; continue; }
+    if (m.controlledBy) continue;   // a puppet: moved by its controller (tickMindControl)
     if (room.gameMode === 'sandbox' && room.sandbox.freeze) continue;   // sandbox: AI switched off
 
     if (nearest) {
@@ -2299,7 +2339,7 @@ function tickRoom(dt) {
   // ── Traps ── (in the Portal Mage fight only he lays them)
   room.trapSpawnTimer -= dt;
   if (room.trapSpawnTimer <= 0 && room.gameMode !== 'portal' && room.gameMode !== 'sandbox') {
-    if (room.traps.length < MAX_TRAPS) spawnTrap();
+    if (room.traps.filter(t => !t.owner).length < MAX_TRAPS) spawnTrap();
     room.trapSpawnTimer = TRAP_SPAWN_MIN + Math.random() * (TRAP_SPAWN_MAX - TRAP_SPAWN_MIN);
   }
   room.traps = room.traps.filter(tr => {
@@ -2312,23 +2352,40 @@ function tickRoom(dt) {
       }
     }
     if (tr.state === 'idle') {
-      for (const key of ['p1', 'p2']) {
-        const p = room.players[key];
-        if (p && !p.dead && aabb(p, tr)) {
-          if (tr.mode === 'instant') fireTrap(tr, p);
-          else { tr.state = 'arming'; tr.armTimer = TRAP_TYPES[tr.type].armTime; tr.trigger = key; }
-          break;
+      if (tr.owner) {
+        // A mind trap: sprung by its owner's enemies, never by its owner.
+        const foe = enemyTargets(tr.owner).find(t => aabb(t, tr));
+        if (foe) {
+          if (tr.mode === 'instant') fireTrap(tr, null);
+          else { tr.state = 'arming'; tr.armTimer = TRAP_TYPES[tr.type].armTime; tr.trigger = null; }
+        }
+      } else {
+        let sprung = false;
+        for (const key of ['p1', 'p2']) {
+          const p = room.players[key];
+          if (p && !p.dead && !p.controlling && aabb(p, tr)) {
+            if (tr.mode === 'instant') fireTrap(tr, p);
+            else { tr.state = 'arming'; tr.armTimer = TRAP_TYPES[tr.type].armTime; tr.trigger = key; }
+            sprung = true;
+            break;
+          }
+        }
+        // A monster under mind control can be walked straight into one.
+        const puppet = !sprung && room.monsters.find(m => m.controlledBy && !m.dead && aabb(m, tr));
+        if (puppet) {
+          if (tr.mode === 'instant') fireTrap(tr, null);
+          else { tr.state = 'arming'; tr.armTimer = TRAP_TYPES[tr.type].armTime; tr.trigger = null; }
         }
       }
     } else if (tr.state === 'arming') {
       tr.armTimer -= dt;
-      if (tr.armTimer <= 0) fireTrap(tr, room.players[tr.trigger]);
+      if (tr.armTimer <= 0) fireTrap(tr, tr.trigger ? room.players[tr.trigger] : null);
     } else if (tr.state === 'firing') {
       const ldef = TRAP_TYPES[tr.type];
       if (ldef.linger) {
         const tx = tr.x + tr.w / 2, ty = tr.y + tr.h / 2;
-        const inside = [room.players.p1, room.players.p2, ...room.monsters]
-          .filter(t => t && !t.dead && Math.hypot(cx(t) - tx, cy(t) - ty) <= tr.radius);
+        const inside = (tr.owner ? enemyTargets(tr.owner) : [room.players.p1, room.players.p2, ...room.monsters])
+          .filter(t => t && !t.dead && !t.controlling && Math.hypot(cx(t) - tx, cy(t) - ty) <= tr.radius);
         // The gravity well drags all the time, not just on its ticks.
         if (tr.effect === 'gravity') {
           for (const t of inside) {
@@ -2542,7 +2599,7 @@ function advanceProjectile(proj, factor, dt) {
 
   const hitBox = { x: proj.x - 4, y: proj.y - 4, w: 8, h: 8 };
   for (const t of enemyTargets(proj.owner)) {
-    if (!aabb(hitBox, t)) continue;
+    if (t === proj.ignore || !aabb(hitBox, t)) continue;
     const tk = playerKeyOf(t);
     if (tk && t.parryTimer > 0) {
       // Parried: bounce the projectile back at its owner
@@ -2734,6 +2791,7 @@ function doAttack(p, pKey) {
   // Any attack can swat an enemy's fire hand out of the air.
   swatFireHands(p, pKey, w.type === 'melee' ? w.range : 48);
 
+  if (w.mindTrap) { placeMindTrap(p, pKey, w, dmgMult); return; }
   if (w.vortexShield) {
     p.vortexShield = VORTEX_SHIELD_MS;
     room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 22, timer: 300, max: 300, color: WEAPON_COLORS.vortex });
@@ -2898,6 +2956,10 @@ function doSuper(p, pKey) {
   p.superCooldown = su.cd;
   p.swingTimer = 300;
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
+  if (su.kind === 'mindcontrol') {
+    if (!startMindControl(p, pKey)) { p.superCooldown = 0; p.swingTimer = 0; }
+    return;
+  }
   if (su.kind === 'rewind') {
     // REWIND: back to your best health of the last few seconds, bad effects
     // undone, the special ready again, and a burst of haste.
@@ -3147,6 +3209,10 @@ const THROW_SHARE = 0.25, THROW_BACK_SHARE = 0.5, THROW_BOSS_SHARE = 0.06, THROW
 
 // The passives that act every tick rather than on a stat.
 function passiveTick(p, key, dt) {
+  if (p.passive === 'mindtome') {                                     // SHIFTING GROUND
+    p.shuffleT = (p.shuffleT ?? MIND_SHUFFLE_MS) - dt;
+    if (p.shuffleT <= 0) { p.shuffleT = MIND_SHUFFLE_MS; shuffleTraps(p, key); }
+  }
   if (p.passive === 'chronostaff') {                                  // TIME DILATION
     if (p.specialCooldown > 0) p.specialCooldown -= dt * CHRONO_DILATION;
     if (p.superCooldown > 0) p.superCooldown -= dt * CHRONO_DILATION;
@@ -3516,6 +3582,7 @@ function updateFires(factor, dt) {
     if (f.kind === 'meteor' || f.kind === 'knife') return true;   // still falling: only the warning shows
     if (f.kind === 'portal') return updatePortal(f, dt);
     if (f.kind === 'mine') return updatePlayerMine(f);
+    if (f.kind === 'mindbeams') return updateMindBeams(f, dt);
     if (f.kind === 'barrier') return updateBarrier(f);
     if (f.kind === 'blizzard') return updateBlizzard(f, dt);
     if (f.kind === 'sunorb') return updateSunorb(f, dt);
@@ -4217,7 +4284,7 @@ function abBurst(p, ab, text, r = 34) {
 // Stun a monster for a moment (bosses and players are only slowed).
 // kind: ice, stun, shock, quake, timestop, root, chain, holy, void, silence.
 // Each is drawn differently; bosses and players are only slowed.
-const STAGGER_SLOW = { timestop: 'time', root: 'net', chain: 'net' };
+const STAGGER_SLOW = { timestop: 'time', root: 'net', chain: 'net', mind: 'mind' };
 function stagger(t, ms, kind = 'stun') {
   if (t.dead) return;
   if (t.num || t.boss) chillTarget(t, ms, STAGGER_SLOW[kind] || 'chill');
@@ -4232,6 +4299,191 @@ const THORNS_SHARE = 0.5, VOID_WAVE_MULT = 0.6, VOID_WAVE_RANGE = 170, VOID_HUNG
 const TIMESTOP_MS = 2000, RIFT_R = 55, REWIND_SAMPLES = 16, REWIND_HASTE_MS = 4000;
 const SING_R = 46, SING_MS = 3200, SING_PULL_R = 260, SING_BOOM = 4, SING_BOOM_R = 130;
 const MINE_ARM = 500, MINE_LIFE = 20000, MINE_R = 64, MINE_TRIP = 20;
+
+// ── MIND TOME ──
+const MIND_LEGENDS = 3, MIND_TRAP_MAX = 6, MIND_TRAP_LIFE = 14000, MIND_BEAM_MS = 2600, MIND_BEAM_SPIN = 2.6, MIND_FREEZE_MS = 5000;
+const MIND_CTL_MONSTER = 20000, MIND_CTL_BOSS = 5000, MIND_CTL_PLAYER = 5000, MIND_SHUFFLE_MS = 30000;
+const PUPPET_DMG = 1.6, PUPPET_SPEED = 2.6;
+// The traps a mind tome can set (warp runes, healing springs and the like would help the enemy).
+const MIND_TRAPS = ['spike', 'mine', 'snare', 'fire', 'tesla', 'ice', 'saw', 'gravity', 'lava', 'root', 'keg', 'quake', 'poison'];
+
+// Where to put a trap for an enemy: just in its path toward you, never on you.
+function mindSpot(p, pKey, size, maxRange) {
+  let foes = enemyTargets(pKey).filter(t => !t.controlledBy);
+  const near = foes.filter(t => Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) <= maxRange);
+  if (near.length) foes = near;
+  for (let tries = 0; tries < 10; tries++) {
+    let x, y;
+    if (foes.length) {
+      const t = foes[Math.floor(Math.random() * foes.length)];
+      const dx = cx(p) - cx(t), dy = cy(p) - cy(t), d = Math.hypot(dx, dy) || 1;
+      const ahead = Math.min(40, Math.max(0, d - 40)) * (0.5 + Math.random() * 0.5);
+      x = cx(t) + dx / d * ahead + (Math.random() - 0.5) * 22;
+      y = cy(t) + dy / d * ahead + (Math.random() - 0.5) * 22;
+    } else {
+      const a = (p.facing === -1 ? Math.PI : 0) + (Math.random() - 0.5) * 1.4;
+      x = cx(p) + Math.cos(a) * 90; y = cy(p) + Math.sin(a) * 90;
+    }
+    const at = arenaClamp(x, y, size / 2 + 4);
+    if (Math.hypot(at.x - cx(p), at.y - cy(p)) < 34 + size / 2 && tries < 9) continue;   // not on top of you
+    const box = { x: at.x - size / 2, y: at.y - size / 2, w: size, h: size };
+    if (tries < 8 && overlapsAny(room.traps.filter(t => t.state === 'idle'), box, 2)) continue;   // nor on another trap
+    return { x: at.x - size / 2, y: at.y - size / 2 };
+  }
+  return null;
+}
+
+function placeMindTrap(p, pKey, w, dmgMult) {
+  const type = MIND_TRAPS[Math.floor(Math.random() * MIND_TRAPS.length)];
+  const def = TRAP_TYPES[type];
+  const at = mindSpot(p, pKey, def.size, w.range);
+  if (!at) return;
+  // Your oldest unsprung trap makes way once you have too many out.
+  const mine = room.traps.filter(t => t.owner === pKey);
+  if (mine.length >= MIND_TRAP_MAX) {
+    const old = mine.find(t => t.state === 'idle') || mine[0];
+    room.traps = room.traps.filter(t => t !== old);
+  }
+  const scale = (w.damage * dmgMult) / 30;
+  room.traps.push({ id: nextId(), type, x: at.x, y: at.y, w: def.size, h: def.size, owner: pKey,
+                    state: 'idle', armTimer: 0, fireTimer: 0, mode: def.mode, radius: def.radius,
+                    damage: Math.max(def.damage ? 1 : 0, Math.round((def.damage || 0) * scale)),
+                    effect: def.effect || null, dur: def.dur || 0, color: def.color, expire: MIND_TRAP_LIFE });
+  const tx = at.x + def.size / 2, ty = at.y + def.size / 2;
+  p.facing = tx < cx(p) ? -1 : 1;
+  room.particles.push({ type: 'streak', x: cx(p), y: cy(p) - 4, x2: tx, y2: ty, timer: 260, max: 260, color: WEAPON_COLORS.mindtome });
+  room.particles.push({ type: 'teleport', x: tx, y: ty, timer: 380, max: 380, color: WEAPON_COLORS.mindtome });
+}
+
+// The four spinning beams: anything they cross is frozen (bosses and players slowed).
+function updateMindBeams(f, dt) {
+  const o = room.players[f.owner];
+  if (!o || o.dead) return false;
+  f.x = cx(o); f.y = cy(o);
+  f.a += MIND_BEAM_SPIN * dt / 1000;
+  for (const t of enemyTargets(f.owner)) {
+    const id = playerKeyOf(t) || t.id;
+    if (f.hit.has(id)) continue;
+    for (let i = 0; i < 4; i++) {
+      const a = f.a + i * Math.PI / 2;
+      if (distToSegment(cx(t), cy(t), f.x, f.y, f.x + Math.cos(a) * f.r, f.y + Math.sin(a) * f.r) > 8 + t.w / 2) continue;
+      f.hit.add(id);
+      if (playerKeyOf(t) && t.parryTimer > 0) { spawnParrySpark(cx(t), cy(t)); break; }
+      if (!t.num) t.invincible = 0;
+      applyDamage(t, f.dmg, f.owner);
+      stagger(t, MIND_FREEZE_MS, 'mind');
+      room.particles.push({ type: 'crit', x: cx(t), y: t.y - 6, text: 'MIND LOCK', timer: 600, max: 600 });
+      break;
+    }
+  }
+  return true;
+}
+
+// MIND CONTROL: take over the strongest enemy on the map.
+function startMindControl(p, pKey) {
+  let best = null;
+  for (const t of enemyTargets(pKey)) {
+    if (t.controlledBy || t.mindControlledBy || t.ally) continue;
+    if (!best || t.hp > best.hp) best = t;
+  }
+  if (!best) return false;
+  const isPlayer = !!best.num, isBoss = !!best.boss;
+  const dur = isPlayer ? MIND_CTL_PLAYER : isBoss ? MIND_CTL_BOSS : MIND_CTL_MONSTER;
+  p.controlling = { ref: best, isPlayer, left: dur, home: { x: p.x, y: p.y } };
+  p.hidden = true;
+  p.pull = null;
+  if (isPlayer) best.mindControlledBy = pKey;
+  else { best.controlledBy = pKey; best.freeze = 0; best.windup = 0; best.wind = null; best.atkCooldown = 0; }   // ready to swing at once
+  room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 420, max: 420, color: WEAPON_COLORS.mindtome });
+  room.particles.push({ type: 'streak', x: cx(p), y: cy(p), x2: cx(best), y2: cy(best), timer: 420, max: 420, color: WEAPON_COLORS.mindtome });
+  room.particles.push({ type: 'trapburst', x: cx(best), y: cy(best), maxR: 40, timer: 800, max: 800, color: WEAPON_COLORS.mindtome, text: 'MIND CONTROL' });
+  return true;
+}
+
+function endMindControl(p, pKey) {
+  const c = p.controlling;
+  if (!c) return;
+  p.controlling = null;
+  p.hidden = false;
+  const t = c.ref;
+  if (t) {
+    if (c.isPlayer) { if (t.mindControlledBy === pKey) t.mindControlledBy = null; }
+    else if (t.controlledBy === pKey) { t.controlledBy = null; t.atkCooldown = Math.max(t.atkCooldown || 0, 600); }
+    if (!t.dead) room.particles.push({ type: 'teleport', x: cx(t), y: cy(t), timer: 380, max: 380, color: '#ffffff' });
+  }
+  p.invincible = Math.max(p.invincible || 0, 1200);
+  room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 420, max: 420, color: WEAPON_COLORS.mindtome });
+}
+
+// Each tick while you are in someone's head.
+function tickMindControl(p, key, dt, factor) {
+  const c = p.controlling, t = c.ref;
+  c.left -= dt;
+  const gone = !t || t.dead || (!c.isPlayer && !room.monsters.includes(t));
+  if (gone || c.left <= 0) { endMindControl(p, key); return; }
+  if (c.isPlayer) return;   // a rival player moves on your keys in their own movement step
+  const inp = room.inputs[key];
+  if (!(t.freeze > 0)) {
+    const spd = Math.max(t.speed * 1.5, PUPPET_SPEED) * (t.slowTimer > 0 ? 0.5 : 1);
+    let vx = 0, vy = 0;
+    if (inp.left) vx = -1; if (inp.right) vx = 1;
+    if (inp.up) vy = -1; if (inp.down) vy = 1;
+    if (vx && vy) { vx *= 0.707; vy *= 0.707; }
+    if (vx) t.face = vx > 0 ? 1 : -1;
+    t.x += vx * spd * factor; t.y += vy * spd * factor;
+  }
+  applyPull(t, dt);
+  clampToArena(t);
+  if (t.atkCooldown > 0) t.atkCooldown -= dt;
+  if (room.attackJustPressed[key] && !(t.atkCooldown > 0) && !(t.freeze > 0)) puppetAttack(t, key);
+}
+
+// The puppet uses its own attack — on its own side.
+function puppetAttack(m, pKey) {
+  const def = MONSTER_TYPES[m.type] || {};
+  const foes = enemyTargets(pKey).filter(o => o !== m);
+  let best = null, bd = Infinity;
+  for (const o of foes) { const d = distBetween(o, m); if (d < bd) { bd = d; best = o; } }
+  m.swing = MONSTER_SWING_MS;
+  const dmg = Math.round(m.atkDamage * PUPPET_DMG);
+  if (def.ranged || m.mage) {
+    m.atkCooldown = Math.round((def.reload || 1400) * 0.6);
+    if (!best) return;
+    const ang = Math.atan2(cy(best) - cy(m), cx(best) - cx(m)), sp = def.shotSpeed || 4.4;
+    m.face = Math.cos(ang) < 0 ? -1 : 1;
+    room.projectiles.push({ id: nextId(), x: cx(m), y: cy(m), dx: Math.cos(ang) * sp, dy: Math.sin(ang) * sp,
+      damage: dmg, owner: pKey, ignore: m, traveled: 0, maxRange: Math.max(def.shotRange || 260, 300),
+      weaponId: def.shotId || (m.mage ? 'hellfire' : 'spit'), burn: def.shotBurn || (m.mage ? 1500 : 0),
+      isAoe: false, aoeRadius: 0, pierce: false, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: null });
+    return;
+  }
+  m.atkCooldown = m.boss ? 900 : 650;
+  const reach = m.atkRange + (m.boss ? 40 : 18);
+  if (best) m.face = cx(best) < cx(m) ? -1 : 1;
+  for (const o of foes) {
+    if (distBetween(o, m) > reach + (o.w + o.h) / 4) continue;
+    if (playerKeyOf(o) && o.parryTimer > 0) { spawnParrySpark(cx(o), cy(o)); continue; }
+    o.invincible = 0;
+    applyDamage(o, dmg, pKey);
+  }
+  if (m.boss) room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: reach, timer: 300, max: 300, color: '#c8e07a' });
+}
+
+// SHIFTING GROUND: every trap on the map jumps next to your enemies.
+function shuffleTraps(p, pKey) {
+  let moved = 0;
+  for (const tr of room.traps) {
+    if (tr.state !== 'idle') continue;
+    const at = mindSpot(p, pKey, tr.w, 9999);
+    if (!at) continue;
+    room.particles.push({ type: 'teleport', x: tr.x + tr.w / 2, y: tr.y + tr.h / 2, timer: 380, max: 380, color: WEAPON_COLORS.mindtome });
+    tr.x = at.x; tr.y = at.y;
+    room.particles.push({ type: 'teleport', x: tr.x + tr.w / 2, y: tr.y + tr.h / 2, timer: 380, max: 380, color: '#ffffff' });
+    moved++;
+  }
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p) - 10, maxR: 40, timer: 800, max: 800, color: WEAPON_COLORS.mindtome,
+                        text: moved ? 'TRAPS SHIFTED' : 'SHIFT' });
+}
 
 // The singularity's end: one big blast where it stood.
 function collapseSingularity(f) {
@@ -4796,6 +5048,13 @@ function doSpecial(p, pKey) {
     castFireHand(p, pKey, sp, dmgMult);
     return;
   }
+  if (sp.kind === 'mindbeams') {
+    // Four beams of mind energy spin out from you; each foe they touch is frozen 5s.
+    room.fires.push({ id: nextId(), kind: 'mindbeams', owner: pKey, x: px, y: py, r: sp.range, a: Math.random() * Math.PI,
+                      t: 0, life: MIND_BEAM_MS, dmg: spDmg, hit: new Set() });
+    room.particles.push({ type: 'shockwave', x: px, y: py, maxR: 40, timer: 400, max: 400, color: wc });
+    return;
+  }
   if (sp.kind === 'timestop') {
     // TIME STOP: everything close is frozen where it stands.
     for (const t of enemyTargets(pKey)) {
@@ -5007,7 +5266,7 @@ function buildChains() {
 
 // Fires that sit on their caster every tick. Clients pin them to wherever they
 // draw that player, so they never trail behind a predicted or smoothed position.
-const RIDES_OWNER = new Set(['barrier', 'hurricane', 'vortexfield', 'drain', 'blizzard', 'sunbeam']);
+const RIDES_OWNER = new Set(['barrier', 'hurricane', 'vortexfield', 'drain', 'blizzard', 'sunbeam', 'mindbeams']);
 
 // Positions go out 50×/s for every entity; full float precision is ~20 characters
 // each and 0.1 world units is well under a screen pixel, so round them.
@@ -5031,6 +5290,9 @@ function playerView(p) {
     parryCd: Math.max(0, p.parryCooldown), parryMax: p.parryCd || PARRY_COOLDOWN, parryActive: p.parryTimer > 0,
     speed: Math.round(p.speed * 1000) / 1000,
     passive: p.passive || null,
+    ...(p.controlling ? { controlling: true, ctlLeft: Math.max(0, Math.round(p.controlling.left)) } : {}),
+    ...(p.mindControlledBy ? { puppet: p.mindControlledBy } : {}),
+    ...(p.passive === 'mindtome' ? { shuffleIn: Math.max(0, Math.round(p.shuffleT ?? MIND_SHUFFLE_MS)) } : {}),
     ...(p.passive === 'vortex' ? { aegis: !(p.aegisCd > 0) } : {}),
     effects: p.effects,
     pulled: !!p.pull,
@@ -5050,6 +5312,7 @@ function buildStateMsg(playerNum) {
                   hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash, slowed: (m.slowTimer || 0) > 0, frozen: (m.freeze || 0) > 0,
                   ...(m.freeze > 0 ? { fk: m.freezeKind || 'ice' } : {}), ...(m.slowTimer > 0 ? { sk: m.slowKind || 'chill' } : {}), burning: (m.burnTimer || 0) > 0, armor: m.armor || 0,
                   face: m.face, swing: m.swing > 0 ? Math.round(m.swing) : 0,
+                  ...(m.controlledBy ? { ctl: m.controlledBy, ctlLeft: Math.round(room.players[m.controlledBy]?.controlling?.left || 0) } : {}),
                   ...(m.fuse > 0 ? { fuse: Math.round(m.fuse) } : {}), ...(m.ward > 0 ? { ward: true } : {}),
                   ...(m.charge ? { charge: { a: Math.round(m.charge.a * 100) / 100, wind: m.charge.wind > 0 } } : {}),
                   ...(m.dazed > 0 ? { dazed: true } : {}),
@@ -5067,7 +5330,7 @@ function buildStateMsg(playerNum) {
                                     ...(f.color ? { c: f.color } : {}), ...(f.trapType ? { tt: f.trapType } : {}),
                                     ...(RIDES_OWNER.has(f.kind) ? { fo: f.owner } : {}) })),
     chains:      buildChains().map(c => ({ x1: r1(c.x1), y1: r1(c.y1), x2: r1(c.x2), y2: r1(c.y2), kind: c.kind, o: c.o })),
-    traps:       room.traps.map(tr => ({ x: r1(tr.x), y: r1(tr.y), w: tr.w, h: tr.h, type: tr.type, state: tr.state, radius: tr.radius, color: tr.color,
+    traps:       room.traps.map(tr => ({ x: r1(tr.x), y: r1(tr.y), w: tr.w, h: tr.h, type: tr.type, state: tr.state, radius: tr.radius, color: tr.color, o: tr.owner || null,
                   armRatio: tr.state === 'arming' ? r1(1 - tr.armTimer / (TRAP_TYPES[tr.type].armTime || 1)) : 0 })),
     items:       room.items.map(it => ({ x: r1(it.x), y: r1(it.y), w: it.w, h: it.h, type: it.type, color: ITEM_TYPES[it.type].color })),
     coins:       room.coins.map(c => ({ id: c.id, x: r1(c.x), y: r1(c.y), w: c.w, h: c.h, value: c.value, fading: c.life < 4000 })),
@@ -5111,6 +5374,7 @@ function weaponCatalog() {
     damage: w.damage, range: w.range, atkSpd: w.atkSpd, spin: !!w.swing360,
     shopOnly: !!w.shopOnly, noRequirement: !!w.noRequirement, needLegendary: !!w.needLegendary, price: w.price || 0,
     needAll: !!w.needAll,
+    needMind: !!w.needMind,
     bossReward: !!w.bossReward,
     special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd } : null,
     super: w.super ? { kind: w.super.kind, dmg: w.super.dmg, cd: w.super.cd } : null,
@@ -5380,6 +5644,13 @@ app.post('/api/buy_weapon', (req, res) => {
   if (prof.weapons.includes(weaponId)) return res.status(400).json({ error: 'You already own that weapon.' });
   const missing = def.noRequirement ? 0 : XP_WEAPON_IDS.filter(id => !prof.weapons.includes(id)).length;
   // Some legendaries are only for players who already own another one.
+  if (def.needMind) {
+    const tomeLv = prof.upgrades?.stormtome || {};
+    const tomeMaxed = prof.weapons.includes('stormtome') && upgradesFor('stormtome').every(k => (tomeLv[k] || 0) >= UPGRADE_STATS[k].max);
+    const legends = SHOP_WEAPONS.filter(w => w.id !== weaponId && prof.weapons.includes(w.id)).length;
+    if (!tomeMaxed) return res.status(400).json({ error: 'Max out every upgrade on the Storm Tome first.' });
+    if (legends < MIND_LEGENDS) return res.status(400).json({ error: `Own ${MIND_LEGENDS} other legendary weapons first (${legends}/${MIND_LEGENDS}).` });
+  }
   if (def.needLegendary && !SHOP_WEAPONS.some(w => w.id !== weaponId && prof.weapons.includes(w.id))) {
     return res.status(400).json({ error: 'Own at least one other legendary weapon first.' });
   }
