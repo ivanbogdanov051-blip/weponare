@@ -807,7 +807,15 @@ function monsterSprite(type, w, h, state) {
   return sprite(`mo:${type}:${w}x${h}:${state}`, () => {
     const b = monsterBuf(type, w, h);
     if (state === 'flash') tint(b, '#ffffff', 0.8);
-    else if (state === 'slow') tint(b, '#4fd8ff', 0.42);
+    else if (state === 'slow') tint(b, '#4fd8ff', 0.42);          // chilled
+    else if (state === 'slowtime') tint(b, '#e8c87a', 0.4);       // slowed by time magic: amber
+    else if (state === 'slownet') tint(b, '#c9b98e', 0.34);       // snared: rope-brown
+    else if (state === 'slowpoison') tint(b, '#8ad048', 0.42);    // in a toxic cloud: sickly green
+    else if (state === 'ice') tint(b, '#bfefff', 0.55);           // frozen solid
+    else if (state === 'tstop') tint(b, '#d8c890', 0.62);         // time stopped: drained to gold-grey
+    else if (state === 'void') tint(b, '#7a3ad0', 0.5);           // caught in a rift
+    else if (state === 'holy') tint(b, '#fff2a0', 0.5);           // smitten
+    else if (state === 'shock') tint(b, '#bfe0ff', 0.4);          // jolted
     else if (state.startsWith('ally:')) tint(b, state.slice(5), 0.5);   // a Portal Wand ally, in its owner's colour
     return b;
   });

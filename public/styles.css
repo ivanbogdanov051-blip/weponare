@@ -653,16 +653,51 @@ body {
 .abil-equip:hover { border-color: #8fd8ff; }
 .abil-equip.on { background: #12301e; border-color: #4aa86a; color: #9affc0; }
 
-/* Q / E buttons on touch screens: a small pair above SUPER. */
-.ability-btns { display: flex; gap: 6px; }
+/* Touch buttons, right side: abilities as a strip of icons, then two compact
+   rows (weapon arrows, parry, special / super beside attack), so the whole
+   column stays short and never reaches the weapon rack or the item bar. */
+.action-btns { gap: 6px; }
+.ability-btns { display: flex; gap: 4px; justify-content: flex-end; }
+.action-row { display: flex; gap: 6px; align-items: flex-end; justify-content: flex-end; }
 .action-btn.ability-btn {
-  min-width: 0; padding: 8px 10px; font-size: 10px; letter-spacing: 1px;
-  border-color: rgba(143, 216, 255, 0.65); color: #dff6ff; background: rgba(10, 32, 48, 0.34);
+  position: relative; min-width: 0; width: 38px; height: 38px; padding: 3px;
+  border-color: color-mix(in srgb, var(--abc, #8fd8ff) 65%, transparent);
+  background: rgba(10, 32, 48, 0.34);
 }
 .action-btn.ability-btn:active { background: rgba(30, 80, 110, 0.6); }
-.action-btn.ability-btn.cooling { opacity: 0.55; }
+.action-btn.ability-btn.cooling { opacity: 0.45; }
+.ability-btn canvas.ab-ic { width: 100%; height: 100%; image-rendering: pixelated; pointer-events: none; display: block; }
+.ability-btn i {
+  position: absolute; right: 2px; bottom: 0; font: bold 8px 'Courier New', monospace; font-style: normal;
+  color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000; pointer-events: none;
+}
+/* < and > : step back and forward through your weapons. */
+.action-btn.arrow-btn {
+  min-width: 0; width: 36px; padding: 10px 0; font-size: 15px; font-weight: bold; letter-spacing: 0;
+  border-color: rgba(190, 200, 235, 0.55); color: rgba(225, 230, 250, 0.95); background: rgba(15, 15, 40, 0.32);
+}
+.action-btn.arrow-btn:active { background: rgba(70, 80, 150, 0.6); }
 @media (max-height: 420px) {
-  .action-btn.ability-btn { padding: 6px 8px; font-size: 9px; }
+  .action-btns { gap: 4px; }
+  .action-btn.ability-btn { width: 33px; height: 33px; padding: 2px; }
+  .action-btn.arrow-btn { width: 30px; padding: 7px 0; font-size: 13px; }
+  .action-row { gap: 4px; }
+}
+@media (max-height: 340px) {
+  .action-btn.ability-btn { width: 29px; height: 29px; }
+  .action-btn.arrow-btn { width: 26px; padding: 5px 0; font-size: 12px; }
+}
+/* Narrow screens (portrait phones): tighter buttons, and the rows may wrap
+   instead of running off the edge. */
+@media (max-width: 520px) {
+  #touchControls { --dpad-size: 44px; padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); }
+  .action-btns { gap: 4px; }
+  .action-row, .ability-btns { gap: 3px; flex-wrap: wrap; }
+  .action-btn { min-width: 0; letter-spacing: 1px; font-size: 9px; padding: 8px 7px; }
+  .action-btn.special-btn, .action-btn.parry-btn, .action-btn.super-btn { padding: 8px 7px; font-size: 9px; }
+  .action-btn.big-btn { padding: 12px 14px; font-size: 12px; min-width: 56px; }
+  .action-btn.ability-btn { width: 30px; height: 30px; padding: 2px; }
+  .action-btn.arrow-btn { width: 28px; padding: 8px 0; font-size: 12px; }
 }
 
 /* Way out of the connecting / waiting / error screens. */
@@ -726,11 +761,11 @@ body {
 .sb-note { font-size: 9px; color: #889; margin-top: 8px; }
 .sb-title .sb-note { margin: 0; }
 
-/* Extra ability slots: the "buy a slot" tile, and up to six touch buttons in rows of three. */
+/* Extra ability slots: the "buy a slot" tile, and six touch buttons (icons) in one strip. */
 .abil-buyslot { font-family: 'Courier New', monospace; cursor: pointer; border: 1px dashed #b8902a; background: #1e1808; color: #ffe08a; }
 .abil-buyslot:hover { background: #2e240a; }
 .abil-buyslot.poor { color: #8a7a4a; border-color: #4a3e1a; }
-.ability-btns { flex-wrap: wrap; justify-content: flex-end; max-width: 230px; }
+.ability-btns { flex-wrap: wrap; justify-content: flex-end; }   /* one strip; wraps only on a really narrow screen */
 .abil-equip + .abil-equip { margin-left: 4px; }
 
 /* The Dagger of Ghosts: the rarest weapon gets a pale, ghostly card. */

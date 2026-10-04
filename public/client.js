@@ -1454,8 +1454,10 @@ function syncAbilityButtons(me) {
     if (id !== st.id) {
       st.id = id;
       const def = abilityDef(id);
-      el.textContent = def ? def.name.split(' ').pop().slice(0, 6) : '';
-      el.style.borderColor = def ? def.color : '';
+      const ic = el.querySelector('canvas.ab-ic');
+      if (ic && def) drawAbilityIcon(ic.getContext('2d'), id, ic.width, ic.height);
+      el.title = def ? def.name : '';
+      if (def) el.style.setProperty('--abc', def.color); else el.style.removeProperty('--abc');
       el.classList.toggle('hidden-btn', !id);
       touchZonesAt = -1e9;
       if (!id) touchKeys['ab' + (i + 1)] = false;
@@ -1528,7 +1530,7 @@ canvas.addEventListener('pointermove', (e) => {
 });
 canvas.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') mouseAim = null; });
 
-const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false,
+const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false,
                     ab1: false, ab2: false, ab3: false, ab4: false, ab5: false, ab6: false };
 
 window.addEventListener('keydown', (e) => {
@@ -1557,6 +1559,7 @@ function currentInputs() {
     right:   !!keys['ArrowRight'] || !!keys['KeyD'] || touchKeys.right,
     attack:  !!keys['Space']      || touchKeys.attack,
     swap:    !!keys['Enter']      || touchKeys.swap,
+    swapPrev: !!keys['KeyZ']      || touchKeys.swapPrev,
     special: !!keys['ShiftLeft'] || !!keys['ShiftRight'] || touchKeys.special,
     parry:   !!keys['KeyP'] || !!keys['ControlLeft'] || !!keys['ControlRight'] || touchKeys.parry,
     super:   !!keys['KeyR'] || touchKeys.super,
@@ -1572,7 +1575,7 @@ function currentInputs() {
   };
 }
 
-let localPrevAttack = false, localPrevSwap = false;
+let localPrevAttack = false, localPrevSwap = false, localPrevSwapPrev = false;
 let localAtkCd = 0;          // client-mirrored attack cooldown (ms)
 let lastLocalSlashTime = 0;  // suppress the server echo of a slash we already showed
 
@@ -1583,12 +1586,13 @@ function sendInput() {
   // Predict the attack swing locally for instant feedback (rising edge only).
   if (inp.attack && !localPrevAttack) tryLocalAttack();
   // Swapping off the dagger drops the cloak.
-  if (inp.swap && !localPrevSwap && localGhost?.on !== false && currState?.players) {
+  if (((inp.swap && !localPrevSwap) || (inp.swapPrev && !localPrevSwapPrev)) && localGhost?.on !== false && currState?.players) {
     const me = currState.players[myNum === 1 ? 'p1' : 'p2'];
     if (me && ghostNow(me)) localGhost = { on: false, at: performance.now() };
   }
   localPrevAttack = inp.attack;
   localPrevSwap = inp.swap;
+  localPrevSwapPrev = inp.swapPrev;
 }
 
 function tryLocalAttack() {
@@ -1742,7 +1746,7 @@ function setupTouchControls() {
 
   const btnMap = [
     ['btn-up','up'], ['btn-down','down'], ['btn-left','left'],
-    ['btn-right','right'], ['btn-attack','attack'], ['btn-swap','swap'],
+    ['btn-right','right'], ['btn-attack','attack'], ['btn-next','swap'], ['btn-prev','swapPrev'],
     ['btn-special','special'], ['btn-parry','parry'], ['btn-super','super'],
     ['btn-ab1','ab1'], ['btn-ab2','ab2'], ['btn-ab3','ab3'], ['btn-ab4','ab4'], ['btn-ab5','ab5'], ['btn-ab6','ab6'],
   ];
@@ -3111,7 +3115,8 @@ function drawItemBar(inv, me) {
   const x0 = onRight ? HUD_W - INV_X - rowW : INV_X;
   // Below the SUPER and ability bars.
   const top = INV_Y + (me && me.superMax > 0 ? 7 : 0) + ((me && me.abil) || []).filter(Boolean).length * 7;
-  const y = clearOfButtons(x0 - 2, top - 2, rowW + 4, INV_SLOT + 4) + 2;
+  let y = clearOfButtons(x0 - 2, top - 2, rowW + 4, INV_SLOT + 4) + 2;
+  if (y + INV_SLOT + 8 > HUD_H) y = top;
   ctx.save();
   if (inv.length) {
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
@@ -3594,7 +3599,7 @@ function drawWeaponSprite(p, px, py, key) {
 function drawMonster(m) {
   if (m.mage && m.hidden) return;   // gone into hiding behind his giants
   const type = m.type || 'grunt';
-  const state = m.hitFlash > 0 ? 'flash' : (m.slowed ? 'slow' : 'base');
+  const state = m.hitFlash > 0 ? 'flash' : monsterBodyState(m);
   const x = Math.round(m.x), y = Math.round(m.y);
   if (m.mage) drawMageAura(m, x, y);
 
@@ -3608,7 +3613,7 @@ function drawMonster(m) {
   }
   drawMonsterArms(m, x, y);
   if (m.burning) drawFlames(x, y, m.w, m.h);
-  if (m.frozen) drawIceBlock(x, y, m.w, m.h);
+  if (m.frozen) drawFreezeFx(m, x, y); else if (m.slowed) drawSlowFx(m, x, y);
   drawMonsterTells(m, x, y);
   if (m.boss) { drawBossMarks(m, x, y); return; }
 
@@ -3721,6 +3726,167 @@ function drawMageAura(m, x, y) {
   ctx.restore();
 }
 
+// ── Statuses, each drawn its own way ──
+// Which sprite tint a monster wears: what froze or slowed it decides.
+const SLOW_BODY = { chill: 'slow', time: 'slowtime', net: 'slownet', poison: 'slowpoison' };
+const FREEZE_BODY = { ice: 'ice', timestop: 'tstop', void: 'void', holy: 'holy', shock: 'shock' };
+function monsterBodyState(m) {
+  if (m.frozen && FREEZE_BODY[m.fk]) return FREEZE_BODY[m.fk];
+  if (m.slowed) return SLOW_BODY[m.sk] || 'slow';
+  return 'base';
+}
+
+// Stuck in place: ice block, dizzy stars, jolts, rubble, a stopped clock, vines,
+// chains, a halo, a rift or a struck-through spark. A poster of the lot is in HOW TO PLAY.
+function drawFreezeFx(m, x, y) {
+  const k = m.fk || 'ice';
+  const now = performance.now(), t = now / 1000;
+  const mx = x + m.w / 2, my = y + m.h / 2, top = y - 4;
+  if (k === 'ice') { drawIceBlock(x, y, m.w, m.h); return; }
+  ctx.save();
+  if (k === 'stun') {
+    // Gold stars circling the head, and a wobble line of dizziness.
+    ctx.fillStyle = '#ffe25a';
+    for (let i = 0; i < 4; i++) {
+      const a = t * 4 + i * Math.PI / 2;
+      const sx = mx + Math.cos(a) * (m.w * 0.55 + 3), sy = top - 2 + Math.sin(a) * 3;
+      ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 9 + i);
+      ctx.beginPath();
+      for (let p = 0; p < 10; p++) { const r = p % 2 ? 1.3 : 3; const an = p * Math.PI / 5 - Math.PI / 2; ctx.lineTo(sx + Math.cos(an) * r, sy + Math.sin(an) * r); }
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.globalAlpha = 0.8; ctx.strokeStyle = '#fff6c0'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i <= 8; i++) ctx.lineTo(mx - 5 + i * 1.25, my - m.h * 0.2 + Math.sin(t * 14 + i) * 1.4);
+    ctx.stroke();
+  } else if (k === 'shock') {
+    // Crackling blue-white arcs jumping around the body.
+    ctx.strokeStyle = Math.floor(now / 70) % 2 ? '#ffffff' : '#7ac8ff'; ctx.lineWidth = 1.2;
+    const seed = Math.floor(now / 60);
+    for (let b = 0; b < 3; b++) {
+      let px = x + ((seed * 7 + b * 13) % 10) / 10 * m.w, py = y - 2;
+      ctx.beginPath(); ctx.moveTo(px, py);
+      for (let i = 1; i <= 5; i++) { px += (((seed * 31 + b * 17 + i * 11) % 9) - 4) * 0.9; py = y - 2 + i * (m.h + 4) / 5; ctx.lineTo(px, py); }
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 0.25 + 0.2 * Math.sin(now / 40); ctx.fillStyle = '#9fd8ff';
+    ctx.fillRect(x - 2, y - 2, m.w + 4, m.h + 4);
+  } else if (k === 'quake') {
+    // Rubble at the feet: a dust ring, cracks in the floor, pebbles bouncing.
+    const fy = y + m.h;
+    ctx.globalAlpha = 0.35; ctx.fillStyle = '#a07a4a';
+    ctx.beginPath(); ctx.ellipse(mx, fy, m.w * 0.9 + Math.sin(t * 6) * 2, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.9; ctx.strokeStyle = '#2a1a0a'; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.moveTo(mx - m.w * 0.8, fy + 1); ctx.lineTo(mx - 3, fy + 3); ctx.lineTo(mx, fy); ctx.lineTo(mx + 4, fy + 4); ctx.lineTo(mx + m.w * 0.8, fy + 1); ctx.stroke();
+    ctx.fillStyle = '#8a6a3a';
+    for (let i = 0; i < 4; i++) {
+      const hop = Math.abs(Math.sin(t * 7 + i * 1.7)) * 8;
+      ctx.fillRect(Math.round(mx - m.w * 0.6 + i * m.w * 0.4), Math.round(fy - 2 - hop), 2, 2);
+    }
+    ctx.globalAlpha = 0.3; ctx.fillStyle = '#c89a5a'; ctx.fillRect(x, y + m.h * 0.7, m.w, m.h * 0.3);   // dust on the legs
+  } else if (k === 'timestop') {
+    // Caught in a bubble of stopped time: a gold clock face, its hand frozen, and still sparks.
+    ctx.globalAlpha = 0.22; ctx.fillStyle = '#e8c87a';
+    ctx.beginPath(); ctx.ellipse(mx, my, m.w * 0.85, m.h * 0.75, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.9; ctx.strokeStyle = '#e8c87a'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.ellipse(mx, my, m.w * 0.85, m.h * 0.75, 0, 0, Math.PI * 2); ctx.stroke();
+    const cxk = mx, cyk = top - 8;
+    ctx.fillStyle = '#fff6e0'; ctx.strokeStyle = '#c89a3a'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(cxk, cyk, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = '#3a2a14'; ctx.lineWidth = 1;
+    for (let i = 0; i < 12; i += 3) { const a = i * Math.PI / 6; ctx.beginPath(); ctx.moveTo(cxk + Math.cos(a) * 4.6, cyk + Math.sin(a) * 4.6); ctx.lineTo(cxk + Math.cos(a) * 5.8, cyk + Math.sin(a) * 5.8); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(cxk, cyk); ctx.lineTo(cxk + 0.5, cyk - 4.6); ctx.moveTo(cxk, cyk); ctx.lineTo(cxk + 3.2, cyk + 1); ctx.stroke();   // hands, stopped
+    ctx.fillStyle = '#ffd24a';
+    for (let i = 0; i < 4; i++) ctx.fillRect(Math.round(x + ((i * 37) % 100) / 100 * m.w), Math.round(y + ((i * 53) % 100) / 100 * m.h), 1.5, 1.5);   // sparks that never move
+  } else if (k === 'root') {
+    // Green vines wound up the legs, with thorns and leaves.
+    const fy = y + m.h;
+    ctx.strokeStyle = '#3a8a2a'; ctx.lineWidth = 1.8;
+    for (let i = 0; i < 3; i++) {
+      const bx = x + (i + 0.5) * m.w / 3;
+      ctx.beginPath(); ctx.moveTo(bx, fy + 2);
+      ctx.bezierCurveTo(bx + 5, fy - m.h * 0.2, bx - 5, fy - m.h * 0.4, bx + 2, fy - m.h * 0.65); ctx.stroke();
+    }
+    ctx.fillStyle = '#7ad85a';
+    for (let i = 0; i < 4; i++) ctx.fillRect(Math.round(x + (i + 0.3) * m.w / 4), Math.round(fy - m.h * (0.15 + 0.15 * i)), 2.5, 1.5);
+    ctx.fillStyle = '#c8a050'; ctx.fillRect(Math.round(mx - 1), Math.round(fy - m.h * 0.5), 1.5, 1.5);   // a thorn
+    ctx.globalAlpha = 0.3; ctx.fillStyle = '#3a8a2a'; ctx.fillRect(x - 1, y + m.h * 0.55, m.w + 2, m.h * 0.45);
+  } else if (k === 'chain') {
+    // Iron chains wrapped across the body, with a padlock.
+    ctx.strokeStyle = '#aab4c4'; ctx.lineWidth = 1.6;
+    for (const dir of [1, -1]) {
+      ctx.beginPath();
+      for (let i = 0; i <= 6; i++) { const f = i / 6; ctx.lineTo(x - 1 + f * (m.w + 2), (dir > 0 ? y : y + m.h) + dir * f * m.h); }
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#e8eef8';
+    for (let i = 1; i < 6; i++) { const f = i / 6; ctx.fillRect(Math.round(x + f * m.w) - 1, Math.round(y + f * m.h) - 1, 2.5, 2.5); }
+    ctx.fillStyle = '#c8a030'; ctx.fillRect(Math.round(mx) - 2, Math.round(my) - 2, 5, 4);
+    ctx.strokeStyle = '#c8a030'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(mx, my - 2, 2, Math.PI, 0); ctx.stroke();
+  } else if (k === 'holy') {
+    // A halo over the head and a pillar of light.
+    ctx.globalAlpha = 0.22 + 0.1 * Math.sin(t * 8); ctx.fillStyle = '#fff2a0';
+    ctx.fillRect(mx - m.w * 0.55, y - 30, m.w * 1.1, m.h + 34);
+    ctx.globalAlpha = 0.95; ctx.strokeStyle = '#ffe25a'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(mx, top - 4, m.w * 0.45, 2.6, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    for (let i = 0; i < 5; i++) ctx.fillRect(Math.round(mx - m.w * 0.5 + ((i * 41 + Math.floor(t * 6) * 13) % 100) / 100 * m.w), Math.round(y - 6 + ((i * 29) % 100) / 100 * (m.h + 6)), 1.5, 1.5);
+  } else if (k === 'void') {
+    // Pulled into a turning purple rift.
+    ctx.translate(mx, my);
+    ctx.globalAlpha = 0.55; ctx.fillStyle = '#12051f';
+    ctx.beginPath(); ctx.ellipse(0, m.h * 0.35, m.w * 0.9, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#c8a0ff'; ctx.lineWidth = 1.4; ctx.globalAlpha = 0.9;
+    for (let i = 0; i < 3; i++) {
+      const a = t * 5 + i * 2.1;
+      ctx.beginPath(); ctx.ellipse(0, 0, m.w * 0.85, m.h * 0.7, 0, a, a + 1.2); ctx.stroke();
+    }
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(Math.cos(t * 6) * m.w * 0.6), Math.round(Math.sin(t * 6) * m.h * 0.5), 1.5, 1.5);
+  } else if (k === 'silence') {
+    // A struck-through spark: no powers for a moment.
+    ctx.globalAlpha = 0.85; ctx.strokeStyle = '#c8c8e0'; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.arc(mx, top - 6, 4.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(mx - 3.2, top - 2.8); ctx.lineTo(mx + 3.2, top - 9.2); ctx.stroke();
+    ctx.globalAlpha = 0.3; ctx.fillStyle = '#6a6a88'; ctx.fillRect(x, y, m.w, m.h);
+  } else {
+    drawIceBlock(x, y, m.w, m.h);
+  }
+  ctx.restore();
+}
+
+// Slowed (but still moving): a hint of what is dragging it down.
+function drawSlowFx(m, x, y) {
+  const k = m.sk || 'chill';
+  const now = performance.now(), t = now / 1000;
+  const mx = x + m.w / 2;
+  ctx.save();
+  if (k === 'chill') {                // snowflakes drifting down
+    ctx.fillStyle = '#e8faff';
+    for (let i = 0; i < 4; i++) {
+      const f = (t * 0.7 + i * 0.25) % 1;
+      ctx.globalAlpha = 0.9 * (1 - f);
+      ctx.fillRect(Math.round(x + ((i * 37) % 100) / 100 * m.w), Math.round(y - 6 + f * (m.h + 8)), 1.5, 1.5);
+    }
+  } else if (k === 'time') {          // a small hourglass over the head, sand falling
+    const hx = mx, hy = y - 9;
+    ctx.fillStyle = '#e8c87a'; ctx.strokeStyle = '#c89a3a'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(hx - 3, hy - 4); ctx.lineTo(hx + 3, hy - 4); ctx.lineTo(hx, hy); ctx.closePath(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(hx - 3, hy + 4); ctx.lineTo(hx + 3, hy + 4); ctx.lineTo(hx, hy); ctx.closePath(); ctx.fill();
+    ctx.fillRect(Math.round(hx), Math.round(hy - 1), 1, 3);
+  } else if (k === 'net') {           // rope strands dragging at the legs
+    ctx.strokeStyle = '#c9b98e'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x - 1, y + m.h * 0.6); ctx.lineTo(x + m.w + 1, y + m.h); ctx.moveTo(x + m.w + 1, y + m.h * 0.6); ctx.lineTo(x - 1, y + m.h); ctx.stroke();
+  } else if (k === 'poison') {        // green bubbles rising
+    ctx.strokeStyle = '#b8f070';
+    for (let i = 0; i < 3; i++) {
+      const f = (t * 0.8 + i / 3) % 1;
+      ctx.globalAlpha = 0.9 * (1 - f);
+      ctx.beginPath(); ctx.arc(x + ((i * 43) % 100) / 100 * m.w, y + m.h - f * (m.h + 6), 1.6, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
 // Frost nova: the monster sits inside a block of ice until it thaws.
 function drawIceBlock(x, y, w, h) {
   ctx.save();
@@ -3733,6 +3899,15 @@ function drawIceBlock(x, y, w, h) {
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(x, y, 2, Math.max(3, h * 0.35));
   ctx.fillRect(x + w - 4, y + h * 0.55, 2, 3);
+  // Jagged icicles hanging off the bottom and crystals on top.
+  ctx.fillStyle = '#d8f4ff';
+  for (let i = 0; i < 4; i++) {
+    const ix = x + (i + 0.5) * w / 4;
+    ctx.beginPath(); ctx.moveTo(ix - 2, y + h + 2); ctx.lineTo(ix, y + h + 2 + 3 + (i % 2) * 2); ctx.lineTo(ix + 2, y + h + 2); ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.moveTo(x + w * 0.3, y - 2); ctx.lineTo(x + w * 0.38, y - 7); ctx.lineTo(x + w * 0.46, y - 2); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x + w * 0.58, y - 2); ctx.lineTo(x + w * 0.68, y - 6); ctx.lineTo(x + w * 0.76, y - 2); ctx.closePath(); ctx.fill();
   ctx.restore();
 }
 
@@ -4757,7 +4932,7 @@ function hudTouchZones() {
   // The touch pads and action buttons (phones), and the music / leave buttons.
   const tc = document.getElementById('touchControls');
   if (tc && tc.classList.contains('visible')) {
-    for (const el of tc.querySelectorAll('.dpad, .action-btns')) add(el);
+    for (const el of tc.querySelectorAll('.dpad, .ability-btns, .action-row')) add(el);
   }
   const gc = document.getElementById('gameControls');
   if (gc && gc.classList.contains('visible')) add(gc);
@@ -4773,7 +4948,7 @@ function drawControlHints() {
   const me = myNum === 1 ? currState?.players?.p1 : currState?.players?.p2;
   const abil = (me && me.abil) || [];
   const abKeys = abil.map((a, i) => a ? AB_KEYS[i] : '').filter(Boolean).join('/');
-  const t = 'ARROWS MOVE · SPACE ATK · ENTER SWAP · SHIFT SPECIAL · P PARRY · '
+  const t = 'ARROWS MOVE · SPACE ATK · ENTER/Z SWAP · SHIFT SPECIAL · P PARRY · '
           + (me && me.superMax > 0 ? 'R SUPER · ' : '') + (abKeys ? abKeys + ' ABILITY · ' : '') + '1-4 ITEMS';
   const w = ctx.measureText(t).width;
   ctx.globalAlpha = 0.8;

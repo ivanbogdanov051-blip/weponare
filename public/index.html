@@ -68,8 +68,8 @@
       <div class="subtitle">EVERYTHING YOU NEED TO KNOW</div>
       <div class="howto-list">
         <div class="howto-sec"><h3>CONTROLS</h3>
-          <p><b>Keyboard:</b> ARROWS or WASD move &middot; SPACE attack &middot; SHIFT special &middot; R super &middot; P (or CTRL) parry &middot; ENTER next weapon &middot; Q / E abilities (F, G, V, B for extra slots) &middot; 1-4 use an item &middot; M sound.</p>
-          <p><b>Touch:</b> the pad on the left moves you; the buttons on the right attack, use your special, super, parry, swap weapon and fire your abilities. Tap an item in the bar to use it.</p>
+          <p><b>Keyboard:</b> ARROWS or WASD move &middot; SPACE attack &middot; SHIFT special &middot; R super &middot; P (or CTRL) parry &middot; ENTER (or Z for the one before) next weapon &middot; Q / E abilities (F, G, V, B for extra slots) &middot; 1-4 use an item &middot; M sound.</p>
+          <p><b>Touch:</b> the pad on the left moves you; the buttons on the right attack, use your special, super, parry and fire your abilities; the small &lt; and &gt; buttons step back and forward through your weapons (or tap a weapon in the rack). Tap an item in the bar to use it.</p>
           <p>Click or tap a weapon in the rack at the top to switch straight to it. <b>Hold</b> attack, special, super or an ability and it fires again by itself whenever it is ready.</p></div>
         <div class="howto-sec"><h3>MODES</h3>
           <p><b>PvP</b> &ndash; two players fight; each round you have 3 lives, and the first to win 3 rounds takes the match.</p>
@@ -115,6 +115,7 @@
         <div class="howto-sec"><h3>MONSTERS &amp; BOSSES</h3>
           <p>Each kind fights its own way: runners are fast, brutes hit hard, spitters and infernals shoot from range, wraiths blink next to you, and armoured ones (grey mark on their health bar) shrug off part of every hit.</p>
           <p><b>Bombers</b> light a fuse next to you and blow up (get out of the ring, or parry) &ndash; kill one first and it blows up its own pack. <b>Shamans</b> hang back healing and warding the monsters around them (green glow: they take less damage), so hunt them first. <b>Splitters</b> burst into two quick slimelets. <b>Chargers</b> lower their heads and show a red line, then ram along it &ndash; step aside and they hit the wall dazed, or parry them. <b>Necromancers</b> raise skeletons from green marks, and every skeleton crumbles when the necromancer dies.</p>
+          <p><b>Reading what hit a monster:</b> <b>ice</b> = a block of ice with icicles &middot; <b>stun</b> = gold stars circling its head &middot; <b>shock</b> = blue lightning arcs &middot; <b>quake</b> = rubble and dust at its feet &middot; <b>time stop</b> = a gold bubble with a stopped clock &middot; <b>roots</b> = green vines &middot; <b>chained</b> = iron chains and a padlock &middot; <b>smite</b> = a halo and a pillar of light &middot; <b>rift</b> = a swirling purple vortex &middot; <b>silenced</b> = a struck-through spark. Slowed monsters are tinted too: <b>cyan</b> with snowflakes (frost), <b>amber</b> with an hourglass (time), <b>rope-brown</b> (snared) or <b>green</b> with bubbles (toxic cloud).</p>
           <p>When you die you come back at the safest spot in the arena, away from monsters, traps and shots.</p>
           <p><b>The Giant</b> swings his tree and slams the ground to send out a shockwave &ndash; parry either one to stun him. <b>The Portal Mage</b> throws fireballs through red portals, teleports (follow him through the portal if you are quick), lays traps, summons monsters through green portals and, as a last resort, hides behind two Giants &ndash; kill them to finish him.</p></div>
         <div class="howto-sec"><h3>SAVING</h3>
@@ -246,18 +247,18 @@
     </div>
     <div class="action-btns">
       <div class="ability-btns">
-        <button id="btn-ab1" class="action-btn ability-btn hidden-btn"></button>
-        <button id="btn-ab2" class="action-btn ability-btn hidden-btn"></button>
-        <button id="btn-ab3" class="action-btn ability-btn hidden-btn"></button>
-        <button id="btn-ab4" class="action-btn ability-btn hidden-btn"></button>
-        <button id="btn-ab5" class="action-btn ability-btn hidden-btn"></button>
-        <button id="btn-ab6" class="action-btn ability-btn hidden-btn"></button>
+        <button id="btn-ab1" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>Q</i></button><button id="btn-ab2" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>E</i></button><button id="btn-ab3" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>F</i></button><button id="btn-ab4" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>G</i></button><button id="btn-ab5" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>V</i></button><button id="btn-ab6" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>B</i></button>
       </div>
-      <button id="btn-super" class="action-btn super-btn hidden-btn">SUPER</button>
-      <button id="btn-swap" class="action-btn">SWAP</button>
-      <button id="btn-parry" class="action-btn parry-btn">PARRY</button>
-      <button id="btn-special" class="action-btn special-btn">SPECIAL</button>
-      <button id="btn-attack" class="action-btn big-btn">ATK</button>
+      <div class="action-row">
+        <button id="btn-prev" class="action-btn arrow-btn" aria-label="Previous weapon">&lt;</button>
+        <button id="btn-next" class="action-btn arrow-btn" aria-label="Next weapon">&gt;</button>
+        <button id="btn-parry" class="action-btn parry-btn">PARRY</button>
+        <button id="btn-special" class="action-btn special-btn">SPECIAL</button>
+      </div>
+      <div class="action-row">
+        <button id="btn-super" class="action-btn super-btn hidden-btn">SUPER</button>
+        <button id="btn-attack" class="action-btn big-btn">ATK</button>
+      </div>
     </div>
   </div>
 

@@ -1048,8 +1048,8 @@ function makeRoom() { return {
   p1Joined: false, p2Joined: false,
   players: { p1: null, p2: null },
   inputs: {
-    p1: { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false, ab1: false, ab2: false },
-    p2: { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false, ab1: false, ab2: false },
+    p1: { up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false, ab1: false, ab2: false },
+    p2: { up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false, ab1: false, ab2: false },
   },
   monsters: [],
   allies: [],
@@ -1071,12 +1071,13 @@ function makeRoom() { return {
   lastLeaderboard: [],
   attackJustPressed: { p1: false, p2: false },
   swapJustPressed: { p1: false, p2: false },
+  swapPrevJustPressed: { p1: false, p2: false },
   specialJustPressed: { p1: false, p2: false },
   parryJustPressed: { p1: false, p2: false },
   superJustPressed: { p1: false, p2: false },
   prevInputs: {
-    p1: { attack: false, swap: false, special: false, parry: false, super: false },
-    p2: { attack: false, swap: false, special: false, parry: false, super: false },
+    p1: { attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false },
+    p2: { attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false },
   },
 }; }
 
@@ -1248,18 +1249,18 @@ function fireTrap(tr, trigger) {
   }
   for (const t of inRange) {
     if (tr.effect === 'slow') {
-      chillTarget(t, tr.dur);
+      chillTarget(t, tr.dur, 'net');
     } else if (tr.effect === 'freeze') {
-      if (t.num) chillTarget(t, tr.dur * 1.4); else stagger(t, tr.dur);
+      if (t.num) chillTarget(t, tr.dur * 1.4); else stagger(t, tr.dur, 'ice');
     } else if (tr.effect === 'root') {
-      if (t.num) applyEffect(t, 'root', tr.dur); else stagger(t, tr.dur);
+      if (t.num) applyEffect(t, 'root', tr.dur); else stagger(t, tr.dur, 'root');
     } else if (tr.effect === 'confuse') {
       if (t.num) applyEffect(t, 'confuse', tr.dur); else chillTarget(t, tr.dur);
     } else if (tr.effect === 'silence') {
-      if (t.num) applyEffect(t, 'silence', tr.dur); else stagger(t, 900);
+      if (t.num) applyEffect(t, 'silence', tr.dur); else stagger(t, 900, 'silence');
     } else if (tr.effect === 'quake') {
       applyDamage(t, tr.damage, 'trap');
-      stagger(t, tr.dur);
+      stagger(t, tr.dur, 'quake');
     } else if (tr.effect === 'keg' || tr.effect === 'launch') {
       applyDamage(t, tr.damage, 'trap');
       let dx = cx(t) - tx, dy = cy(t) - ty, d = Math.hypot(dx, dy);
@@ -1463,7 +1464,7 @@ function monsterMelee(m, t) {
   } else {
     applyDamage(t, m.atkDamage, 'monster');
     if (t.num && hasEffect(t, 'thorns')) { m.invincible = 0; applyDamage(m, Math.max(1, Math.round(m.atkDamage * THORNS_SHARE * 2)), playerKeyOf(t)); }
-    if (t.num && hasEffect(t, 'frostarmor')) stagger(m, 1000);
+    if (t.num && hasEffect(t, 'frostarmor')) stagger(m, 1000, 'ice');
     if (t.passive === 'fireglove') {                                                  // EMBER SKIN
       m.burnTimer = Math.max(m.burnTimer || 0, EMBER_BURN);
       m.invincible = 0;
@@ -2067,10 +2068,11 @@ function tickRoom(dt) {
     const prev = room.prevInputs[key];
     room.attackJustPressed[key]  = inp.attack;
     room.swapJustPressed[key]    = inp.swap    && !prev.swap;
+    room.swapPrevJustPressed[key] = !!inp.swapPrev && !prev.swapPrev;
     room.specialJustPressed[key] = inp.special;
     room.parryJustPressed[key]   = inp.parry   && !prev.parry;
     room.superJustPressed[key]   = inp.super;
-    room.prevInputs[key] = { attack: inp.attack, swap: inp.swap, special: inp.special, parry: inp.parry, super: inp.super };
+    room.prevInputs[key] = { attack: inp.attack, swap: inp.swap, swapPrev: !!inp.swapPrev, special: inp.special, parry: inp.parry, super: inp.super };
   }
 
   // ── Move players ──
@@ -2134,8 +2136,11 @@ function tickRoom(dt) {
     }
     if (room.gameMode === 'sandbox') sandboxCheats(p);
 
-    if (room.swapJustPressed[key] && p.unlockedWeapons.length > 0) {
-      p.weaponIdx = (p.weaponIdx + 1) % p.unlockedWeapons.length;
+    // > goes to the next weapon, < to the one before (they wrap round).
+    const nWeapons = p.unlockedWeapons.length;
+    const step = (room.swapJustPressed[key] ? 1 : 0) - (room.swapPrevJustPressed[key] ? 1 : 0);
+    if (step && nWeapons > 0) {
+      p.weaponIdx = ((p.weaponIdx + step) % nWeapons + nWeapons) % nWeapons;
       refreshWeapon(p);
     }
     if (room.attackJustPressed[key] && p.atkCooldown <= 0) {
@@ -2636,10 +2641,14 @@ function ignite(t, ms) {
   else t.burnTimer = Math.max(t.burnTimer || 0, ms);
 }
 
-function chillTarget(t, ms) {
+// kind: chill (frost), time (time magic), net (snare), poison (toxic cloud).
+function chillTarget(t, ms, kind = 'chill') {
   if (t.dead) return;
   if (t.num) applyEffect(t, 'slow', ms);
-  else t.slowTimer = Math.max(t.slowTimer || 0, ms);
+  else {
+    if (ms >= (t.slowTimer || 0)) t.slowKind = kind;
+    t.slowTimer = Math.max(t.slowTimer || 0, ms);
+  }
 }
 
 // A hit that ignores projectiles but still respects a parry: the parrying
@@ -2664,8 +2673,8 @@ function distToSegment(px, py, ax, ay, bx, by) {
 
 // What a projectile does beyond its damage: frost slows, storm arcs onward.
 function onHitExtras(proj, t) {
-  if (proj.chill) chillTarget(t, proj.chill);
-  if (proj.stun) stagger(t, proj.stun);
+  if (proj.chill) chillTarget(t, proj.chill, proj.weaponId === 'chronostaff' ? 'time' : 'chill');
+  if (proj.stun) stagger(t, proj.stun, 'shock');
   if (proj.frostbite) addFrostbite(t);
   // Wind wand: the gust shoves the target along the shot (never the Giant).
   if (proj.gust && !t.boss && !t.dead) {
@@ -2773,7 +2782,7 @@ function doAttack(p, pKey) {
         applyDamage(t, Math.round(w.damage * dmgMult), pKey);
         if (w.arcHit) arcLightning(t, Math.round(w.damage * dmgMult * 0.5), w.arcHit, pKey);
         if (w.frostbite) addFrostbite(t);
-        if (w.stunHit) stagger(t, w.stunHit);              // MACE
+        if (w.stunHit) stagger(t, w.stunHit, 'stun');              // MACE
         if (w.burn) ignite(t, w.burn);
         if (w.chill) chillTarget(t, w.chill);
       }
@@ -3064,7 +3073,7 @@ function addFrostbite(t) {
   t.frostStacks = (t.frostStacks || 0) + 1;
   if (t.frostStacks < FROSTBITE_STACKS) { chillTarget(t, 600); return; }
   t.frostStacks = 0;
-  if (!t.num && !t.boss) { t.freeze = Math.max(t.freeze || 0, FROSTBITE_FREEZE); t.swing = 0; }
+  if (!t.num && !t.boss) stagger(t, FROSTBITE_FREEZE, 'ice');
   else chillTarget(t, 2000);
   room.particles.push({ type: 'crit', x: cx(t), y: t.y - 6, text: 'FROZEN', timer: 600, max: 600 });
 }
@@ -4206,10 +4215,16 @@ function abBurst(p, ab, text, r = 34) {
   room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: r, timer: 650, max: 650, color: ab.color, text });
 }
 // Stun a monster for a moment (bosses and players are only slowed).
-function stagger(t, ms) {
+// kind: ice, stun, shock, quake, timestop, root, chain, holy, void, silence.
+// Each is drawn differently; bosses and players are only slowed.
+const STAGGER_SLOW = { timestop: 'time', root: 'net', chain: 'net' };
+function stagger(t, ms, kind = 'stun') {
   if (t.dead) return;
-  if (t.num || t.boss) chillTarget(t, ms);
-  else { t.freeze = Math.max(t.freeze || 0, ms); t.swing = 0; }
+  if (t.num || t.boss) chillTarget(t, ms, STAGGER_SLOW[kind] || 'chill');
+  else {
+    if (ms >= (t.freeze || 0)) t.freezeKind = kind;
+    t.freeze = Math.max(t.freeze || 0, ms); t.swing = 0;
+  }
 }
 
 // ── The 10 update ──
@@ -4277,7 +4292,7 @@ function useItemEffect(p, key, def) {
   if (def.effect === 'hourglass') {
     for (const t of enemyTargets(key)) {
       if (t.num) chillTarget(t, 2500);
-      else t.slowTimer = Math.max(t.slowTimer || 0, def.dur);
+      else chillTarget(t, def.dur, 'time');
     }
     room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 400, timer: 800, max: 800, color: def.color });
     return true;
@@ -4336,12 +4351,12 @@ const ABILITY_FNS = {
     room.particles.push({ type: 'streak', x: cx(p), y: cy(p), x2: cx(t), y2: cy(t), timer: 400, max: 400, color: ab.color });
     strikeTarget(t, abDmg(t, 30, 0.03, m), pKey);
     if (!t.boss) startPull(t, pKey);
-    stagger(t, 1400);
+    stagger(t, 1400, 'chain');
   },
   warcry(p, pKey, ab, m) {
     applyEffect(p, 'strength', 5000);
     for (const t of enemyTargets(pKey)) {
-      if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) <= 160 + t.w / 2) stagger(t, 1000);
+      if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) <= 160 + t.w / 2) stagger(t, 1000, 'stun');
     }
     room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 160, timer: 500, max: 500, color: ab.color });
     abBurst(p, ab, 'WAR CRY');
@@ -4370,7 +4385,7 @@ const ABILITY_FNS = {
     room.particles.push({ type: 'shockwave', x: cx(best), y: cy(best), maxR: 40, timer: 450, max: 450, color: ab.color });
     if (!best.num) best.invincible = 0;
     applyDamage(best, abDmg(best, 110, 0.12, m), pKey);
-    stagger(best, 600);
+    stagger(best, 600, 'holy');
   },
   frostarmor(p, pKey, ab) {
     applyEffect(p, 'frostarmor', 6000);
@@ -4395,7 +4410,7 @@ const ABILITY_FNS = {
     for (const t of enemyTargets(pKey)) {
       if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) > QUAKE_R + t.w / 2) continue;
       applyDamage(t, abDmg(t, 55, 0.04, m), pKey);
-      stagger(t, 1000);
+      stagger(t, 1000, 'quake');
     }
     room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: QUAKE_R, timer: 480, max: 480, color: ab.color });
     room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: QUAKE_R * 0.6, timer: 360, max: 360, color: '#7a5a30' });
@@ -4540,7 +4555,7 @@ const ABILITY_FNS = {
     for (const t of enemyTargets(pKey)) {
       if (distToSegment(cx(t), cy(t), x0, y0, end.x, end.y) > 14 + t.w / 2) continue;
       applyDamage(t, abDmg(t, 65, 0.04, m), pKey);
-      stagger(t, 1200);
+      stagger(t, 1200, 'ice');
     }
     room.particles.push({ type: 'streak', x: x0, y: y0, x2: end.x, y2: end.y, timer: 420, max: 420, color: ab.color });
     for (let i = 1; i <= 5; i++) {
@@ -4576,7 +4591,7 @@ function updateCloud(f, dt) {
   for (const t of enemyTargets(f.owner)) {
     if (Math.hypot(cx(t) - f.x, cy(t) - f.y) > f.r + t.w / 2) continue;
     applyDamage(t, abDmg(t, 14, 0.012, f.mult || 1), f.owner);
-    chillTarget(t, 700);
+    chillTarget(t, 700, 'poison');
   }
   return true;
 }
@@ -4586,7 +4601,7 @@ function updateCloud(f, dt) {
 function abilityWarp(p, pKey) {
   const foes = enemyTargets(pKey);
   if (!foes.length) return false;
-  for (const t of foes) chillTarget(t, WARP_MS);
+  for (const t of foes) chillTarget(t, WARP_MS, 'time');
   room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 420, timer: 700, max: 700, color: ABILITY_BY_ID.warp.color });
   room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 36, timer: 700, max: 700, color: ABILITY_BY_ID.warp.color, text: 'TIME WARP' });
   return true;
@@ -4705,8 +4720,7 @@ function abilityFrost(p, pKey) {
     const bonus = t.num ? 0 : Math.round((t.maxHp || 0) * (t.boss ? 0.01 : 0.03));
     applyDamage(t, Math.round((FROST_DMG + bonus) * dmgMult), pKey);
     if (t.dead) continue;
-    if (t.num || t.boss) chillTarget(t, FROST_FREEZE_MS);
-    else { t.freeze = Math.max(t.freeze || 0, FROST_FREEZE_MS); t.swing = 0; }
+    stagger(t, FROST_FREEZE_MS, 'ice');
   }
   room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: FROST_R, timer: 420, max: 420, color: ABILITY_BY_ID.frost.color });
   room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 30, timer: 600, max: 600, color: '#dff6ff', text: 'FROST NOVA' });
@@ -4787,7 +4801,7 @@ function doSpecial(p, pKey) {
     for (const t of enemyTargets(pKey)) {
       if (Math.hypot(cx(t) - px, cy(t) - py) > sp.range + t.w / 2) continue;
       applyDamage(t, spDmg, pKey);
-      stagger(t, TIMESTOP_MS);
+      stagger(t, TIMESTOP_MS, 'timestop');
     }
     room.projectiles = room.projectiles.filter(pr => !(pr.owner === 'monster' && Math.hypot(pr.x - px, pr.y - py) < sp.range));
     room.particles.push({ type: 'shockwave', x: px, y: py, maxR: sp.range, timer: 700, max: 700, color: wc });
@@ -4808,7 +4822,7 @@ function doSpecial(p, pKey) {
     for (const o of enemyTargets(pKey)) {
       if (Math.hypot(cx(o) - cx(p), cy(o) - cy(p)) > RIFT_R + o.w / 2) continue;
       strikeTarget(o, spDmg, pKey);
-      stagger(o, 500);
+      stagger(o, 500, 'void');
     }
     room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 380, max: 380, color: '#ffffff' });
     room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: RIFT_R, timer: 380, max: 380, color: wc });
@@ -5033,7 +5047,8 @@ function buildStateMsg(playerNum) {
     playerNames: room.playerNames,
     players: { p1: playerView(room.players.p1), p2: playerView(room.players.p2) },
     monsters:    room.monsters.map(m => ({ id: m.id, type: m.type, x: r1(m.x), y: r1(m.y), w: m.w, h: m.h,
-                  hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash, slowed: (m.slowTimer || 0) > 0, frozen: (m.freeze || 0) > 0, burning: (m.burnTimer || 0) > 0, armor: m.armor || 0,
+                  hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash, slowed: (m.slowTimer || 0) > 0, frozen: (m.freeze || 0) > 0,
+                  ...(m.freeze > 0 ? { fk: m.freezeKind || 'ice' } : {}), ...(m.slowTimer > 0 ? { sk: m.slowKind || 'chill' } : {}), burning: (m.burnTimer || 0) > 0, armor: m.armor || 0,
                   face: m.face, swing: m.swing > 0 ? Math.round(m.swing) : 0,
                   ...(m.fuse > 0 ? { fuse: Math.round(m.fuse) } : {}), ...(m.ward > 0 ? { ward: true } : {}),
                   ...(m.charge ? { charge: { a: Math.round(m.charge.a * 100) / 100, wind: m.charge.wind > 0 } } : {}),
@@ -5409,8 +5424,8 @@ function clearSlot(key) {
   room.playerAbilities[key] = null;
   room.unlockQueues[key] = [];
   room.players[key] = null;
-  room.inputs[key] = { up: false, down: false, left: false, right: false, attack: false, swap: false, special: false, parry: false, super: false, ab1: false, ab2: false };
-  room.prevInputs[key] = { attack: false, swap: false, special: false, parry: false, super: false };
+  room.inputs[key] = { up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false, ab1: false, ab2: false };
+  room.prevInputs[key] = { attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false };
 }
 
 // Drop slots whose socket died without a close event, and rooms left empty.
@@ -5529,7 +5544,7 @@ wss.on('connection', (ws) => {
         const k = msg.keys;
         room.inputs[myKey] = {
           up: !!k.up, down: !!k.down, left: !!k.left, right: !!k.right,
-          attack: !!k.attack, swap: !!k.swap, special: !!k.special, parry: !!k.parry, super: !!k.super,
+          attack: !!k.attack, swap: !!k.swap, swapPrev: !!k.swapPrev, special: !!k.special, parry: !!k.parry, super: !!k.super,
           ab1: !!k.ab1, ab2: !!k.ab2, ab3: !!k.ab3, ab4: !!k.ab4, ab5: !!k.ab5, ab6: !!k.ab6,
           // Mouse position in world space (desktop only): where DASH goes.
           aimX: Number.isFinite(k.aimX) ? k.aimX : null, aimY: Number.isFinite(k.aimY) ? k.aimY : null,
