@@ -74,15 +74,18 @@ function isRanged(id) { return WEAPON_META[id] ? WEAPON_META[id].type === 'range
 
 // ─── Skins ────────────────────────────────────────────────────────────────────
 
-const SKIN_COLORS = ['#4488ff','#ff4444','#44cc44','#aa44ff','#ff8833','#44ddee','#ff44aa','#ffcc00'];
-const SKIN_HATS   = ['NONE','CAP','CROWN','HORNS','SPIKY'];
+const SKIN_COLORS = ['#4488ff','#ff4444','#44cc44','#aa44ff','#ff8833','#44ddee','#ff44aa','#ffcc00',
+                     '#a6e22e','#14b8a6','#2a4ab0','#a02840','#ff9ec8','#7ac8ff','#8fffc0','#8a5a34',
+                     '#f0f0f8','#34343e','#aab4c4','#d6249f','#808a1e','#ff6f61','#d01030','#5b3df5'];
+const SKIN_HATS   = ['NONE','CAP','CROWN','HORNS','SPIKY','TOP HAT','PARTY','HALO','CHEF','COWBOY','BEANIE','ANTLERS','BUNNY','FLOWERS','HEADSET'];
+const SKIN_ACCS   = ['NONE','GLASSES','SHADES','MASK','SCARF','BOWTIE','MEDAL','CAPE','WINGS','BACKPACK'];
 
 function lsGet(k)      { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v)   { try { localStorage.setItem(k, v); } catch {} }
 
 function loadLocalSkin() {
-  try { return { colorIdx: 0, hatIdx: 0, outfit: '', ...(JSON.parse(lsGet('weponare_skin')) || {}) }; }
-  catch { return { colorIdx: 0, hatIdx: 0, outfit: '' }; }
+  try { return { colorIdx: 0, hatIdx: 0, accIdx: 0, outfit: '', ...(JSON.parse(lsGet('weponare_skin')) || {}) }; }
+  catch { return { colorIdx: 0, hatIdx: 0, accIdx: 0, outfit: '' }; }
 }
 function saveLocalSkin(s)  { lsSet('weponare_skin', JSON.stringify(s)); }
 function loadLocalXp(pw)   { return pw ? (parseInt(lsGet('weponare_xp_' + pw)) || 0) : 0; }
@@ -1965,6 +1968,13 @@ function selectSkinHat(idx) {
   buildSkinGrids();
   renderSkinPreview();
 }
+function selectSkinAcc(idx) {
+  pendingSkin.accIdx = idx;
+  skinModified = true;
+  saveLocalSkin(pendingSkin);
+  buildSkinGrids();
+  renderSkinPreview();
+}
 
 // Owned (or the default look): wear it. Otherwise: buy it.
 function selectOutfit(id) {
@@ -2021,6 +2031,10 @@ function buildSkinGrids() {
       `<div class="skin-hat${i === pendingSkin.hatIdx ? ' selected' : ''}" onclick="selectSkinHat(${i})">${h}</div>`
     ).join('');
   }
+  const ag = document.getElementById('accGrid');
+  if (ag) ag.innerHTML = SKIN_ACCS.map((a, i) =>
+    `<div class="skin-hat${i === (pendingSkin.accIdx | 0) ? ' selected' : ''}" onclick="selectSkinAcc(${i})">${a}</div>`
+  ).join('');
   const coinsEl = document.getElementById('skinCoins');
   if (coinsEl) coinsEl.textContent = skinProfile.loaded ? `◆ ${skinProfile.coins.toLocaleString()}` : '';
 
@@ -2043,7 +2057,7 @@ function buildSkinGrids() {
     const g = cv.getContext('2d');
     g.imageSmoothingEnabled = false;
     g.clearRect(0, 0, cv.width, cv.height);
-    const spr = playerSprite(color, pendingSkin.hatIdx, 1, false, cv.dataset.outfit);
+    const spr = playerSprite(color, pendingSkin.hatIdx, 1, false, cv.dataset.outfit, pendingSkin.accIdx);
     if (spr) g.drawImage(spr, Math.floor((cv.width - spr.width) / 2), cv.height - spr.height);
   }
 }
@@ -2056,7 +2070,7 @@ function renderSkinPreview() {
   ux.clearRect(0, 0, uc.width, uc.height);
   ux.fillStyle = '#1a1a2e'; ux.fillRect(0, 0, uc.width, uc.height);
   const color = SKIN_COLORS[pendingSkin.colorIdx] || '#4488ff';
-  const cv = playerSprite(color, pendingSkin.hatIdx, 1, false, pendingSkin.outfit || '');
+  const cv = playerSprite(color, pendingSkin.hatIdx, 1, false, pendingSkin.outfit || '', pendingSkin.accIdx);
   if (!cv) return;
   // Integer zoom keeps the preview as crisp as the in-game sprite.
   const z = Math.max(1, Math.floor(Math.min(uc.width / cv.width, uc.height / cv.height)));
@@ -2357,7 +2371,7 @@ const PERK_ROWS = {
   _hero: { name: 'CHARACTER', color: '#ffcc55', icon(g, w, h) {
     // Your own character, in your chosen skin.
     const skin = pendingSkin || {};
-    const spr = playerSprite(SKIN_COLORS[skin.colorIdx] || '#4488ff', skin.hatIdx || 0, 1, false, skin.outfit || '');
+    const spr = playerSprite(SKIN_COLORS[skin.colorIdx] || '#4488ff', skin.hatIdx || 0, 1, false, skin.outfit || '', skin.accIdx || 0);
     if (spr) g.drawImage(spr, Math.floor((w - spr.width) / 2), Math.floor((h - spr.height) / 2));
   } },
 };
@@ -3646,7 +3660,7 @@ function drawPlayerBody(p, baseColor, label, key) {
   ctx.fillStyle = 'rgba(0,0,0,0.32)';
   ctx.fillRect(x + 1, y + p.h, p.w - 2, 2);
 
-  const cv = playerSprite(skinCol, p.skin?.hatIdx || 0, p.facing, p.hitFlash > 0, p.skin?.outfit || '');
+  const cv = playerSprite(skinCol, p.skin?.hatIdx || 0, p.facing, p.hitFlash > 0, p.skin?.outfit || '', p.skin?.accIdx || 0);
   if (cv) ctx.drawImage(cv, x, y - PLAYER_PAD);
 
   drawNametag(x + p.w / 2, y - 13, label, skinCol);

@@ -340,24 +340,178 @@ const OUTFITS = {
       setPx(b, 7, T + 13, '#e02a4a');
     },
   },
+
+  samurai: {
+    hat: false,
+    key: () => ({
+      H: '#1c1c24', h: '#0f0f16',
+      3: '#c03038', 2: '#9a2028', 1: '#6a1218',
+      G: '#2a2a34', g: '#1c1c24', B: MAT5.gold[2], b: MAT5.gold[4],
+      P: '#2a2a34', p: '#1c1c24', T: '#3a2a22', t: '#1c1410',
+    }),
+    paint(b, T) {
+      // Lacquered kabuto with a gold crest and neck guard.
+      rect(b, 2, T, 12, 3, '#2a2a34');
+      rect(b, 3, T, 9, 1, '#4a4a58');
+      rect(b, 1, T + 3, 3, 4, '#9a2028');
+      poly(b, [[7, T], [9, T], [11, T - 4], [10, T - 5], [8, T - 2]], MAT5.gold[3]);
+      poly(b, [[5, T], [7, T], [5, T - 4], [4, T - 5], [4, T - 2]], MAT5.gold[3]);
+      setPx(b, 11, T - 4, MAT5.gold[4]); setPx(b, 4, T - 4, MAT5.gold[4]);
+      // Half-mask over the jaw.
+      rect(b, 7, T + 7, 6, 3, '#2a2a34');
+      setPx(b, 9, T + 8, '#c03038'); setPx(b, 10, T + 8, '#c03038');
+      // Armour plates and a white obi.
+      for (const y of [12, 14]) rect(b, 4, T + y, 8, 1, '#c8c8d4');
+      rect(b, 4, T + 16, 8, 1, '#e8e8f0');
+    },
+  },
+
+  astronaut: {
+    hat: false,
+    head: [
+      '     SSSSS      ',
+      '   SSSSSSSSS    ',
+      '  sSSSSSSSSSs   ',
+      '  sSSVVVVVVVSs  ',
+      '  sSVVCCVVCVVs  ',
+      '  sSVVCVVVVVVs  ',
+      '  sSVVVVVVVVVs  ',
+      '  sSSVVVVVVSSs  ',
+      '  ssSSSSSSSSSs  ',
+      '   ssssssssss   ',
+      '     kssssk     ',
+    ],
+    key: () => ({
+      S: '#eef0f6', s: '#b4bccc', V: '#1a2a4a', C: '#7ad0ff',
+      3: '#f2f4fa', 2: '#d4d9e6', 1: '#a4acbe',
+      G: '#d4d9e6', g: '#a4acbe', B: '#e8603a', b: '#ffcc33',
+      P: '#d4d9e6', p: '#a4acbe', T: '#8a92a6', t: '#4a5060',
+    }),
+    paint(b, T) {
+      // Oxygen tank behind, a flag patch and a chest control box.
+      rect(b, 0, T + 11, 3, 6, '#8a92a6'); rect(b, 0, T + 11, 1, 6, '#b4bccc');
+      rect(b, 5, T + 12, 2, 2, '#3a6ad0'); setPx(b, 5, T + 12, '#e8603a'); setPx(b, 6, T + 13, '#f4f4fa');
+      rect(b, 8, T + 12, 3, 2, '#5a6278'); setPx(b, 9, T + 12, '#6aff9a'); setPx(b, 10, T + 13, '#ff6a6a');
+      setPx(b, 3, T - 1, '#8a92a6'); setPx(b, 3, T - 2, '#ff4a4a');   // helmet beacon
+    },
+  },
+
+  vampire: {
+    hat: true,
+    key: () => ({
+      H: '#14141c', h: '#0a0a10', F: '#ece0e4', f: '#c8b8c0', W: '#ffd0d0', E: '#e01030',
+      3: '#7a1428', 2: '#5a0c1c', 1: '#3a0812',
+      G: '#14141c', g: '#0a0a10', B: '#0a0a10', b: '#c02030',
+      P: '#1c1c28', p: '#12121a', T: '#0a0a10', t: '#050508',
+    }),
+    paint(b, T) {
+      // Fangs, a tall collar and a red-lined cape.
+      setPx(b, 11, T + 8, '#ffffff'); setPx(b, 9, T + 8, '#ffffff');
+      poly(b, [[3, T + 11], [5, T + 8], [6, T + 11]], '#14141c');
+      poly(b, [[13, T + 11], [11, T + 8], [10, T + 11]], '#14141c');
+      rect(b, 1, T + 11, 2, 10, '#14141c'); rect(b, 0, T + 12, 1, 8, '#7a1428');
+      setPx(b, 2, T + 21, '#7a1428'); setPx(b, 7, T + 11, '#c02030');
+    },
+  },
+
+  pumpkin: {
+    hat: false,
+    head: [
+      '    OOOOOO      ',
+      '   OOoOOOOOO    ',
+      '  oOOoOOOOOOO   ',
+      '  oOOOOOOOOOOO  ',
+      '  oOOOOOYOOYO   ',
+      '  oOOOOYYOYYO   ',
+      '  ooOOOOOOOOOO  ',
+      '  ooOOYYYYYYOo  ',
+      '   ooOYOYOYOo   ',
+      '    ooOOOOoo    ',
+      '     kooook     ',
+    ],
+    key: () => ({
+      O: '#f08a1a', o: '#b8560e', Y: '#ffe066',
+      3: '#5a7a2a', 2: '#3e5a1c', 1: '#2a3e12',
+      G: '#3e5a1c', g: '#2a3e12', B: '#2a1a0a', b: '#f08a1a',
+      P: '#2a1a0a', p: '#1a1006', T: '#1a1006', t: '#0e0804',
+    }),
+    paint(b, T) {
+      // Curled stem and vines on the shoulders.
+      rect(b, 7, T - 2, 2, 2, '#4a8a2a'); setPx(b, 8, T - 3, '#4a8a2a'); setPx(b, 9, T - 3, '#6ab03a');
+      for (const [x, y] of [[4, 12], [5, 13], [10, 12], [9, 13]]) setPx(b, x, T + y, '#6ab03a');
+    },
+  },
+
+  frost: {
+    hat: false,
+    key: () => ({
+      H: '#cfefff', h: '#8fd0f0', F: '#e4f6ff', f: '#b4dcf0', W: '#ffffff', E: '#2a7ad0',
+      3: '#7ac8f0', 2: '#4a9ad0', 1: '#2a6a9a',
+      G: '#8fd0f0', g: '#4a9ad0', B: '#2a6a9a', b: '#e8f8ff',
+      P: '#4a9ad0', p: '#2a6a9a', T: '#cfefff', t: '#8fd0f0',
+    }),
+    paint(b, T) {
+      // An ice crown, frozen shoulders and glittering flecks.
+      for (const [x, h] of [[3, 3], [5, 5], [7, 4], [9, 6], [11, 3]]) {
+        rect(b, x, T + 1 - h, 2, h, '#bfeaff');
+        setPx(b, x, T + 1 - h, '#ffffff');
+      }
+      poly(b, [[2, T + 11], [4, T + 9], [5, T + 12]], '#e8f8ff');
+      poly(b, [[13, T + 11], [11, T + 9], [10, T + 12]], '#e8f8ff');
+      for (const [x, y] of [[6, 13], [9, 15], [5, 18], [10, 19], [7, 16]]) setPx(b, x, T + y, '#ffffff');
+    },
+  },
+
+  angel: {
+    hat: false,
+    key: () => ({
+      H: '#f2dc8a', h: '#d0b45a',
+      3: '#fdfdff', 2: '#e4e8f4', 1: '#b8c0d8',
+      G: '#e4e8f4', g: '#b8c0d8', B: MAT5.gold[2], b: MAT5.gold[4],
+      P: '#e4e8f4', p: '#b8c0d8', T: MAT5.gold[2], t: MAT5.gold[0],
+    }),
+    paint(b, T) {
+      // Halo, and big feathered wings behind.
+      rect(b, 5, T - 3, 6, 1, MAT5.gold[4]);
+      setPx(b, 4, T - 2, MAT5.gold[3]); setPx(b, 11, T - 2, MAT5.gold[3]);
+      rect(b, 5, T - 1, 6, 1, MAT5.gold[2]);
+      const w = (x, y, c) => { if (K.getA(b, x, y) === 0) setPx(b, x, y, c); };
+      for (let y = T + 4; y <= T + 17; y++) {
+        const reach = y < T + 11 ? (T + 11 - y) / 2.4 : (y - T - 10) / 2.2;
+        for (let x = 0; x <= 2; x++) if (x >= 2 - reach) w(x, y, (x + y) & 1 ? '#ffffff' : '#dfe6f8');
+      }
+      for (let y = T + 4; y <= T + 6; y++) w(0, y, '#ffffff');
+    },
+  },
 };
 
 // The skin shop list: id, display name, coin price. The server owns the real
 // prices and ownership; this copy is for drawing previews before it answers.
 const SKIN_SHOP = [
-  { id: 'ninja',    name: 'NINJA',    price: 120 },
-  { id: 'knight',   name: 'KNIGHT',   price: 150 },
-  { id: 'pirate',   name: 'PIRATE',   price: 180 },
-  { id: 'wizard',   name: 'WIZARD',   price: 200 },
-  { id: 'viking',   name: 'VIKING',   price: 240 },
-  { id: 'skeleton', name: 'SKELETON', price: 280 },
-  { id: 'robot',    name: 'ROBOT',    price: 350 },
-  { id: 'shadow',   name: 'SHADOW',   price: 500 },
-  { id: 'inferno',  name: 'INFERNO',  price: 650 },
-  { id: 'golden',   name: 'GOLDEN',   price: 900 },
+  { id: 'ninja',     name: 'NINJA',     price: 120 },
+  { id: 'knight',    name: 'KNIGHT',    price: 150 },
+  { id: 'pirate',    name: 'PIRATE',    price: 180 },
+  { id: 'wizard',    name: 'WIZARD',    price: 200 },
+  { id: 'viking',    name: 'VIKING',    price: 240 },
+  { id: 'skeleton',  name: 'SKELETON',  price: 280 },
+  { id: 'samurai',   name: 'SAMURAI',   price: 320 },
+  { id: 'robot',     name: 'ROBOT',     price: 350 },
+  { id: 'astronaut', name: 'ASTRONAUT', price: 400 },
+  { id: 'vampire',   name: 'VAMPIRE',   price: 450 },
+  { id: 'shadow',    name: 'SHADOW',    price: 500 },
+  { id: 'pumpkin',   name: 'PUMPKIN',   price: 550 },
+  { id: 'inferno',   name: 'INFERNO',   price: 650 },
+  { id: 'frost',     name: 'FROST',     price: 700 },
+  { id: 'golden',    name: 'GOLDEN',    price: 900 },
+  { id: 'angel',     name: 'ANGEL',     price: 1100 },
 ];
 
-function playerBuf(color, hatIdx, flash, outfitId) {
+// Free hats and accessories, picked by index (the server clamps to these counts).
+const HAT_NAMES = ['NONE', 'CAP', 'CROWN', 'HORNS', 'SPIKY', 'TOPHAT', 'PARTY', 'HALO', 'CHEF',
+                   'COWBOY', 'BEANIE', 'ANTLERS', 'BUNNY', 'FLOWERS', 'HEADSET'];
+const ACC_NAMES = ['NONE', 'GLASSES', 'SHADES', 'MASK', 'SCARF', 'BOWTIE', 'MEDAL', 'CAPE', 'WINGS', 'BACKPACK'];
+
+function playerBuf(color, hatIdx, flash, outfitId, accIdx) {
   const c = ramp(color);
   const fit = OUTFITS[outfitId] || null;
   const hair = ramp('#4a3322');
@@ -390,13 +544,14 @@ function playerBuf(color, hatIdx, flash, outfitId) {
   }
   if (fit && fit.paint) fit.paint(b, T, c);
   if (!fit || fit.hat) drawHatPixels(b, hatIdx, c);
+  drawAccessory(b, accIdx, !(fit && fit.head));
   outline(b, fit && fit.edge || EDGE);
   if (flash) tint(b, '#ffffff', 0.78);
   return b;
 }
 
 function drawHatPixels(b, hatIdx, c) {
-  const hat = ['NONE', 'CAP', 'CROWN', 'HORNS', 'SPIKY'][hatIdx | 0] || 'NONE';
+  const hat = HAT_NAMES[hatIdx | 0] || 'NONE';
   const T = PLAYER_PAD;   // the head's first row
   if (hat === 'CAP') {
     rect(b, 3, T - 1, 10, 3, '#27384d');
@@ -424,13 +579,115 @@ function drawHatPixels(b, hatIdx, c) {
       rect(b, x, T + 1 - hh, 2, hh, c[3]);
       setPx(b, x, T + 1 - hh, c[4]);
     }
+  } else if (hat === 'TOPHAT') {
+    rect(b, 4, T - 5, 7, 5, '#1c1c24');
+    rect(b, 4, T - 2, 7, 1, '#c02030');
+    rect(b, 2, T, 11, 1, '#1c1c24');
+    setPx(b, 5, T - 4, '#3a3a4c'); setPx(b, 5, T - 3, '#3a3a4c');
+  } else if (hat === 'PARTY') {
+    poly(b, [[4, T + 1], [11, T + 1], [8, T - 5], [7, T - 5]], '#ff5ac8');
+    for (const [x, y] of [[6, 0], [8, -2], [7, -4], [9, 0]]) setPx(b, x, T + y, '#ffe45a');
+    setPx(b, 7, T - 6, '#5affd0'); setPx(b, 8, T - 6, '#5affd0');
+    rect(b, 4, T + 1, 8, 1, '#c03a98');
+  } else if (hat === 'HALO') {
+    rect(b, 5, T - 3, 6, 1, MAT5.gold[4]);
+    setPx(b, 4, T - 2, MAT5.gold[3]); setPx(b, 11, T - 2, MAT5.gold[3]);
+    rect(b, 5, T - 1, 6, 1, MAT5.gold[2]);
+  } else if (hat === 'CHEF') {
+    rect(b, 4, T - 1, 8, 3, '#f4f4fa');
+    rect(b, 3, T - 4, 10, 3, '#f4f4fa');
+    rect(b, 5, T - 5, 6, 1, '#f4f4fa');
+    for (const [x, y] of [[4, -2], [7, -3], [10, -2], [6, 0]]) setPx(b, x, T + y, '#c4c4d4');
+  } else if (hat === 'COWBOY') {
+    rect(b, 1, T + 1, 14, 1, '#8a5a2a');
+    rect(b, 4, T - 3, 8, 4, '#a06a30');
+    rect(b, 4, T, 8, 1, '#4a2a12');
+    setPx(b, 7, T - 3, '#8a5a2a'); setPx(b, 8, T - 3, '#8a5a2a');
+    setPx(b, 1, T, '#8a5a2a'); setPx(b, 14, T, '#8a5a2a');
+    setPx(b, 5, T - 2, '#c08a50'); setPx(b, 6, T - 2, '#c08a50');
+  } else if (hat === 'BEANIE') {
+    rect(b, 3, T - 1, 10, 3, c[2]);
+    rect(b, 3, T + 1, 10, 1, c[1]);
+    for (const x of [5, 8, 11]) rect(b, x, T - 1, 1, 2, c[3]);
+    rect(b, 7, T - 3, 3, 2, '#f4f4fa'); setPx(b, 8, T - 3, '#c4c4d4');
+  } else if (hat === 'ANTLERS') {
+    const br = '#8a5a2a', tip = '#c89a5a';
+    rect(b, 4, T - 4, 1, 5, br); rect(b, 2, T - 3, 2, 1, br); rect(b, 3, T - 5, 1, 3, br);
+    rect(b, 11, T - 4, 1, 5, br); rect(b, 12, T - 3, 2, 1, br); rect(b, 12, T - 5, 1, 3, br);
+    for (const [x, y] of [[4, -4], [3, -5], [2, -3], [11, -4], [12, -5], [13, -3]]) setPx(b, x, T + y, tip);
+  } else if (hat === 'BUNNY') {
+    rect(b, 4, T - 6, 2, 7, '#f0e8f0'); rect(b, 9, T - 6, 2, 7, '#f0e8f0');
+    rect(b, 5, T - 5, 1, 5, '#ff9ab8'); rect(b, 9, T - 5, 1, 5, '#ff9ab8');
+  } else if (hat === 'FLOWERS') {
+    for (const [x, col] of [[4, '#ff7ab0'], [8, '#ffffff'], [12, '#ffb84a']]) {
+      for (const [dx, dy] of [[0, -1], [-1, 0], [1, 0], [0, 1]]) setPx(b, x + dx, T + dy, col);
+      setPx(b, x, T, '#ffe45a');
+    }
+    for (const x of [6, 10]) setPx(b, x, T, '#4ab04a');
+  } else if (hat === 'HEADSET') {
+    rect(b, 3, T - 1, 10, 1, '#2a2a34'); rect(b, 2, T, 1, 3, '#2a2a34'); rect(b, 13, T, 1, 3, '#2a2a34');
+    rect(b, 1, T + 3, 2, 4, '#e0304a'); rect(b, 13, T + 3, 2, 4, '#e0304a');
+    setPx(b, 1, T + 3, '#ff7a8a'); setPx(b, 13, T + 3, '#ff7a8a');
+    rect(b, 12, T + 7, 2, 1, '#2a2a34'); setPx(b, 11, T + 8, '#2a2a34');
   }
 }
 
-function playerSprite(color, hatIdx, facing, flash, outfitId) {
+// Free extras. Face pieces skip skins with their own head; capes, wings and
+// packs only paint onto empty pixels so they sit behind the body.
+function drawAccessory(b, accIdx, faceOk) {
+  const acc = ACC_NAMES[accIdx | 0] || 'NONE';
+  if (acc === 'NONE') return;
+  const T = PLAYER_PAD;
+  const behind = (x, y, col) => { if (K.getA(b, x, y) === 0) setPx(b, x, y, col); };
+  if (acc === 'GLASSES' && faceOk) {
+    rect(b, 4, T + 5, 5, 1, '#2a2a34');
+    for (let x = 9; x <= 12; x++) { setPx(b, x, T + 4, '#2a2a34'); setPx(b, x, T + 7, '#2a2a34'); }
+    for (const y of [5, 6]) { setPx(b, 9, T + y, '#2a2a34'); setPx(b, 12, T + y, '#2a2a34'); }
+    setPx(b, 10, T + 5, '#bfe8ff');
+  } else if (acc === 'SHADES' && faceOk) {
+    rect(b, 4, T + 5, 5, 1, '#0c0c14');
+    rect(b, 9, T + 4, 4, 3, '#0c0c14');
+    setPx(b, 10, T + 4, '#5a7ac0'); setPx(b, 11, T + 5, '#3a4a80');
+  } else if (acc === 'MASK' && faceOk) {
+    rect(b, 7, T + 4, 6, 3, '#c02030');
+    setPx(b, 10, T + 5, '#ffffff'); setPx(b, 11, T + 5, '#1a1a24');
+    setPx(b, 10, T + 6, '#ffffff'); setPx(b, 11, T + 6, '#1a1a24');
+    rect(b, 4, T + 5, 3, 1, '#901828');
+  } else if (acc === 'SCARF') {
+    rect(b, 4, T + 10, 9, 2, '#e04a4a');
+    for (const x of [5, 7, 9, 11]) setPx(b, x, T + 10, '#f4f4f4');
+    rect(b, 3, T + 11, 2, 6, '#e04a4a');
+    for (const y of [12, 14, 16]) setPx(b, 3, T + y, '#f4f4f4');
+  } else if (acc === 'BOWTIE') {
+    rect(b, 5, T + 10, 2, 2, '#d02050'); rect(b, 8, T + 10, 2, 2, '#d02050');
+    setPx(b, 7, T + 10, '#901030'); setPx(b, 7, T + 11, '#901030');
+  } else if (acc === 'MEDAL') {
+    rect(b, 8, T + 11, 2, 2, '#4a8ad0');
+    rect(b, 8, T + 13, 2, 2, MAT5.gold[3]); setPx(b, 8, T + 13, MAT5.gold[4]);
+  } else if (acc === 'CAPE') {
+    for (let y = T + 11; y <= T + 20; y++) {
+      const w = y < T + 15 ? 2 : 3;
+      for (let x = 0; x < w; x++) behind(x, y, x === 0 ? '#7a1820' : '#b02a30');
+    }
+    setPx(b, 3, T + 11, MAT5.gold[3]);
+  } else if (acc === 'WINGS') {
+    for (let y = T + 3; y <= T + 19; y++) {
+      const reach = y < T + 11 ? (y - T - 2) / 2.5 : (T + 20 - y) / 2.5;
+      for (let x = 0; x <= 2; x++) if (x >= 3 - reach) behind(x, y, (x + y) & 1 ? '#ffffff' : '#c8d4f0');
+    }
+  } else if (acc === 'BACKPACK') {
+    rect(b, 0, T + 11, 3, 6, '#6a4a2a');
+    for (let y = T + 11; y <= T + 16; y++) behind(0, y, '#8a6a3a');
+    rect(b, 1, T + 13, 2, 2, '#4a3018');
+    setPx(b, 3, T + 12, '#4a3018'); setPx(b, 3, T + 15, '#4a3018');
+  }
+}
+
+function playerSprite(color, hatIdx, facing, flash, outfitId, accIdx) {
   const fit = OUTFITS[outfitId] ? outfitId : '';
-  return sprite(`pl:${color}:${hatIdx}:${facing}:${flash ? 1 : 0}:${fit}`, () => {
-    const b = playerBuf(color, hatIdx, flash, fit);
+  const acc = accIdx | 0;
+  return sprite(`pl:${color}:${hatIdx}:${facing}:${flash ? 1 : 0}:${fit}:${acc}`, () => {
+    const b = playerBuf(color, hatIdx, flash, fit, acc);
     return facing === 1 ? b : mirror(b);
   });
 }
@@ -1275,7 +1532,7 @@ function trapSprite(type, size, armed) {
 }
 
 const Sprites = {
-  monsterPad, PLAYER_PAD, OUTFITS, SKIN_SHOP,
+  monsterPad, PLAYER_PAD, OUTFITS, SKIN_SHOP, HAT_NAMES, ACC_NAMES,
   EDGE, playerBuf, playerSprite, monsterBuf, monsterSprite,
   itemSprite, ITEM_ROWS, itemSymbol, coinSprite, trapBuf, trapSprite, mirror,
   MONSTER_SKIN,

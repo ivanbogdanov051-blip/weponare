@@ -432,17 +432,24 @@ function reflectOf(t) { return (t && t.parryReflect) || PARRY_REFLECT; }
 // ── Skins bought with coins: full outfits drawn over the character ──
 // Ownership is saved per password; a skin can only be worn once it is owned.
 const SKIN_SHOP = [
-  { id: 'ninja',    name: 'NINJA',    price: 120 },
-  { id: 'knight',   name: 'KNIGHT',   price: 150 },
-  { id: 'pirate',   name: 'PIRATE',   price: 180 },
-  { id: 'wizard',   name: 'WIZARD',   price: 200 },
-  { id: 'viking',   name: 'VIKING',   price: 240 },
-  { id: 'skeleton', name: 'SKELETON', price: 280 },
-  { id: 'robot',    name: 'ROBOT',    price: 350 },
-  { id: 'shadow',   name: 'SHADOW',   price: 500 },
-  { id: 'inferno',  name: 'INFERNO',  price: 650 },
-  { id: 'golden',   name: 'GOLDEN',   price: 900 },
+  { id: 'ninja',     name: 'NINJA',     price: 120 },
+  { id: 'knight',    name: 'KNIGHT',    price: 150 },
+  { id: 'pirate',    name: 'PIRATE',    price: 180 },
+  { id: 'wizard',    name: 'WIZARD',    price: 200 },
+  { id: 'viking',    name: 'VIKING',    price: 240 },
+  { id: 'skeleton',  name: 'SKELETON',  price: 280 },
+  { id: 'samurai',   name: 'SAMURAI',   price: 320 },
+  { id: 'robot',     name: 'ROBOT',     price: 350 },
+  { id: 'astronaut', name: 'ASTRONAUT', price: 400 },
+  { id: 'vampire',   name: 'VAMPIRE',   price: 450 },
+  { id: 'shadow',    name: 'SHADOW',    price: 500 },
+  { id: 'pumpkin',   name: 'PUMPKIN',   price: 550 },
+  { id: 'inferno',   name: 'INFERNO',   price: 650 },
+  { id: 'frost',     name: 'FROST',     price: 700 },
+  { id: 'golden',    name: 'GOLDEN',    price: 900 },
+  { id: 'angel',     name: 'ANGEL',     price: 1100 },
 ];
+const SKIN_COLOR_COUNT = 24, SKIN_HAT_COUNT = 15, SKIN_ACC_COUNT = 10;
 const SKIN_BY_ID = Object.fromEntries(SKIN_SHOP.map(s => [s.id, s]));
 
 // ── Abilities: bought once with coins and kept forever (saved per password,
@@ -1033,7 +1040,7 @@ function makePlayer(num, xp, upgrades) {
     hitFlash: 0,
     dead: false,
     respawnTimer: 0,
-    skin: { colorIdx: 0, hatIdx: 0, outfit: '' },
+    skin: { colorIdx: 0, hatIdx: 0, accIdx: 0, outfit: '' },
     inventory: [],
     effects: {},
     pull: null,
@@ -5446,8 +5453,9 @@ function cleanSkin(raw, owned) {
   const s = raw && typeof raw === 'object' ? raw : {};
   const outfit = typeof s.outfit === 'string' && SKIN_BY_ID[s.outfit] && owned.includes(s.outfit) ? s.outfit : '';
   return {
-    colorIdx: Math.max(0, Math.min(7, Number(s.colorIdx) || 0)),
-    hatIdx:   Math.max(0, Math.min(4, Number(s.hatIdx)   || 0)),
+    colorIdx: Math.max(0, Math.min(SKIN_COLOR_COUNT - 1, Math.floor(Number(s.colorIdx) || 0))),
+    hatIdx:   Math.max(0, Math.min(SKIN_HAT_COUNT - 1,   Math.floor(Number(s.hatIdx)   || 0))),
+    accIdx:   Math.max(0, Math.min(SKIN_ACC_COUNT - 1,   Math.floor(Number(s.accIdx)   || 0))),
     outfit,
   };
 }
