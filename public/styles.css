@@ -322,7 +322,7 @@ body {
 .buy-weapon.poor, .buy-weapon:disabled { opacity: 0.45; cursor: default; }
 .legend-need { font-size: 9px; letter-spacing: 1px; color: #b08060; }
 .shop-back { width: 100%; margin-top: 14px; }
-.shop-open-btn { border-color: #5a4a1a; color: var(--c-gold); }
+.shop-open-btn { border-color: #8a7020; color: var(--c-gold); background: #1c1708; }
 
 @media (max-width: 560px) {
   .shop-head { min-width: 0; flex: 1 1 100%; }
@@ -333,18 +333,19 @@ body {
 
 .skin-btn {
   margin-top: 12px;
-  background: none;
-  border: 1px solid #333355;
-  color: #555577;
+  background: #12122a;
+  border: 2px solid #4a4a80;
+  color: #b8b8e0;
   font-family: 'Courier New', monospace;
-  font-size: 10px;
+  font-size: 12px;
+  font-weight: bold;
   letter-spacing: 2px;
-  padding: 6px 16px;
+  padding: 9px 16px;
   cursor: pointer;
   width: 100%;
-  transition: border-color 0.1s, color 0.1s;
+  transition: border-color 0.1s, color 0.1s, background 0.1s;
 }
-.skin-btn:hover { border-color: var(--c-accent); color: var(--c-accent); }
+.skin-btn:hover { background: #1a1a38; border-color: var(--c-accent); color: var(--c-accent); }
 
 .skins-box { min-width: min(280px, 92vw); max-width: min(560px, 96vw); margin: auto; }
 #skinsScreen { align-items: safe center; }
@@ -634,7 +635,7 @@ body {
 }
 
 /* ── Abilities ── */
-.abil-open-btn { border-color: #1f4a5a; color: #8fd8ff; }
+.abil-open-btn { border-color: #2f7a96; color: #8fd8ff; background: #08181f; }
 .abil-title { color: #8fd8ff; }
 .abil-slots { display: flex; gap: 8px; justify-content: center; margin-bottom: 6px; flex-wrap: wrap; }
 .abil-slot {
