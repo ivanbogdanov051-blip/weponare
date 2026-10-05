@@ -2151,7 +2151,7 @@ function revolverBlast(target, attackerKey, r, dmg) {
 
 // Bank XP for a player: unlocks anything it reaches and saves it.
 function creditXp(key, xpGain) {
-  if (room.gameMode === 'sandbox') return;
+  if (room.gameMode === 'sandbox' || (room.bot && key === 'p2')) return;
   const attacker = room.players[key];
   const pw = room.passwords[key];
   const admin = isAdminPw(pw);
@@ -2269,6 +2269,7 @@ function tickRoom(dt) {
   }
 
   const factor = dt / 16.67;
+  if (room.bot) botTick(dt);
 
   // Swap and parry fire once per press. Attack, special and super auto-fire
   // while held: they go off again as soon as their cooldown is ready.
@@ -5965,6 +5966,7 @@ function buildStateMsg(playerNum) {
     myNum: playerNum,
     gameState: room.gameState,
     gameMode: room.gameMode,
+    ...(room.bot ? { bot: room.bot.level } : {}),
     playerNames: room.playerNames,
     players: { p1: playerView(room.players.p1), p2: playerView(room.players.p2) },
     monsters:    room.monsters.map(m => ({ id: m.id, type: m.type, x: r1(m.x), y: r1(m.y), w: m.w, h: m.h,
@@ -6116,6 +6118,229 @@ function cleanSkin(raw, owned) {
     accIdx:   Math.max(0, Math.min(SKIN_ACC_COUNT - 1,   Math.floor(Number(s.accIdx)   || 0))),
     outfit,
   };
+}
+
+// Use the item in inventory slot `index` (a player's 1-4 keys, or the bot).
+function useInventorySlot(myKey, index) {
+  const p = room.players[myKey];
+  if (p && !p.dead && Array.isArray(p.inventory)) {
+    const idx = Number(index);
+    if (Number.isInteger(idx) && idx >= 0 && idx < p.inventory.length) {
+      const type = p.inventory[idx];
+      const def = ITEM_TYPES[type];
+      if (def && useItemEffect(p, myKey, def)) {
+        p.inventory.splice(idx, 1);
+        room.particles.push({ type: 'useitem', x: cx(p), y: p.y, timer: 900, max: 900, color: def.color, text: def.name });
+      } else if (def) {
+        if (def.instant && def.effect === 'heal') {
+          p.hp = Math.min(p.maxHp, p.hp + def.amount);
+        } else if (def.effect === 'bomb') {
+          for (const t of enemyTargets(myKey)) {
+            if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) <= def.radius) strikeTarget(t, def.amount, myKey);
+          }
+          room.particles.push({ type: 'aoe', x: cx(p), y: cy(p), maxR: def.radius, radius: 2, timer: 420, max: 420, color: def.color });
+          room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: def.radius, timer: 420, max: 420, color: '#ffe0a0' });
+        } else if (def.effect === 'frost') {
+          for (const t of enemyTargets(myKey)) {
+            if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) <= def.radius) chillTarget(t, def.dur);
+          }
+          room.particles.push({ type: 'aoe', x: cx(p), y: cy(p), maxR: def.radius, radius: 2, timer: 520, max: 520, color: def.color });
+        } else {
+          applyEffect(p, def.effect, def.dur);
+        }
+        p.inventory.splice(idx, 1);
+        room.particles.push({ type: 'useitem', x: cx(p), y: p.y, timer: 900, max: 900, color: def.color, text: def.name });
+      }
+    }
+  }
+}
+
+// ─── BOT BATTLE ───────────────────────────────────────────────────────────────
+// A PvP match against a bot. It is a real second player: it gets a loadout
+// (weapons, upgrades, abilities, skin) scaled to its level and fights by
+// writing room.inputs.p2 every tick, exactly as a client would. The match
+// itself is plain PvP: same arena, lives, rounds and rewards.
+// own:   the chance it owns each weapon, ability and skin (rolled one by one),
+//        and how far each weapon is upgraded.
+// think: ms between decisions (its reaction time).
+// aggro: chance it swings when in range · parry / dodge: chance it reacts to a
+// blow or a shot · skill: how readily it uses specials, supers, abilities, items.
+const BOT_LEVELS = {
+  easy:    { name: 'EASY',    own: 0.10, think: 420, aggro: 0.45, parry: 0.00, dodge: 0.00, skill: 0.25, slots: 1 },
+  common:  { name: 'COMMON',  own: 0.20, think: 340, aggro: 0.60, parry: 0.06, dodge: 0.15, skill: 0.40, slots: 2 },
+  average: { name: 'AVERAGE', own: 0.30, think: 270, aggro: 0.70, parry: 0.15, dodge: 0.30, skill: 0.55, slots: 2 },
+  strong:  { name: 'STRONG',  own: 0.40, think: 210, aggro: 0.80, parry: 0.28, dodge: 0.45, skill: 0.70, slots: 3 },
+  hard:    { name: 'HARD',    own: 0.50, think: 160, aggro: 0.90, parry: 0.42, dodge: 0.60, skill: 0.85, slots: 4 },
+  insane:  { name: 'INSANE',  own: 0.60, think: 110, aggro: 1.00, parry: 0.60, dodge: 0.80, skill: 1.00, slots: 6 },
+};
+const BOT_HEALS = ['heal', 'rejuvenate', 'haven', 'vampirism', 'phoenix'];
+const BOT_GUARDS = ['aegis', 'barrier', 'perfectguard', 'vanish', 'shadowstep', 'warp'];
+const BOT_SWAP_MIN = 10000, BOT_SWAP_VAR = 12000;
+
+// Each thing is owned on its own roll: `chance` of it being there.
+const rollOwned = (list, chance) => list.filter(() => Math.random() < chance);
+const pickSome = (list, n) => {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a.slice(0, Math.max(0, Math.min(a.length, n)));
+};
+
+// A room of its own with the bot already seated as player 2.
+function newBotRoom(level) {
+  const r = makeRoom();
+  r.gameMode = 'pvp';
+  r.bot = { level };
+  rooms.push(r);
+  return [r, 'p1'];
+}
+
+// Everything the bot owns, rolled fresh for each bot battle.
+function setupBot() {
+  const L = BOT_LEVELS[room.bot.level];
+  const starters = getUnlockedWeaponIds(0);
+  const all = WEAPONS.map(w => w.id);
+  const weapons = sortWeaponIds([...new Set([...starters, ...rollOwned(all, L.own)])]);
+  const upgrades = {};
+  for (const id of weapons) {
+    upgrades[id] = {};
+    for (const k of upgradesFor(id)) {
+      const lv = Math.round(UPGRADE_STATS[k].max * L.own + (Math.random() - 0.5) * 2);
+      upgrades[id][k] = Math.max(0, Math.min(UPGRADE_STATS[k].max - 1, lv));   // never fully maxed: no passives
+    }
+  }
+  let abilities = pickSome(rollOwned(ABILITIES.map(a => a.id), L.own), L.slots);
+  if (!abilities.length) abilities = pickSome(ABILITIES.map(a => a.id), 1);   // always has at least one
+  const slots = Array.from({ length: L.slots }, (_, i) => abilities[i] || null);
+  const outfits = pickSome(rollOwned(SKIN_SHOP.map(s => s.id), L.own), 1);
+  room.playerNames.p2 = 'BOT ' + L.name;
+  room.passwords.p2 = '';
+  room.playerXp.p2 = 0;
+  room.playerCoins.p2 = 0;
+  room.playerUnlocks.p2 = weapons;
+  room.playerUpgrades.p2 = upgrades;
+  room.playerAbilities.p2 = slots;
+  room.playerSkins.p2 = {
+    colorIdx: Math.floor(Math.random() * SKIN_COLOR_COUNT), hatIdx: Math.floor(Math.random() * SKIN_HAT_COUNT),
+    accIdx: Math.floor(Math.random() * SKIN_ACC_COUNT), outfit: outfits.length && Math.random() < 0.7 ? outfits[0] : '',
+  };
+  room.p2Joined = true;
+  room.bot.thinkT = 0; room.bot.swapT = 0; room.bot.strafe = 1; room.bot.wasDead = true;
+}
+
+// Hold a random weapon from what it owns.
+function botPickWeapon(p) {
+  const ids = p.unlockedWeapons || [];
+  if (ids.length < 2) return;
+  let i = p.weaponIdx;
+  while (i === p.weaponIdx) i = Math.floor(Math.random() * ids.length);
+  p.weaponIdx = i;
+  refreshWeapon(p);
+}
+
+function botTick(dt) {
+  const b = room.bot, L = BOT_LEVELS[b.level];
+  const p = room.players.p2, foe = room.players.p1;
+  const inp = room.inputs.p2;
+  // One-press buttons only stay down for a single tick.
+  inp.parry = false; inp.swap = false; inp.swapPrev = false; inp.special = false; inp.super = false;
+  for (let i = 1; i <= 6; i++) inp['ab' + i] = false;
+  if (!p || p.dead || p.mindControlledBy) {
+    inp.up = inp.down = inp.left = inp.right = inp.attack = false;
+    if (p && p.dead) b.wasDead = true;
+    return;
+  }
+  // A fresh life (or a while on one weapon): pick another at random.
+  b.swapT -= dt;
+  if (b.wasDead || b.swapT <= 0) {
+    if (b.wasDead || Math.random() < 0.8) botPickWeapon(p);
+    b.wasDead = false;
+    b.swapT = BOT_SWAP_MIN + Math.random() * BOT_SWAP_VAR;
+  }
+  b.thinkT -= dt;
+  if (b.thinkT > 0) return;
+  b.thinkT = L.think * (0.8 + Math.random() * 0.4);
+
+  const w = weapon(p), melee = w.type === 'melee';
+  const see = foe && !foe.dead && !unseen(foe) && !foe.hidden;
+  const px = cx(p), py = cy(p);
+  let mx = 0, my = 0, d = Infinity, dx = 0, dy = 0;
+  if (see) {
+    dx = cx(foe) - px; dy = cy(foe) - py; d = Math.hypot(dx, dy) || 1;
+    const want = w.lightDash ? 150 : melee ? Math.max(14, w.range * 0.55) : Math.min(260, w.range * 0.65);
+    if (d > want + 15) { mx += dx / d; my += dy / d; }
+    else if (!melee && d < want - 30) { mx -= dx / d; my -= dy / d; }
+    if (Math.random() < 0.08) b.strafe = -b.strafe;
+    const sk = melee && d < want + 15 ? 0.35 : 0.65;
+    mx += (-dy / d) * sk * b.strafe; my += (dx / d) * sk * b.strafe;
+    // Badly hurt and not built to brawl: back off a little.
+    if (p.hp < p.maxHp * 0.25 && L.skill >= 0.7 && !melee) { mx -= dx / d * 0.6; my -= dy / d * 0.6; }
+    inp.aimX = Math.round(cx(foe)); inp.aimY = Math.round(cy(foe));
+  } else {
+    // Can't see them: roam (toward where they were last seen first).
+    if (!b.roam || Math.hypot(b.roam.x - px, b.roam.y - py) < 20 || Math.random() < 0.04) {
+      const last = foe && !foe.dead ? { x: cx(foe), y: cy(foe) } : null;
+      b.roam = last && Math.random() < 0.5 ? arenaClamp(last.x + (Math.random() - 0.5) * 160, last.y + (Math.random() - 0.5) * 160, 20)
+                                           : arenaClamp(ARENA_X + Math.random() * ARENA_W, ARENA_Y + Math.random() * ARENA_H, 20);
+    }
+    const rx = b.roam.x - px, ry = b.roam.y - py, rd = Math.hypot(rx, ry) || 1;
+    mx = rx / rd; my = ry / rd;
+    inp.aimX = null; inp.aimY = null;
+  }
+  // Pickups lying close by, when it's safe to grab them.
+  if (room.items.length && (!see || d > 140)) {
+    let best = null, bd = 170;
+    for (const it of room.items) {
+      const id = Math.hypot(it.x + it.w / 2 - px, it.y + it.h / 2 - py);
+      if (id < bd) { bd = id; best = it; }
+    }
+    if (best) { mx = (best.x + best.w / 2 - px) / bd; my = (best.y + best.h / 2 - py) / bd; }
+  }
+  // Keep clear of traps that aren't its own.
+  for (const tr of room.traps) {
+    if (tr.owner === 'p2') continue;
+    const tx = px - (tr.x + tr.w / 2), ty = py - (tr.y + tr.h / 2), td = Math.hypot(tx, ty) || 1;
+    if (td < 44) { mx += tx / td * 1.2; my += ty / td * 1.2; }
+  }
+  // Shots coming its way: sidestep, or parry if one is about to land.
+  let threat = false;
+  for (const pr of room.projectiles) {
+    if (pr.owner !== 'p1') continue;
+    const rx = px - pr.x, ry = py - pr.y, rd = Math.hypot(rx, ry);
+    const sp = Math.hypot(pr.dx, pr.dy) || 1;
+    if (rd > 160 || (rx * pr.dx + ry * pr.dy) <= 0) continue;          // heading away
+    const miss = Math.abs(rx * pr.dy - ry * pr.dx) / sp;               // how close it will pass
+    if (miss > 22) continue;
+    if (rd < 55) threat = true;
+    if (Math.random() < L.dodge) { const s = (rx * pr.dy - ry * pr.dx) >= 0 ? 1 : -1; mx += (pr.dy / sp) * s * 1.6; my += (-pr.dx / sp) * s * 1.6; }
+  }
+  if (see && foe.swingTimer > 0 && d < weapon(foe).range + 24) threat = true;
+  if (threat && p.parryCooldown <= 0 && Math.random() < L.parry) inp.parry = true;
+  // Walls: steer back toward the middle when hugging one.
+  if (p.x < ARENA_X + 20) mx += 0.8; if (p.x > ARENA_X + ARENA_W - p.w - 20) mx -= 0.8;
+  if (p.y < ARENA_Y + 20) my += 0.8; if (p.y > ARENA_Y + ARENA_H - p.h - 20) my -= 0.8;
+
+  const mm = Math.hypot(mx, my);
+  if (mm > 0.01) { mx /= mm; my /= mm; }
+  inp.left = mx < -0.38; inp.right = mx > 0.38; inp.up = my < -0.38; inp.down = my > 0.38;
+
+  // Attack, special, super, abilities, items.
+  const reach = w.lightDash ? 240 : melee ? w.range + (p.w + (foe ? foe.w : 16)) / 2 + 6 : w.range;
+  inp.attack = see && d <= reach && Math.random() < L.aggro;
+  if (!see) return;
+  const spRange = (w.special && w.special.range) || Math.max(140, w.range * 1.3);
+  if (w.special && p.specialCooldown <= 0 && d <= Math.max(spRange, 120) && Math.random() < L.skill * 0.6) inp.special = true;
+  if (w.super && p.superCooldown <= 0 && d <= 320 && Math.random() < L.skill * 0.5) inp.super = true;
+  const hurt = p.hp / p.maxHp;
+  for (let i = 0; i < p.abilities.length; i++) {
+    const id = p.abilities[i];
+    if (!id || (p.abCd[id] || 0) > 0 || Math.random() > L.skill * 0.5) continue;
+    const use = BOT_HEALS.includes(id) ? hurt < 0.55
+      : BOT_GUARDS.includes(id) ? hurt < 0.7 && d < 160
+      : id === 'dash' ? d > reach + 60
+      : d < 230;
+    if (use) { inp['ab' + (i + 1)] = true; break; }
+  }
+  if (p.inventory && p.inventory.length && (hurt < 0.45 || (d < 150 && Math.random() < L.skill * 0.15))) useInventorySlot('p2', 0);
 }
 
 // ─── HTTP API (shop / upgrades) ───────────────────────────────────────────────
@@ -6384,7 +6609,7 @@ function reapRooms() {
 function findSeat(mode) {
   if (!SOLO_MODES.includes(mode)) {
     for (const r of rooms) {
-      if (r.gameState !== 'LOBBY' || r.gameMode !== mode) continue;
+      if (r.gameState !== 'LOBBY' || r.gameMode !== mode || r.bot) continue;
       const free = !r.p1 ? 'p1' : !r.p2 ? 'p2' : null;
       if (free && (r.p1 || r.p2)) return [r, free];
     }
@@ -6422,9 +6647,10 @@ wss.on('connection', (ws) => {
         return;
       }
       if (msg.type === 'join' && !ws.room) {
-        const mode = ['pvp', 'coop', 'waves', 'extreme', 'portal', 'sandbox'].includes(msg.mode) ? msg.mode : 'pvp';
+        const mode = ['pvp', 'coop', 'waves', 'extreme', 'portal', 'sandbox', 'bot'].includes(msg.mode) ? msg.mode : 'pvp';
         reapRooms();
-        const [r, key] = findSeat(mode);
+        // BOT BATTLE: a PvP room of your own, the bot in the other seat.
+        const [r, key] = mode === 'bot' ? newBotRoom(BOT_LEVELS[msg.level] ? msg.level : 'average') : findSeat(mode);
         ws.room = r; ws.key = key;
         r[key] = ws;
         ws.send(JSON.stringify({ type: 'seat', num: key === 'p1' ? 1 : 2, mode }));
@@ -6471,6 +6697,7 @@ wss.on('connection', (ws) => {
         if (save) { ws.lastSave = save.data; ws.send(JSON.stringify({ type: 'save', save })); }
 
         room[myKey + 'Joined'] = true;
+        if (room.bot && !room.p2Joined) setupBot();
 
         // Start game: solo modes at once, the others once both have joined.
         const canStart = isSolo()
@@ -6510,37 +6737,7 @@ wss.on('connection', (ws) => {
       }
 
       if (msg.type === 'use_item') {
-        const p = room.players[myKey];
-        if (p && !p.dead && Array.isArray(p.inventory)) {
-          const idx = Number(msg.index);
-          if (Number.isInteger(idx) && idx >= 0 && idx < p.inventory.length) {
-            const type = p.inventory[idx];
-            const def = ITEM_TYPES[type];
-            if (def && useItemEffect(p, myKey, def)) {
-              p.inventory.splice(idx, 1);
-              room.particles.push({ type: 'useitem', x: cx(p), y: p.y, timer: 900, max: 900, color: def.color, text: def.name });
-            } else if (def) {
-              if (def.instant && def.effect === 'heal') {
-                p.hp = Math.min(p.maxHp, p.hp + def.amount);
-              } else if (def.effect === 'bomb') {
-                for (const t of enemyTargets(myKey)) {
-                  if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) <= def.radius) strikeTarget(t, def.amount, myKey);
-                }
-                room.particles.push({ type: 'aoe', x: cx(p), y: cy(p), maxR: def.radius, radius: 2, timer: 420, max: 420, color: def.color });
-                room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: def.radius, timer: 420, max: 420, color: '#ffe0a0' });
-              } else if (def.effect === 'frost') {
-                for (const t of enemyTargets(myKey)) {
-                  if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) <= def.radius) chillTarget(t, def.dur);
-                }
-                room.particles.push({ type: 'aoe', x: cx(p), y: cy(p), maxR: def.radius, radius: 2, timer: 520, max: 520, color: def.color });
-              } else {
-                applyEffect(p, def.effect, def.dur);
-              }
-              p.inventory.splice(idx, 1);
-              room.particles.push({ type: 'useitem', x: cx(p), y: p.y, timer: 900, max: 900, color: def.color, text: def.name });
-            }
-          }
-        }
+        useInventorySlot(myKey, msg.index);
       }
 
       if (msg.type === 'sandbox' && room.gameMode === 'sandbox' && room.gameState === 'GAMEPLAY') sandboxAction(myKey, msg);

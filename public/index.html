@@ -23,10 +23,11 @@
       </div>
       <button class="mode-btn btn-portal" onclick="joinGame('portal')">&#10022; FIGHT THE PORTAL MAGE &#10022;</button>
       <div class="mode-row mode-row-2">
+        <button class="mode-btn btn-bot" onclick="openBotPicker()">&#9881; BOT BATTLE</button>
         <button class="mode-btn btn-sandbox" onclick="joinGame('sandbox')">&#9874; SANDBOX</button>
         <button class="mode-btn btn-howto" onclick="openHowTo()">? HOW TO PLAY</button>
       </div>
-      <div class="hint-text">PvP/Co-op: 2 players &nbsp;|&nbsp; Waves: solo endless &nbsp;|&nbsp; Extreme: solo, strongest monsters, huge coin rewards &nbsp;|&nbsp; Sandbox: solo practice, nothing saved</div>
+      <div class="hint-text">PvP/Co-op: 2 players &nbsp;|&nbsp; Bot Battle: PvP vs a bot &nbsp;|&nbsp; Waves: solo endless &nbsp;|&nbsp; Extreme: solo, strongest monsters, huge coin rewards &nbsp;|&nbsp; Sandbox: solo practice, nothing saved</div>
       <div id="savedInfo" class="saved-info"></div>
       <button class="skin-btn shop-open-btn" onclick="openShop()">&#9670; UPGRADE WEAPONS</button>
       <button class="skin-btn abil-open-btn" onclick="openAbilities()">&#10038; ABILITIES</button>
@@ -62,6 +63,24 @@
   </div>
 
   <!-- How to play: the rules and controls, in one scrolling page -->
+  <!-- Bot Battle: pick the bot's level -->
+  <div id="botScreen" class="overlay hidden">
+    <div class="pixel-box bot-box">
+      <div class="title-text" style="font-size:22px;margin-bottom:4px">BOT BATTLE</div>
+      <div class="subtitle">A PvP MATCH AGAINST A BOT &middot; PICK ITS LEVEL</div>
+      <div class="bot-levels">
+        <button class="bot-lv lv-easy"    onclick="pickBotLevel('easy')"><b>EASY</b><span>slow, 10% chance to own each thing</span></button>
+        <button class="bot-lv lv-common"  onclick="pickBotLevel('common')"><b>COMMON</b><span>20% chance to own each thing</span></button>
+        <button class="bot-lv lv-average" onclick="pickBotLevel('average')"><b>AVERAGE</b><span>30% chance, starts to parry</span></button>
+        <button class="bot-lv lv-strong"  onclick="pickBotLevel('strong')"><b>STRONG</b><span>40% chance, dodges shots</span></button>
+        <button class="bot-lv lv-hard"    onclick="pickBotLevel('hard')"><b>HARD</b><span>50% chance, quick and sharp</span></button>
+        <button class="bot-lv lv-insane"  onclick="pickBotLevel('insane')"><b>INSANE</b><span>60% chance, every trick it has</span></button>
+      </div>
+      <div class="body-text" style="font-size:10px">The bot fights like a player: random weapons from what it owns (upgraded to its level), abilities, items, specials and supers. Same rules as PvP: 3 lives a round, first to 3 rounds.</div>
+      <button class="mode-btn shop-back" onclick="closeBotPicker()">&#10003; BACK</button>
+    </div>
+  </div>
+
   <div id="howtoScreen" class="overlay hidden">
     <div class="pixel-box shop-box howto-box">
       <div class="title-text shop-title howto-title">HOW TO PLAY</div>
@@ -73,6 +92,7 @@
           <p>Click or tap a weapon in the rack at the top to switch straight to it. <b>Hold</b> attack, special, super or an ability and it fires again by itself whenever it is ready.</p></div>
         <div class="howto-sec"><h3>MODES</h3>
           <p><b>PvP</b> &ndash; two players fight; each round you have 3 lives, and the first to win 3 rounds takes the match.</p>
+          <p><b>Bot Battle</b> &ndash; the same PvP match, against a bot. Pick its level: Easy, Common, Average, Strong, Hard or Insane. The higher the level, the more it owns: every weapon, ability and skin has a 10% chance of being the bot's on Easy, up to 60% on Insane, and its weapons are upgraded that far too and the faster and sharper it plays: dodging shots, parrying, and using specials, supers, abilities and items. It fights with random weapons from what it owns and swaps every so often.</p>
           <p><b>Co-op</b> &ndash; two players fight 10 waves of monsters together; the Giant waits at wave 10.</p>
           <p><b>Waves</b> &ndash; solo and endless; every wave is harder, a Giant comes every 20th wave, and your best wave goes on the leaderboard.</p>
           <p><b>Extreme</b> &ndash; solo with the toughest monsters, a Giant every 5th wave and much bigger coin rewards.</p>

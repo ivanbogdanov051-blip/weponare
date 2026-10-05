@@ -124,7 +124,7 @@ let stateIntervalMs = SERVER_TICK_MS;
 let rttMs = 60;
 let pingTimer = null;
 
-let pendingName = 'PLAYER', pendingMode = 'pvp', pendingPass = '';
+let pendingName = 'PLAYER', pendingMode = 'pvp', pendingPass = '', pendingBotLevel = 'average';
 let roomWasFull = false;
 let welcomeLeaderboard = [];
 let serverPlayerSpeed = 3.6;
@@ -293,7 +293,7 @@ function connect() {
       if (Array.isArray(msg.abilityDefs)) ABILITY_DEFS = msg.abilityDefs;
       if (msg.sandboxDefs) SANDBOX_DEFS = msg.sandboxDefs;
       ws.send(JSON.stringify({
-        type: 'join', name: pendingName, mode: pendingMode, password: pendingPass,
+        type: 'join', name: pendingName, mode: pendingMode, password: pendingPass, level: pendingBotLevel,
         skin: pendingSkin, skinModified,
         localXp: loadLocalXp(pendingPass), localCoins: loadLocalCoins(pendingPass), backup: loadBackup(pendingPass),
       }));
@@ -314,6 +314,8 @@ function connect() {
         setLobbyMsg(`<span style="color:#ff5a3a">EXTREME MODE</span><br><span style="color:#888">SOLO · STRONGEST MONSTERS · HUGE REWARDS</span><br>Loading...`);
       } else if (mode === 'portal') {
         setLobbyMsg(PORTAL_LOBBY);
+      } else if (mode === 'bot') {
+        setLobbyMsg(BOT_LOBBY());
       } else {
         setLobbyMsg(myNum === 1
           ? `<span class="p1-color">YOU ARE PLAYER 1</span><br><span style="color:#888">${modeLabel} MODE</span><br>Waiting for opponent...`
@@ -2971,16 +2973,29 @@ const ABILITY_ICONS = {
   },
 };
 
-const SCREENS = ['startScreen','lobbyScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen','howtoScreen'];
+const SCREENS = ['startScreen','lobbyScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen','howtoScreen','botScreen'];
 function showScreen(id) { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay '+(s===id?'active':'hidden'); }); }
 function hideAllScreens() { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay hidden'; }); }
 function setLobbyMsg(html) { showScreen('lobbyScreen'); document.getElementById('lobbyMsg').innerHTML = html; }
 const PORTAL_LOBBY = `<span style="color:#c8a0ff">THE PORTAL MAGE</span><br>`
   + `<span style="color:#888">SOLO BOSS FIGHT · WIN 50,000 COINS + 50,000 XP</span><br>Opening the portal...`;
 
+const BOT_LOBBY = () => `<span style="color:#ff9a5a">BOT BATTLE</span><br><span style="color:#888">PvP VS A ${(pendingBotLevel || 'average').toUpperCase()} BOT</span><br>Loading...`;
+
+// BOT BATTLE: pick the bot's level, then it's a PvP match against it.
+function openBotPicker() { readCredentials(); showScreen('botScreen'); }
+function closeBotPicker() { showScreen('startScreen'); }
+function pickBotLevel(level) {
+  pendingBotLevel = level;
+  document.getElementById('botScreen').className = 'overlay hidden';
+  joinGame('bot');
+}
+
 function updateScreens(state) {
   if (state.gameState === 'LOBBY') {
-    if (state.gameMode === 'waves') {
+    if (state.bot) {
+      setLobbyMsg(BOT_LOBBY());
+    } else if (state.gameMode === 'waves') {
       setLobbyMsg(`<span style="color:#ffcc00">WAVES MODE</span><br><span style="color:#888">SOLO ENDLESS</span><br>Loading...`);
     } else if (state.gameMode === 'extreme') {
       setLobbyMsg(`<span style="color:#ff5a3a">EXTREME MODE</span><br><span style="color:#888">SOLO · STRONGEST MONSTERS</span><br>Loading...`);
@@ -5108,6 +5123,10 @@ function drawHUD(state) {
     ctx.font = '8px "Courier New",monospace';
     ctx.fillStyle = mage && mage.phase === 2 ? '#ff7aaa' : '#999'; ctx.fillText(sub, HUD_W/2, 15);
     ctx.font = '10px "Courier New",monospace';
+  } else if (state.bot) {
+    const t = 'BOT BATTLE · ' + String(state.bot).toUpperCase();
+    ctx.fillStyle = '#000'; ctx.fillText(t, HUD_W/2 + 1, 3);
+    ctx.fillStyle = '#ff9a5a'; ctx.fillText(t, HUD_W/2, 2);
   } else if (w && state.gameMode !== 'pvp') {
     const wl = (state.gameMode === 'extreme' ? 'EXTREME ' : '') + 'WAVE ' + w.num + (state.finalWave ? '/' + state.finalWave : '');
     ctx.fillStyle = '#000'; ctx.fillText(wl, HUD_W/2 + 1, 3);

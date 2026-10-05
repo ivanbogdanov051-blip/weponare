@@ -717,6 +717,20 @@ body {
 
 /* Sandbox and how-to-play, side by side under the Portal Mage. */
 .mode-row-2 { margin: 8px 0 10px; }
+.mode-btn.btn-bot { border-color: #b0602a; color: #ffb07a; }
+.mode-btn.btn-bot:hover { background: #2a160a; color: #fff; }
+.bot-box { max-width: min(520px, 96vw); }
+.bot-levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 6px 0 12px; }
+.bot-lv {
+  display: flex; flex-direction: column; gap: 4px; align-items: center;
+  background: #0a0a18; border: 2px solid var(--lv); color: var(--lv);
+  font-family: 'Courier New', monospace; font-size: 9px; letter-spacing: 1px; padding: 10px 6px; cursor: pointer;
+}
+.bot-lv b { font-size: 13px; letter-spacing: 3px; }
+.bot-lv span { color: #9a9ab8; }
+.bot-lv:hover { background: #151525; box-shadow: 0 0 8px var(--lv); }
+.lv-easy { --lv: #6aff8a; } .lv-common { --lv: #9adfff; } .lv-average { --lv: #ffe45a; }
+.lv-strong { --lv: #ffa04a; } .lv-hard { --lv: #ff5a4a; } .lv-insane { --lv: #d05aff; }
 .mode-btn.btn-sandbox { border-color: #2a9a6a; color: #9fffd0; }
 .mode-btn.btn-sandbox:hover { background: #0e2a1e; color: #fff; }
 .mode-btn.btn-howto { border-color: #9a8a3a; color: #ffe89a; }
