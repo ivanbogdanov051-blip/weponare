@@ -727,6 +727,7 @@ const MONSTER_SKIN = {
   charger:     { base: '#9a7050', eye: '#ff4422', eyes: 2 },
   necromancer: { base: '#5a4a7a', eye: '#9aff7a', eyes: 2 },
   skeleton:    { base: '#d8d0b8', eye: '#ff5a3a', eyes: 2 },
+  light:       { base: '#f2ecc0', eye: '#3ad0ff', eyes: 2 },
   // Boss
   giant:    { base: '#7a9a56', eye: '#ffe25a', eyes: 2 },
   portalmage: { base: '#5a2aa8', eye: '#ff9aff', eyes: 2 },
@@ -819,6 +820,11 @@ const MONSTER_SHAPE = {
     // A skull on a thin ribcage.
     body: [[0.30,0.00],[0.70,0.00],[0.76,0.26],[0.60,0.32],[0.74,0.40],[0.70,0.70],[0.30,0.70],[0.26,0.40],[0.40,0.32],[0.24,0.26]],
     legs: [[0.30,0.30],[0.56,0.30]], legTop: 0.68, headV: 0.16,
+  },
+  light: {
+    // A slim, sharp figure leaning into a sprint, with a swept-back crest.
+    body: [[0.40,0.00],[0.66,0.04],[0.80,0.16],[0.84,0.34],[0.76,0.52],[0.70,0.74],[0.30,0.74],[0.22,0.52],[0.14,0.30],[0.00,0.10],[0.24,0.12]],
+    legs: [[0.26,0.20],[0.54,0.20]], legTop: 0.72, headV: 0.24, lean: true,
   },
   infernal: {
     // A lean, horned demon.
@@ -1010,6 +1016,13 @@ function monsterBuf(type, w, h) {
     line(b, X(0.20), Y(0.52), X(0.80), Y(0.52), MAT5.bone[3]);
     for (const [u, v] of [[0.30, 0.66], [0.66, 0.70], [0.46, 0.84]]) setPx(b, X(u), Y(v), '#9aff7a');
     K.ditherRect(b, X(0.14), Y(0.60), w * 0.72, h * 0.34, c[1], c[0], 'sparse');
+  } else if (type === 'light') {
+    // A glowing core, gold trim down the chest and bright streaks on the crest.
+    rect(b, X(0.44), Y(0.40), Math.max(1, w * 0.14), Math.max(1, h * 0.10), '#ffffff');
+    setPx(b, X(0.48), Y(0.38), '#fff6a0');
+    line(b, X(0.34), Y(0.56), X(0.66), Y(0.56), MAT5.gold[3]);
+    line(b, X(0.04), Y(0.10), X(0.36), Y(0.08), '#ffffff');
+    line(b, X(0.14), Y(0.20), X(0.30), Y(0.18), '#fff6a0');
   } else if (type === 'skeleton') {
     // Hollow eye sockets, a jaw line and ribs.
     rect(b, X(0.34), Y(0.22), w * 0.32, 1, c[0]);

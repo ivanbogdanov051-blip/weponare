@@ -1262,6 +1262,15 @@ function drawPuppetMark(x, y, m) {
     ctx.globalAlpha = 1; ctx.font = 'bold 7px "Courier New",monospace'; ctx.textAlign = 'center';
     ctx.fillStyle = '#000'; ctx.fillText(Math.ceil(m.ctlLeft / 1000) + 's', x + 0.5, y - 11.5);
     ctx.fillStyle = '#ffb8f0'; ctx.fillText(Math.ceil(m.ctlLeft / 1000) + 's', x, y - 12);
+    // Your own puppet: its ability, and whether it's ready.
+    const me = currState && currState.players && currState.players['p' + myNum];
+    if (me && me.pupAb && m.ctl === 'p' + myNum) {
+      const ready = !(me.pupCd > 0);
+      const txt = me.pupAb + (ready ? '' : ' ' + (me.pupCd / 1000).toFixed(1) + 's');
+      ctx.font = 'bold 6px "Courier New",monospace';
+      ctx.fillStyle = '#000'; ctx.fillText(txt, x + 0.5, y - 19.5);
+      ctx.fillStyle = ready ? '#ffffff' : '#9a8aa8'; ctx.fillText(txt, x, y - 20);
+    }
     ctx.textAlign = 'left';
   }
   ctx.restore();
@@ -1600,6 +1609,12 @@ function syncSuperButton(me) {
   if (cooling !== superBtnCooling) { superBtnCooling = cooling; el.classList.toggle('cooling', cooling); }
   const label = me && me.controlling ? 'LET GO' : 'SUPER';
   if (el.textContent !== label) el.textContent = label;
+  // Inside a monster, SPECIAL is its own ability.
+  const sp = document.getElementById('btn-special');
+  if (sp) {
+    const spLabel = me && me.pupAb ? me.pupAb : 'SPECIAL';
+    if (sp.textContent !== spLabel) sp.textContent = spLabel;
+  }
 }
 
 // Thrusting weapons: a straight lunge along the aim to the weapon's reach.
@@ -3773,6 +3788,7 @@ function drawMonster(m) {
   ctx.fillRect(x + 1, y + m.h, m.w - 2, 2);
 
   const cv = monsterSprite(type, m.w, m.h, state);
+  if (type === 'light' && cv) drawLightTrail(m, cv);
   if (cv) {
     const pad = monsterPad(m.w, m.h);
     ctx.drawImage(cv, x - pad, y - pad);
@@ -3792,6 +3808,27 @@ function drawMonster(m) {
   }
 }
 function drawMonsters(ms) { for(const m of ms) drawMonster(m); }
+
+// Light leaves fading afterimages wherever he has just been.
+const lightTrails = new Map();
+function drawLightTrail(m, cv) {
+  const now = performance.now();
+  let tr = lightTrails.get(m.id);
+  if (!tr) { tr = []; lightTrails.set(m.id, tr); }
+  const last = tr[tr.length - 1];
+  if (!last || Math.hypot(last.x - m.x, last.y - m.y) > 3) tr.push({ x: m.x, y: m.y, t: now });
+  while (tr.length && now - tr[0].t > 260) tr.shift();
+  if (lightTrails.size > 40) for (const k of lightTrails.keys()) { if (k !== m.id) { lightTrails.delete(k); break; } }
+  const pad = monsterPad(m.w, m.h);
+  ctx.save();
+  for (const p of tr) {
+    const k = 1 - (now - p.t) / 260;
+    if (k <= 0 || (Math.abs(p.x - m.x) < 2 && Math.abs(p.y - m.y) < 2)) continue;
+    ctx.globalAlpha = 0.35 * k;
+    ctx.drawImage(cv, Math.round(p.x) - pad, Math.round(p.y) - pad);
+  }
+  ctx.restore();
+}
 
 // Warnings for the monsters with tricks, so each one can be read and dodged:
 // a bomber's blast ring, a charger's ram line, a necromancer's grave marks,
@@ -3829,6 +3866,35 @@ function drawMonsterTells(m, x, y) {
     ctx.fillStyle = '#ff8a5a';
     ctx.beginPath(); ctx.moveTo(L + 8, 0); ctx.lineTo(L - 4, -7); ctx.lineTo(L - 4, 7); ctx.closePath(); ctx.fill();
     ctx.restore(); ctx.save();   // back to world space
+  }
+  if (m.lsweep) {
+    // Light's sweep: a glinting arc while he gathers, then a bright cut.
+    const R = 46, a = m.lsweep.a;
+    ctx.lineWidth = m.lsweep.wind ? 1.5 : 3;
+    ctx.strokeStyle = m.lsweep.wind ? '#fff6a0' : '#ffffff';
+    ctx.globalAlpha = m.lsweep.wind ? 0.45 + 0.35 * Math.sin(now / 40) : 0.85;
+    ctx.beginPath(); ctx.arc(mx, my, R, a - 1.4, a + 1.4); ctx.stroke();
+    if (m.lsweep.wind) {
+      ctx.globalAlpha = 0.12; ctx.fillStyle = '#fff6a0';
+      ctx.beginPath(); ctx.moveTo(mx, my); ctx.arc(mx, my, R, a - 1.4, a + 1.4); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 0.9; ctx.fillStyle = '#ffffff';   // the glint on his blade
+      ctx.fillRect(Math.round(mx + Math.cos(now / 60) * 4) - 1, Math.round(y - 4), 2, 2);
+    }
+  }
+  if (m.ldash) {
+    // Light's flash chain: an arrow while he lines up, pips for dashes left.
+    const a = m.ldash.a;
+    if (m.ldash.wind) {
+      ctx.globalAlpha = 0.5 + 0.3 * Math.sin(now / 45); ctx.strokeStyle = '#fff6a0'; ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]); ctx.lineDashOffset = -now / 15;
+      ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx + Math.cos(a) * 90, my + Math.sin(a) * 90); ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      ctx.globalAlpha = 0.7; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx - Math.cos(a) * 26, my - Math.sin(a) * 26); ctx.stroke();
+    }
+    ctx.globalAlpha = 0.95; ctx.fillStyle = '#fff6a0';
+    for (let i = 0; i < (m.ldash.n || 0); i++) ctx.fillRect(Math.round(mx - (m.ldash.n - 1) * 2 + i * 4) - 1, Math.round(y - 12), 2, 2);
   }
   if (m.dazed) {
     ctx.fillStyle = '#ffe25a'; ctx.globalAlpha = 0.9;
@@ -4188,6 +4254,7 @@ const MONSTER_ARMS = {
   shaman:      { art: 'm_totem',     color: '#5aff9a', size: 0.68, rest: -1.1,  move: 'cast'   },
   necromancer: { art: 'm_bonestaff', color: '#9aff7a', size: 0.66, rest: -1.1,  move: 'cast'   },
   skeleton:    { art: 'm_shiv',      color: '#c8c0a8', size: 0.8,  rest:  0.3,  move: 'stab'   },
+  light:       { art: 'm_scythe',    color: '#fff6a0', size: 0.8,  rest: -0.6,  move: 'chop'   },
   // Boss
   giant:    { art: 'm_tree',      color: '#4e8a3a', size: 0.62, rest: -0.95, move: 'giant'  },
   portalmage: { art: 'm_portalstaff', color: '#b07aff', size: 0.6, rest: -1.15, move: 'cast' },

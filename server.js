@@ -652,6 +652,12 @@ const MONSTER_TYPES = {
     name: 'NECROMANCER', minWave: 12, weight: 2, hp: 1.6, dmg: 1.0, speed: 0.8, size: 1.1,
     color: '#5a4a7a', xp: 2.0, coins: 2.2, ai: 'necro',
   },
+  // Blindingly fast and rare (see maybeLightWave): sweeps through you and
+  // blinks away, or chains curving dashes. Usually comes alone.
+  light: {
+    name: 'LIGHT', minWave: 6, weight: 0, hp: 3.0, dmg: 1.4, speed: 2.9, size: 1.05,
+    color: '#fff6a0', xp: 3.5, coins: 4.0, ai: 'light', rare: true,
+  },
   // ── Minions (never spawned by waves, only by the monsters above) ──
   slimelet: {
     name: 'SLIMELET', minWave: 1, weight: 0, hp: 0.45, dmg: 0.6, speed: 1.6, size: 0.7,
@@ -738,7 +744,7 @@ function pickMonsterType(wave) {
   const pool = [];
   let total = 0;
   for (const [id, def] of Object.entries(MONSTER_TYPES)) {
-    if (def.extremeOnly || def.boss || def.minion || wave < def.minWave) continue;
+    if (def.extremeOnly || def.boss || def.minion || def.rare || wave < def.minWave) continue;
     // The further past a type's debut, the more it crowds out the weaker ones.
     const maturity = 1 + Math.min(2.2, (wave - def.minWave) * 0.16);
     const toughness = Math.max(1, def.hp);
@@ -1679,7 +1685,112 @@ function aiNecro(m, t, dist, dx, dy, spd, factor, dt) {
   return true;
 }
 
-const MONSTER_AI = { bomber: aiBomber, shaman: aiShaman, charger: aiCharger, necro: aiNecro };
+// LIGHT: runs at you very fast, and every LIGHT_CD picks one of two moves:
+//  SWEEP — a glint (LIGHT_SWEEP_WIND), then he lunges through you at several
+//          times his speed with a wide blade sweep, and blinks to a random spot.
+//  FLASH CHAIN — LIGHT_DASHES charges in a row, each one curving after you.
+// A parry stops either move and dazes him.
+const LIGHT_CD = 2400, LIGHT_SWEEP_WIND = 380, LIGHT_SWEEP_MS = 360, LIGHT_SWEEP_R = 46, LIGHT_SWEEP_MULT = 2.0, LIGHT_SWEEP_SPEED = 7.5;
+const LIGHT_DASHES = 4, LIGHT_DASH_WIND = 480, LIGHT_DASH_GAP = 170, LIGHT_DASH_SPEED = 9, LIGHT_DASH_DIST = 280;
+const LIGHT_TURN = 3.4, LIGHT_DASH_MULT = 1.3, LIGHT_KNOCK = 30;
+const LIGHT_CHANCE = 0.12, LIGHT_ALONE = 0.75, LIGHT_FIRST_WAVE = 6, LIGHT_GAP = 2;
+
+function lightParried(m, o) {
+  applyDamage(m, Math.round(m.atkDamage * reflectOf(o)) + 10, playerKeyOf(o));
+  spawnParrySpark(cx(o), cy(o));
+  m.sweep = null; m.dashes = null; m.dazed = 1500; m.lightCd = LIGHT_CD;
+}
+// Somewhere on the floor well away from the players.
+function lightBlink(m) {
+  room.particles.push({ type: 'teleport', x: cx(m), y: cy(m), timer: 340, max: 340, color: '#fff6a0' });
+  for (let i = 0; i < 16; i++) {
+    m.x = ARENA_X + 4 + Math.random() * (ARENA_W - m.w - 8);
+    m.y = ARENA_Y + 4 + Math.random() * (ARENA_H - m.h - 8);
+    if (!tooCloseToPlayers(cx(m), cy(m), 140)) break;
+  }
+  clampToArena(m);
+  room.particles.push({ type: 'teleport', x: cx(m), y: cy(m), timer: 340, max: 340, color: '#ffffff' });
+}
+function angleTo(from, to) { return Math.atan2(cy(to) - cy(from), cx(to) - cx(from)); }
+function turnToward(a, want, max) {
+  let d = want - a;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return a + Math.max(-max, Math.min(max, d));
+}
+function aiLight(m, t, dist, dx, dy, spd, factor, dt) {
+  m.lightCd = (m.lightCd ?? 1300) - dt;
+  if (m.dazed > 0) { m.dazed -= dt; return true; }
+  const s = m.sweep;
+  if (s) {
+    if (s.wind > 0) {
+      s.wind -= dt; s.a = Math.atan2(dy, dx); m.face = dx > 0 ? 1 : -1;
+      return true;
+    }
+    s.t -= dt;
+    const step = LIGHT_SWEEP_SPEED * factor;
+    m.x += Math.cos(s.a) * step; m.y += Math.sin(s.a) * step;
+    clampToArena(m);
+    for (const o of shieldFoes()) {
+      if (s.hit.has(o) || (o.num && unseen(o))) continue;
+      if (Math.hypot(cx(o) - cx(m), cy(o) - cy(m)) > LIGHT_SWEEP_R + o.w / 2) continue;
+      s.hit.add(o);
+      if (o.parryTimer > 0) { lightParried(m, o); return true; }
+      applyDamage(o, Math.round(m.atkDamage * LIGHT_SWEEP_MULT), 'monster');
+    }
+    if (s.t <= 0) { m.sweep = null; m.lightCd = LIGHT_CD; lightBlink(m); }
+    return true;
+  }
+  const c = m.dashes;
+  if (c) {
+    if (c.wind > 0) {
+      c.wind -= dt; c.a = Math.atan2(dy, dx); m.face = dx > 0 ? 1 : -1;
+      return true;
+    }
+    c.a = turnToward(c.a, Math.atan2(dy, dx), LIGHT_TURN * dt / 1000);   // curves after you
+    m.face = Math.cos(c.a) < 0 ? -1 : 1;
+    const step = LIGHT_DASH_SPEED * factor, ox = m.x, oy = m.y;
+    m.x += Math.cos(c.a) * step; m.y += Math.sin(c.a) * step; c.left -= step;
+    clampToArena(m);
+    for (const o of shieldFoes()) {
+      if (c.hit.has(o) || (o.num && unseen(o)) || !aabb(m, o)) continue;
+      c.hit.add(o);
+      if (o.parryTimer > 0) { lightParried(m, o); return true; }
+      applyDamage(o, Math.round(m.atkDamage * LIGHT_DASH_MULT), 'monster');
+      o.x += Math.cos(c.a) * LIGHT_KNOCK; o.y += Math.sin(c.a) * LIGHT_KNOCK;
+      clampToArena(o);
+    }
+    const wall = Math.hypot(m.x - ox, m.y - oy) < step * 0.5;
+    if (wall || c.left <= 0) {
+      if (--c.n > 0) { c.wind = LIGHT_DASH_GAP; c.left = LIGHT_DASH_DIST; c.hit = new Set(); }
+      else { m.dashes = null; m.lightCd = LIGHT_CD; m.dazed = 380; }
+    }
+    return true;
+  }
+  if (m.lightCd <= 0 && dist < 340) {
+    m.swing = MONSTER_SWING_MS;
+    if (dist < 160 && Math.random() < 0.55) m.sweep = { wind: LIGHT_SWEEP_WIND, t: LIGHT_SWEEP_MS, a: Math.atan2(dy, dx), hit: new Set() };
+    else m.dashes = { n: LIGHT_DASHES, wind: LIGHT_DASH_WIND, a: Math.atan2(dy, dx), left: LIGHT_DASH_DIST, hit: new Set() };
+    return true;
+  }
+  return false;   // otherwise he closes in (very fast) and slashes like anyone else
+}
+
+// Light comes at most every LIGHT_GAP waves, by chance, and most often alone.
+function maybeLightWave(num) {
+  if (!['waves', 'coop', 'extreme'].includes(room.gameMode)) return;
+  if (num < (room.gameMode === 'extreme' ? 2 : LIGHT_FIRST_WAVE)) return;
+  if (num - (room.lastLightWave ?? -99) < LIGHT_GAP || Math.random() >= LIGHT_CHANCE) return;
+  room.lastLightWave = num;
+  room.seenTypes.add('light');
+  if (Math.random() < LIGHT_ALONE) { room.wave.spawnQueue = 0; room.wave.monstersLeft = 1; }
+  else room.wave.monstersLeft++;
+  spawnMonster('light');
+  room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
+                        text: room.wave.spawnQueue ? 'LIGHT JOINS THE FIGHT' : 'LIGHT HAS COME', color: '#fff6a0', timer: 3000, max: 3000 });
+}
+
+const MONSTER_AI = { bomber: aiBomber, shaman: aiShaman, charger: aiCharger, necro: aiNecro, light: aiLight };
 
 // After a monster is killed (and paid for): bombers pop, splitters split,
 // a necromancer's skeletons crumble.
@@ -1728,7 +1839,7 @@ function startWave(num) {
     spawnMonster('giant');
     room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
                           text: 'THE GIANT APPROACHES', color: '#c8e07a', timer: 3200, max: 3200 });
-  }
+  } else maybeLightWave(num);
 }
 
 function clearField() {
@@ -4419,7 +4530,10 @@ function startMindControl(p, pKey) {
   p.hidden = true;
   p.pull = null;
   if (isPlayer) best.mindControlledBy = pKey;
-  else { best.controlledBy = pKey; best.freeze = 0; best.windup = 0; best.wind = null; best.atkCooldown = 0; }   // ready to swing at once
+  else {   // ready to swing at once, with whatever it was doing dropped
+    best.controlledBy = pKey; best.freeze = 0; best.windup = 0; best.wind = null; best.atkCooldown = 0;
+    best.charge = null; best.sweep = null; best.dashes = null; best.dazed = 0; best.fuse = 0; best.raiseT = 0; best.raiseAt = null;
+  }
   room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 420, max: 420, color: WEAPON_COLORS.mindtome });
   room.particles.push({ type: 'streak', x: cx(p), y: cy(p), x2: cx(best), y2: cy(best), timer: 420, max: 420, color: WEAPON_COLORS.mindtome });
   room.particles.push({ type: 'trapburst', x: cx(best), y: cy(best), maxR: 40, timer: 800, max: 800, color: WEAPON_COLORS.mindtome, text: 'MIND CONTROL' });
@@ -4434,7 +4548,7 @@ function endMindControl(p, pKey) {
   const t = c.ref;
   if (t) {
     if (c.isPlayer) { if (t.mindControlledBy === pKey) t.mindControlledBy = null; }
-    else if (t.controlledBy === pKey) { t.controlledBy = null; t.atkCooldown = Math.max(t.atkCooldown || 0, 600); }
+    else if (t.controlledBy === pKey) { t.controlledBy = null; t.pupRush = null; t.atkCooldown = Math.max(t.atkCooldown || 0, 600); }
     if (!t.dead) room.particles.push({ type: 'teleport', x: cx(t), y: cy(t), timer: 380, max: 380, color: '#ffffff' });
   }
   p.invincible = Math.max(p.invincible || 0, 1200);
@@ -4449,6 +4563,16 @@ function tickMindControl(p, key, dt, factor) {
   if (gone || c.left <= 0) { endMindControl(p, key); return; }
   if (c.isPlayer) return;   // a rival player moves on your keys in their own movement step
   const inp = room.inputs[key];
+  c.spCd = Math.max(0, (c.spCd || 0) - dt);
+  if (t.pupRush && !(t.freeze > 0)) {
+    updatePuppetRush(t, key, factor, dt);
+    if (!t.dead && room.monsters.includes(t)) { applyPull(t, dt); clampToArena(t); }
+    return;
+  }
+  if (room.specialJustPressed[key] && c.spCd <= 0 && !(t.freeze > 0)) {
+    c.spCd = puppetSpecial(t, key);
+    if (t.dead || !room.monsters.includes(t)) return;   // it blew itself up
+  }
   if (!(t.freeze > 0)) {
     const spd = Math.max(t.speed * 1.5, PUPPET_SPEED) * (t.slowTimer > 0 ? 0.5 : 1);
     let vx = 0, vy = 0;
@@ -4464,23 +4588,184 @@ function tickMindControl(p, key, dt, factor) {
   if (room.attackJustPressed[key] && !(t.atkCooldown > 0) && !(t.freeze > 0)) puppetAttack(t, key);
 }
 
+// Your foes as seen from the puppet (never the puppet itself), and the nearest.
+function puppetFoes(m, pKey) { return enemyTargets(pKey).filter(o => o !== m); }
+function nearestTo(m, list) {
+  let best = null, bd = Infinity;
+  for (const o of list) { const d = distBetween(o, m); if (d < bd) { bd = d; best = o; } }
+  return best;
+}
+// One blow from the puppet: a player's parry shrugs it off.
+function puppetHit(o, dmg, pKey) {
+  if (playerKeyOf(o) && o.parryTimer > 0) { spawnParrySpark(cx(o), cy(o)); return false; }
+  if (!o.num) o.invincible = 0;
+  applyDamage(o, Math.max(1, Math.round(dmg)), pKey);
+  return true;
+}
+function puppetShot(m, pKey, ang, dmg) {
+  const def = MONSTER_TYPES[m.type] || {}, sp = def.shotSpeed || 4.4;
+  room.projectiles.push({ id: nextId(), x: cx(m), y: cy(m), dx: Math.cos(ang) * sp, dy: Math.sin(ang) * sp,
+    damage: Math.round(dmg), owner: pKey, ignore: m, traveled: 0, maxRange: Math.max(def.shotRange || 260, 300),
+    weaponId: def.shotId || (m.mage ? 'hellfire' : 'spit'), burn: def.shotBurn || (m.mage ? 1500 : 0),
+    isAoe: false, aoeRadius: 0, pierce: false, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: null });
+}
+// A shockwave around the puppet: everything of yours in reach is hit and staggered.
+function puppetSlam(m, pKey, r, dmg, stunMs, kind, color, text) {
+  for (const o of puppetFoes(m, pKey)) {
+    if (Math.hypot(cx(o) - cx(m), cy(o) - cy(m)) > r + o.w / 2) continue;
+    if (puppetHit(o, dmg, pKey) && stunMs && !o.dead) stagger(o, stunMs, kind);
+  }
+  room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: r, timer: 420, max: 420, color });
+  room.particles.push({ type: 'trapburst', x: cx(m), y: cy(m), maxR: Math.min(50, r), timer: 650, max: 650, color, text });
+}
+
+// What SPECIAL does while you're inside each monster: its own ability, turned
+// on its own side. The name is shown on your SPECIAL button.
+const PUPPET_ABILITY = {
+  bomber: 'DETONATE', shaman: 'MEND', charger: 'CHARGE', necromancer: 'RAISE DEAD', splitter: 'SPLIT',
+  light: 'FLASH CHAIN', wraith: 'BLINK', spitter: 'VOLLEY', infernal: 'FIRESTORM', runner: 'DASH',
+  giant: 'STOMP', portalmage: 'FIRE RING',
+};
+const puppetAbilityName = m => PUPPET_ABILITY[m.type] || 'SLAM';
+
+// Returns the cooldown before it can be used again.
+function puppetSpecial(m, pKey) {
+  const def = MONSTER_TYPES[m.type] || {};
+  const base = m.atkDamage * PUPPET_DMG;
+  const best = nearestTo(m, puppetFoes(m, pKey));
+  const aim = best ? angleTo(m, best) : (m.face < 0 ? Math.PI : 0);
+  m.face = Math.cos(aim) < 0 ? -1 : 1;
+  m.swing = MONSTER_SWING_MS;
+  const rush = (o) => { m.pupRush = { a: aim, hit: new Set(), wait: 0, ...o, left: o.dist }; };
+  switch (m.type) {
+    case 'bomber': {
+      // The fuse is lit at once: it goes up on your enemies (and takes itself with it).
+      const r = BOMB_R * 1.3;
+      for (const o of puppetFoes(m, pKey)) if (Math.hypot(cx(o) - cx(m), cy(o) - cy(m)) <= r + o.w / 2) puppetHit(o, base * BOMB_MULT, pKey);
+      room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: r, timer: 450, max: 450, color: '#ffb030' });
+      room.particles.push({ type: 'trapburst', x: cx(m), y: cy(m), maxR: r, timer: 650, max: 650, color: '#ff6a1a', text: 'BOOM!' });
+      removeMonster(m);
+      return 0;
+    }
+    case 'shaman': {
+      // Heals you (and your partner in co-op) and the puppet.
+      for (const k of ['p1', 'p2']) {
+        const pl = room.players[k];
+        if (!pl || pl.dead || (k !== pKey && enemyTargets(pKey).includes(pl))) continue;
+        const heal = Math.round(pl.maxHp * 0.25);
+        pl.hp = Math.min(pl.maxHp, pl.hp + heal);
+        room.particles.push({ type: 'xp', x: cx(pl), y: pl.y, text: '+' + heal, timer: 700, color: '#5aff9a' });
+      }
+      m.hp = Math.min(m.maxHp, m.hp + Math.round(m.maxHp * 0.25));
+      m.ward = SHAMAN_WARD_MS;
+      room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: SHAMAN_R, timer: 600, max: 600, color: '#5aff9a' });
+      room.particles.push({ type: 'trapburst', x: cx(m), y: cy(m), maxR: 34, timer: 650, max: 650, color: '#5aff9a', text: 'MEND' });
+      return 4500;
+    }
+    case 'charger':
+      rush({ dist: CHARGE_DIST, speed: CHARGE_SPEED, mult: CHARGE_MULT, knock: CHARGE_KNOCK, n: 1, turn: 0 });
+      return 3000;
+    case 'light':
+      rush({ dist: LIGHT_DASH_DIST, speed: LIGHT_DASH_SPEED, mult: LIGHT_DASH_MULT, knock: LIGHT_KNOCK, n: 3, turn: LIGHT_TURN });
+      return 4000;
+    case 'runner':
+      rush({ dist: 200, speed: 8, mult: 1.2, knock: 12, n: 1, turn: 0 });
+      return 2000;
+    case 'necromancer':
+    case 'splitter': {
+      const type = m.type === 'splitter' ? 'slimelet' : 'skeleton';
+      for (let i = 0; i < 2; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const at = arenaClamp(cx(m) + Math.cos(a) * 30, cy(m) + Math.sin(a) * 30, 12);
+        spawnAlly(pKey, at.x, at.y, base * 1.4, { type, force: true, life: 12000 });
+        room.particles.push({ type: 'teleport', x: at.x, y: at.y, timer: 380, max: 380, color: def.color || '#9aff7a' });
+      }
+      room.particles.push({ type: 'trapburst', x: cx(m), y: cy(m), maxR: 34, timer: 650, max: 650, color: def.color || '#9aff7a', text: puppetAbilityName(m) });
+      return m.type === 'splitter' ? 6000 : 5000;
+    }
+    case 'wraith': {
+      if (!best) return 400;
+      room.particles.push({ type: 'teleport', x: cx(m), y: cy(m), timer: 340, max: 340, color: '#8a6aff' });
+      const a = angleTo(best, m);
+      m.x = cx(best) + Math.cos(a) * 30 - m.w / 2; m.y = cy(best) + Math.sin(a) * 30 - m.h / 2;
+      clampToArena(m);
+      room.particles.push({ type: 'teleport', x: cx(m), y: cy(m), timer: 340, max: 340, color: '#c8b8ff' });
+      m.face = cx(best) < cx(m) ? -1 : 1;
+      puppetHit(best, base * 1.6, pKey);
+      return 2500;
+    }
+    case 'spitter':
+    case 'infernal':
+      for (let i = -2; i <= 2; i++) puppetShot(m, pKey, aim + i * 0.18, base);
+      return 2500;
+    case 'portalmage':
+      for (let i = 0; i < 10; i++) puppetShot(m, pKey, aim + i * Math.PI / 5, base);
+      return 3500;
+    case 'giant':
+      puppetSlam(m, pKey, 125, base * 1.6, 1200, 'quake', '#c8e07a', 'STOMP');
+      return 4000;
+    default:
+      puppetSlam(m, pKey, 70 + m.w * 0.5, base * 1.8, 600, 'stun', def.color || '#ffffff', 'SLAM');
+      return 3000;
+  }
+}
+
+// A puppet's charge (or chain of them): runs along its angle, curving after the
+// nearest foe if it can turn, hitting each foe once per run.
+function updatePuppetRush(m, pKey, factor, dt) {
+  const r = m.pupRush;
+  if (r.wait > 0) { r.wait -= dt; return; }
+  const foes = puppetFoes(m, pKey);
+  const tgt = nearestTo(m, foes);
+  if (r.turn && tgt) r.a = turnToward(r.a, angleTo(m, tgt), r.turn * dt / 1000);
+  m.face = Math.cos(r.a) < 0 ? -1 : 1;
+  const step = r.speed * factor, ox = m.x, oy = m.y;
+  m.x += Math.cos(r.a) * step; m.y += Math.sin(r.a) * step; r.left -= step;
+  clampToArena(m);
+  for (const o of foes) {
+    if (r.hit.has(o) || Math.hypot(cx(o) - cx(m), cy(o) - cy(m)) > (m.w + o.w) / 2 + 6) continue;
+    r.hit.add(o);
+    if (puppetHit(o, m.atkDamage * PUPPET_DMG * r.mult, pKey) && !o.dead && !o.boss) {
+      o.x += Math.cos(r.a) * r.knock; o.y += Math.sin(r.a) * r.knock;
+      clampToArena(o);
+    }
+  }
+  const wall = Math.hypot(m.x - ox, m.y - oy) < step * 0.5;
+  if (wall || r.left <= 0) {
+    if (--r.n > 0) {
+      r.left = r.dist; r.hit = new Set(); r.wait = LIGHT_DASH_GAP;
+      if (tgt) r.a = angleTo(m, tgt);
+    } else m.pupRush = null;
+  }
+}
+
 // The puppet uses its own attack — on its own side.
 function puppetAttack(m, pKey) {
   const def = MONSTER_TYPES[m.type] || {};
-  const foes = enemyTargets(pKey).filter(o => o !== m);
-  let best = null, bd = Infinity;
-  for (const o of foes) { const d = distBetween(o, m); if (d < bd) { bd = d; best = o; } }
+  const foes = puppetFoes(m, pKey);
+  const best = nearestTo(m, foes);
   m.swing = MONSTER_SWING_MS;
   const dmg = Math.round(m.atkDamage * PUPPET_DMG);
   if (def.ranged || m.mage) {
     m.atkCooldown = Math.round((def.reload || 1400) * 0.6);
     if (!best) return;
-    const ang = Math.atan2(cy(best) - cy(m), cx(best) - cx(m)), sp = def.shotSpeed || 4.4;
+    const ang = angleTo(m, best);
     m.face = Math.cos(ang) < 0 ? -1 : 1;
-    room.projectiles.push({ id: nextId(), x: cx(m), y: cy(m), dx: Math.cos(ang) * sp, dy: Math.sin(ang) * sp,
-      damage: dmg, owner: pKey, ignore: m, traveled: 0, maxRange: Math.max(def.shotRange || 260, 300),
-      weaponId: def.shotId || (m.mage ? 'hellfire' : 'spit'), burn: def.shotBurn || (m.mage ? 1500 : 0),
-      isAoe: false, aoeRadius: 0, pierce: false, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: null });
+    puppetShot(m, pKey, ang, dmg);
+    return;
+  }
+  if (m.type === 'light') {
+    // Light's blade sweep: a short lunge and a wide cut around him.
+    if (best) {
+      const a = angleTo(m, best);
+      m.x += Math.cos(a) * 28; m.y += Math.sin(a) * 28; clampToArena(m);
+      m.face = Math.cos(a) < 0 ? -1 : 1;
+    }
+    for (const o of foes) {
+      if (Math.hypot(cx(o) - cx(m), cy(o) - cy(m)) <= LIGHT_SWEEP_R + 10 + o.w / 2) puppetHit(o, dmg * LIGHT_SWEEP_MULT, pKey);
+    }
+    room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: LIGHT_SWEEP_R + 10, timer: 260, max: 260, color: '#fff6a0' });
+    m.atkCooldown = 700;
     return;
   }
   m.atkCooldown = m.boss ? 900 : 650;
@@ -5321,7 +5606,8 @@ function playerView(p) {
     parryCd: Math.max(0, p.parryCooldown), parryMax: p.parryCd || PARRY_COOLDOWN, parryActive: p.parryTimer > 0,
     speed: Math.round(p.speed * 1000) / 1000,
     passive: p.passive || null,
-    ...(p.controlling ? { controlling: true, ctlLeft: Math.max(0, Math.round(p.controlling.left)) } : {}),
+    ...(p.controlling ? { controlling: true, ctlLeft: Math.max(0, Math.round(p.controlling.left)),
+                          ...(!p.controlling.isPlayer && p.controlling.ref ? { pupAb: puppetAbilityName(p.controlling.ref), pupCd: Math.round(p.controlling.spCd || 0) } : {}) } : {}),
     ...(p.mindControlledBy ? { puppet: p.mindControlledBy } : {}),
     ...(p.passive === 'mindtome' ? { shuffleIn: Math.max(0, Math.round(p.shuffleT ?? MIND_SHUFFLE_MS)) } : {}),
     ...(p.passive === 'vortex' ? { aegis: !(p.aegisCd > 0) } : {}),
@@ -5347,6 +5633,9 @@ function buildStateMsg(playerNum) {
                   ...(m.fuse > 0 ? { fuse: Math.round(m.fuse) } : {}), ...(m.ward > 0 ? { ward: true } : {}),
                   ...(m.charge ? { charge: { a: Math.round(m.charge.a * 100) / 100, wind: m.charge.wind > 0 } } : {}),
                   ...(m.dazed > 0 ? { dazed: true } : {}),
+                  ...(m.sweep ? { lsweep: { a: Math.round(m.sweep.a * 100) / 100, wind: m.sweep.wind > 0 } } : {}),
+                  ...(m.dashes ? { ldash: { a: Math.round(m.dashes.a * 100) / 100, wind: m.dashes.wind > 0, n: m.dashes.n } } : {}),
+                  ...(m.pupRush ? { ldash: { a: Math.round(m.pupRush.a * 100) / 100, wind: false, n: m.pupRush.n || 1 } } : {}),
                   ...(m.raiseT > 0 && m.raiseAt ? { raise: m.raiseAt.map(r => ({ x: r1(r.x), y: r1(r.y) })) } : {}),
                   ...(m.boss ? { boss: true, wind: m.windup > 0 ? m.wind : null, windup: Math.max(0, Math.round(m.windup)), stun: Math.max(0, Math.round(m.stun)) } : {}),
                   ...(m.mage ? { mage: true, hidden: !!m.hidden, phase: m.phase, cast: m.tpT > 0 ? 'teleport' : m.castT > 0 ? m.cast : null } : {}) })),
