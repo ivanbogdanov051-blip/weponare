@@ -35,7 +35,7 @@ let WEAPON_COLOR = {
   ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
   scimitar:'#e8e0c8', slingshot:'#b08a5a', mace:'#9aa4b0', javelin:'#d8c8a0', claws:'#e0e4ec',
   emberstaff:'#ff7a2a', halberd:'#c0c8d8', frostbow:'#9fe8ff', chronostaff:'#e8c87a', voidblade:'#9a5aff',
-  mindtome:'#ff5ad8',
+  mindtome:'#ff5ad8', lightblade:'#fff27a',
 };
 const WEAPON_DESC = {
   sword:'Balanced blade', dagger:'Fast, low damage', axe:'Slow, heavy hit',
@@ -64,6 +64,7 @@ const WEAPON_DESC = {
   chronostaff:'Bend time: freeze foes in place and rewind your own wounds',
   voidblade:'A blade of the void: waves on every swing, rift steps and a SUPER singularity',
   mindtome:'A book of mind power: set traps under your enemies, lock their minds, and take one over',
+  lightblade:'A blade of pure light: dash wherever you click or tap, hunt foes in a chain of dashes, and go LIGHTSPEED',
 };
 
 // Filled from the server catalog: { id: {type, atkSpd, ...} }
@@ -464,7 +465,7 @@ function updatePrediction(frameDt, now) {
   if (!currState || currState.gameState !== 'GAMEPLAY' || !myNum) { pred = null; predHist.length = 0; return; }
   const key = myNum === 1 ? 'p1' : 'p2';
   const me = currState.players?.[key];
-  if (!me || me.dead || me.controlling) { pred = null; predHist.length = 0; return; }
+  if (!me || me.dead || me.controlling || me.dashing) { pred = null; predHist.length = 0; return; }
   if (!pred) { pred = { x: me.x, y: me.y, facing: me.facing }; predHist.length = 0; }
 
   const inp = currentInputs();
@@ -494,6 +495,7 @@ function updatePrediction(frameDt, now) {
   let spd = me.speed || serverPlayerSpeed;
   if (me.effects && me.effects.speed > 0) spd *= 1.7;
   if (ghostNow(me, now)) spd *= 1.75;
+  if (me.lightspeed > 0) spd *= 3;            // LIGHTSPEED
   if (me.passive === 'dagger') spd *= 1.45;   // SWIFTNESS
   if (me.effects && me.effects.slow  > 0) spd *= 0.4;
   if (me.effects && me.effects.root  > 0) spd = 0;            // ROOT VINES
@@ -590,6 +592,7 @@ const ATTACK_ANIM = {
   stormhammer: 'chop', frostscythe: 'spin', sunbow: 'draw',
   scimitar: 'slash', slingshot: 'draw', mace: 'chop', javelin: 'throw', claws: 'stab',
   emberstaff: 'cast', halberd: 'sweep', frostbow: 'draw', chronostaff: 'cast', voidblade: 'slash', mindtome: 'tome',
+  lightblade: 'slash',
 };
 const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
                   heavy: 300, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
@@ -1361,6 +1364,28 @@ function drawCloud(f, now) {
   ctx.restore();
 }
 
+// AFTERGLOW: a glowing streak along a Light Blade dash, crackling, fading out.
+function drawLightStreak(f, now) {
+  const fade = 1 - Math.min(1, f.k || 0);
+  const x2 = f.x + Math.cos(f.a) * f.v, y2 = f.y + Math.sin(f.a) * f.v;
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (const [w, c, al] of [[10, '#fff27a', 0.18], [5, '#fff27a', 0.45], [2, '#ffffff', 0.9]]) {
+    ctx.globalAlpha = al * fade * (0.85 + 0.15 * Math.sin(now * 20 + w));
+    ctx.strokeStyle = c; ctx.lineWidth = w;
+    ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+  // A few sparks jumping off it.
+  ctx.globalAlpha = fade; ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < 4; i++) {
+    const k = ((now * 1.7 + i * 0.27 + f.id * 0.13) % 1);
+    const sx = f.x + (x2 - f.x) * k, sy = f.y + (y2 - f.y) * k;
+    const j = Math.sin(now * 30 + i * 4) * 4;
+    ctx.fillRect(Math.round(sx - Math.sin(f.a) * j), Math.round(sy + Math.cos(f.a) * j), 1.5, 1.5);
+  }
+  ctx.restore();
+}
+
 function drawFireRings(fires) {
   if (!fires.length) return;
   const now = performance.now() / 1000;
@@ -1377,6 +1402,7 @@ function drawFireRings(fires) {
     if (f.kind === 'barrier') { drawBarrier(f, now); continue; }
     if (f.kind === 'mine') { drawPlayerMine(f, now); continue; }
     if (f.kind === 'mindbeams') { drawMindBeams(f, now); continue; }
+    if (f.kind === 'lightstreak') { drawLightStreak(f, now); continue; }
     if (f.kind === 'blizzard') { drawBlizzard(f, now); continue; }
     if (f.kind === 'sunorb') { drawSunorb(f, now); continue; }
     if (f.kind === 'sunbeam') { drawSunbeam(f, now); continue; }
@@ -1745,6 +1771,7 @@ function tryLocalAttack() {
     localGhost = { on: !was, at: performance.now() };
     if (!was) { localAtkCd = Math.max(localAtkCd, 700); lastLocalSlashTime = performance.now(); return; }
   }
+  if (me.weaponId === 'lightblade') return;   // its swipe comes at the end of the dash, from the server
   spawnLocalSlash(me, key);
 }
 
@@ -1869,8 +1896,24 @@ function handleCanvasTap(clientX, clientY) {
 }
 
 canvas.addEventListener('pointerdown', (e) => {
-  if (handleCanvasTap(e.clientX, e.clientY)) e.preventDefault();
+  if (handleCanvasTap(e.clientX, e.clientY)) { e.preventDefault(); return; }
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (tryBladeDash(e.clientX, e.clientY)) e.preventDefault();
 }, { passive: false });
+
+// Light Blade: clicking (or tapping) the field dashes you there.
+function tryBladeDash(clientX, clientY) {
+  if (!currState || currState.gameState !== 'GAMEPLAY' || !myNum || !ws || ws.readyState !== 1) return false;
+  const me = currState.players?.['p' + myNum];
+  if (!me || me.dead || me.controlling || me.weaponId !== 'lightblade') return false;
+  const r = canvas.getBoundingClientRect();
+  if (!r.width || !r.height) return false;
+  const x = Math.round((clientX - r.left) * CANVAS_W / r.width), y = Math.round((clientY - r.top) * CANVAS_H / r.height);
+  ws.send(JSON.stringify({ type: 'blade_dash', x, y }));
+  bladeTapMark = { x, y, at: performance.now() };
+  return true;
+}
+let bladeTapMark = null;
 
 // ─── Touch Controls ───────────────────────────────────────────────────────────
 
@@ -2237,10 +2280,16 @@ const LEGEND_MOVES = {
              + ' <b>SUPER</b> SUPERNOVA: a beam of sunlight right across the arena that sweeps a wide arc for 2.5s,'
              + ' burning everything it crosses. Needs another legendary.',
   ghostdagger: '<b>ATK</b> melt into the shadows: invisible to every enemy (you still see yourself) and 75% faster;'
-             + ' your next attack is a double-damage ghost strike that ends it, and so does a special, a super or a'
-             + ' weapon swap · <b>SPECIAL</b> throw the dagger: at least a quarter of the target\'s health, half of it'
-             + ' in the back (long cooldown) · <b>SUPER</b> throw it skyward and it rains knives that hit for massive'
-             + ' damage where they\'re marked; a quarter of them become medkits that heal on touch.',
+             + ' your next attack is a double-damage ghost strike that ends it, and so does a special, a super, an'
+             + ' ability or a weapon swap · <b>SPECIAL</b> throw a fan of five daggers: the middle one takes at least'
+             + ' 16% of the target\'s health (32% in the back) · <b>SUPER</b> throw it skyward and it rains knives that'
+             + ' hit hard where they\'re marked; a quarter of them become medkits that heal on touch.',
+  lightblade: '<b>ATK</b> dash to wherever you click (or tap on a phone) &ndash; or toward the nearest foe with the'
+            + ' attack key &ndash; cutting through anything in the way, then swipe all round as you land ·'
+            + ' <b>SPECIAL</b> five curving dashes that hunt down your enemies (or the nearest pickup if there are none):'
+            + ' anything you hit is stunned and hurled into the wall · <b>SUPER</b> LIGHTSPEED: 8s at triple speed,'
+            + ' lightning zapping everything that comes close, and crash into a foe for a huge lightning blast that'
+            + ' stuns everyone around for 2s.',
   portalwand: '<b>ATK</b> small fire portals open beside you and throw exploding fireballs · <b>SPECIAL</b> jump through a portal to the safest spot on the'
             + ' field (furthest from foes, clear of shots and traps), leaving a fire portal behind that keeps shooting ·'
             + ' <b>SUPER</b> portal legion: portals in your colour pour out monsters that fight on your side for 14s.'
@@ -2304,6 +2353,25 @@ function legendaryCards(weapons, coins) {
         <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>${legendPassive(w.id)}
         <div class="legend-buy">
           <button class="buy-weapon${ok && coins >= w.price ? '' : ' poor'}" onclick="buyWeapon('${w.id}')" ${ok ? '' : 'disabled'}>BUY ◆${w.price.toLocaleString()}</button>
+          <span class="legend-need">${need}</span>
+        </div>
+      </div>`;
+    }
+    if (w.needLight) {
+      const kills = (shopData && shopData.lightKills) || 0;
+      const maxed = (shopData && shopData.lightMaxed) || 0, needMax = (shopData && shopData.lightMaxedNeed) || 0;
+      const ok = kills >= 3 && maxed >= needMax;
+      const need = ok ? 'The light is yours - claim it!'
+        : `Beat Light ${Math.min(kills, 3)}/3 times (any runs) &middot; weapons fully maxed ${maxed}/${needMax}`;
+      return `<div class="shop-row legendary light-row">
+        <div class="shop-head">
+          <canvas class="shop-ic" data-weapon="${w.id}" width="56" height="32"></canvas>
+          <span class="shop-name" style="color:${col}">${w.name}</span>
+          <span class="legend-tag light-tag">LIGHT</span>
+        </div>
+        <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>${legendPassive(w.id)}
+        <div class="legend-buy">
+          <button class="buy-weapon${ok ? '' : ' poor'}" onclick="buyWeapon('${w.id}')" ${ok ? '' : 'disabled'}>CLAIM</button>
           <span class="legend-need">${need}</span>
         </div>
       </div>`;
@@ -3676,7 +3744,9 @@ function drawPlayerBody(p, baseColor, label, key) {
   ctx.fillRect(x + 1, y + p.h, p.w - 2, 2);
 
   const cv = playerSprite(skinCol, p.skin?.hatIdx || 0, p.facing, p.hitFlash > 0, p.skin?.outfit || '', p.skin?.accIdx || 0);
+  if (cv) drawLightRunner(p, key, x, y, cv);
   if (cv) ctx.drawImage(cv, x, y - PLAYER_PAD);
+  if (p.lightspeed > 0) drawLightspeedFx(p, x, y);
 
   drawNametag(x + p.w / 2, y - 13, label, skinCol);
   drawWeaponSprite(p, x, y, key);
@@ -3695,6 +3765,93 @@ function drawPlayerBody(p, baseColor, label, key) {
     ctx.beginPath(); ctx.arc(x + p.w/2, y + p.h/2, p.w + 1 + Math.sin(t)*1.5, 0, Math.PI*2); ctx.stroke();
     ctx.restore();
   }
+}
+
+// ── Light Blade ──
+// Dashing or at LIGHTSPEED you leave glowing afterimages and streaks of light.
+const lightRun = {};
+function drawLightRunner(p, key, x, y, cv) {
+  const now = performance.now();
+  let tr = lightRun[key];
+  if (!tr) tr = lightRun[key] = { pts: [] };
+  const fast = p.dashing || p.lightspeed > 0;
+  if (fast) {
+    const last = tr.pts[tr.pts.length - 1];
+    if (!last || Math.hypot(last.x - x, last.y - y) > 3) tr.pts.push({ x, y, t: now });
+  }
+  while (tr.pts.length && (now - tr.pts[0].t > 220 || tr.pts.length > 14)) tr.pts.shift();
+  if (key === 'p' + myNum && bladeTapMark && now - bladeTapMark.at < 350) {
+    const k = (now - bladeTapMark.at) / 350;
+    ctx.save();
+    ctx.globalAlpha = 0.8 * (1 - k); ctx.strokeStyle = '#fff27a'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(bladeTapMark.x, bladeTapMark.y, 4 + k * 10, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  if (!tr.pts.length) return;
+  ctx.save();
+  // A streak of light along the path…
+  ctx.lineCap = 'round';
+  for (const [w, c, al] of [[p.w * 0.9, '#fff27a', 0.22], [3, '#ffffff', 0.6]]) {
+    ctx.strokeStyle = c; ctx.lineWidth = w;
+    ctx.beginPath();
+    tr.pts.forEach((q, i) => {
+      ctx.globalAlpha = al;
+      if (i === 0) ctx.moveTo(q.x + p.w / 2, q.y + p.h / 2); else ctx.lineTo(q.x + p.w / 2, q.y + p.h / 2);
+    });
+    ctx.lineTo(x + p.w / 2, y + p.h / 2);
+    ctx.stroke();
+  }
+  // …and fading copies of you along it.
+  for (const q of tr.pts) {
+    const k = 1 - (now - q.t) / 220;
+    if (k <= 0 || (Math.abs(q.x - x) < 2 && Math.abs(q.y - y) < 2)) continue;
+    ctx.globalAlpha = 0.35 * k;
+    ctx.drawImage(cv, q.x, q.y - PLAYER_PAD);
+  }
+  ctx.restore();
+}
+
+// LIGHTSPEED: crackling lightning round you, beams of light flaring out,
+// and speed lines streaming off behind.
+function drawLightspeedFx(p, x, y) {
+  const now = performance.now(), mx = x + p.w / 2, my = y + p.h / 2;
+  const fadeOut = Math.min(1, p.lightspeed / 600);
+  ctx.save();
+  // Aura reach.
+  ctx.globalAlpha = (0.12 + 0.06 * Math.sin(now / 60)) * fadeOut; ctx.fillStyle = '#fff27a';
+  ctx.beginPath(); ctx.arc(mx, my, 80, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.35 * fadeOut; ctx.strokeStyle = '#fff27a'; ctx.lineWidth = 1;
+  ctx.setLineDash([3, 5]); ctx.lineDashOffset = -now / 20;
+  ctx.beginPath(); ctx.arc(mx, my, 80, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  // Beams of light flaring out and turning.
+  for (let i = 0; i < 6; i++) {
+    const a = now / 400 + i * Math.PI / 3, len = 26 + 14 * Math.sin(now / 90 + i * 2);
+    const g = ctx.createLinearGradient(mx, my, mx + Math.cos(a) * len, my + Math.sin(a) * len);
+    g.addColorStop(0, 'rgba(255,255,255,0.8)'); g.addColorStop(1, 'rgba(255,242,122,0)');
+    ctx.globalAlpha = fadeOut; ctx.strokeStyle = g; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx + Math.cos(a) * len, my + Math.sin(a) * len); ctx.stroke();
+  }
+  // Little jagged bolts crackling round your body, re-rolled every frame.
+  for (let b = 0; b < 3; b++) {
+    const a0 = Math.random() * Math.PI * 2, r0 = p.w * 0.5, r1 = p.w * (1.1 + Math.random() * 0.9);
+    let px = mx + Math.cos(a0) * r0, py = my + Math.sin(a0) * r0;
+    ctx.globalAlpha = 0.9 * fadeOut; ctx.strokeStyle = b % 2 ? '#ffffff' : '#fff27a'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(px, py);
+    for (let s = 1; s <= 4; s++) {
+      const rr = r0 + (r1 - r0) * s / 4, aa = a0 + (Math.random() - 0.5) * 0.7;
+      px = mx + Math.cos(aa) * rr; py = my + Math.sin(aa) * rr; ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+  // Speed lines and sparks.
+  for (let i = 0; i < 8; i++) {
+    const k = (now / 260 + i / 8) % 1;
+    const sx = mx - (p.facing || 1) * (6 + k * 26), sy = my - p.h / 2 + ((i * 37) % p.h) + 2;
+    ctx.globalAlpha = (1 - k) * 0.8 * fadeOut; ctx.fillStyle = i % 3 ? '#fff27a' : '#ffffff';
+    ctx.fillRect(Math.round(sx), Math.round(sy), Math.round(6 - k * 4), 1);
+  }
+  ctx.restore();
 }
 
 function drawNametag(cx, bottomY, label, color) {
@@ -4768,6 +4925,21 @@ function drawParticles(particles) {
       }
       ctx.globalAlpha = a; ctx.fillStyle = '#ffffff';
       ctx.beginPath(); ctx.arc(p.x2, p.y2, 3 + (1-a)*5, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    } else if (p.type==='bladeswipe') {
+      // The Light Blade's landing cut: a bright ring sweeping round from the dash direction.
+      const m=p.max||280, a=Math.max(0,p.timer/m), k=1-a;
+      const start = (p.a||0) - Math.PI * 0.5, sweep = Math.PI * 2 * Math.min(1, k * 1.8);
+      ctx.save();
+      for (const [w, c, al, rr] of [[7, p.color||'#fff27a', 0.35, 1], [3, '#ffffff', 0.95, 0.92], [1.5, p.color||'#fff27a', 0.8, 0.7]]) {
+        ctx.globalAlpha = a*al; ctx.strokeStyle = c; ctx.lineWidth = w;
+        ctx.beginPath(); ctx.arc(p.x, p.y, (p.r||60)*rr*(0.7+0.3*k), start, start + sweep); ctx.stroke();
+      }
+      ctx.globalAlpha = a; ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 6; i++) {
+        const ang = start + sweep * (i / 6), rr = (p.r||60) * (0.85 + 0.25 * Math.sin(i * 7.3));
+        ctx.fillRect(Math.round(p.x + Math.cos(ang)*rr) - 1, Math.round(p.y + Math.sin(ang)*rr) - 1, 2, 2);
+      }
       ctx.restore();
     } else if (p.type==='giantswipe') {
       const m=p.max||320, a=Math.max(0,p.timer/m), k=1-a;

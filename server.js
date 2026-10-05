@@ -268,13 +268,24 @@ const WEAPONS = [
   // in the game (needAll). Attack: melt into the shadows — invisible (you still
   // see yourself) and 75% faster; the next attack is a double-damage ghost
   // strike that ends it, and so does any special, super, ability or weapon swap.
-  // Special: a fan of five thrown daggers, the middle one worth at least 25% of
-  // the target's max health (50% in the back), the rest 40% of that. SUPER:
+  // Special: a fan of five thrown daggers, the middle one worth at least 16% of
+  // the target's max health (32% in the back), the rest 40% of that. SUPER:
   // throw it skyward and it rains 60 knives.
-  { id: 'ghostdagger', name: 'DAGGER OF GHOSTS', damage: 45, range: 48, atkSpd: 450, type: 'melee', unlockXp: 0,
+  { id: 'ghostdagger', name: 'DAGGER OF GHOSTS', damage: 32, range: 48, atkSpd: 450, type: 'melee', unlockXp: 0,
     shopOnly: true, needAll: true, noRequirement: true, price: 0, ghostCloak: true,
-    special: { kind: 'ghostthrow', dmg: 60, range: 430, cd: 12000 },
-    super:   { kind: 'knifestorm', dmg: 160, cd: 24000 } },
+    special: { kind: 'ghostthrow', dmg: 42, range: 430, cd: 12000 },
+    super:   { kind: 'knifestorm', dmg: 110, cd: 24000 } },
+  // A blade of pure light, claimed (free) by beating Light three times, over
+  // any number of runs, with at least 75% of all weapons fully maxed (needLight).
+  // Attack: dash to where you click or tap (or toward the nearest foe) and swipe
+  // all round on arrival. Special: five curving dashes that hunt foes (or the
+  // nearest pickup if there are none), stunning them and hurling them to the
+  // wall. SUPER: LIGHTSPEED — triple speed, a crackling aura that zaps anything
+  // close, and crashing into a foe sets off a huge lightning blast.
+  { id: 'lightblade', name: 'LIGHT BLADE', damage: 40, range: 56, atkSpd: 620, type: 'melee', unlockXp: 0,
+    shopOnly: true, noRequirement: true, needLight: true, price: 0, lightDash: true,
+    special: { kind: 'lightdashes', dmg: 70, range: 260, cd: 9000 },
+    super:   { kind: 'lightspeed', dmg: 320, cd: 26000 } },
 ];
 
 // Melee reach: the swing is 50% longer and a slam special 30% wider. The shield
@@ -291,7 +302,7 @@ const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
 const WEAPON_COLORS = {
   scimitar: '#e8e0c8', slingshot: '#b08a5a', mace: '#9aa4b0', javelin: '#d8c8a0', claws: '#e0e4ec',
   emberstaff: '#ff7a2a', halberd: '#c0c8d8', frostbow: '#9fe8ff', chronostaff: '#e8c87a', voidblade: '#9a5aff',
-  mindtome: '#ff5ad8',
+  mindtome: '#ff5ad8', lightblade: '#fff27a',
   sword: '#c8d8e8', dagger: '#d4e8b0', axe: '#e8a040', spear: '#c0c8d0',
   bow: '#b89060', staff: '#cc66ff', hammer: '#aab0b8', wand: '#88ddff',
   crossbow: '#cc8844', flail: '#dd4444', greatsword: '#ddeeff',
@@ -374,6 +385,7 @@ const WEAPON_UPGRADES = {
   chronostaff: ['dmg', 'spd', 'chill', 'cdr'],
   voidblade:   ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   mindtome:    ['dmg', 'spd', 'cdr', 'rng'],   // no SPD or MLT: its portals come fast enough
+  lightblade:  ['dmg', 'spd', 'crit', 'cdr', 'rng'],
 };
 // ── Weapon passives ──
 // Max out every upgrade on one of these weapons and, whenever you hold it, you
@@ -395,17 +407,18 @@ const PASSIVES = {
   windwand:    { name: 'GALE GUARD',     color: '#d8f4ff', desc: 'blows away an enemy shot that comes close, every 0.5s' },
   revolver:    { name: 'CHAIN REACTION', color: '#ffa040', desc: 'every hit explodes onto the foes around it, and everything you kill blows up even bigger' },
   portalwand:  { name: 'ESCAPE PORTAL',  color: '#b07aff', desc: 'when a hit drops you below 35% health you warp to safety and heal 20% (every 8s)' },
-  ghostdagger: { name: 'BACKSTABBER',    color: '#a8f0ff', desc: '+80% damage on foes facing away from you' },
+  ghostdagger: { name: 'HAUNTING',       color: '#a8f0ff', desc: 'your thrown daggers turn in the air and chase down your enemies' },
   stormhammer: { name: 'THUNDERSTRUCK',  color: '#7ac8ff', desc: '35% of your hits call down lightning for +80% damage' },
   frostscythe: { name: 'SHATTERPOINT',   color: '#bfefff', desc: '+50% damage to slowed or frozen foes' },
   chronostaff: { name: 'TIME DILATION',  color: '#e8c87a', desc: 'your special and super recharge 40% faster' },
   mindtome:    { name: 'SHIFTING GROUND', color: '#ff5ad8', desc: 'every 30s every trap on the map jumps next to your enemies (a countdown over your head shows when)' },
+  lightblade:  { name: 'AFTERGLOW',      color: '#fff27a', desc: 'every dash leaves a streak of light behind for 2.5s that burns and stuns any foe who touches it' },
   voidblade:   { name: 'VOID HUNGER',    color: '#9a5aff', desc: 'every kill takes 1.5s off your special and super' },
   sunbow:      { name: 'SUNLIT',         color: '#ffd24a', desc: 'heal 5% of your health every second' },
 };
 const AEGIS_CD = 4000, GALE_CD = 500, GALE_R = 75;
 const BLAST_R = 90, BLAST_MULT = 1.1, HIT_BLAST_R = 65, HIT_BLAST_MULT = 0.55, HIT_BLAST_GAP = 60;
-const ESCAPE_CD = 8000, ESCAPE_AT = 0.35, ESCAPE_HEAL = 0.2, BACKSTAB = 1.8, THUNDER_CHANCE = 0.35, THUNDER_MULT = 1.8;
+const ESCAPE_CD = 8000, ESCAPE_AT = 0.35, ESCAPE_HEAL = 0.2, THUNDER_CHANCE = 0.35, THUNDER_MULT = 1.8;
 const SHATTER_MULT = 1.5, SUNLIT_SHARE = 0.05;
 const PASSIVE_SPEED = 1.45, PASSIVE_GUARD = 0.7, PASSIVE_RAGE = 1.0, PASSIVE_HARVEST = 0.12;
 const FROST_AURA_R = 115, STATIC_CD = 1200, STATIC_R = 220, STATIC_MULT = 0.9, EMBER_BURN = 4000, EMBER_SCORCH = 0.4;
@@ -788,6 +801,7 @@ function progress() {
   if (!d.abilities)   d.abilities = {};
   if (!d.abilitySlots) d.abilitySlots = {};
   if (!d.abilitySlotCount) d.abilitySlotCount = {};
+  if (!d.lightKills)  d.lightKills = {};
   return d;
 }
 function markDirty() { progressDirty = true; }
@@ -835,6 +849,7 @@ function saveData(pw) {
     ownedSkins: d.ownedSkins[pw] || [], skin: d.skins[pw] || null,
     abilities: d.abilities[pw] || [], abilitySlots: d.abilitySlots[pw] || [],
     slotCount: d.abilitySlotCount[pw] || ABILITY_SLOTS,
+    lightKills: d.lightKills[pw] || 0,
   });
 }
 function makeSave(pw) {
@@ -880,6 +895,7 @@ function restoreBackup(pw, backup) {
     d.abilities[pw] = abils;
     d.abilitySlotCount[pw] = clampSlots(b.slotCount);
     d.abilitySlots[pw] = cleanSlots(b.abilitySlots, abils, d.abilitySlotCount[pw]);
+    d.lightKills[pw] = num(b.lightKills);
     if (b.skin && typeof b.skin === 'object' && d.skins[pw] === undefined) d.skins[pw] = b.skin;
     markDirty();
     return;
@@ -895,6 +911,7 @@ function restoreBackup(pw, backup) {
   const haveAb = d.abilities[pw] || [];
   if (abils.some(id => !haveAb.includes(id))) { d.abilities[pw] = [...new Set([...haveAb, ...abils])]; changed = true; }
   if (clampSlots(b.slotCount) > (d.abilitySlotCount[pw] || ABILITY_SLOTS)) { d.abilitySlotCount[pw] = clampSlots(b.slotCount); changed = true; }
+  if (num(b.lightKills) > (d.lightKills[pw] || 0)) { d.lightKills[pw] = num(b.lightKills); changed = true; }
   for (const [wid, lv] of Object.entries(ups)) {
     const allowed = upgradesFor(wid);
     for (const [k, n] of Object.entries(lv)) {
@@ -1202,6 +1219,7 @@ function effectiveSpeed(p) {
   let s = p.speed;
   if (hasEffect(p, 'speed')) s *= 1.7;
   if (hasEffect(p, 'ghost')) s *= 1.75;
+  if (p.lightspeed > 0) s *= LIGHTSPEED_MULT;          // the Light Blade's SUPER
   if (p.passive === 'dagger') s *= PASSIVE_SPEED;
   if (hasEffect(p, 'slow'))  s *= 0.4;
   if (hasEffect(p, 'root'))  s = 0;          // ROOT VINES
@@ -1796,6 +1814,7 @@ const MONSTER_AI = { bomber: aiBomber, shaman: aiShaman, charger: aiCharger, nec
 // a necromancer's skeletons crumble.
 function monsterDied(m, killer) {
   const def = MONSTER_TYPES[m.type] || {};
+  if (m.type === 'light' && !m.controlledBy) creditLightKill();
   if (def.ai === 'bomber') bomberBlast(m, killer || true);
   if (def.split) {
     for (let i = 0; i < (def.splitCount || 2); i++) {
@@ -1902,10 +1921,6 @@ function applyDamage(target, dmg, attackerKey) {
   if (target.num && hasEffect(target, 'ironskin')) dmg *= 0.5;                                     // IRON SKIN
   if (target.num && hasEffect(target, 'frostarmor')) dmg *= 0.75;                                  // FROST ARMOR
   if (target.num && target.passive === 'sword') dmg *= PASSIVE_GUARD;                              // GUARDIAN
-  if (aw && atk.passive === 'ghostdagger' && hitFromBehind(target, cx(target) - cx(atk))) {        // BACKSTABBER
-    dmg *= BACKSTAB;
-    room.particles.push({ type: 'crit', x: cx(target), y: target.y - 10, text: 'BACKSTAB', timer: 500, max: 500 });
-  }
   if (aw && atk.passive === 'frostscythe' && ((target.freeze || 0) > 0 || (target.slowTimer || 0) > 0
       || (target.num && hasEffect(target, 'slow')))) dmg *= SHATTER_MULT;                          // SHATTERPOINT
   if (aw && atk.passive === 'stormhammer' && Math.random() < THUNDER_CHANCE) {                    // THUNDERSTRUCK
@@ -2230,6 +2245,7 @@ function tickRoom(dt) {
   for (const key of ['p1', 'p2']) {
     const p = room.players[key];
     if (!p || p.dead) {
+      if (p) { p.bladeDash = null; p.lightspeed = 0; p.bladeClick = null; }
       if (p && p.respawnTimer > 0) {
         p.respawnTimer -= dt;
         if (p.respawnTimer <= 0) respawnPlayer(p);
@@ -2248,8 +2264,11 @@ function tickRoom(dt) {
     if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
     if (hasEffect(p, 'confuse')) { vx = -vx; vy = -vy; if (vx) p.facing = vx > 0 ? 1 : -1; }   // MIRROR RUNE
 
-    p.x += vx * factor;
-    p.y += vy * factor;
+    if (p.bladeDash && !p.controlling) updateBladeDash(p, key, factor, dt);   // a Light Blade dash carries you
+    else {
+      p.x += vx * factor;
+      p.y += vy * factor;
+    }
     applyPull(p, dt);
     clampToArena(p, 2);
 
@@ -2279,6 +2298,7 @@ function tickRoom(dt) {
     if (p.swingTimer      > 0) p.swingTimer      -= dt;
     for (const id in p.abCd) if (p.abCd[id] > 0) p.abCd[id] -= dt;
     if (hasEffect(p, 'thunder')) thunderTick(p, key, dt);
+    if (p.lightspeed > 0) lightspeedTick(p, key, dt);
     if (p.passive && !p.dead) passiveTick(p, key, dt);
     // A few seconds of health history, for the Chrono Staff's REWIND.
     p.hpHistAcc = (p.hpHistAcc || 0) + dt;
@@ -2310,7 +2330,10 @@ function tickRoom(dt) {
       p.weaponIdx = ((p.weaponIdx + step) % nWeapons + nWeapons) % nWeapons;
       refreshWeapon(p);
     }
-    if (room.attackJustPressed[key] && p.atkCooldown <= 0) {
+    // A Light Blade click / tap is an attack aimed at that spot (kept briefly if it's still cooling).
+    if (p.bladeClick && (!weapon(p).lightDash || Date.now() - p.bladeClick.at > BLADE_CLICK_MS)) p.bladeClick = null;
+    const bladeBusy = weapon(p).lightDash && p.bladeDash;
+    if ((room.attackJustPressed[key] || p.bladeClick) && p.atkCooldown <= 0 && !bladeBusy) {
       doAttack(p, key);
     }
     if (room.specialJustPressed[key] && p.specialCooldown <= 0) {
@@ -2425,6 +2448,7 @@ function tickRoom(dt) {
     clampToArena(m);
   }
   updateAllies(factor, dt);
+  updateHurls(dt);
   separateMonsters(factor);
 
   // ── Projectiles ──
@@ -2671,6 +2695,22 @@ function startPull(target, ownerKey) {
 
 // Fast projectiles (the grapple hook moves ~17 units a tick) would tunnel
 // straight through a small monster, so long steps are split into short ones.
+// HAUNTING: a thrown ghost dagger turns toward the nearest foe it hasn't hit.
+const HOMING_TURN = 6.5, HOMING_SEEK_R = 420;
+function homeProjectile(proj, dt) {
+  let best = proj.quarry && !proj.quarry.dead && (proj.quarry.num || room.monsters.includes(proj.quarry)) ? proj.quarry : null;
+  let bd = HOMING_SEEK_R;
+  if (!best) for (const t of enemyTargets(proj.owner)) {
+    if (proj.hitTargets && proj.hitTargets.has(t)) continue;
+    const d = Math.hypot(cx(t) - proj.x, cy(t) - proj.y);
+    if (d < bd) { bd = d; best = t; }
+  }
+  if (!best) return;
+  const sp = Math.hypot(proj.dx, proj.dy) || 1;
+  const a = turnToward(Math.atan2(proj.dy, proj.dx), Math.atan2(cy(best) - proj.y, cx(best) - proj.x), HOMING_TURN * dt / 1000);
+  proj.dx = Math.cos(a) * sp; proj.dy = Math.sin(a) * sp;
+}
+
 function updateProjectile(proj, factor, dt) {
   const stepLen = Math.hypot(proj.dx, proj.dy) * factor;
   const subs = Math.max(1, Math.ceil(stepLen / 5));
@@ -2681,6 +2721,7 @@ function updateProjectile(proj, factor, dt) {
 }
 
 function advanceProjectile(proj, factor, dt) {
+  if (proj.homing) homeProjectile(proj, dt);
   const step = Math.hypot(proj.dx, proj.dy) * factor;
   proj.x += proj.dx * factor;
   proj.y += proj.dy * factor;
@@ -2926,6 +2967,7 @@ function doAttack(p, pKey) {
   swatFireHands(p, pKey, w.type === 'melee' ? w.range : 48);
 
   if (w.mindTrap) { placeMindTrap(p, pKey, w, dmgMult); return; }
+  if (w.lightDash) { p.swingTimer = 0; bladeAttack(p, pKey, w, dmgMult); return; }
   if (w.vortexShield) {
     p.vortexShield = VORTEX_SHIELD_MS;
     room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 22, timer: 300, max: 300, color: WEAPON_COLORS.vortex });
@@ -3090,6 +3132,12 @@ function doSuper(p, pKey) {
   p.superCooldown = su.cd;
   p.swingTimer = 300;
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
+  if (su.kind === 'lightspeed') {
+    p.lightspeed = LIGHTSPEED_MS; p.lsMult = dmgMult; p.crashCd = 0; p.lsAcc = 0;
+    room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 80, timer: 500, max: 500, color: WEAPON_COLORS.lightblade });
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 50, timer: 800, max: 800, color: WEAPON_COLORS.lightblade, text: 'LIGHTSPEED' });
+    return;
+  }
   if (su.kind === 'mindcontrol') {
     if (!startMindControl(p, pKey)) { p.superCooldown = 0; p.swingTimer = 0; }
     return;
@@ -3341,7 +3389,7 @@ const KNIFE_COUNT = 60, KNIFE_MS = 4200, KNIFE_DELAY = 500, KNIFE_FALL_MS = 700,
 const KNIFE_PVP_DMG = 40, KNIFE_MEDKIT_CHANCE = 0.25, MAX_MEDKITS = 10;
 // The thrown dagger: at least this share of the target's max health (bosses
 // take a much smaller share, or the fights would be over in a few throws).
-const THROW_SHARE = 0.25, THROW_BACK_SHARE = 0.5, THROW_BOSS_SHARE = 0.06, THROW_BOSS_BACK_SHARE = 0.12;
+const THROW_SHARE = 0.16, THROW_BACK_SHARE = 0.32, THROW_BOSS_SHARE = 0.04, THROW_BOSS_BACK_SHARE = 0.08;
 
 // The passives that act every tick rather than on a stat.
 function passiveTick(p, key, dt) {
@@ -3425,7 +3473,7 @@ function ghostThrowHit(proj, t) {
 function explodeKnife(f) {
   for (const t of enemyTargets(f.owner)) {
     if (Math.hypot(cx(t) - f.x, cy(t) - f.y) > f.r + t.w / 2) continue;
-    const dmg = t.num ? KNIFE_PVP_DMG : f.dmg + Math.round((t.maxHp || 0) * (t.boss ? 0.02 : 0.15));
+    const dmg = t.num ? KNIFE_PVP_DMG : f.dmg + Math.round((t.maxHp || 0) * (t.boss ? 0.015 : 0.1));
     t.invincible = 0;
     applyDamage(t, dmg, f.owner);
   }
@@ -3726,6 +3774,7 @@ function updateFires(factor, dt) {
     if (f.kind === 'sunbeam') return updateSunbeam(f, dt);
     if (f.kind === 'cloud') return updateCloud(f, dt);
     if (f.kind === 'blackhole') return updateBlackhole(f, factor, dt);
+    if (f.kind === 'lightstreak') return updateLightStreak(f);
     if (f.kind === 'drain') return updateDrain(f, factor, dt);
     if (f.kind === 'tornado') return updateTornado(f, factor, dt);
     if (f.kind === 'hurricane') return updateHurricane(f, factor, dt);
@@ -4780,6 +4829,234 @@ function puppetAttack(m, pKey) {
   if (m.boss) room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: reach, timer: 300, max: 300, color: '#c8e07a' });
 }
 
+// ── Light Blade ──
+// Every dash is a short sprint: the player is carried along an angle (curving
+// toward a target for the special), hitting each foe once per leg.
+const BLADE_DASH_MAX = 240, BLADE_DASH_SPEED = 15, BLADE_PATH_SHARE = 0.5, BLADE_CLICK_MS = 400;
+const BLADE_SP_DASHES = 5, BLADE_SP_SPEED = 13, BLADE_SP_TURN = 9, BLADE_SP_GAP = 110, BLADE_SP_STUN = 1500, BLADE_HURL_SPEED = 1.3;
+const LIGHTSPEED_MS = 8000, LIGHTSPEED_MULT = 3, LIGHTSPEED_AURA_R = 80, LIGHTSPEED_TICK = 200, LIGHTSPEED_AURA_DMG = 18;
+const LIGHT_CRASH_R = 140, LIGHT_CRASH_STUN = 2000, LIGHT_CRASH_CD = 1200, LIGHT_CRASH_KNOCK = 140, LIGHT_CRASH_PVP = 70;
+const AFTERGLOW_MS = 2500, AFTERGLOW_TICK = 450, AFTERGLOW_SHARE = 0.4, AFTERGLOW_STUN = 400;
+const LIGHT_KILLS_NEED = 3, LIGHT_MAXED_SHARE = 0.75;
+
+// Where the special heads: the nearest foe it hasn't struck yet (then any foe),
+// else the nearest pickup on the floor.
+function bladeAim(p, pKey, struck) {
+  let f = null, fd = Infinity;
+  for (const t of enemyTargets(pKey)) {
+    if (struck && struck.has(t)) continue;
+    const d = Math.hypot(cx(t) - cx(p), cy(t) - cy(p));
+    if (d < fd) { fd = d; f = t; }
+  }
+  if (!f) f = nearestFoe(p, pKey);
+  if (f) return { x: cx(f), y: cy(f), foe: f };
+  let best = null, bd = Infinity;
+  for (const it of room.items) {
+    const ix = it.x + it.w / 2, iy = it.y + it.h / 2, d = Math.hypot(ix - cx(p), iy - cy(p));
+    if (d < bd) { bd = d; best = { x: ix, y: iy, item: true }; }
+  }
+  return best;
+}
+// A leg runs to a pickup and stops on it, or runs through a foe and a bit past.
+function bladeLegDist(p, tgt, range) {
+  if (!tgt) return range;
+  const d = Math.hypot(tgt.x - cx(p), tgt.y - cy(p));
+  return tgt.item ? Math.min(range, d + 2) : Math.min(range * 1.6, Math.max(range * 0.5, d + 50));
+}
+function startBladeDash(p, o) {
+  p.bladeDash = { ...o, left: o.dist, hit: new Set(), struck: new Set(), wait: 0, sx: cx(p), sy: cy(p) };
+  p.pull = null;
+}
+
+// ATK: dash to the click / tap (or the mouse, or the nearest foe) and swipe all round.
+function bladeAttack(p, pKey, w, dmgMult) {
+  const inp = room.inputs[pKey] || {};
+  let tx, ty;
+  if (p.bladeClick) { tx = p.bladeClick.x; ty = p.bladeClick.y; }
+  else if (inp.aimX != null && inp.aimY != null) { tx = inp.aimX; ty = inp.aimY; }
+  else {
+    const f = nearestFoe(p, pKey);
+    if (f) { tx = cx(f); ty = cy(f); } else { tx = cx(p) + (p.facing || 1) * BLADE_DASH_MAX; ty = cy(p); }
+  }
+  p.bladeClick = null;
+  const a = Math.atan2(ty - cy(p), tx - cx(p));
+  p.facing = Math.cos(a) < 0 ? -1 : 1;
+  startBladeDash(p, { kind: 'atk', a, dist: Math.min(BLADE_DASH_MAX, Math.hypot(tx - cx(p), ty - cy(p))), speed: BLADE_DASH_SPEED,
+                      n: 1, turn: 0, dmg: Math.round(w.damage * dmgMult * BLADE_PATH_SHARE),
+                      swipe: Math.round(w.damage * dmgMult), swipeR: w.range });
+}
+
+// Fling a foe along `a` until it hits the wall (bosses don't budge).
+function hurlToWall(t, a) {
+  if (t.boss) return;
+  const c = Math.cos(a), s = Math.sin(a);
+  const lim = [];
+  if (c > 0.01)  lim.push((ARENA_X + ARENA_W - t.w - 2 - t.x) / c);
+  if (c < -0.01) lim.push((ARENA_X + 2 - t.x) / c);
+  if (s > 0.01)  lim.push((ARENA_Y + ARENA_H - t.h - 2 - t.y) / s);
+  if (s < -0.01) lim.push((ARENA_Y + 2 - t.y) / s);
+  const dist = Math.max(0, Math.min(...lim));
+  if (dist < 4) return;
+  const ms = Math.max(120, dist / BLADE_HURL_SPEED);
+  t.hurl = { vx: c * dist / ms, vy: s * dist / ms, timer: ms };
+}
+// Flights in progress: they carry on even while the target is stunned.
+function updateHurls(dt) {
+  for (const t of [room.players.p1, room.players.p2, ...room.monsters]) {
+    if (!t || !t.hurl) continue;
+    if (t.dead) { t.hurl = null; continue; }
+    const step = Math.min(dt, t.hurl.timer);
+    t.x += t.hurl.vx * step; t.y += t.hurl.vy * step;
+    t.hurl.timer -= dt;
+    clampToArena(t, 2);
+    if (t.hurl.timer <= 0) {
+      t.hurl = null;
+      room.particles.push({ type: 'shockwave', x: cx(t), y: cy(t), maxR: 22, timer: 300, max: 300, color: WEAPON_COLORS.lightblade });
+    }
+  }
+}
+
+function updateBladeDash(p, key, factor, dt) {
+  const b = p.bladeDash;
+  if (b.wait > 0) { b.wait -= dt; return; }
+  if (b.turn) {
+    // Chase this leg's quarry (it may be on its way to the wall); once it's
+    // been struck, run on straight.
+    const q = b.quarry && !b.quarry.dead && !b.hit.has(b.quarry) ? b.quarry : null;
+    if (q) b.a = turnToward(b.a, Math.atan2(cy(q) - cy(p), cx(q) - cx(p)), b.turn * dt / 1000);
+    else if (!b.quarry && !b.hit.size) {
+      const tgt = bladeAim(p, key, b.struck);
+      if (tgt && tgt.item) b.a = turnToward(b.a, Math.atan2(tgt.y - cy(p), tgt.x - cx(p)), b.turn * dt / 1000);
+    }
+  }
+  const step = Math.min(b.left, b.speed * factor), ox = p.x, oy = p.y;
+  p.x += Math.cos(b.a) * step; p.y += Math.sin(b.a) * step; b.left -= step;
+  clampToArena(p, 2);
+  p.facing = Math.cos(b.a) < 0 ? -1 : 1;
+  p.invincible = Math.max(p.invincible || 0, 100);
+  for (const t of enemyTargets(key)) {
+    if (b.hit.has(t) || Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) > (t.w + p.w) / 2 + 4) continue;
+    b.hit.add(t); b.struck.add(t);
+    if (!t.num) t.invincible = 0;
+    strikeTarget(t, b.dmg, key);
+    if (b.kind === 'sp' && !t.dead) { stagger(t, BLADE_SP_STUN, 'shock'); hurlToWall(t, b.a); }
+  }
+  if (b.left <= 0.5 || Math.hypot(p.x - ox, p.y - oy) < step * 0.5) endBladeLeg(p, key, b);
+}
+
+function endBladeLeg(p, key, b) {
+  if (p.passive === 'lightblade') {                                   // AFTERGLOW
+    const len = Math.hypot(cx(p) - b.sx, cy(p) - b.sy);
+    if (len > 8) room.fires.push({ id: nextId(), kind: 'lightstreak', owner: key, x: b.sx, y: b.sy, a: Math.atan2(cy(p) - b.sy, cx(p) - b.sx),
+                                   v: len, r: 6, t: 0, life: AFTERGLOW_MS, dmg: Math.max(1, Math.round(weapon(p).damage * AFTERGLOW_SHARE)), hitAt: new Map() });
+  }
+  if (b.kind === 'atk') {
+    for (const t of enemyTargets(key)) {
+      if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) > b.swipeR + t.w / 2) continue;
+      if (!t.num) t.invincible = 0;
+      strikeTarget(t, b.swipe, key);
+    }
+    p.swingTimer = 200;
+    room.particles.push({ type: 'bladeswipe', x: cx(p), y: cy(p), r: b.swipeR, a: b.a, timer: 280, max: 280, color: WEAPON_COLORS.lightblade });
+  }
+  if (--b.n > 0) {
+    const tgt = bladeAim(p, key, b.struck);
+    if (tgt) b.a = Math.atan2(tgt.y - cy(p), tgt.x - cx(p));
+    b.quarry = tgt && tgt.foe || null;
+    b.dist = bladeLegDist(p, tgt, b.range);
+    b.left = b.dist; b.hit = new Set(); b.wait = BLADE_SP_GAP; b.sx = cx(p); b.sy = cy(p);
+  } else p.bladeDash = null;
+}
+
+// AFTERGLOW: a streak of light that burns and stuns whoever crosses it.
+function updateLightStreak(f) {
+  const x2 = f.x + Math.cos(f.a) * f.v, y2 = f.y + Math.sin(f.a) * f.v;
+  for (const t of enemyTargets(f.owner)) {
+    if (distToSegment(cx(t), cy(t), f.x, f.y, x2, y2) > 6 + t.w / 2) continue;
+    if ((f.hitAt.get(t) ?? -1e9) + AFTERGLOW_TICK > f.t) continue;
+    f.hitAt.set(t, f.t);
+    if (!t.num) t.invincible = 0;
+    applyDamage(t, f.dmg, f.owner);
+    if (!t.dead) stagger(t, AFTERGLOW_STUN, 'shock');
+  }
+  return true;
+}
+
+// SUPER: LIGHTSPEED. Triple speed, an aura that zaps whatever comes close, and
+// crashing into a foe sets off a huge lightning blast.
+function lightspeedTick(p, key, dt) {
+  if (weapon(p).id !== 'lightblade') { p.lightspeed = 0; return; }
+  p.lightspeed -= dt;
+  p.crashCd = (p.crashCd || 0) - dt;
+  p.lsAcc = (p.lsAcc || 0) + dt;
+  if (p.lsAcc >= LIGHTSPEED_TICK) {
+    p.lsAcc -= LIGHTSPEED_TICK;
+    for (const t of enemyTargets(key)) {
+      if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) > LIGHTSPEED_AURA_R + t.w / 2) continue;
+      room.particles.push({ type: 'bolt', x: cx(p), y: cy(p), x2: cx(t), y2: cy(t), timer: 180, max: 180,
+                            color: Math.random() < 0.5 ? '#ffffff' : WEAPON_COLORS.lightblade });
+      if (!t.num) t.invincible = 0;
+      const dmg = t.num ? 6 : LIGHTSPEED_AURA_DMG + Math.round((t.maxHp || 0) * (t.boss ? 0.002 : 0.012));
+      strikeTarget(t, Math.round(dmg * (p.lsMult || 1)), key);
+    }
+  }
+  if (p.crashCd <= 0) {
+    const hit = enemyTargets(key).find(t => Math.abs(cx(t) - cx(p)) < (t.w + p.w) / 2 + 3 && Math.abs(cy(t) - cy(p)) < (t.h + p.h) / 2 + 3);
+    if (hit) { p.crashCd = LIGHT_CRASH_CD; lightCrash(p, key); }
+  }
+  if (p.lightspeed <= 0) p.lightspeed = 0;
+}
+
+function lightCrash(p, key) {
+  const x = cx(p), y = cy(p), su = weapon(p).super, mult = p.lsMult || 1;
+  for (const t of enemyTargets(key)) {
+    const d = Math.hypot(cx(t) - x, cy(t) - y);
+    if (d > LIGHT_CRASH_R + t.w / 2) continue;
+    if (!t.num) t.invincible = 0;
+    const dmg = t.num ? LIGHT_CRASH_PVP : su.dmg + Math.round((t.maxHp || 0) * (t.boss ? 0.03 : 0.2));
+    strikeTarget(t, Math.round(dmg * mult), key);
+    if (t.dead) continue;
+    stagger(t, LIGHT_CRASH_STUN, 'shock');
+    if (!t.boss) {
+      const a = Math.atan2(cy(t) - y, cx(t) - x) || Math.random() * Math.PI * 2;
+      t.hurl = { vx: Math.cos(a) * LIGHT_CRASH_KNOCK / 220, vy: Math.sin(a) * LIGHT_CRASH_KNOCK / 220, timer: 220 };
+    }
+    room.particles.push({ type: 'bolt', x, y, x2: cx(t), y2: cy(t), timer: 400, max: 400, color: '#ffffff' });
+  }
+  for (let i = 0; i < 10; i++) {
+    const a = i * Math.PI / 5 + Math.random() * 0.4, r = LIGHT_CRASH_R * (0.6 + Math.random() * 0.4);
+    room.particles.push({ type: 'bolt', x, y, x2: x + Math.cos(a) * r, y2: y + Math.sin(a) * r, timer: 420, max: 420,
+                          color: i % 2 ? '#ffffff' : WEAPON_COLORS.lightblade });
+  }
+  room.particles.push({ type: 'shockwave', x, y, maxR: LIGHT_CRASH_R, timer: 600, max: 600, color: WEAPON_COLORS.lightblade });
+  room.particles.push({ type: 'shockwave', x, y, maxR: LIGHT_CRASH_R * 0.6, timer: 450, max: 450, color: '#ffffff' });
+  room.particles.push({ type: 'trapburst', x, y, maxR: 60, timer: 800, max: 800, color: WEAPON_COLORS.lightblade, text: 'LIGHTNING CRASH' });
+}
+
+// How many weapons (not counting the Light Blade) a save has fully maxed.
+function maxedWeaponCount(weapons, upgrades) {
+  return WEAPONS.filter(w => w.id !== 'lightblade' && weapons.includes(w.id)
+    && upgradesFor(w.id).every(k => ((upgrades?.[w.id] || {})[k] || 0) >= UPGRADE_STATS[k].max)).length;
+}
+const lightMaxedNeed = () => Math.ceil(WEAPONS.filter(w => w.id !== 'lightblade').length * LIGHT_MAXED_SHARE);
+
+// Beating Light counts toward the Light Blade, for every player in the run.
+function creditLightKill() {
+  if (room.gameMode === 'sandbox') return;
+  const d = progress();
+  for (const k of ['p1', 'p2']) {
+    const pw = room.passwords[k];
+    if (!room.players[k] || !pw || isAdminPw(pw)) continue;
+    d.lightKills[pw] = (d.lightKills[pw] || 0) + 1;
+    markDirty();
+    const p = room.players[k];
+    room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26 + (k === 'p2' ? 16 : 0),
+                          text: `LIGHT DEFEATED ${Math.min(d.lightKills[pw], LIGHT_KILLS_NEED)}/${LIGHT_KILLS_NEED}`,
+                          color: '#fff6a0', timer: 2600, max: 2600 });
+    if (p) room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 500, max: 500, color: '#fff6a0' });
+  }
+}
+
 // SHIFTING GROUND: every trap on the map jumps next to your enemies.
 function shuffleTraps(p, pKey) {
   let moved = 0;
@@ -5359,6 +5636,15 @@ function doSpecial(p, pKey) {
     castFireHand(p, pKey, sp, dmgMult);
     return;
   }
+  if (sp.kind === 'lightdashes') {
+    // Five curving dashes, each hunting the nearest foe (or a pickup if none).
+    const tgt = bladeAim(p, pKey);
+    const a = tgt ? Math.atan2(tgt.y - py, tgt.x - px) : (p.facing < 0 ? Math.PI : 0);
+    startBladeDash(p, { kind: 'sp', a, dist: bladeLegDist(p, tgt, sp.range), range: sp.range, speed: BLADE_SP_SPEED,
+                        n: BLADE_SP_DASHES, turn: BLADE_SP_TURN, dmg: spDmg, quarry: tgt && tgt.foe || null });
+    room.particles.push({ type: 'trapburst', x: px, y: py, maxR: 34, timer: 600, max: 600, color: wc, text: 'FLASH STEP' });
+    return;
+  }
   if (sp.kind === 'mindbeams') {
     // Four beams of mind energy spin out from you; each foe they touch is frozen 5s.
     room.fires.push({ id: nextId(), kind: 'mindbeams', owner: pKey, x: px, y: py, r: sp.range, a: Math.random() * Math.PI,
@@ -5522,9 +5808,17 @@ function doSpecial(p, pKey) {
     // reappear, so it's decided as the dagger leaves your hand.)
     const backOf = new Set(enemyTargets(pKey).filter(t => hitFromBehind(t, cx(t) - px)).map(throwKey));
     // A fan of five: the middle dagger is the full throw, the outer four hit for a share of it.
+    // HAUNTING: each dagger picks its own quarry (the closest foes, the middle
+    // dagger taking the closest), chases it, and flies further to do it.
+    const haunt = p.passive === 'ghostdagger';
+    const prey = haunt ? enemyTargets(pKey).map(t => ({ t, d: Math.hypot(cx(t) - px, cy(t) - py) }))
+                                           .sort((u, v) => u.d - v.d).slice(0, 5).map(e => e.t) : [];
+    const order = [0, -1, 1, -2, 2];
     for (let i = -2; i <= 2; i++) {
       const a = aim + i * 0.2;
+      const quarry = prey.length ? prey[order.indexOf(i) % prey.length] : null;
       room.projectiles.push(mkProj(a, { ghostThrow: true, backOf, shareMult: i === 0 ? 1 : GHOST_FAN_SHARE,
+                                        homing: haunt, quarry, maxRange: sp.range * (haunt ? 1.8 : 1),
                                         dx: Math.cos(a) * 8.5, dy: Math.sin(a) * 8.5 }));
     }
   } else if (sp.kind === 'pierce') {
@@ -5609,6 +5903,8 @@ function playerView(p) {
     ...(p.controlling ? { controlling: true, ctlLeft: Math.max(0, Math.round(p.controlling.left)),
                           ...(!p.controlling.isPlayer && p.controlling.ref ? { pupAb: puppetAbilityName(p.controlling.ref), pupCd: Math.round(p.controlling.spCd || 0) } : {}) } : {}),
     ...(p.mindControlledBy ? { puppet: p.mindControlledBy } : {}),
+    ...(p.bladeDash ? { dashing: p.bladeDash.kind } : {}),
+    ...(p.lightspeed > 0 ? { lightspeed: Math.round(p.lightspeed) } : {}),
     ...(p.passive === 'mindtome' ? { shuffleIn: Math.max(0, Math.round(p.shuffleT ?? MIND_SHUFFLE_MS)) } : {}),
     ...(p.passive === 'vortex' ? { aegis: !(p.aegisCd > 0) } : {}),
     effects: p.effects,
@@ -5695,6 +5991,7 @@ function weaponCatalog() {
     shopOnly: !!w.shopOnly, noRequirement: !!w.noRequirement, needLegendary: !!w.needLegendary, price: w.price || 0,
     needAll: !!w.needAll,
     needMind: !!w.needMind,
+    needLight: !!w.needLight,
     bossReward: !!w.bossReward,
     special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd } : null,
     super: w.super ? { kind: w.super.kind, dmg: w.super.dmg, cd: w.super.cd } : null,
@@ -5752,7 +6049,9 @@ function profileFor(pw, opts = {}) {
     : (Array.isArray(d.abilities[pw]) ? d.abilities[pw].filter(id => ABILITY_BY_ID[id]) : []);
   const slotCount = admin ? MAX_ABILITY_SLOTS : clampSlots(d.abilitySlotCount[pw]);
   const abilitySlots = cleanSlots(d.abilitySlots[pw], abilities, slotCount);
-  return { xp, coins, weapons, upgrades, ownedSkins, abilities, abilitySlots, slotCount,
+  const lightKills = admin ? LIGHT_KILLS_NEED : (d.lightKills[pw] || 0);
+  return { xp, coins, weapons, upgrades, ownedSkins, abilities, abilitySlots, slotCount, lightKills,
+           lightMaxed: maxedWeaponCount(weapons, upgrades), lightMaxedNeed: lightMaxedNeed(),
            nextSlotPrice: slotCount < MAX_ABILITY_SLOTS ? SLOT_PRICES[slotCount - ABILITY_SLOTS] : 0,
            refunded, save: makeSave(pw) };
 }
@@ -5972,6 +6271,10 @@ app.post('/api/buy_weapon', (req, res) => {
     if (!tomeMaxed) return res.status(400).json({ error: 'Max out every upgrade on the Storm Tome first.' });
     if (legends < MIND_LEGENDS) return res.status(400).json({ error: `Own ${MIND_LEGENDS} other legendary weapons first (${legends}/${MIND_LEGENDS}).` });
   }
+  if (def.needLight && !admin) {
+    if (prof.lightKills < LIGHT_KILLS_NEED) return res.status(400).json({ error: `Beat Light ${LIGHT_KILLS_NEED} times first (${prof.lightKills}/${LIGHT_KILLS_NEED}).` });
+    if (prof.lightMaxed < prof.lightMaxedNeed) return res.status(400).json({ error: `Max out at least ${prof.lightMaxedNeed} weapons first (${prof.lightMaxed}/${prof.lightMaxedNeed}).` });
+  }
   if (def.needLegendary && !SHOP_WEAPONS.some(w => w.id !== weaponId && prof.weapons.includes(w.id))) {
     return res.status(400).json({ error: 'Own at least one other legendary weapon first.' });
   }
@@ -6141,6 +6444,12 @@ wss.on('connection', (ws) => {
           // Mouse position in world space (desktop only): where DASH goes.
           aimX: Number.isFinite(k.aimX) ? k.aimX : null, aimY: Number.isFinite(k.aimY) ? k.aimY : null,
         };
+      }
+
+      // Light Blade: a click or tap on the field is an attack aimed at that spot.
+      if (msg.type === 'blade_dash' && Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
+        const p = room.players[myKey];
+        if (p && !p.dead && weapon(p).lightDash) p.bladeClick = { x: msg.x, y: msg.y, at: Date.now() };
       }
 
       if (msg.type === 'select_weapon') {

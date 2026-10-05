@@ -641,6 +641,23 @@ const WEAPON_ART = {
     k.r(21, -9, 1.2, 1.2, wc); k.r(23, -5, 1, 1, '#ffb8f0'); k.r(22, 2, 1, 1, wc);
   }},
 
+  lightblade: { draw(k, wc) {
+    // A long blade of pure light: a white-hot core inside a gold glow, on a
+    // gilded hilt with a sun-stone, and sparks flying off the point.
+    k.r(-2.6, -1.4, 1.6, 2.8, MAT.goldLight);             // pommel
+    k.r(-1.2, -1.5, 5, 3, '#f4ecc8');                      // pale wrapped grip
+    k.r(0, -1.5, 0.8, 3, MAT.gold); k.r(2, -1.5, 0.8, 3, MAT.gold);
+    k.poly([[3.8, -5], [5.8, -3.6], [5.8, 3.6], [3.8, 5]], MAT.gold);   // winged guard
+    k.poly([[3.8, -5], [2.4, -6.6], [4.6, -5]], MAT.goldLight);
+    k.poly([[3.8, 5], [2.4, 6.6], [4.6, 5]], MAT.goldLight);
+    k.circ(4.8, 0, 1.3, '#ffffff');                        // sun-stone
+    k.glow(17, 0, 13, wc, 0.55);
+    k.poly([[5.8, -2.6], [26, -2], [32, 0], [26, 2], [5.8, 2.6]], wc);              // blade of light
+    k.poly([[5.8, -1.2], [27, -0.8], [31, 0], [27, 0.8], [5.8, 1.2]], '#ffffff');   // white-hot core
+    k.r(10, -3.6, 1, 1, '#ffffff'); k.r(18, 2.8, 1, 1, wc); k.r(24, -3.2, 0.8, 0.8, '#ffffff');
+    k.line(31, -1, 34.5, -3.5, 0.7, '#ffffff'); k.line(31, 1, 34.5, 3.5, 0.7, wc);
+  }},
+
   ghostdagger: { draw(k, wc) {
     // A slim, wavy spectral blade on a dark, rune-wrapped hilt: wisps trail off
     // the edge, and a ghostly glow hangs around the whole thing.
