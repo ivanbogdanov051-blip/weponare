@@ -1816,6 +1816,41 @@ function maybeLightWave(num) {
                         text: count > 1 ? 'LIGHT STRIKES x' + count : alone ? 'LIGHT HAS COME' : 'LIGHT JOINS THE FIGHT', color: '#fff6a0', timer: 3000, max: 3000 });
 }
 
+// SEARCH: with every player invisible, monsters stop standing about. They head
+// for where they last saw you, then wander the area around it, and every couple
+// of seconds swing at the air; anyone invisible close enough to be hit is found.
+const SEARCH_SPEED = 0.7, SEARCH_AREA = 150, SEARCH_SWING_MIN = 1600, SEARCH_SWING_VAR = 1400;
+const spdOf = m => m.speed * (m.slowTimer > 0 ? 0.4 : 1);
+function monsterSearch(m, spd, factor, dt) {
+  m.charge = null; m.sweep = null; m.dashes = null; m.fuse = 0;   // whatever it was winding up fizzles
+  if (m.dazed > 0) { m.dazed -= dt; return; }
+  const home = m.lastSeen;
+  if (!m.searchPt || (m.searchT -= dt) <= 0 || Math.hypot(m.searchPt.x - cx(m), m.searchPt.y - cy(m)) < 14) {
+    if (home && !m.searchedHome) { m.searchPt = { x: home.x, y: home.y }; m.searchedHome = true; }
+    else {
+      const a = Math.random() * Math.PI * 2, r = Math.random() * SEARCH_AREA;
+      const at = arenaClamp((home ? home.x : cx(m)) + Math.cos(a) * r, (home ? home.y : cy(m)) + Math.sin(a) * r, 14);
+      m.searchPt = { x: at.x, y: at.y };
+    }
+    m.searchT = 1800 + Math.random() * 1600;
+  }
+  const dx = m.searchPt.x - cx(m), dy = m.searchPt.y - cy(m), d = Math.hypot(dx, dy) || 1;
+  if (!(m.ranged && d < 30)) {
+    m.x += (dx / d) * spd * SEARCH_SPEED * factor; m.y += (dy / d) * spd * SEARCH_SPEED * factor;
+    if (Math.abs(dx) > 2) m.face = dx > 0 ? 1 : -1;
+  }
+  m.searchSwingCd = (m.searchSwingCd ?? 700 + Math.random() * 900) - dt;
+  if (m.searchSwingCd > 0) return;
+  m.searchSwingCd = SEARCH_SWING_MIN + Math.random() * SEARCH_SWING_VAR;
+  m.swing = MONSTER_SWING_MS;
+  room.particles.push({ type: 'crit', x: cx(m), y: m.y - 8, text: '?', timer: 600, max: 600 });
+  for (const k of ['p1', 'p2']) {
+    const p = room.players[k];
+    if (!p || p.dead || p.controlling || !(hasEffect(p, 'vanish') || hasEffect(p, 'ghost'))) continue;
+    if (Math.hypot(cx(p) - cx(m), cy(p) - cy(m)) <= m.atkRange + 18 + (p.w + m.w) / 2) { monsterMelee(m, p); m.lastSeen = { x: cx(p), y: cy(p) }; m.searchedHome = false; }
+  }
+}
+
 const MONSTER_AI = { bomber: aiBomber, shaman: aiShaman, charger: aiCharger, necro: aiNecro, light: aiLight };
 
 // After a monster is killed (and paid for): bombers pop, splitters split,
@@ -2450,6 +2485,9 @@ function tickRoom(dt) {
         }
         if (dist <= reach + 4 && m.atkCooldown <= 0) monsterMelee(m, nearest);
       }
+      if (nearest.num) { m.lastSeen = { x: cx(nearest), y: cy(nearest) }; m.searchedHome = false; }
+    } else if (!m.boss) {
+      monsterSearch(m, spdOf(m), factor, dt);   // nobody in sight (you're invisible): hunt around
     }
 
     applyPull(m, dt);
