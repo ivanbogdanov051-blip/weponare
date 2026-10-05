@@ -1795,17 +1795,25 @@ function aiLight(m, t, dist, dx, dy, spd, factor, dt) {
 }
 
 // Light comes at most every LIGHT_GAP waves, by chance, and most often alone.
+// In EXTREME he turns up in almost every wave, never alone, sometimes in twos or threes.
+const EXTREME_LIGHT_CHANCE = 0.85;
 function maybeLightWave(num) {
   if (!['waves', 'coop', 'extreme'].includes(room.gameMode)) return;
-  if (num < (room.gameMode === 'extreme' ? 2 : LIGHT_FIRST_WAVE)) return;
-  if (num - (room.lastLightWave ?? -99) < LIGHT_GAP || Math.random() >= LIGHT_CHANCE) return;
+  const extreme = room.gameMode === 'extreme';
+  if (num < (extreme ? 2 : LIGHT_FIRST_WAVE)) return;
+  if (extreme) {
+    if (Math.random() >= EXTREME_LIGHT_CHANCE) return;
+  } else if (num - (room.lastLightWave ?? -99) < LIGHT_GAP || Math.random() >= LIGHT_CHANCE) return;
   room.lastLightWave = num;
   room.seenTypes.add('light');
-  if (Math.random() < LIGHT_ALONE) { room.wave.spawnQueue = 0; room.wave.monstersLeft = 1; }
-  else room.wave.monstersLeft++;
-  spawnMonster('light');
+  const roll = Math.random();
+  const count = extreme ? (roll < 0.5 ? 1 : roll < 0.85 ? 2 : 3) : 1;
+  const alone = !extreme && Math.random() < LIGHT_ALONE;
+  if (alone) { room.wave.spawnQueue = 0; room.wave.monstersLeft = count; }
+  else room.wave.monstersLeft += count;
+  for (let i = 0; i < count; i++) spawnMonster('light');
   room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
-                        text: room.wave.spawnQueue ? 'LIGHT JOINS THE FIGHT' : 'LIGHT HAS COME', color: '#fff6a0', timer: 3000, max: 3000 });
+                        text: count > 1 ? 'LIGHT STRIKES x' + count : alone ? 'LIGHT HAS COME' : 'LIGHT JOINS THE FIGHT', color: '#fff6a0', timer: 3000, max: 3000 });
 }
 
 const MONSTER_AI = { bomber: aiBomber, shaman: aiShaman, charger: aiCharger, necro: aiNecro, light: aiLight };
