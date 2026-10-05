@@ -277,6 +277,15 @@ const WEAPONS = [
     super:   { kind: 'knifestorm', dmg: 160, cd: 24000 } },
 ];
 
+// Melee reach: the swing is 50% longer and a slam special 30% wider. The shield
+// and glove (their range is a ring around you) keep their numbers.
+const MELEE_REACH_MULT = 1.5, SLAM_REACH_MULT = 1.3;
+for (const w of WEAPONS) {
+  if (w.type !== 'melee' || w.vortexShield || w.fireRing) continue;
+  w.range = Math.round(w.range * MELEE_REACH_MULT);
+  if (w.special && w.special.kind === 'slam') w.special.range = Math.round(w.special.range * SLAM_REACH_MULT);
+}
+
 const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
 
 const WEAPON_COLORS = {
