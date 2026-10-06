@@ -6061,6 +6061,7 @@ const STATE_MIN_GAP_MS = 26;
 // it more only makes its picture older and older, so it skips frames instead
 // and always gets the freshest state once it catches up.
 const MAX_BUFFERED = 40 * 1024;
+const ACK_SLACK_MS = 250;
 function broadcastTick() {
   const now = Date.now();
   if (now - (room.lastStateAt || 0) < STATE_MIN_GAP_MS) return;
@@ -6072,6 +6073,14 @@ function broadcastState() {
   KEYS.forEach((k, i) => {
     const ws = room[k];
     if (!ws || ws.readyState !== 1 || ws.bufferedAmount > MAX_BUFFERED) return;
+    // Flow control: if the newest snapshot this player has confirmed is well
+    // behind their usual round trip, snapshots are piling up somewhere (a slow
+    // link, a proxy's buffer, a busy browser). Hold off until it drains, so the
+    // picture is at most a fraction of a second old, never seconds. A probe
+    // still goes out every half second so a lost ack can't stall it.
+    const now = Date.now();
+    if (ws.ackSt && now - ws.ackSt > ws.minAckAge + ACK_SLACK_MS && now - (ws.lastProbe || 0) < 500) return;
+    ws.lastProbe = now;
     ws.send(JSON.stringify(buildStateMsg(i + 1)));
   });
 }
@@ -6751,6 +6760,17 @@ wss.on('connection', (ws) => {
     try {
       const msg = JSON.parse(data);
 
+      // The client confirms each snapshot it has drawn. How old the newest
+      // confirmed one is tells us whether anything is queuing up on the way.
+      if (msg.type === 'ack') {
+        const st = Number(msg.st), now = Date.now();
+        if (Number.isFinite(st) && st <= now && st > (ws.ackSt || 0)) {
+          ws.ackSt = st;
+          const age = now - st;
+          ws.minAckAge = ws.minAckAge === undefined || age < ws.minAckAge ? age : ws.minAckAge + 0.5;
+        }
+        return;
+      }
       if (msg.type === 'ping') {
         ws.send(JSON.stringify({ type: 'pong', t: msg.t }));
         return;

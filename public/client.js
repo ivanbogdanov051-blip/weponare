@@ -140,6 +140,29 @@ let stateIntervalMs = SERVER_TICK_MS;
 let rttMs = 60;
 let pingTimer = null;
 
+// Incoming snapshots wait here (raw text) until the next frame handles them.
+const stateInbox = [];
+let handleMessage = () => {};
+let chatSolo = null;
+// Shown with F3: what the connection is doing right now.
+const netStats = { ping: 0, bytes: 0, dropped: 0, kbps: 0, fps: 0, frames: 0, since: 0 };
+let netOverlay = false;
+function drainStates() {
+  if (!stateInbox.length) return;
+  // Behind? Keep only the newest two (enough to blend between).
+  const batch = stateInbox.splice(0);
+  if (batch.length > 2) netStats.dropped += batch.length - 2;
+  for (const raw of batch.slice(-2)) {
+    let msg; try { msg = JSON.parse(raw); } catch { continue; }
+    handleMessage(msg);
+  }
+  // Tell the server how fresh our picture is, so it never queues more than the
+  // link and this page can actually take.
+  if (currState && Number.isFinite(currState.st) && ws && ws.readyState === 1) {
+    ws.send('{"type":"ack","st":' + currState.st + '}');
+  }
+}
+
 // Snapshot timeline. Each state carries the server's clock (st); everyone but
 // you is drawn a short, steady delay behind the newest one, blended between the
 // two snapshots around that moment. A server or link that delivers in clumps
@@ -326,11 +349,24 @@ function connect() {
       else clearInterval(pingTimer);
     }, 1000);
   };
+  stateInbox.length = 0;
+  // Snapshots are only queued here and handled once per frame (drainStates):
+  // if the page ever falls behind, the stale ones are dropped instead of being
+  // played back one by one, seconds late.
   ws.onmessage = (e) => {
-    const msg = JSON.parse(e.data);
+    if (typeof e.data === 'string' && e.data.startsWith('{"type":"state"')) {
+      netStats.bytes += e.data.length;
+      stateInbox.push(e.data);
+      if (stateInbox.length > 4) { netStats.dropped += stateInbox.length - 4; stateInbox.splice(0, stateInbox.length - 4); }
+      return;
+    }
+    handleMessage(JSON.parse(e.data));
+  };
+  handleMessage = (msg) => {
     if (msg.type === 'pong') {
       const sample = performance.now() - msg.t;
       if (sample >= 0 && sample < 2000) rttMs = rttMs * 0.7 + sample * 0.3;
+      netStats.ping = sample;
       return;
     }
     if (msg.type === 'save') storeBackup(pendingPass, msg.save);
@@ -406,8 +442,13 @@ function connect() {
       }
       // The server only sends a player's unlock list when it changes.
       applyWorld(msg.world);
-      const chatBtn = document.getElementById('chatBtn');   // nobody to talk to in the solo modes
-      if (chatBtn) { const solo = ['waves', 'extreme', 'portal', 'sandbox'].includes(msg.gameMode); chatBtn.style.display = solo ? 'none' : ''; if (solo) toggleChat(false); }
+      const solo = ['waves', 'extreme', 'portal', 'sandbox'].includes(msg.gameMode);   // nobody to talk to in the solo modes
+      if (solo !== chatSolo) {
+        chatSolo = solo;
+        const chatBtn = document.getElementById('chatBtn');
+        if (chatBtn) chatBtn.style.display = solo ? 'none' : '';
+        if (solo) toggleChat(false);
+      }
       for (const k of KEYS) {
         const np = msg.players?.[k], op = currState?.players?.[k];
         if (np && !np.unlockedWeapons && op?.unlockedWeapons) np.unlockedWeapons = op.unlockedWeapons;
@@ -433,6 +474,7 @@ function connect() {
     connected = false;
     currState = null; prevState = null; pred = null; stateRecvTime = 0;
     snaps.length = 0; clockOffset = null; lateMs = 0;
+    stateInbox.length = 0; chatSolo = null;
     clearInterval(pingTimer);
     if (window.GameAudio) GameAudio.stopMusic();
     showGameControls(false);
@@ -1771,6 +1813,7 @@ window.addEventListener('keydown', (e) => {
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','ShiftLeft','ShiftRight','KeyP','ControlLeft','ControlRight'].includes(e.code)) e.preventDefault();
   if (e.code === 'Space' && currState && currState.gameState === 'WEAPON_UNLOCK' && currState.pendingUnlock) sendAckUnlock();
   if (e.code === 'KeyM') toggleSound();
+  if (e.code === 'F3') { e.preventDefault(); netOverlay = !netOverlay; }
   if (e.code === 'KeyT' && currState && currState.gameState === 'GAMEPLAY' && document.activeElement?.tagName !== 'INPUT') toggleChat();
   if (e.code === 'Escape') toggleChat(false);
   if (e.code.startsWith('Digit')) {
@@ -3047,7 +3090,7 @@ const ABILITY_ICONS = {
 
 const SCREENS = ['startScreen','lobbyScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen'];
 function showScreen(id) { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay '+(s===id?'active':'hidden'); }); }
-function hideAllScreens() { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay hidden'; }); }
+function hideAllScreens() { SCREENS.forEach(s => { const el=document.getElementById(s); if(el && el.className!=='overlay hidden') el.className='overlay hidden'; }); }
 function setLobbyMsg(html) { showScreen('lobbyScreen'); document.getElementById('lobbyMsg').innerHTML = html; }
 const PORTAL_LOBBY = `<span style="color:#c8a0ff">THE PORTAL MAGE</span><br>`
   + `<span style="color:#888">SOLO BOSS FIGHT · WIN 50,000 COINS + 50,000 XP</span><br>Opening the portal...`;
@@ -3303,6 +3346,13 @@ let lastFrameTime = 0;
 function renderLoop(now) {
   const dt = lastFrameTime ? Math.min(now - lastFrameTime, 100) : 16;
   lastFrameTime = now;
+  drainStates();
+  netStats.frames++;
+  if (now - netStats.since >= 1000) {
+    netStats.fps = Math.round(netStats.frames * 1000 / (now - netStats.since || 1000));
+    netStats.kbps = Math.round(netStats.bytes / 1024 * 1000 / (now - netStats.since || 1000));
+    netStats.frames = 0; netStats.bytes = 0; netStats.since = now;
+  }
   tickSlashes(dt);
   if (localAtkCd > 0) localAtkCd -= dt;
   if (currState && currState.gameState === 'GAMEPLAY') {
@@ -3355,6 +3405,24 @@ function draw(state) {
   drawItemBar(state.inventory || [], meP);
   drawWeaponPanel(state);
   drawPickupBanners(state.particles);
+  ctx.restore();
+  if (netOverlay) drawNetOverlay();
+}
+
+function drawNetOverlay() {
+  const lines = [
+    'FPS ' + netStats.fps,
+    'PING ' + Math.round(netStats.ping) + ' ms',
+    'VIEW DELAY ' + Math.round(viewDelay) + ' ms (late ' + Math.round(lateMs) + ')',
+    'DOWN ' + netStats.kbps + ' KB/s',
+    'DROPPED ' + netStats.dropped,
+  ];
+  ctx.save();
+  ctx.font = '12px monospace';
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(4, 4, 210, lines.length * 15 + 8);
+  ctx.fillStyle = '#7aff9a';
+  lines.forEach((l, i) => ctx.fillText(l, 10, 18 + i * 15));
   ctx.restore();
 }
 
