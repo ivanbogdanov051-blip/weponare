@@ -1,24 +1,40 @@
 'use strict';
 
 const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+// Opaque (the floor fills every pixel) and low-latency: the browser can put frames on
+// screen without waiting for the page compositor, which shaves input lag on desktop.
+const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }) || canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 // World size. The whole arena is always on screen — the canvas backing store is
 // the world, and CSS scales it down to fit the device, so a bigger map simply
 // means a more zoomed-out view.
-const CANVAS_W = 720, CANVAS_H = 405;
+let CANVAS_W = 720, CANVAS_H = 405;
 const ARENA_X = 12, ARENA_Y = 12;
-const ARENA_W = CANVAS_W - ARENA_X * 2, ARENA_H = CANVAS_H - ARENA_Y * 2;
+let ARENA_W = CANVAS_W - ARENA_X * 2, ARENA_H = CANVAS_H - ARENA_Y * 2;
 
 // The HUD is laid out in its own 480×270 space and drawn through a scale, so
 // text and bars stay a readable size no matter how big the world gets.
 const HUD_W = 480, HUD_H = 270;
-const HUD_SCALE = CANVAS_W / HUD_W;
+let HUD_SCALE = CANVAS_W / HUD_W;
+// The room's map size (small / medium / big) sets the world; the canvas is
+// resized to it and CSS fits it to the screen.
+function applyWorld(world) {
+  if (!world || (world.w === CANVAS_W && world.h === CANVAS_H)) return;
+  CANVAS_W = world.w; CANVAS_H = world.h;
+  ARENA_W = CANVAS_W - ARENA_X * 2; ARENA_H = CANVAS_H - ARENA_Y * 2;
+  HUD_SCALE = CANVAS_W / HUD_W;
+  canvas.width = CANVAS_W; canvas.height = CANVAS_H;
+  ctx.imageSmoothingEnabled = false;
+  arenaCache = null;
+  pred = null;
+}
+const KEYS = ['p1', 'p2', 'p3', 'p4'];
+const myKeyOf = () => (myNum ? 'p' + myNum : null);
 
 const PAL = {
   bg:'#0a0a14', arena:'#1a1a2e', wall:'#2a2a4a',
-  p1:'#4488ff', p2:'#ff6644', monster:'#44cc44',
+  p1:'#4488ff', p2:'#ff6644', p3:'#44dd66', p4:'#ffcc33', monster:'#44cc44',
   xp:'#ffcc00', coin:'#ffd24a', hp:'#ff3333', hpBg:'#330000',
   text:'#e8e8e8', white:'#ffffff',
 };
@@ -125,6 +141,9 @@ let rttMs = 60;
 let pingTimer = null;
 
 let pendingName = 'PLAYER', pendingMode = 'pvp', pendingPass = '', pendingBotLevel = 'average';
+let pendingMapSize = lsGetSafe('weponare_map') || 'medium', pendingRoom = {};
+function lsGetSafe(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function escapeHtml(t) { return String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
 let roomWasFull = false;
 let welcomeLeaderboard = [];
 let serverPlayerSpeed = 3.6;
@@ -195,6 +214,7 @@ async function refreshSavedBanner() {
 }
 
 function joinGame(mode) {
+  if (mode !== 'create' && mode !== 'joinroom') pendingRoom = {};
   if (window.GameAudio) { GameAudio.init(); GameAudio.resume(); }
   readCredentials();
   pendingMode = mode;
@@ -228,6 +248,7 @@ function cycleMusic() {
 let leaving = false, returningToMenu = false;
 function leaveGame() {
   leaving = true;
+  toggleChat(false);
   toggleSandboxPanel(false);
   if (window.GameAudio) GameAudio.stopMusic();
   if (ws) { try { ws.close(); } catch {} }
@@ -292,8 +313,10 @@ function connect() {
       applyCatalog(msg.catalog, msg.colors);
       if (Array.isArray(msg.abilityDefs)) ABILITY_DEFS = msg.abilityDefs;
       if (msg.sandboxDefs) SANDBOX_DEFS = msg.sandboxDefs;
+      if (Array.isArray(msg.chatLines)) { CHAT_LINES = msg.chatLines; buildChatPanel(); }
       ws.send(JSON.stringify({
         type: 'join', name: pendingName, mode: pendingMode, password: pendingPass, level: pendingBotLevel,
+        size: pendingMapSize, ...pendingRoom,
         skin: pendingSkin, skinModified,
         localXp: loadLocalXp(pendingPass), localCoins: loadLocalCoins(pendingPass), backup: loadBackup(pendingPass),
       }));
@@ -304,10 +327,14 @@ function connect() {
     }
     // The server seats us once we've picked a mode: solo modes get a room of
     // their own; PvP / co-op pair us with someone who picked the same mode.
+    if (msg.type === 'room_gone') {
+      setLobbyMsg('That room is full or has already started.');
+      setTimeout(() => { leaveGame(); openRoomBrowser(); }, 1600);
+    }
     if (msg.type === 'seat') {
       myNum = msg.num;
       const mode = msg.mode || pendingMode;
-      const modeLabel = mode === 'coop' ? 'CO-OP' : 'PvP';
+      const modeLabel = mode === 'coop' ? 'CO-OP' : (msg.maxPlayers || 2) > 2 ? 'LAST ONE STANDING' : 'PvP';
       if (mode === 'waves') {
         setLobbyMsg(`<span class="p1-color">WAVES MODE</span><br><span style="color:#888">SOLO ENDLESS</span><br>Loading...`);
       } else if (mode === 'extreme') {
@@ -319,7 +346,7 @@ function connect() {
       } else {
         setLobbyMsg(myNum === 1
           ? `<span class="p1-color">YOU ARE PLAYER 1</span><br><span style="color:#888">${modeLabel} MODE</span><br>Waiting for opponent...`
-          : `<span class="p2-color">YOU ARE PLAYER 2</span><br><span style="color:#888">${modeLabel} MODE</span><br>Game starting!`);
+          : `<span class="p${myNum}-color">YOU ARE PLAYER ${myNum}</span><br><span style="color:#888">${modeLabel} MODE</span><br>Joining...`);
       }
     }
     if (msg.type === 'full') {
@@ -344,7 +371,10 @@ function connect() {
         if (msg.myCoins !== undefined) saveLocalCoins(pendingPass, msg.myCoins);
       }
       // The server only sends a player's unlock list when it changes.
-      for (const k of ['p1', 'p2']) {
+      applyWorld(msg.world);
+      const chatBtn = document.getElementById('chatBtn');   // nobody to talk to in the solo modes
+      if (chatBtn) { const solo = ['waves', 'extreme', 'portal', 'sandbox'].includes(msg.gameMode); chatBtn.style.display = solo ? 'none' : ''; if (solo) toggleChat(false); }
+      for (const k of KEYS) {
         const np = msg.players?.[k], op = currState?.players?.[k];
         if (np && !np.unlockedWeapons && op?.unlockedWeapons) np.unlockedWeapons = op.unlockedWeapons;
       }
@@ -412,10 +442,7 @@ function interpState(prev, curr, t) {
   const ip = (a, b) => (!a || !b || b.dead) ? b : { ...b, x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t) };
   return {
     ...curr,
-    players: {
-      p1: ip(prev.players?.p1, curr.players?.p1),
-      p2: ip(prev.players?.p2, curr.players?.p2),
-    },
+    players: Object.fromEntries(KEYS.map(k => [k, ip(prev.players?.[k], curr.players?.[k])])),
     monsters:    interpById(prev.monsters, curr.monsters || [], t),
     allies:      interpById(prev.allies, curr.allies || [], t),
     projectiles: interpById(prev.projectiles, curr.projectiles || [], t),
@@ -465,7 +492,7 @@ function predictedAt(t) {
 
 function updatePrediction(frameDt, now) {
   if (!currState || currState.gameState !== 'GAMEPLAY' || !myNum) { pred = null; predHist.length = 0; return; }
-  const key = myNum === 1 ? 'p1' : 'p2';
+  const key = myKeyOf();
   const me = currState.players?.[key];
   if (!me || me.dead || me.controlling || me.dashing) { pred = null; predHist.length = 0; return; }
   if (!pred) { pred = { x: me.x, y: me.y, facing: me.facing }; predHist.length = 0; }
@@ -520,7 +547,7 @@ function updatePrediction(frameDt, now) {
 
 function applyPrediction(state) {
   if (!pred || !myNum) return state;
-  const key = myNum === 1 ? 'p1' : 'p2';
+  const key = myKeyOf();
   const me = state.players?.[key];
   if (!me || me.dead) return state;
   // Clone so we never mutate the stored authoritative currState.
@@ -689,8 +716,8 @@ function pushSlash(cp, angle, key) {
 }
 
 function detectSlashes(prev, curr) {
-  const myKey = myNum === 1 ? 'p1' : (myNum === 2 ? 'p2' : null);
-  for (const key of ['p1', 'p2']) {
+  const myKey = myKeyOf();
+  for (const key of KEYS) {
     const cp = curr.players?.[key], pp = prev.players?.[key];
     if (!cp || cp.dead) continue;
     const fresh = cp.swingTimer > 0 && (!pp || pp.swingTimer <= 0 || cp.swingTimer > pp.swingTimer);
@@ -725,7 +752,7 @@ function detectAudioEvents(prev, curr) {
   if ((curr.monsters?.length || 0) < (prev.monsters?.length || 0)) GameAudio.sfx.death();
 
   // Local player took damage
-  const key = myNum === 1 ? 'p1' : 'p2';
+  const key = myKeyOf();
   const pme = prev.players?.[key], cme = curr.players?.[key];
   if (pme && cme && cme.hp < pme.hp) GameAudio.sfx.hit();
 
@@ -926,11 +953,11 @@ const PORTAL_COLORS = {
 };
 // A player's colour: their skin colour, else the P1/P2 default.
 function ownerColor(key) {
-  return getSkinColor(currState?.players?.[key], key === 'p2' ? PAL.p2 : PAL.p1);
+  return getSkinColor(currState?.players?.[key], PAL[key] || PAL.p1);
 }
 function drawPortal(f, now) {
   // Portal Wand summoning portals ('p1'/'p2') wear their caster's colour.
-  const [col, hi, voidC] = f.c === 'p1' || f.c === 'p2' ? [ownerColor(f.c), '#ffffff', '#0a0a14']
+  const [col, hi, voidC] = /^p[1-4]$/.test(f.c) ? [ownerColor(f.c), '#ffffff', '#0a0a14']
     : PORTAL_COLORS[f.c] || PORTAL_COLORS.purple;
   const k = Math.max(0, f.k || 0);
   // Opens with a snap, holds, then pinches shut.
@@ -1701,6 +1728,8 @@ window.addEventListener('keydown', (e) => {
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','ShiftLeft','ShiftRight','KeyP','ControlLeft','ControlRight'].includes(e.code)) e.preventDefault();
   if (e.code === 'Space' && currState && currState.gameState === 'WEAPON_UNLOCK' && currState.pendingUnlock) sendAckUnlock();
   if (e.code === 'KeyM') toggleSound();
+  if (e.code === 'KeyT' && currState && currState.gameState === 'GAMEPLAY' && document.activeElement?.tagName !== 'INPUT') toggleChat();
+  if (e.code === 'Escape') toggleChat(false);
   if (e.code.startsWith('Digit')) {
     const n = parseInt(e.code.slice(5));
     if (n >= 1 && n <= 4) useItem(n - 1);
@@ -1750,7 +1779,7 @@ function sendInput() {
   if (inp.attack && !localPrevAttack) tryLocalAttack();
   // Swapping off the dagger drops the cloak.
   if (((inp.swap && !localPrevSwap) || (inp.swapPrev && !localPrevSwapPrev)) && localGhost?.on !== false && currState?.players) {
-    const me = currState.players[myNum === 1 ? 'p1' : 'p2'];
+    const me = currState.players[myKeyOf()];
     if (me && ghostNow(me)) localGhost = { on: false, at: performance.now() };
   }
   localPrevAttack = inp.attack;
@@ -1760,7 +1789,7 @@ function sendInput() {
 
 function tryLocalAttack() {
   if (!currState || currState.gameState !== 'GAMEPLAY' || !myNum) return;
-  const key = myNum === 1 ? 'p1' : 'p2';
+  const key = myKeyOf();
   const me = currState.players?.[key];
   if (!me || me.dead || me.controlling || localAtkCd > 0) return;
   const haste = me.effects && me.effects.haste > 0;
@@ -2973,7 +3002,7 @@ const ABILITY_ICONS = {
   },
 };
 
-const SCREENS = ['startScreen','lobbyScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen','howtoScreen','botScreen'];
+const SCREENS = ['startScreen','lobbyScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen'];
 function showScreen(id) { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay '+(s===id?'active':'hidden'); }); }
 function hideAllScreens() { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay hidden'; }); }
 function setLobbyMsg(html) { showScreen('lobbyScreen'); document.getElementById('lobbyMsg').innerHTML = html; }
@@ -2981,6 +3010,117 @@ const PORTAL_LOBBY = `<span style="color:#c8a0ff">THE PORTAL MAGE</span><br>`
   + `<span style="color:#888">SOLO BOSS FIGHT · WIN 50,000 COINS + 50,000 XP</span><br>Opening the portal...`;
 
 const BOT_LOBBY = () => `<span style="color:#ff9a5a">BOT BATTLE</span><br><span style="color:#888">PvP VS A ${(pendingBotLevel || 'average').toUpperCase()} BOT</span><br>Loading...`;
+
+// ── Map size (all modes) ──
+function pickMapSize(size) {
+  pendingMapSize = size;
+  try { localStorage.setItem('weponare_map', size); } catch {}
+  for (const b of document.querySelectorAll('.map-btn')) b.classList.toggle('on', b.dataset.size === size);
+}
+pickMapSize(['small', 'medium', 'big'].includes(pendingMapSize) ? pendingMapSize : 'medium');
+
+// ── Rooms: create one, or browse and join someone else's ──
+let roomDraft = { maxPlayers: 2, size: 'medium' };
+function pickRoomPlayers(n) {
+  roomDraft.maxPlayers = n;
+  for (const b of document.querySelectorAll('#roomPlayersOpts .room-opt')) b.classList.toggle('on', Number(b.dataset.n) === n);
+}
+function pickRoomSize(size) {
+  roomDraft.size = size;
+  for (const b of document.querySelectorAll('#roomSizeOpts .room-opt')) b.classList.toggle('on', b.dataset.size === size);
+}
+function openCreateRoom() {
+  readCredentials();
+  pickRoomPlayers(roomDraft.maxPlayers);
+  pickRoomSize(pendingMapSize || 'medium');
+  const inp = document.getElementById('roomNameInput');
+  if (inp && !inp.value) inp.value = ((pendingName && pendingName !== 'PLAYER' ? pendingName : 'MY') + "'S ROOM").slice(0, 20);
+  showScreen('createRoomScreen');
+}
+function createRoomGo() {
+  const name = (document.getElementById('roomNameInput')?.value || '').trim().slice(0, 20) || 'ROOM';
+  pendingMapSize = roomDraft.size;
+  pendingRoom = { roomName: name, maxPlayers: roomDraft.maxPlayers };
+  document.getElementById('createRoomScreen').className = 'overlay hidden';
+  joinGame('create');
+}
+let roomPoll = null;
+async function refreshRoomList() {
+  const el = document.getElementById('roomList');
+  if (!el) return;
+  try {
+    const res = await fetch('/api/rooms');
+    const list = (await res.json()).rooms || [];
+    el.innerHTML = list.length ? list.map(r => `<div class="room-row">
+        <div class="room-info">
+          <div class="room-name">${escapeHtml(r.name)}</div>
+          <div class="room-meta">HOST ${escapeHtml(r.host)} &middot; ${r.players}/${r.maxPlayers} PLAYERS &middot; ${r.maxPlayers > 2 ? 'LAST ONE STANDING' : 'DUEL'} &middot; ${String(r.size).toUpperCase()} MAP</div>
+          <div class="room-who">${r.names.map(escapeHtml).join(', ')}</div>
+        </div>
+        <button onclick="joinRoom('${r.id}', '${r.size}')">JOIN</button>
+      </div>`).join('')
+      : '<div class="room-empty">No open rooms right now &ndash; create one!</div>';
+  } catch {
+    el.innerHTML = '<div class="room-empty">Could not reach the server.</div>';
+  }
+}
+function openRoomBrowser() {
+  readCredentials();
+  showScreen('roomsScreen');
+  document.getElementById('roomList').innerHTML = '<div class="room-empty">Looking for rooms...</div>';
+  refreshRoomList();
+  clearInterval(roomPoll);
+  roomPoll = setInterval(refreshRoomList, 2000);
+}
+function closeRoomBrowser() { clearInterval(roomPoll); roomPoll = null; showScreen('startScreen'); }
+function joinRoom(id, size) {
+  clearInterval(roomPoll); roomPoll = null;
+  pendingRoom = { roomId: id };
+  pendingMapSize = size;
+  document.getElementById('roomsScreen').className = 'overlay hidden';
+  joinGame('joinroom');
+}
+
+// ── Safe chat: a fixed list of friendly lines (from the server) ──
+let CHAT_LINES = [];
+function buildChatPanel() {
+  const el = document.getElementById('chatPanel');
+  if (el) el.innerHTML = CHAT_LINES.map((t, i) => `<button onclick="sendChat(${i})">${escapeHtml(t)}</button>`).join('');
+}
+function toggleChat(show) {
+  const el = document.getElementById('chatPanel');
+  if (!el) return;
+  const on = show ?? el.classList.contains('hidden');
+  if (on && !el.children.length) buildChatPanel();
+  el.classList.toggle('hidden', !on);
+}
+function sendChat(i) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'chat', id: i }));
+  toggleChat(false);
+}
+// A speech bubble over whoever spoke, fading out.
+function drawChatBubbles(state) {
+  for (const c of state.chats || []) {
+    const p = state.players?.[c.key], text = CHAT_LINES[c.id];
+    if (!p || p.dead || !text || (p.effects && (p.effects.vanish > 0 || p.effects.ghost > 0) && c.key !== myKeyOf())) continue;
+    const age = (c.age || 0) + (performance.now() - stateRecvTime);
+    const a = Math.max(0, Math.min(1, (3500 - age) / 500));
+    if (a <= 0) continue;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.font = 'bold 8px "Courier New",monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const w = Math.ceil(ctx.measureText(text).width) + 8, h = 12;
+    const x = Math.round(p.x + p.w / 2), y = Math.round(p.y - 30 - Math.min(4, age / 60));
+    ctx.fillStyle = 'rgba(250, 250, 255, 0.95)';
+    ctx.fillRect(x - w / 2, y - h / 2, w, h);
+    ctx.beginPath(); ctx.moveTo(x - 3, y + h / 2); ctx.lineTo(x + 3, y + h / 2); ctx.lineTo(x, y + h / 2 + 4); ctx.fill();
+    ctx.strokeStyle = PAL[c.key] || '#888'; ctx.lineWidth = 1;
+    ctx.strokeRect(x - w / 2 + 0.5, y - h / 2 + 0.5, w - 1, h - 1);
+    ctx.fillStyle = '#111'; ctx.fillText(text, x, y + 0.5);
+    ctx.restore();
+  }
+}
 
 // BOT BATTLE: pick the bot's level, then it's a PvP match against it.
 function openBotPicker() { readCredentials(); showScreen('botScreen'); }
@@ -3004,11 +3144,14 @@ function updateScreens(state) {
     } else if (state.gameMode === 'sandbox') {
       setLobbyMsg(`<span style="color:#9fffd0">SANDBOX</span><br><span style="color:#888">SOLO PRACTICE · NOTHING IS SAVED</span><br>Loading...`);
     } else {
-      const modeStr = state.gameMode === 'coop' ? 'CO-OP MODE' : 'PvP MODE';
+      const modeStr = state.gameMode === 'coop' ? 'CO-OP MODE' : state.maxPlayers > 2 ? 'LAST ONE STANDING' : 'PvP MODE';
+      const k = myKeyOf();
+      const head = state.roomName ? `<span style="color:#ffe45a">${escapeHtml(state.roomName)}</span><br>` : '';
+      const who = KEYS.slice(0, state.maxPlayers || 2).map(q => state.playerNames?.[q] && (state.seated || 0) > KEYS.indexOf(q)
+        ? `<span class="${q}-color">${escapeHtml(state.playerNames[q])}</span>` : '<span style="color:#555">· empty ·</span>').join(' &nbsp; ');
       setLobbyMsg(myNum
-        ? (myNum===1
-            ? `<span class="p1-color">${state.playerNames?.p1||'PLAYER 1'}</span> &nbsp;[${modeStr}]<br>Waiting for opponent...`
-            : `<span class="p2-color">${state.playerNames?.p2||'PLAYER 2'}</span> &nbsp;[${modeStr}]<br>Waiting...`)
+        ? `${head}<span class="${k}-color">${escapeHtml(state.playerNames?.[k] || 'PLAYER')}</span> &nbsp;[${modeStr} · ${(state.world?.size || 'medium').toUpperCase()} MAP]<br>`
+          + `${who}<br>Waiting for players... ${state.seated || 1}/${state.maxPlayers || 2}`
         : 'Waiting...');
     }
     document.getElementById('xpDisplay').innerHTML =
@@ -3089,26 +3232,20 @@ function updateScreens(state) {
         `WAVE ${state.wave?.num||0} REACHED<br>XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`;
     } else {
       lb.classList.add('hidden');
-      const p1 = state.players.p1, p2 = state.players.p2;
-      const p1Out = !p1 || (p1.dead && p1.lives <= 0);
-      const p2Out = !p2 || (p2.dead && p2.lives <= 0);
-      const nameOf = n => (n === 1 ? state.playerNames?.p1 || 'P1' : state.playerNames?.p2 || 'P2');
+      const nameOf = n => state.playerNames?.['p' + n] || 'P' + n;
+      const fighters = KEYS.filter(k => state.players[k]);
       if (r.matchWinner) {
         hint.textContent = 'NEW MATCH STARTING...';
         document.getElementById('roundTitle').innerHTML =
-          `<span class="${r.matchWinner===1?'p1-color':'p2-color'}">${nameOf(r.matchWinner)} TAKES THE MATCH</span>`;
+          `<span class="p${r.matchWinner}-color">${nameOf(r.matchWinner)} TAKES THE MATCH</span>`;
       } else {
         hint.textContent = 'NEXT ROUND STARTING...';
-        if (p1Out && p2Out) {
-          document.getElementById('roundTitle').innerHTML = '<span style="color:#ffcc00">DRAW!</span>';
-        } else {
-          const wn = p2Out ? 1 : 2;
-          document.getElementById('roundTitle').innerHTML =
-            `<span class="${wn===1?'p1-color':'p2-color'}">${nameOf(wn)} WINS THE ROUND</span>`;
-        }
+        const wn = r.roundWinner || 0;
+        document.getElementById('roundTitle').innerHTML = !wn ? '<span style="color:#ffcc00">DRAW!</span>'
+          : `<span class="p${wn}-color">${nameOf(wn)} ${fighters.length > 2 ? 'IS THE LAST ONE STANDING' : 'WINS THE ROUND'}</span>`;
       }
       document.getElementById('roundStats').innerHTML =
-        `${nameOf(1)} ${r.p1Wins} &nbsp;—&nbsp; ${r.p2Wins} ${nameOf(2)}`
+        fighters.map(k => `<span class="${k}-color">${nameOf(Number(k.slice(1)))}</span> ${(r.wins || {})[k] || 0}`).join(' &nbsp;—&nbsp; ')
         + `<br><span style="color:#888">FIRST TO ${r.maxWins} WINS THE MATCH</span><br>`
         + `XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`;
     }
@@ -3156,17 +3293,18 @@ function draw(state) {
   drawMonsters(state.monsters || []);
   drawAllies(state.allies || []);
   const names = state.playerNames || {};
-  if (state.players.p1) drawPlayer(state.players.p1, PAL.p1, names.p1 || 'P1', 'p1');
-  if (state.players.p2) drawPlayer(state.players.p2, PAL.p2, names.p2 || 'P2', 'p2');
+  for (const k of KEYS) if (state.players[k]) drawPlayer(state.players[k], PAL[k], names[k] || k.toUpperCase(), k);
+  drawChatBubbles(state);
   drawFireHands(state.fires || []);
-  syncSuperButton(myNum === 1 ? state.players.p1 : myNum === 2 ? state.players.p2 : null);
-  syncAbilityButtons(myNum === 1 ? state.players.p1 : myNum === 2 ? state.players.p2 : null);
+  const meP = state.players[myKeyOf()] || null;
+  syncSuperButton(meP);
+  syncAbilityButtons(meP);
   drawParticles(state.particles || []);
   ctx.save();
   ctx.scale(HUD_SCALE, HUD_SCALE);
   drawHUD(state);
   drawBossBar(state.monsters);
-  drawItemBar(state.inventory || [], myNum === 1 ? state.players.p1 : myNum === 2 ? state.players.p2 : null);
+  drawItemBar(state.inventory || [], meP);
   drawWeaponPanel(state);
   drawPickupBanners(state.particles);
   ctx.restore();
@@ -3365,7 +3503,7 @@ function clearOfButtons(x, y, w, h) {
 
 function drawItemBar(inv, me) {
   itemSlotRects = [];
-  const onRight = myNum === 2;
+  const onRight = myNum % 2 === 0;
   const active = me && me.effects
     ? Object.keys(me.effects).filter(k => EFFECT_ITEM[k] && me.effects[k] > 0) : [];
   if ((!inv || !inv.length) && !active.length) return;
@@ -3421,7 +3559,7 @@ function drawItemBar(inv, me) {
 
 // Big "you got X" banner for the local player's pickups, in HUD space.
 function drawPickupBanners(particles) {
-  const myKey = myNum === 1 ? 'p1' : myNum === 2 ? 'p2' : null;
+  const myKey = myKeyOf();
   const mine = (particles || []).filter(p => p.type === 'pickup' && p.text && p.who === myKey);
   mine.slice(-3).forEach((p, i) => {
     const m = p.max || 1800, k = 1 - p.timer / m;
@@ -5102,6 +5240,20 @@ function drawHUD(state) {
     drawHpBar(RX - 80, 15, 74, 5, p2.hp / p2.maxHp, col, '#330000');
     for (let i = 0; i < (p2.lives || 0); i++) { ctx.fillStyle = col; ctx.fillRect(RX - 9 - i*7, 21, 5, 3); }
   }
+  // Players 3 and 4 share the middle of the bar.
+  for (const [k, left] of [['p3', true], ['p4', false]]) {
+    const q = state.players[k];
+    if (!q) continue;
+    const col = getSkinColor(q, PAL[k]), nm = (names[k] || k.toUpperCase()).slice(0, 10);
+    const x0 = left ? HUD_W / 2 - 78 : HUD_W / 2 + 4;
+    ctx.textAlign = 'left';
+    const tx = x0;
+    ctx.fillStyle = '#000'; ctx.fillText(nm, tx + 1, 3);
+    ctx.fillStyle = q.dead && q.lives <= 0 ? '#555' : col; ctx.fillText(nm, tx, 2);
+    ctx.textAlign = 'left';
+    drawHpBar(x0, 15, 74, 5, q.hp / q.maxHp, col, '#330000');
+    for (let i = 0; i < (q.lives || 0); i++) { ctx.fillStyle = col; ctx.fillRect(x0 + i*7, 21, 5, 3); }
+  }
 
   const w = state.wave;
   ctx.textAlign = 'center';
@@ -5138,12 +5290,13 @@ function drawHUD(state) {
   ctx.textAlign = 'left';
 
   // ── Ability cooldown bars (local player): special + parry ──
-  const mp = myNum === 1 ? p1 : (myNum === 2 ? p2 : null);
+  const mp = state.players[myKeyOf()] || null;
   if (mp) {
     const barW = 60, barH = 4;
-    const bx = myNum === 1 ? 4 : RX - 4 - barW;
-    const lx = myNum === 1 ? bx + barW + 3 : bx - 3;
-    const align = myNum === 1 ? 'left' : 'right';
+    const leftSide = myNum % 2 === 1, inset = 0;
+    const bx = leftSide ? 4 + inset : RX - 4 - barW - inset;
+    const lx = leftSide ? bx + barW + 3 : bx - 3;
+    const align = leftSide ? 'left' : 'right';
     ctx.textBaseline = 'top';
     ctx.textAlign = align;
 
@@ -5191,7 +5344,7 @@ function drawHUD(state) {
 
   // XP and coins live in the top bar beside your own health, so the bottom edge
   // belongs to the weapon rack alone.
-  const right = myNum === 2;
+  const right = myNum % 2 === 0;
   const ax = right ? RX - 86 : 86;
   ctx.font = '8px "Courier New",monospace';
   ctx.textBaseline = 'top';
@@ -5236,7 +5389,7 @@ let weaponSlotRects = []; // HUD-space hit boxes for tap-to-select
 function drawWeaponPanel(state) {
   weaponSlotRects = [];
   if (!myNum) return;
-  const mp = myNum===1 ? state.players?.p1 : state.players?.p2;
+  const mp = state.players?.[myKeyOf()];
   if (!mp || !mp.unlockedWeapons || !mp.unlockedWeapons.length) return;
   const weapons = mp.unlockedWeapons;
   const n = weapons.length;
@@ -5248,7 +5401,7 @@ function drawWeaponPanel(state) {
   // third) row only if they'd get too small; the held weapon's name sits under
   // the rack instead of a label in every slot.
   const TOP = 29, SIDE = 156;
-  let L = myNum === 2 ? 6 : SIDE, R = myNum === 2 ? HUD_W - SIDE : HUD_W - 6;
+  let L = myNum % 2 === 0 ? 6 : SIDE, R = myNum % 2 === 0 ? HUD_W - SIDE : HUD_W - 6;
   const gap = 1, slotH = isTouchDevice ? 16 : 14, minW = isTouchDevice ? 17 : 15;
   let rows, slotW, perRow, panelW, panelH, panelX;
   const rowW = (cnt) => cnt * (slotW + gap) - gap;
@@ -5286,7 +5439,7 @@ function drawWeaponPanel(state) {
 
   // Never hide your own character: if you walk behind the rack, it turns
   // see-through.
-  const me = myNum === 1 ? state.players?.p1 : state.players?.p2;
+  const me = state.players?.[myKeyOf()];
   let alpha = 1;
   if (me && !me.dead) {
     const px = me.x / HUD_SCALE, py = (me.y - PLAYER_PAD) / HUD_SCALE;
@@ -5379,7 +5532,7 @@ function drawControlHints() {
   ctx.save();
   ctx.font = '8px "Courier New",monospace';
   ctx.textBaseline = 'bottom'; ctx.textAlign = 'center';
-  const me = myNum === 1 ? currState?.players?.p1 : currState?.players?.p2;
+  const me = currState?.players?.[myKeyOf()];
   const abil = (me && me.abil) || [];
   const abKeys = abil.map((a, i) => a ? AB_KEYS[i] : '').filter(Boolean).join('/');
   const t = 'ARROWS MOVE · SPACE ATK · ENTER/Z SWAP · SHIFT SPECIAL · P PARRY · '

@@ -9,7 +9,11 @@ const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+// Game state is repetitive JSON, so a light deflate cuts it ~4x for almost no CPU.
+const wss = new WebSocketServer({
+  server,
+  perMessageDeflate: { zlibDeflateOptions: { level: 1 }, threshold: 512, concurrencyLimit: 4, serverNoContextTakeover: true, clientNoContextTakeover: true },
+});
 
 const PORT = process.env.PORT || 3000;
 const PROGRESS_FILE = path.join(__dirname, 'progress.json');
@@ -19,9 +23,16 @@ const PROGRESS_FILE = path.join(__dirname, 'progress.json');
 // World is 1.5× the old 480×270 arena. The client renders the whole world at
 // 720×405 and draws its HUD in a 480×270 space scaled by 1.5, so the bigger map
 // is simply zoomed out to fit the screen.
-const CANVAS_W = 720, CANVAS_H = 405;
+// The world size depends on the room's map (small / medium / big), so these are
+// set from the room each time the code switches to it (useRoom).
+const MAP_SIZES = { small: [560, 315], medium: [720, 405], big: [960, 540] };
 const ARENA_X = 12, ARENA_Y = 12;
-const ARENA_W = CANVAS_W - ARENA_X * 2, ARENA_H = CANVAS_H - ARENA_Y * 2;
+let CANVAS_W = 720, CANVAS_H = 405;
+let ARENA_W = CANVAS_W - ARENA_X * 2, ARENA_H = CANVAS_H - ARENA_Y * 2;
+function setArena(size) {
+  [CANVAS_W, CANVAS_H] = MAP_SIZES[size] || MAP_SIZES.medium;
+  ARENA_W = CANVAS_W - ARENA_X * 2; ARENA_H = CANVAS_H - ARENA_Y * 2;
+}
 const TICK_MS = 20;
 
 // Dev hook: start co-op/waves at a later wave so the deep-wave monster roster can
@@ -100,7 +111,6 @@ const ITEM_TYPES = {
   shield:   { effect: 'shield',   dur: 4500, color: '#ffdd44', name: 'SHIELD',       desc: 'Take no damage' },
   haste:    { effect: 'haste',    dur: 6000, color: '#aa66ff', name: 'HASTE',        desc: 'Attack twice as fast' },
   heal:     { effect: 'heal',     instant: true, amount: 50, color: '#44ff66', name: 'HEAL', desc: 'Restore 50 HP' },
-  magnet:   { effect: 'magnet',   dur: 10000, color: '#ffc24a', name: 'COIN MAGNET', desc: 'Pull in coins from afar' },
   regen:    { effect: 'regen',    dur: 8000, color: '#ff7ac8', name: 'REGENERATION', desc: 'Heal 5 HP every second' },
   vampire:  { effect: 'vampire',  dur: 7000, color: '#d8304a', name: 'VAMPIRE',      desc: 'Heal 25% of damage dealt' },
   bomb:     { effect: 'bomb',     instant: true, amount: 70, radius: 110, color: '#ff8a2a', name: 'BOMB', desc: 'Blast everything nearby' },
@@ -130,8 +140,9 @@ const ITEM_POOL = (() => {
 // ── Coins: drop from every kill, spent on weapon upgrades in the menu ──
 const COIN_SIZE = 10;
 const COIN_LIFETIME = 22000;
-const COIN_MAGNET = 26;       // auto-collect radius
-const COIN_ATTRACT = 95;      // coins drift toward a player from this far away
+const COIN_MAGNET = 30;       // auto-collect radius
+const COIN_ATTRACT = 170;     // coins fly toward a player from this far away
+const COIN_PULL = 0.9, COIN_SETTLED_PULL = 0.45, COIN_SETTLE_MS = 1200;
 const MAX_COIN_DROPS = 9;     // entities per kill (value is stacked instead)
 const COIN_KILL_MULT = 4;     // every kill pays out this many times the base amount
 const MAX_COINS_ON_FLOOR = 140;
@@ -926,7 +937,7 @@ function restoreBackup(pw, backup) {
 
 // Keep every connected player's device copy up to date as they earn and spend.
 function pushSaves() {
-  for (const r of rooms) for (const key of ['p1', 'p2']) {
+  for (const r of rooms) for (const key of KEYS) {
     const ws = r[key], pw = r.passwords[key];
     if (!ws || ws.readyState !== 1 || !pw || isAdminPw(pw)) continue;
     const data = saveData(pw);
@@ -1040,10 +1051,11 @@ function weapon(p) { return p.w_ || WEAPONS[0]; }
 // ─── Room State ───────────────────────────────────────────────────────────────
 
 function spawnPointFor(num) {
-  return {
-    x: num === 1 ? ARENA_X + 56 : ARENA_X + ARENA_W - 56 - PLAYER_W,
-    y: ARENA_Y + Math.round(ARENA_H / 2) - PLAYER_H / 2,
-  };
+  const midX = ARENA_X + Math.round(ARENA_W / 2) - PLAYER_W / 2, midY = ARENA_Y + Math.round(ARENA_H / 2) - PLAYER_H / 2;
+  // (not right at the top: the weapon rack covers the top middle of the screen)
+  if (num === 3) return { x: midX, y: ARENA_Y + ARENA_H - 40 - PLAYER_H };
+  if (num === 4) return { x: midX, y: ARENA_Y + Math.round(ARENA_H * 0.32) };
+  return { x: num === 1 ? ARENA_X + 56 : ARENA_X + ARENA_W - 56 - PLAYER_W, y: midY };
 }
 
 function makePlayer(num, xp, upgrades) {
@@ -1083,29 +1095,40 @@ function makePlayer(num, xp, upgrades) {
   return p;
 }
 
+// Player seats. PvP rooms can hold up to four (last one standing); the rest use p1/p2.
+const KEYS = ['p1', 'p2', 'p3', 'p4'];
+const isPKey = k => KEYS.includes(k);
+const perKey = v => Object.fromEntries(KEYS.map(k => [k, typeof v === 'function' ? v(k) : v]));
+function allPlayers() { return KEYS.map(k => room.players[k]); }
+const blankInput = () => ({ up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false, ab1: false, ab2: false });
+const blankPrev = () => ({ attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false });
+function newRound() { return { wins: perKey(0), maxWins: 3, matchWinner: 0 }; }
+
 function emptyWave() { return { num: 0, monstersLeft: 0, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 }; }
 
 // Every game runs in its own room. The game code works on `room`, which the
 // loop and the socket handlers point at the right one before running
 // (single-threaded, so it can never be caught half-switched).
 function makeRoom() { return {
-  p1: null, p2: null,
+  id: Math.random().toString(36).slice(2, 10),
+  p1: null, p2: null, p3: null, p4: null,
   gameState: 'LOBBY',
   gameMode: 'pvp',
-  playerNames: { p1: 'PLAYER 1', p2: 'PLAYER 2' },
-  passwords: { p1: '', p2: '' },
-  playerXp: { p1: 0, p2: 0 },
-  playerCoins: { p1: 0, p2: 0 },
-  playerSkins: { p1: null, p2: null },
-  playerUnlocks: { p1: null, p2: null },
-  playerUpgrades: { p1: null, p2: null },
-  playerAbilities: { p1: null, p2: null },
-  p1Joined: false, p2Joined: false,
-  players: { p1: null, p2: null },
-  inputs: {
-    p1: { up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false, ab1: false, ab2: false },
-    p2: { up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false, ab1: false, ab2: false },
-  },
+  mapSize: 'medium',
+  maxPlayers: 2,
+  custom: null,          // a created room: { name, host }
+  chats: [],             // quick-chat lines on screen: { key, id, t }
+  playerNames: perKey(k => 'PLAYER ' + k.slice(1)),
+  passwords: perKey(''),
+  playerXp: perKey(0),
+  playerCoins: perKey(0),
+  playerSkins: perKey(null),
+  playerUnlocks: perKey(null),
+  playerUpgrades: perKey(null),
+  playerAbilities: perKey(null),
+  p1Joined: false, p2Joined: false, p3Joined: false, p4Joined: false,
+  players: perKey(null),
+  inputs: perKey(blankInput),
   monsters: [],
   allies: [],
   projectiles: [],
@@ -1120,21 +1143,22 @@ function makeRoom() { return {
   wave: emptyWave(),
   waveHpMult: 1,
   waveSpeedMult: 1,
-  unlockQueues: { p1: [], p2: [] },
-  round: { p1Wins: 0, p2Wins: 0, maxWins: 3, matchWinner: 0 },
+  unlockQueues: perKey(() => []),
+  round: newRound(),
   roundOverTimer: 0,
   lastLeaderboard: [],
-  attackJustPressed: { p1: false, p2: false },
-  swapJustPressed: { p1: false, p2: false },
-  swapPrevJustPressed: { p1: false, p2: false },
-  specialJustPressed: { p1: false, p2: false },
-  parryJustPressed: { p1: false, p2: false },
-  superJustPressed: { p1: false, p2: false },
-  prevInputs: {
-    p1: { attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false },
-    p2: { attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false },
-  },
+  attackJustPressed: perKey(false),
+  swapJustPressed: perKey(false),
+  swapPrevJustPressed: perKey(false),
+  specialJustPressed: perKey(false),
+  parryJustPressed: perKey(false),
+  superJustPressed: perKey(false),
+  prevInputs: perKey(blankPrev),
 }; }
+
+// Point the game code at a room (and its map size).
+function useRoom(r) { room = r; setArena(r.mapSize); }
+const seatKeys = (r = room) => KEYS.slice(0, r.maxPlayers);
 
 const rooms = [];
 let room = makeRoom();   // the room being worked on right now
@@ -1145,7 +1169,7 @@ function isSolo() { return SOLO_MODES.includes(room.gameMode); }
 // Seats (room + slot) held by a password, for pushing shop changes into live games.
 function liveSeats(pw) {
   const out = [];
-  for (const r of rooms) for (const key of ['p1', 'p2']) if (r[key] && r.passwords[key] === pw) out.push([r, key]);
+  for (const r of rooms) for (const key of KEYS) if (r[key] && r.passwords[key] === pw) out.push([r, key]);
   return out;
 }
 
@@ -1169,7 +1193,7 @@ function clampToArena(e, pad = 1) {
 }
 
 function playerKeyOf(t) {
-  return t === room.players.p1 ? 'p1' : t === room.players.p2 ? 'p2' : null;
+  return KEYS.find(k => room.players[k] === t) || null;
 }
 
 // Everything `pKey` is allowed to hit. In co-op the other player is an ally, so
@@ -1184,7 +1208,7 @@ function enemyTargets(pKey) {
   // Summoned allies (Portal Wand) are fair game for monsters too.
   // A player under VANISH can't be seen.
   if (pKey === 'monster') {
-    for (const k of ['p1', 'p2']) {
+    for (const k of KEYS) {
       const p = room.players[k];
       if (p && !p.dead && !unseen(p)) out.push(p);
     }
@@ -1192,9 +1216,9 @@ function enemyTargets(pKey) {
     for (const m of room.monsters) if (m.controlledBy && !m.dead) out.push(m);   // a mind-controlled turncoat
     return out;
   }
-  for (const k of ['p1', 'p2']) {
+  for (const k of KEYS) {
     if (k === pKey) continue;
-    if (room.gameMode === 'coop' && (pKey === 'p1' || pKey === 'p2')) continue;
+    if (room.gameMode === 'coop' && isPKey(pKey)) continue;
     const p = room.players[k];
     if (p && !p.dead && !unseen(p)) out.push(p);
   }
@@ -1227,7 +1251,7 @@ function effectiveSpeed(p) {
 }
 
 function tooCloseToPlayers(x, y, dist) {
-  for (const key of ['p1', 'p2']) {
+  for (const key of KEYS) {
     const p = room.players[key];
     if (p && !p.dead && Math.hypot(cx(p) - x, cy(p) - y) < dist) return true;
   }
@@ -1279,7 +1303,7 @@ function fireTrap(tr, trigger) {
   tr.fireTimer = 280;
   const tx = tr.x + tr.w / 2, ty = tr.y + tr.h / 2;
   const targets = tr.owner ? enemyTargets(tr.owner)
-    : [room.players.p1, room.players.p2, ...room.monsters].filter(t => t && !t.dead && !t.controlling);
+    : [...allPlayers(), ...room.monsters].filter(t => t && !t.dead && !t.controlling);
   const inRange = targets.filter(t => Math.hypot(cx(t) - tx, cy(t) - ty) <= tr.radius);
   const by = tr.owner || 'trap';   // a mind trap's kills are its owner's
   room.particles.push({ type: 'trapburst', x: tx, y: ty, maxR: tr.radius, timer: 340, max: 340, color: tr.color, text: def.name });
@@ -1405,7 +1429,7 @@ function addCoins(pKey, amount) {
 function broadcast(msg) {
   const str = JSON.stringify(msg);
   if (room.p1 && room.p1.readyState === 1) room.p1.send(str);
-  if (room.p2 && room.p2.readyState === 1) room.p2.send(str);
+  for (const k of KEYS.slice(1)) if (room[k] && room[k].readyState === 1) room[k].send(str);
 }
 
 function spawnMonster(forceType) {
@@ -1461,7 +1485,7 @@ function spawnMonster(forceType) {
   // A boss makes an entrance from the side away from the players, halfway
   // down — never from the top, where the HUD would hide it.
   if (def.boss) {
-    const ps = [room.players.p1, room.players.p2].filter(p => p && !p.dead);
+    const ps = [...allPlayers()].filter(p => p && !p.dead);
     const avgX = ps.length ? ps.reduce((s, p) => s + cx(p), 0) / ps.length : 0;
     mx = avgX < CANVAS_W / 2 ? maxX : minX;
     my = Math.round((minY + maxY) / 2);
@@ -1555,7 +1579,7 @@ function spawnMinion(type, x, y, extra) {
   return s;
 }
 
-const shieldFoes = () => [room.players.p1, room.players.p2, ...room.allies].filter(t => t && !t.dead);
+const shieldFoes = () => [...allPlayers(), ...room.allies].filter(t => t && !t.dead);
 
 // Hold a distance from the target: close in when too far, back off when too near.
 function keepRange(m, dist, dx, dy, spd, factor, want) {
@@ -1844,7 +1868,7 @@ function monsterSearch(m, spd, factor, dt) {
   m.searchSwingCd = SEARCH_SWING_MIN + Math.random() * SEARCH_SWING_VAR;
   m.swing = MONSTER_SWING_MS;
   room.particles.push({ type: 'crit', x: cx(m), y: m.y - 8, text: '?', timer: 600, max: 600 });
-  for (const k of ['p1', 'p2']) {
+  for (const k of KEYS) {
     const p = room.players[k];
     if (!p || p.dead || p.controlling || !(hasEffect(p, 'vanish') || hasEffect(p, 'ghost'))) continue;
     if (Math.hypot(cx(p) - cx(m), cy(p) - cy(m)) <= m.atkRange + 18 + (p.w + m.w) / 2) { monsterMelee(m, p); m.lastSeen = { x: cx(p), y: cy(p) }; m.searchedHome = false; }
@@ -1919,10 +1943,12 @@ function clearField() {
 }
 
 function startGame() {
-  if (room.round.matchWinner) room.round = { p1Wins: 0, p2Wins: 0, maxWins: 3, matchWinner: 0 };
-  room.players.p1 = makePlayer(1, room.playerXp.p1, room.playerUpgrades.p1);
-  room.players.p2 = !isSolo() ? makePlayer(2, room.playerXp.p2, room.playerUpgrades.p2) : null;
-  for (const key of ['p1', 'p2']) {
+  if (room.round.matchWinner) room.round = newRound();
+  KEYS.forEach((k, i) => {
+    room.players[k] = i === 0 || (!isSolo() && i < room.maxPlayers && room[k + 'Joined'])
+      ? makePlayer(i + 1, room.playerXp[k], room.playerUpgrades[k]) : null;
+  });
+  for (const key of KEYS) {
     const p = room.players[key];
     if (!p) continue;
     if (room.playerSkins[key])   p.skin = room.playerSkins[key];
@@ -1931,7 +1957,8 @@ function startGame() {
     refreshWeapon(p);
   }
   clearField();
-  room.unlockQueues = { p1: [], p2: [] };
+  room.unlockQueues = perKey(() => []);
+  room.chats = [];
   room.wave = emptyWave();
   room.gameState = 'GAMEPLAY';
   room.victory = false;
@@ -1942,11 +1969,11 @@ function startGame() {
 
 function resetToLobby() {
   room.gameState = 'LOBBY';
-  room.players = { p1: null, p2: null };
+  room.players = perKey(null);
   room.wave = emptyWave();
-  room.round = { p1Wins: 0, p2Wins: 0, maxWins: 3, matchWinner: 0 };
+  room.round = newRound();
   room.roundOverTimer = 0;
-  room.unlockQueues = { p1: [], p2: [] };
+  room.unlockQueues = perKey(() => []);
   clearField();
 }
 
@@ -1956,9 +1983,9 @@ function applyDamage(target, dmg, attackerKey) {
     target.hitFlash = 80;
     return;
   }
-  if (room.gameMode === 'coop' && target.num && (attackerKey === 'p1' || attackerKey === 'p2')) return;
+  if (room.gameMode === 'coop' && target.num && isPKey(attackerKey)) return;
   // Weapon upgrades on the attacking player: critical hits, lifesteal, knockback.
-  const atk = (attackerKey === 'p1' || attackerKey === 'p2') ? room.players[attackerKey] : null;
+  const atk = isPKey(attackerKey) ? room.players[attackerKey] : null;
   const aw = atk && atk !== target ? weapon(atk) : null;
   if (aw && atk.passive === 'axe') dmg *= 1 + PASSIVE_RAGE * Math.max(0, 1 - atk.hp / atk.maxHp);   // BERSERKER
   if (target.num && hasEffect(target, 'ironskin')) dmg *= 0.5;                                     // IRON SKIN
@@ -2078,11 +2105,11 @@ function handleKill(target, attackerKey) {
   const xpGain = room.gameMode === 'extreme' ? baseGain * 3 : room.gameMode === 'waves' ? baseGain * 2 : baseGain;
 
   // Credit XP to attacking player
-  if (attackerKey === 'p1' || attackerKey === 'p2') creditXp(attackerKey, xpGain);
+  if (isPKey(attackerKey)) creditXp(attackerKey, xpGain);
 
   // Only float the XP number when a player actually banked it — a trap or a
   // monster finishing something off earns nobody anything (nor does the sandbox).
-  if ((attackerKey === 'p1' || attackerKey === 'p2') && room.gameMode !== 'sandbox') {
+  if (isPKey(attackerKey) && room.gameMode !== 'sandbox') {
     room.particles.push({
       type: 'xp', x: cx(target), y: target.y,
       text: '+' + xpGain, timer: 900,
@@ -2091,7 +2118,7 @@ function handleKill(target, attackerKey) {
 
   // Coins drop on the floor for anyone to pick up. Dying to a monster or a trap
   // drops nothing — otherwise you could farm coins off your own deaths.
-  const killedByRival = attackerKey === 'p1' || attackerKey === 'p2';
+  const killedByRival = isPKey(attackerKey);
   if (!isPlayer || killedByRival) {
     const rich = room.players[attackerKey] && hasEffect(room.players[attackerKey], 'gold') ? 2 : 1;   // GOLD RUSH
     dropCoins(cx(target), cy(target), coinsForKill(target, isPlayer) * rich);
@@ -2218,16 +2245,18 @@ function checkRoundEnd() {
     const p2Out = !p2 || (p2.dead && p2.lives <= 0);
     if (p1Out && p2Out) { room.gameState = 'ROUND_OVER'; room.roundOverTimer = 4000; }
   } else {
-    if (!p1 || !p2) return;
-    const p1Out = p1.dead && p1.lives <= 0;
-    const p2Out = p2.dead && p2.lives <= 0;
-    if (p1Out || p2Out) {
-      // A double knock-out is a draw — neither side banks a win.
-      if (p2Out && !p1Out) room.round.p1Wins++;
-      if (p1Out && !p2Out) room.round.p2Wins++;
+    // PvP: the round ends when one fighter (or none) is left standing.
+    const fighters = KEYS.filter(k => room.players[k]);
+    if (fighters.length < 2) return;
+    const standing = fighters.filter(k => !(room.players[k].dead && room.players[k].lives <= 0));
+    if (standing.length <= 1) {
+      // Everyone out at once is a draw — nobody banks a win.
+      const winner = standing[0] || null;
+      room.round.roundWinner = winner ? Number(winner.slice(1)) : 0;
+      if (winner) room.round.wins[winner]++;
       // First to maxWins takes the match; the next round starts a fresh tally.
-      const { p1Wins, p2Wins, maxWins } = room.round;
-      room.round.matchWinner = p1Wins >= maxWins ? 1 : p2Wins >= maxWins ? 2 : 0;
+      const champ = KEYS.find(k => room.round.wins[k] >= room.round.maxWins);
+      room.round.matchWinner = champ ? Number(champ.slice(1)) : 0;
       room.gameState      = 'ROUND_OVER';
       room.roundOverTimer = room.round.matchWinner ? 6000 : 4000;
     }
@@ -2245,7 +2274,7 @@ setInterval(() => {
   const nowMs = Date.now();
   const dt = Math.max(1, Math.min(80, nowMs - lastTickAt));
   lastTickAt = nowMs;
-  for (const r of rooms.slice()) { room = r; tickRoom(dt); }
+  for (const r of rooms.slice()) { useRoom(r); tickRoom(dt); }
 }, TICK_MS);
 
 function tickRoom(dt) {
@@ -2254,7 +2283,7 @@ function tickRoom(dt) {
       room.roundOverTimer -= dt;
       if (room.roundOverTimer <= 0) {
         const hasUnlocks = room.unlockQueues.p1.length > 0 ||
-                           (!isSolo() && room.unlockQueues.p2.length > 0);
+                           (!isSolo() && KEYS.some(k => k !== 'p1' && room.unlockQueues[k].length > 0));
         if (hasUnlocks) {
           room.gameState = 'WEAPON_UNLOCK';
         } else if (isSolo()) {
@@ -2264,7 +2293,7 @@ function tickRoom(dt) {
         }
       }
     }
-    broadcastState();
+    broadcastTick();
     return;
   }
 
@@ -2273,7 +2302,7 @@ function tickRoom(dt) {
 
   // Swap and parry fire once per press. Attack, special and super auto-fire
   // while held: they go off again as soon as their cooldown is ready.
-  for (const key of ['p1', 'p2']) {
+  for (const key of KEYS) {
     const inp  = room.inputs[key];
     const prev = room.prevInputs[key];
     room.attackJustPressed[key]  = inp.attack;
@@ -2286,7 +2315,7 @@ function tickRoom(dt) {
   }
 
   // ── Move players ──
-  for (const key of ['p1', 'p2']) {
+  for (const key of KEYS) {
     const p = room.players[key];
     if (!p || p.dead) {
       if (p) { p.bladeDash = null; p.lightspeed = 0; p.bladeClick = null; }
@@ -2402,7 +2431,7 @@ function tickRoom(dt) {
   for (const m of room.monsters.slice()) {
     if (m.dead) continue;
     let nearest = null, bestDist = Infinity;
-    for (const p of [room.players.p1, room.players.p2, ...room.allies, ...room.monsters.filter(o => o.controlledBy && o !== m)]) {
+    for (const p of [...allPlayers(), ...room.allies, ...room.monsters.filter(o => o.controlledBy && o !== m)]) {
       if (!p || p.dead || (p.num && unseen(p))) continue;
       const d = distBetween(p, m);
       if (d < bestDist) { bestDist = d; nearest = p; }
@@ -2531,7 +2560,7 @@ function tickRoom(dt) {
       // Extreme pays a coin bonus for every wave survived, straight to the player.
       if (room.gameMode === 'extreme') {
         const bonus = EXTREME_WAVE_BONUS * room.wave.num;
-        for (const key of ['p1', 'p2']) {
+        for (const key of KEYS) {
           const p = room.players[key];
           if (!p) continue;
           addCoins(key, bonus);
@@ -2566,7 +2595,7 @@ function tickRoom(dt) {
         }
       } else {
         let sprung = false;
-        for (const key of ['p1', 'p2']) {
+        for (const key of KEYS) {
           const p = room.players[key];
           if (p && !p.dead && !p.controlling && aabb(p, tr)) {
             if (tr.mode === 'instant') fireTrap(tr, p);
@@ -2589,7 +2618,7 @@ function tickRoom(dt) {
       const ldef = TRAP_TYPES[tr.type];
       if (ldef.linger) {
         const tx = tr.x + tr.w / 2, ty = tr.y + tr.h / 2;
-        const inside = (tr.owner ? enemyTargets(tr.owner) : [room.players.p1, room.players.p2, ...room.monsters])
+        const inside = (tr.owner ? enemyTargets(tr.owner) : [...allPlayers(), ...room.monsters])
           .filter(t => t && !t.dead && !t.controlling && Math.hypot(cx(t) - tx, cy(t) - ty) <= tr.radius);
         // The gravity well drags all the time, not just on its ticks.
         if (tr.effect === 'gravity') {
@@ -2624,7 +2653,7 @@ function tickRoom(dt) {
     room.itemSpawnTimer = ITEM_SPAWN_MIN + Math.random() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN);
   }
   room.items = room.items.filter(it => {
-    for (const key of ['p1', 'p2']) {
+    for (const key of KEYS) {
       const p = room.players[key];
       if (!p || p.dead || !aabb(p, it)) continue;
       // A medkit heals on touch, whatever you're carrying.
@@ -2651,14 +2680,13 @@ function tickRoom(dt) {
     // Drift toward the nearest player, so a kill made at bow range isn't a chore
     // to collect, then snap in once close enough.
     let near = null, nearKey = null, nearDist = Infinity;
-    for (const key of ['p1', 'p2']) {
+    for (const key of KEYS) {
       const p = room.players[key];
       if (!p || p.dead) continue;
       const d = Math.hypot(cx(p) - cx(c), cy(p) - cy(c));
       if (d < nearDist) { nearDist = d; near = p; nearKey = key; }
     }
-    const magnet = near && hasEffect(near, 'magnet');
-    if (near && nearDist <= COIN_MAGNET * (magnet ? 1.6 : 1)) {
+    if (near && nearDist <= COIN_MAGNET) {
       addCoins(nearKey, c.value);
       room.particles.push({ type: 'coin', x: cx(c), y: cy(c), text: '+' + c.value, timer: 700, max: 700 });
       return false;
@@ -2666,10 +2694,10 @@ function tickRoom(dt) {
     if (near && nearDist > 0.01) {
       // Close by they snap in; after a few seconds on the floor they drift in from
       // anywhere, so killing at bow range doesn't forfeit the reward.
-      const settled = COIN_LIFETIME - c.life > 2500;
-      const reach = magnet ? COIN_ATTRACT * 5 : COIN_ATTRACT;
+      const settled = COIN_LIFETIME - c.life > COIN_SETTLE_MS;
+      const reach = COIN_ATTRACT;
       if (nearDist < reach || settled) {
-        const pull = (magnet ? 0.8 : 0.35) * Math.max(settled ? 0.2 : 0, 1 - nearDist / reach);
+        const pull = Math.max(settled ? COIN_SETTLED_PULL : 0, COIN_PULL * (1 - nearDist / reach));
         c.vx += ((cx(near) - cx(c)) / nearDist) * pull;
         c.vy += ((cy(near) - cy(c)) / nearDist) * pull;
       }
@@ -2686,7 +2714,7 @@ function tickRoom(dt) {
   room.particles = room.particles.filter(p => { p.timer -= dt; return p.timer > 0; });
 
   checkRoundEnd();
-  broadcastState();
+  broadcastTick();
 }
 
 
@@ -3127,7 +3155,7 @@ const FIRE_BAND      = 8;      // half-thickness of a ring's burning edge
 const INFERNO_BAND   = 13;
 const INFERNO_START  = 26;
 const INFERNO_GROWTH = 2.3;    // px per 16.67 ms
-const INFERNO_MAX_R  = Math.hypot(ARENA_W, ARENA_H) + 40;
+const INFERNO_MAX_R  = Math.hypot(MAP_SIZES.big[0], MAP_SIZES.big[1]) + 40;
 // Hands fly like missiles: they launch slowly, accelerate toward a top speed,
 // and the faster they go the wider they turn, so a late sidestep makes them
 // overshoot. (Speeds in px, turn in rad, both per 16.67 ms.)
@@ -4153,7 +4181,7 @@ function updatePortal(f, dt) {
     // The mage's portals shoot at players; a Portal Wand's at its owner's foes in reach.
     const mine = f.owner !== 'monster';
     const ps = mine ? enemyTargets(f.owner).filter(t => Math.hypot(cx(t) - f.x, cy(t) - f.y) <= PWAND_FIREBALL_RANGE)
-                    : [room.players.p1, room.players.p2].filter(p => p && !p.dead);
+                    : [...allPlayers()].filter(p => p && !p.dead);
     if (ps.length) {
       const t = ps.reduce((a, b) => Math.hypot(cx(a) - f.x, cy(a) - f.y) < Math.hypot(cx(b) - f.x, cy(b) - f.y) ? a : b);
       const ang = Math.atan2(cy(t) - f.y, cx(t) - f.x) + (Math.random() - 0.5) * 0.12;
@@ -4194,7 +4222,7 @@ function updatePortal(f, dt) {
   if (f.link && f.t > 300 && f.t < f.life - 150) {
     const out = room.fires.find(o => o.id === f.link);
     if (out) {
-      for (const key of ['p1', 'p2']) {
+      for (const key of KEYS) {
         const p = room.players[key];
         if (!p || p.dead || (p.portalCd || 0) > Date.now()) continue;
         if (Math.hypot(cx(p) - f.x, cy(p) - f.y) > f.r + 6) continue;
@@ -4243,7 +4271,7 @@ function mageDefeated(m) {
   room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 220, timer: 900, max: 900, color: '#c8a0ff' });
   room.particles.push({ type: 'waveclear', x: CANVAS_W / 2, y: CANVAS_H / 2 - 10, text: 'THE PORTAL MAGE IS DEFEATED!', timer: 4000 });
   if (room.gameMode === 'sandbox') return;   // practice: no reward, and the sandbox carries on
-  for (const key of ['p1', 'p2']) {
+  for (const key of KEYS) {
     const p = room.players[key];
     if (!p) continue;
     addCoins(key, MAGE_REWARD_COINS);
@@ -4745,7 +4773,7 @@ function puppetSpecial(m, pKey) {
     }
     case 'shaman': {
       // Heals you (and your partner in co-op) and the puppet.
-      for (const k of ['p1', 'p2']) {
+      for (const k of KEYS) {
         const pl = room.players[k];
         if (!pl || pl.dead || (k !== pKey && enemyTargets(pKey).includes(pl))) continue;
         const heal = Math.round(pl.maxHp * 0.25);
@@ -4949,7 +4977,7 @@ function hurlToWall(t, a) {
 }
 // Flights in progress: they carry on even while the target is stunned.
 function updateHurls(dt) {
-  for (const t of [room.players.p1, room.players.p2, ...room.monsters]) {
+  for (const t of [...allPlayers(), ...room.monsters]) {
     if (!t || !t.hurl) continue;
     if (t.dead) { t.hurl = null; continue; }
     const step = Math.min(dt, t.hurl.timer);
@@ -5091,13 +5119,13 @@ const lightMaxedNeed = () => Math.ceil(WEAPONS.filter(w => w.id !== 'lightblade'
 function creditLightKill() {
   if (room.gameMode === 'sandbox') return;
   const d = progress();
-  for (const k of ['p1', 'p2']) {
+  for (const k of KEYS) {
     const pw = room.passwords[k];
     if (!room.players[k] || !pw || isAdminPw(pw)) continue;
     d.lightKills[pw] = (d.lightKills[pw] || 0) + 1;
     markDirty();
     const p = room.players[k];
-    room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26 + (k === 'p2' ? 16 : 0),
+    room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26 + KEYS.indexOf(k) * 16,
                           text: `LIGHT DEFEATED ${Math.min(d.lightKills[pw], LIGHT_KILLS_NEED)}/${LIGHT_KILLS_NEED}`,
                           color: '#fff6a0', timer: 2600, max: 2600 });
     if (p) room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 500, max: 500, color: '#fff6a0' });
@@ -5912,7 +5940,7 @@ function buildChains() {
     if (!o) continue;
     out.push({ x1: cx(o), y1: cy(o), x2: pr.x, y2: pr.y, kind: pr.hook ? 'hook' : 'grapple', o: pr.owner });
   }
-  for (const e of [room.players.p1, room.players.p2, ...room.monsters]) {
+  for (const e of [...allPlayers(), ...room.monsters]) {
     if (!e || e.dead || !e.pull || !e.pull.from) continue;
     const o = room.players[e.pull.from];
     if (!o || o.dead) continue;
@@ -5960,19 +5988,27 @@ function playerView(p) {
 }
 
 function buildStateMsg(playerNum) {
-  const key = playerNum === 1 ? 'p1' : 'p2';
+  const key = 'p' + playerNum;
   return {
     type: 'state',
     myNum: playerNum,
     gameState: room.gameState,
     gameMode: room.gameMode,
+    world: { size: room.mapSize, w: CANVAS_W, h: CANVAS_H },
+    maxPlayers: room.maxPlayers,
+    ...(room.custom ? { roomName: room.custom.name } : {}),
+    seated: seatKeys().filter(k => room[k] || (room.bot && k === 'p2')).length,
+    chats: room.chats.map(c => ({ key: c.key, id: c.id, age: Date.now() - c.t })),
     ...(room.bot ? { bot: room.bot.level } : {}),
     playerNames: room.playerNames,
-    players: { p1: playerView(room.players.p1), p2: playerView(room.players.p2) },
+    players: perKey(k => playerView(room.players[k])),
     monsters:    room.monsters.map(m => ({ id: m.id, type: m.type, x: r1(m.x), y: r1(m.y), w: m.w, h: m.h,
-                  hp: m.hp, maxHp: m.maxHp, hitFlash: m.hitFlash, slowed: (m.slowTimer || 0) > 0, frozen: (m.freeze || 0) > 0,
-                  ...(m.freeze > 0 ? { fk: m.freezeKind || 'ice' } : {}), ...(m.slowTimer > 0 ? { sk: m.slowKind || 'chill' } : {}), burning: (m.burnTimer || 0) > 0, armor: m.armor || 0,
-                  face: m.face, swing: m.swing > 0 ? Math.round(m.swing) : 0,
+                  hp: m.hp, maxHp: m.maxHp, face: m.face,
+                  ...(m.hitFlash > 0 ? { hitFlash: Math.round(m.hitFlash) } : {}),
+                  ...(m.slowTimer > 0 ? { slowed: true, sk: m.slowKind || 'chill' } : {}),
+                  ...(m.freeze > 0 ? { frozen: true, fk: m.freezeKind || 'ice' } : {}),
+                  ...(m.burnTimer > 0 ? { burning: true } : {}), ...(m.armor ? { armor: m.armor } : {}),
+                  ...(m.swing > 0 ? { swing: Math.round(m.swing) } : {}),
                   ...(m.controlledBy ? { ctl: m.controlledBy, ctlLeft: Math.round(room.players[m.controlledBy]?.controlling?.left || 0) } : {}),
                   ...(m.fuse > 0 ? { fuse: Math.round(m.fuse) } : {}), ...(m.ward > 0 ? { ward: true } : {}),
                   ...(m.charge ? { charge: { a: Math.round(m.charge.a * 100) / 100, wind: m.charge.wind > 0 } } : {}),
@@ -6009,14 +6045,32 @@ function buildStateMsg(playerNum) {
     sandbox:     room.gameMode === 'sandbox' ? room.sandbox : null,
     finalWave:   room.gameMode === 'coop' ? COOP_FINAL_WAVE : 0,
     pendingUnlock: room.unlockQueues[key][0] || null,
-    otherHasUnlocks: room.unlockQueues[key === 'p1' ? 'p2' : 'p1'].length > 0,
+    otherHasUnlocks: KEYS.some(k => k !== key && room.unlockQueues[k].length > 0),
     leaderboard: isSolo() && room.gameState === 'ROUND_OVER' ? room.lastLeaderboard : null,
   };
 }
 
+// A snapshot goes out every tick (compression keeps them small); this only stops
+// two going out back to back. It must stay below the real tick gap, which on
+// some hosts is ~28 ms, or it would skip every other tick.
+const STATE_MIN_GAP_MS = 14;
+// A socket with more than this still waiting to leave is on a slow link; sending
+// it more only makes its picture older and older, so it skips frames instead
+// and always gets the freshest state once it catches up.
+const MAX_BUFFERED = 40 * 1024;
+function broadcastTick() {
+  const now = Date.now();
+  if (now - (room.lastStateAt || 0) < STATE_MIN_GAP_MS) return;
+  room.lastStateAt = now;
+  broadcastState();
+}
 function broadcastState() {
-  if (room.p1 && room.p1.readyState === 1) room.p1.send(JSON.stringify(buildStateMsg(1)));
-  if (room.p2 && room.p2.readyState === 1) room.p2.send(JSON.stringify(buildStateMsg(2)));
+  if (room.chats.length) room.chats = room.chats.filter(c => Date.now() - c.t < CHAT_SHOW_MS);
+  KEYS.forEach((k, i) => {
+    const ws = room[k];
+    if (!ws || ws.readyState !== 1 || ws.bufferedAmount > MAX_BUFFERED) return;
+    ws.send(JSON.stringify(buildStateMsg(i + 1)));
+  });
 }
 
 // A waves run is solo and ends for good — send the client back to the menu
@@ -6172,7 +6226,12 @@ const BOT_LEVELS = {
   strong:  { name: 'STRONG',  own: 0.40, think: 210, aggro: 0.80, parry: 0.28, dodge: 0.45, skill: 0.70, slots: 3 },
   hard:    { name: 'HARD',    own: 0.50, think: 160, aggro: 0.90, parry: 0.42, dodge: 0.60, skill: 0.85, slots: 4 },
   insane:  { name: 'INSANE',  own: 0.60, think: 110, aggro: 1.00, parry: 0.60, dodge: 0.80, skill: 1.00, slots: 6 },
+  // The admin bot owns every weapon, all of them fully maxed (so every passive
+  // is live), a loadout of only the best abilities, and fights flat out,
+  // leaning on the legendaries.
+  admin:   { name: 'ADMIN',   own: 1.00, think: 70,  aggro: 1.00, parry: 0.85, dodge: 0.95, skill: 1.00, slots: 6, all: true, favor: 0.7 },
 };
+const BOT_BEST_ABILITIES = ['execute', 'meteor', 'blackhole', 'perfectguard', 'phoenix', 'airstrike'];
 const BOT_HEALS = ['heal', 'rejuvenate', 'haven', 'vampirism', 'phoenix'];
 const BOT_GUARDS = ['aegis', 'barrier', 'perfectguard', 'vanish', 'shadowstep', 'warp'];
 const BOT_SWAP_MIN = 10000, BOT_SWAP_VAR = 12000;
@@ -6186,9 +6245,10 @@ const pickSome = (list, n) => {
 };
 
 // A room of its own with the bot already seated as player 2.
-function newBotRoom(level) {
+function newBotRoom(level, size) {
   const r = makeRoom();
   r.gameMode = 'pvp';
+  r.mapSize = MAP_SIZES[size] ? size : 'medium';
   r.bot = { level };
   rooms.push(r);
   return [r, 'p1'];
@@ -6199,19 +6259,20 @@ function setupBot() {
   const L = BOT_LEVELS[room.bot.level];
   const starters = getUnlockedWeaponIds(0);
   const all = WEAPONS.map(w => w.id);
-  const weapons = sortWeaponIds([...new Set([...starters, ...rollOwned(all, L.own)])]);
+  const weapons = L.all ? sortWeaponIds(all) : sortWeaponIds([...new Set([...starters, ...rollOwned(all, L.own)])]);
   const upgrades = {};
   for (const id of weapons) {
     upgrades[id] = {};
     for (const k of upgradesFor(id)) {
+      if (L.all) { upgrades[id][k] = UPGRADE_STATS[k].max; continue; }          // admin: everything maxed
       const lv = Math.round(UPGRADE_STATS[k].max * L.own + (Math.random() - 0.5) * 2);
       upgrades[id][k] = Math.max(0, Math.min(UPGRADE_STATS[k].max - 1, lv));   // never fully maxed: no passives
     }
   }
-  let abilities = pickSome(rollOwned(ABILITIES.map(a => a.id), L.own), L.slots);
+  let abilities = L.all ? BOT_BEST_ABILITIES.slice() : pickSome(rollOwned(ABILITIES.map(a => a.id), L.own), L.slots);
   if (!abilities.length) abilities = pickSome(ABILITIES.map(a => a.id), 1);   // always has at least one
   const slots = Array.from({ length: L.slots }, (_, i) => abilities[i] || null);
-  const outfits = pickSome(rollOwned(SKIN_SHOP.map(s => s.id), L.own), 1);
+  const outfits = L.all ? ['golden'] : pickSome(rollOwned(SKIN_SHOP.map(s => s.id), L.own), 1);
   room.playerNames.p2 = 'BOT ' + L.name;
   room.passwords.p2 = '';
   room.playerXp.p2 = 0;
@@ -6221,7 +6282,7 @@ function setupBot() {
   room.playerAbilities.p2 = slots;
   room.playerSkins.p2 = {
     colorIdx: Math.floor(Math.random() * SKIN_COLOR_COUNT), hatIdx: Math.floor(Math.random() * SKIN_HAT_COUNT),
-    accIdx: Math.floor(Math.random() * SKIN_ACC_COUNT), outfit: outfits.length && Math.random() < 0.7 ? outfits[0] : '',
+    accIdx: Math.floor(Math.random() * SKIN_ACC_COUNT), outfit: outfits.length && (L.all || Math.random() < 0.7) ? outfits[0] : '',
   };
   room.p2Joined = true;
   room.bot.thinkT = 0; room.bot.swapT = 0; room.bot.strafe = 1; room.bot.wasDead = true;
@@ -6231,8 +6292,12 @@ function setupBot() {
 function botPickWeapon(p) {
   const ids = p.unlockedWeapons || [];
   if (ids.length < 2) return;
+  const favor = BOT_LEVELS[room.bot.level].favor || 0;
+  const legends = ids.filter(id => WEAPON_BY_ID[id] && WEAPON_BY_ID[id].shopOnly);
   let i = p.weaponIdx;
-  while (i === p.weaponIdx) i = Math.floor(Math.random() * ids.length);
+  if (legends.length && Math.random() < favor) i = ids.indexOf(legends[Math.floor(Math.random() * legends.length)]);
+  else while (i === p.weaponIdx) i = Math.floor(Math.random() * ids.length);
+  if (i === p.weaponIdx && ids.length > 1) i = (i + 1) % ids.length;
   p.weaponIdx = i;
   refreshWeapon(p);
 }
@@ -6286,14 +6351,18 @@ function botTick(dt) {
     mx = rx / rd; my = ry / rd;
     inp.aimX = null; inp.aimY = null;
   }
-  // Pickups lying close by, when it's safe to grab them.
+  let chasing = false;
+  // Powerups lying close by: collect them like anyone (4 at most; a full bag
+  // only lets it walk over medkits when it's hurt).
   if (room.items.length && (!see || d > 140)) {
-    let best = null, bd = 170;
+    const full = (p.inventory || []).length >= MAX_INVENTORY;
+    let best = null, bd = 260;
     for (const it of room.items) {
+      if (full && !(ITEM_TYPES[it.type].touch && p.hp < p.maxHp * 0.8)) continue;
       const id = Math.hypot(it.x + it.w / 2 - px, it.y + it.h / 2 - py);
       if (id < bd) { bd = id; best = it; }
     }
-    if (best) { mx = (best.x + best.w / 2 - px) / bd; my = (best.y + best.h / 2 - py) / bd; }
+    if (best) { mx = (best.x + best.w / 2 - px) / bd; my = (best.y + best.h / 2 - py) / bd; chasing = true; }
   }
   // Keep clear of traps that aren't its own.
   for (const tr of room.traps) {
@@ -6316,8 +6385,10 @@ function botTick(dt) {
   if (see && foe.swingTimer > 0 && d < weapon(foe).range + 24) threat = true;
   if (threat && p.parryCooldown <= 0 && Math.random() < L.parry) inp.parry = true;
   // Walls: steer back toward the middle when hugging one.
-  if (p.x < ARENA_X + 20) mx += 0.8; if (p.x > ARENA_X + ARENA_W - p.w - 20) mx -= 0.8;
-  if (p.y < ARENA_Y + 20) my += 0.8; if (p.y > ARENA_Y + ARENA_H - p.h - 20) my -= 0.8;
+  if (!chasing) {
+    if (p.x < ARENA_X + 20) mx += 0.8; if (p.x > ARENA_X + ARENA_W - p.w - 20) mx -= 0.8;
+    if (p.y < ARENA_Y + 20) my += 0.8; if (p.y > ARENA_Y + ARENA_H - p.h - 20) my -= 0.8;
+  }
 
   const mm = Math.hypot(mx, my);
   if (mm > 0.01) { mx /= mm; my /= mm; }
@@ -6331,6 +6402,13 @@ function botTick(dt) {
   if (w.special && p.specialCooldown <= 0 && d <= Math.max(spRange, 120) && Math.random() < L.skill * 0.6) inp.special = true;
   if (w.super && p.superCooldown <= 0 && d <= 320 && Math.random() < L.skill * 0.5) inp.super = true;
   const hurt = p.hp / p.maxHp;
+  // Items: only what it has picked up. Heals when hurt, the rest once the fight is on.
+  if (p.inventory && p.inventory.length && Math.random() < 0.3 + L.skill * 0.4) {
+    const heals = p.inventory.findIndex(t => ['heal', 'regen', 'elixir'].includes(t));
+    const buffs = p.inventory.findIndex(t => !['heal', 'regen', 'elixir', 'cloak', 'goldrush'].includes(t));
+    if (heals >= 0 && hurt < 0.5) useInventorySlot('p2', heals);
+    else if (buffs >= 0 && d < 190) useInventorySlot('p2', buffs);
+  }
   for (let i = 0; i < p.abilities.length; i++) {
     const id = p.abilities[i];
     if (!id || (p.abCd[id] || 0) > 0 || Math.random() > L.skill * 0.5) continue;
@@ -6340,12 +6418,14 @@ function botTick(dt) {
       : d < 230;
     if (use) { inp['ab' + (i + 1)] = true; break; }
   }
-  if (p.inventory && p.inventory.length && (hurt < 0.45 || (d < 150 && Math.random() < L.skill * 0.15))) useInventorySlot('p2', 0);
 }
 
 // ─── HTTP API (shop / upgrades) ───────────────────────────────────────────────
 
 app.use(express.json({ limit: '64kb' }));
+
+// Open custom rooms, for the JOIN A ROOM list.
+app.get('/api/rooms', (_req, res) => { res.json({ rooms: openRoomList() }); });
 
 app.get('/api/catalog', (_req, res) => {
   res.json({ catalog: weaponCatalog(), perks: PERK_UPGRADES, upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP, abilityDefs: ABILITIES });
@@ -6580,7 +6660,7 @@ app.post('/api/buy_weapon', (req, res) => {
 function clearSlot(key) {
   room[key] = null;
   room[key + 'Joined'] = false;
-  room.playerNames[key] = key === 'p1' ? 'PLAYER 1' : 'PLAYER 2';
+  room.playerNames[key] = 'PLAYER ' + key.slice(1);
   room.passwords[key] = '';
   room.playerXp[key] = 0;
   room.playerCoins[key] = 0;
@@ -6590,35 +6670,60 @@ function clearSlot(key) {
   room.playerAbilities[key] = null;
   room.unlockQueues[key] = [];
   room.players[key] = null;
-  room.inputs[key] = { up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false, ab1: false, ab2: false };
-  room.prevInputs[key] = { attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false };
+  room.inputs[key] = blankInput();
+  room.prevInputs[key] = blankPrev();
 }
 
 // Drop slots whose socket died without a close event, and rooms left empty.
 function reapRooms() {
   for (const r of rooms.slice()) {
-    room = r;
-    for (const key of ['p1', 'p2']) if (r[key] && r[key].readyState !== 1) clearSlot(key);
-    if (!r.p1 && !r.p2) rooms.splice(rooms.indexOf(r), 1);
+    useRoom(r);
+    for (const key of KEYS) if (r[key] && r[key].readyState !== 1) clearSlot(key);
+    if (KEYS.every(k => !r[k])) rooms.splice(rooms.indexOf(r), 1);
   }
 }
 
 // Seat a player who picked a mode. WAVES and EXTREME are solo, so they always
 // get a room of their own; PvP and co-op pair up with someone waiting for the
 // same mode, or open a new room and wait.
-function findSeat(mode) {
+function findSeat(mode, size) {
   if (!SOLO_MODES.includes(mode)) {
     for (const r of rooms) {
-      if (r.gameState !== 'LOBBY' || r.gameMode !== mode || r.bot) continue;
-      const free = !r.p1 ? 'p1' : !r.p2 ? 'p2' : null;
-      if (free && (r.p1 || r.p2)) return [r, free];
+      if (r.gameState !== 'LOBBY' || r.gameMode !== mode || r.bot || r.custom || r.mapSize !== size) continue;
+      const free = seatKeys(r).find(k => !r[k]);
+      if (free && KEYS.some(k => r[k])) return [r, free];
     }
   }
   const r = makeRoom();
   r.gameMode = mode;
+  r.mapSize = size;
   rooms.push(r);
   return [r, 'p1'];
 }
+
+// ── Custom PvP rooms ──
+// Made with a name, a player count (2-4: more than two is last one standing)
+// and a map size; listed for everyone to browse and join until they fill up.
+const ROOM_NAME_MAX = 20;
+function createRoom(opts) {
+  const r = makeRoom();
+  r.gameMode = 'pvp';
+  r.maxPlayers = Math.max(2, Math.min(4, Math.floor(Number(opts.maxPlayers) || 2)));
+  r.mapSize = MAP_SIZES[opts.size] ? opts.size : 'medium';
+  r.custom = { name: sanitizeText(opts.roomName, ROOM_NAME_MAX) || 'ROOM', host: sanitizeText(opts.name, 12).toUpperCase() || 'PLAYER' };
+  rooms.push(r);
+  return [r, 'p1'];
+}
+function openRoomList() {
+  return rooms.filter(r => r.custom && r.gameState === 'LOBBY' && KEYS.some(k => r[k]) && seatKeys(r).some(k => !r[k]))
+    .map(r => ({ id: r.id, name: r.custom.name, host: r.custom.host, size: r.mapSize, maxPlayers: r.maxPlayers,
+                 players: seatKeys(r).filter(k => r[k]).length, names: seatKeys(r).filter(k => r[k]).map(k => r.playerNames[k]) }));
+}
+
+// ── Safe chat: only these lines can be sent ──
+const CHAT_LINES = ['HELLO!', 'GOOD LUCK!', 'HAVE FUN!', 'NICE ONE!', 'WELL PLAYED!', 'GG!', 'OOPS!', 'SO CLOSE!',
+                    'WATCH OUT!', 'HELP!', 'THANKS!', 'SORRY!', 'REMATCH?', 'LET\'S GO!', 'HAHA!', 'WOW!'];
+const CHAT_SHOW_MS = 3500, CHAT_GAP_MS = 1200;
 
 wss.on('connection', (ws) => {
   // Not seated until the player picks a mode (the join message).
@@ -6630,6 +6735,7 @@ wss.on('connection', (ws) => {
     catalog: weaponCatalog(),
     abilityDefs: ABILITIES,
     colors: WEAPON_COLORS,
+    chatLines: CHAT_LINES,
     // What the sandbox panel can spawn.
     sandboxDefs: {
       monsters: Object.entries(MONSTER_TYPES).map(([id, m]) => ({ id, name: m.name, color: m.color, boss: !!m.boss })),
@@ -6647,20 +6753,30 @@ wss.on('connection', (ws) => {
         return;
       }
       if (msg.type === 'join' && !ws.room) {
-        const mode = ['pvp', 'coop', 'waves', 'extreme', 'portal', 'sandbox', 'bot'].includes(msg.mode) ? msg.mode : 'pvp';
+        const mode = ['pvp', 'coop', 'waves', 'extreme', 'portal', 'sandbox', 'bot', 'create', 'joinroom'].includes(msg.mode) ? msg.mode : 'pvp';
+        const size = MAP_SIZES[msg.size] ? msg.size : 'medium';
         reapRooms();
+        let seat = null;
+        if (mode === 'joinroom') {
+          // A listed room: take its first free seat, if it is still open.
+          const r = rooms.find(o => o.id === msg.roomId && o.custom && o.gameState === 'LOBBY');
+          const free = r && seatKeys(r).find(k => !r[k]);
+          if (!free) { ws.send(JSON.stringify({ type: 'room_gone' })); return; }
+          seat = [r, free];
+        }
         // BOT BATTLE: a PvP room of your own, the bot in the other seat.
-        const [r, key] = mode === 'bot' ? newBotRoom(BOT_LEVELS[msg.level] ? msg.level : 'average') : findSeat(mode);
+        const [r, key] = seat || (mode === 'bot' ? newBotRoom(BOT_LEVELS[msg.level] ? msg.level : 'average', size)
+          : mode === 'create' ? createRoom({ ...msg, size }) : findSeat(mode, size));
         ws.room = r; ws.key = key;
         r[key] = ws;
-        ws.send(JSON.stringify({ type: 'seat', num: key === 'p1' ? 1 : 2, mode }));
+        ws.send(JSON.stringify({ type: 'seat', num: KEYS.indexOf(key) + 1, mode, maxPlayers: r.maxPlayers, roomName: r.custom ? r.custom.name : null }));
       }
       if (!ws.room) return;
-      room = ws.room;
+      useRoom(ws.room);
       const myKey = ws.key, isP1 = myKey === 'p1';
 
       if (msg.type === 'join') {
-        room.playerNames[myKey] = sanitizeText(msg.name, 12).toUpperCase() || (isP1 ? 'PLAYER 1' : 'PLAYER 2');
+        room.playerNames[myKey] = sanitizeText(msg.name, 12).toUpperCase() || 'PLAYER ' + myKey.slice(1);
 
         const pw = sanitizeText(msg.password, 32);
         room.passwords[myKey] = pw;
@@ -6698,11 +6814,12 @@ wss.on('connection', (ws) => {
 
         room[myKey + 'Joined'] = true;
         if (room.bot && !room.p2Joined) setupBot();
+        room.playerNames[myKey] = room.playerNames[myKey] || 'PLAYER';
 
         // Start game: solo modes at once, the others once both have joined.
         const canStart = isSolo()
           ? room.p1Joined
-          : (room.p1Joined && room.p2Joined);
+          : seatKeys().every(k => room[k + 'Joined']);
 
         if (canStart && room.gameState === 'LOBBY') startGame();
         broadcastState();
@@ -6717,6 +6834,16 @@ wss.on('connection', (ws) => {
           // Mouse position in world space (desktop only): where DASH goes.
           aimX: Number.isFinite(k.aimX) ? k.aimX : null, aimY: Number.isFinite(k.aimY) ? k.aimY : null,
         };
+      }
+
+      // Safe chat: a line from the fixed list, a few at most per second.
+      if (msg.type === 'chat' && Number.isInteger(msg.id) && msg.id >= 0 && msg.id < CHAT_LINES.length) {
+        const now = Date.now();
+        if (now - (ws.lastChat || 0) >= CHAT_GAP_MS) {
+          ws.lastChat = now;
+          room.chats = room.chats.filter(c => c.key !== myKey && now - c.t < CHAT_SHOW_MS);
+          room.chats.push({ key: myKey, id: msg.id, t: now });
+        }
       }
 
       // Light Blade: a click or tap on the field is an attack aimed at that spot.
@@ -6748,8 +6875,8 @@ wss.on('connection', (ws) => {
       if (msg.type === 'ack_unlock' && room.gameState === 'WEAPON_UNLOCK') {
         room.unlockQueues[myKey].shift();
         const p1Done = room.unlockQueues.p1.length === 0;
-        const p2Done = isSolo() || !room.p2Joined || room.unlockQueues.p2.length === 0;
-        if (p1Done && p2Done) {
+        const othersDone = isSolo() || KEYS.slice(1).every(k => !room[k + 'Joined'] || room.unlockQueues[k].length === 0);
+        if (p1Done && othersDone) {
           if (isSolo()) endWavesRun();
           else startGame();
         }
@@ -6760,13 +6887,13 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     const r = ws.room;
     if (!r || r[ws.key] !== ws) return;
-    room = r;
+    useRoom(r);
     const wasPlaying = room.gameState !== 'LOBBY';
     clearSlot(ws.key);
     // A match can't continue a fighter down — drop back to the lobby, but keep
     // whoever is still connected (and their progress) in place.
     if (wasPlaying) resetToLobby();
-    if (!room.p1 && !room.p2) { rooms.splice(rooms.indexOf(r), 1); return; }
+    if (KEYS.every(k => !room[k])) { rooms.splice(rooms.indexOf(r), 1); return; }
     broadcastState();
   });
 });

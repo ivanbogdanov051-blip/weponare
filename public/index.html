@@ -15,11 +15,21 @@
       <div class="subtitle">ONLINE BATTLE</div>
       <input type="text" id="nameInput" class="name-input" placeholder="YOUR NAME" maxlength="12" autocomplete="off" spellcheck="false">
       <input type="password" id="passInput" class="name-input pass-input" placeholder="PASSWORD (saves progress)" maxlength="32" autocomplete="new-password" spellcheck="false">
+      <div class="map-row">
+        <span class="map-label">MAP SIZE</span>
+        <button class="map-btn" data-size="small" onclick="pickMapSize('small')">SMALL</button>
+        <button class="map-btn" data-size="medium" onclick="pickMapSize('medium')">MEDIUM</button>
+        <button class="map-btn" data-size="big" onclick="pickMapSize('big')">BIG</button>
+      </div>
       <div class="mode-row">
         <button class="mode-btn btn-pvp"  onclick="joinGame('pvp')">&#9876; PvP</button>
         <button class="mode-btn btn-coop" onclick="joinGame('coop')">&#9760; CO-OP</button>
         <button class="mode-btn btn-waves" onclick="joinGame('waves')">&#9670; WAVES</button>
         <button class="mode-btn btn-extreme" onclick="joinGame('extreme')">&#9888; EXTREME &#9888;</button>
+      </div>
+      <div class="mode-row">
+        <button class="mode-btn btn-room" onclick="openCreateRoom()">&#10010; CREATE ROOM</button>
+        <button class="mode-btn btn-room" onclick="openRoomBrowser()">&#9776; JOIN A ROOM</button>
       </div>
       <button class="mode-btn btn-portal" onclick="joinGame('portal')">&#10022; FIGHT THE PORTAL MAGE &#10022;</button>
       <div class="mode-row mode-row-2">
@@ -27,7 +37,7 @@
         <button class="mode-btn btn-sandbox" onclick="joinGame('sandbox')">&#9874; SANDBOX</button>
         <button class="mode-btn btn-howto" onclick="openHowTo()">? HOW TO PLAY</button>
       </div>
-      <div class="hint-text">PvP/Co-op: 2 players &nbsp;|&nbsp; Bot Battle: PvP vs a bot &nbsp;|&nbsp; Waves: solo endless &nbsp;|&nbsp; Extreme: solo, strongest monsters, huge coin rewards &nbsp;|&nbsp; Sandbox: solo practice, nothing saved</div>
+      <div class="hint-text">PvP/Co-op: 2 players &nbsp;|&nbsp; Rooms: 2-4 players, last one standing &nbsp;|&nbsp; Bot Battle: PvP vs a bot &nbsp;|&nbsp; Waves: solo endless &nbsp;|&nbsp; Extreme: solo, strongest monsters, huge coin rewards &nbsp;|&nbsp; Sandbox: solo practice, nothing saved</div>
       <div id="savedInfo" class="saved-info"></div>
       <button class="skin-btn shop-open-btn" onclick="openShop()">&#9670; UPGRADE WEAPONS</button>
       <button class="skin-btn abil-open-btn" onclick="openAbilities()">&#10038; ABILITIES</button>
@@ -63,6 +73,39 @@
   </div>
 
   <!-- How to play: the rules and controls, in one scrolling page -->
+  <!-- Create a PvP room -->
+  <div id="createRoomScreen" class="overlay hidden">
+    <div class="pixel-box room-box">
+      <div class="title-text" style="font-size:22px;margin-bottom:4px">CREATE ROOM</div>
+      <div class="subtitle">YOUR OWN PvP ROOM &middot; OTHERS CAN FIND AND JOIN IT</div>
+      <input type="text" id="roomNameInput" class="name-input" placeholder="ROOM NAME" maxlength="20" autocomplete="off" spellcheck="false">
+      <div class="room-opt-title">PLAYERS</div>
+      <div class="room-opts" id="roomPlayersOpts">
+        <button class="room-opt" data-n="2" onclick="pickRoomPlayers(2)">2<span>DUEL</span></button>
+        <button class="room-opt" data-n="3" onclick="pickRoomPlayers(3)">3<span>LAST ONE STANDING</span></button>
+        <button class="room-opt" data-n="4" onclick="pickRoomPlayers(4)">4<span>LAST ONE STANDING</span></button>
+      </div>
+      <div class="room-opt-title">MAP SIZE</div>
+      <div class="room-opts" id="roomSizeOpts">
+        <button class="room-opt" data-size="small" onclick="pickRoomSize('small')">SMALL</button>
+        <button class="room-opt" data-size="medium" onclick="pickRoomSize('medium')">MEDIUM</button>
+        <button class="room-opt" data-size="big" onclick="pickRoomSize('big')">BIG</button>
+      </div>
+      <button class="mode-btn btn-room-go" onclick="createRoomGo()">&#10010; CREATE AND WAIT FOR PLAYERS</button>
+      <button class="mode-btn shop-back" onclick="showScreen('startScreen')">&#10003; BACK</button>
+    </div>
+  </div>
+
+  <!-- Browse open rooms -->
+  <div id="roomsScreen" class="overlay hidden">
+    <div class="pixel-box room-box">
+      <div class="title-text" style="font-size:22px;margin-bottom:4px">JOIN A ROOM</div>
+      <div class="subtitle">OPEN PvP ROOMS WAITING FOR PLAYERS</div>
+      <div id="roomList" class="room-list"></div>
+      <button class="mode-btn shop-back" onclick="closeRoomBrowser()">&#10003; BACK</button>
+    </div>
+  </div>
+
   <!-- Bot Battle: pick the bot's level -->
   <div id="botScreen" class="overlay hidden">
     <div class="pixel-box bot-box">
@@ -75,8 +118,9 @@
         <button class="bot-lv lv-strong"  onclick="pickBotLevel('strong')"><b>STRONG</b><span>40% chance, dodges shots</span></button>
         <button class="bot-lv lv-hard"    onclick="pickBotLevel('hard')"><b>HARD</b><span>50% chance, quick and sharp</span></button>
         <button class="bot-lv lv-insane"  onclick="pickBotLevel('insane')"><b>INSANE</b><span>60% chance, every trick it has</span></button>
+        <button class="bot-lv lv-admin"   onclick="pickBotLevel('admin')"><b>ADMIN</b><span>owns every weapon, all maxed, only the best abilities</span></button>
       </div>
-      <div class="body-text" style="font-size:10px">The bot fights like a player: random weapons from what it owns (upgraded to its level), abilities, items, specials and supers. Same rules as PvP: 3 lives a round, first to 3 rounds.</div>
+      <div class="body-text" style="font-size:10px">The bot fights like a player: random weapons from what it owns (upgraded to its level), abilities, items, specials and supers. Same rules as PvP: 3 lives a round, first to 3 rounds. The ADMIN bot is a very hard fight.</div>
       <button class="mode-btn shop-back" onclick="closeBotPicker()">&#10003; BACK</button>
     </div>
   </div>
@@ -92,7 +136,10 @@
           <p>Click or tap a weapon in the rack at the top to switch straight to it. <b>Hold</b> attack, special, super or an ability and it fires again by itself whenever it is ready.</p></div>
         <div class="howto-sec"><h3>MODES</h3>
           <p><b>PvP</b> &ndash; two players fight; each round you have 3 lives, and the first to win 3 rounds takes the match.</p>
-          <p><b>Bot Battle</b> &ndash; the same PvP match, against a bot. Pick its level: Easy, Common, Average, Strong, Hard or Insane. The higher the level, the more it owns: every weapon, ability and skin has a 10% chance of being the bot's on Easy, up to 60% on Insane, and its weapons are upgraded that far too and the faster and sharper it plays: dodging shots, parrying, and using specials, supers, abilities and items. It fights with random weapons from what it owns and swaps every so often.</p>
+          <p><b>Create a room / Join a room</b> &ndash; make your own PvP room with a name, 2 to 4 players and a map size, and wait for others to find it in the room list; or browse the open rooms (name, host, who is in it, how many players, map size) and jump in. With 3 or 4 players it is last one standing: the round goes to whoever is still alive when everyone else is out.</p>
+          <p><b>Map size</b> &ndash; pick SMALL, MEDIUM or BIG on the title screen before any mode; a bigger map gives more room to move (and zooms the view out). Quick PvP and co-op only pair you with someone who picked the same size.</p>
+          <p><b>Quick chat</b> &ndash; press T or tap CHAT in a match for a list of friendly lines (hello, good luck, GG...); it shows as a bubble over your head. Only these lines can be sent.</p>
+          <p><b>Bot Battle</b> &ndash; the same PvP match, against a bot. Pick its level: Easy, Common, Average, Strong, Hard or Insane. The higher the level, the more it owns: every weapon, ability and skin has a 10% chance of being the bot's on Easy, up to 60% on Insane, and its weapons are upgraded that far too and the faster and sharper it plays: dodging shots, parrying, and using specials, supers, abilities and items. It fights with random weapons from what it owns and swaps every so often. Bots collect floor powerups like you do (4 at most) and only use what they picked up. The Admin bot is the final test: every weapon fully maxed (all passives live), only the best abilities, and it leans on the legendaries.</p>
           <p><b>Co-op</b> &ndash; two players fight 10 waves of monsters together; the Giant waits at wave 10.</p>
           <p><b>Waves</b> &ndash; solo and endless; every wave is harder, a Giant comes every 20th wave, and your best wave goes on the leaderboard.</p>
           <p><b>Extreme</b> &ndash; solo with the toughest monsters, a Giant every 5th wave and much bigger coin rewards.</p>
@@ -129,7 +176,7 @@
         <div class="howto-sec"><h3>ABILITIES</h3>
           <p>Bought once and kept forever. Put them in your slots in the ABILITIES menu: you start with two (Q and E) and can buy up to four more (F, G, V, B) for huge sums. There are 40 to collect: movement (dash, shadow step), healing and protection (second wind, rejuvenate, aegis, barrier, vanish, phoenix), damage (meteor shower, thunderstorm, chain lightning, fire nova, airstrike, ice lance, execute and more), control (frost nova, time warp, black hole, gravity grip, force push, earthquake) and summons (call to arms, stone golem, fire sentry). Newest: <b>Perfect Guard</b> (a 2.5s parry), <b>Safe Haven</b> (warp to safety and heal), <b>Blade Flurry</b>, <b>Landmines</b>, <b>Soul Chain</b> (drag a foe to you), <b>War Cry</b>, <b>Overcharge</b> (special and super ready again), <b>Fireball</b>, <b>Smite</b> and <b>Frost Armor</b>. Each has its own cooldown.</p></div>
         <div class="howto-sec"><h3>ITEMS</h3>
-          <p>Glowing gems appear on the floor. Walk over one to pick it up (you can carry 4), then use it with 1-4 or by tapping it: speed, strength, shield, haste, heal, coin magnet, regeneration, vampire, bomb, frost nova, <b>thorns</b> (attackers take half back), <b>cloak</b> (invisible), <b>lightning jar</b> (zaps 5 foes), <b>turret</b>, <b>monster egg</b> (2 monsters fight for you), <b>frenzy</b> (fast, strong and quick), <b>iron skin</b> (half damage), <b>hourglass</b> (slows every foe), <b>gold rush</b> (double coins) and <b>elixir</b> (full heal and cure).</p></div>
+          <p>Glowing gems appear on the floor. Walk over one to pick it up (you can carry 4), then use it with 1-4 or by tapping it: speed, strength, shield, haste, heal, regeneration, vampire, bomb, frost nova, <b>thorns</b> (attackers take half back), <b>cloak</b> (invisible), <b>lightning jar</b> (zaps 5 foes), <b>turret</b>, <b>monster egg</b> (2 monsters fight for you), <b>frenzy</b> (fast, strong and quick), <b>iron skin</b> (half damage), <b>hourglass</b> (slows every foe), <b>gold rush</b> (double coins) and <b>elixir</b> (full heal and cure).</p></div>
         <div class="howto-sec"><h3>TRAPS</h3>
           <p>Traps appear around the arena and hurt <b>everyone</b>, monsters included &ndash; so lure enemies onto them. Spikes, fire vents and tesla coils glow while they arm, then go off. Others: mines, snares, poison pools, spring pads and warp runes. Watch out too for <b>frost plates</b> (freeze), <b>saw pits</b>, <b>gravity wells</b> (drag you in), <b>lava cracks</b>, <b>root vines</b> (can't move), <b>powder kegs</b> (huge blast), <b>mirror runes</b> (controls reversed), <b>null fields</b> (no specials, supers or abilities) and <b>fault lines</b> &ndash; and the kind one, the <b>healing spring</b>.</p></div>
         <div class="howto-sec"><h3>MONSTERS &amp; BOSSES</h3>
@@ -213,9 +260,13 @@
   <div id="gameControls">
     <button id="skipWaveBtn" class="admin-only" onclick="skipWave()" title="Admin: kill everything and start the next wave">&#9193; SKIP WAVE</button>
     <button id="sandboxBtn" onclick="toggleSandboxPanel()">&#9874; TOOLS</button>
+    <button id="chatBtn" onclick="toggleChat()" title="Quick chat (T)">&#128172; CHAT</button>
     <button id="musicBtnGame" onclick="cycleMusic()">&#9835; 1/21</button>
     <button id="leaveBtn" onclick="leaveGame()">&#10005; LEAVE</button>
   </div>
+
+  <!-- Safe chat: only these quick lines can be sent -->
+  <div id="chatPanel" class="hidden"></div>
 
   <!-- Sandbox tools: spawn anything, switch on cheats (sandbox mode only) -->
   <div id="sandboxPanel" class="hidden">
