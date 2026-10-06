@@ -140,6 +140,40 @@ let stateIntervalMs = SERVER_TICK_MS;
 let rttMs = 60;
 let pingTimer = null;
 
+// Snapshot timeline. Each state carries the server's clock (st); everyone but
+// you is drawn a short, steady delay behind the newest one, blended between the
+// two snapshots around that moment. A server or link that delivers in clumps
+// (a busy shared host stalls, then sends three at once) then plays back
+// smoothly instead of freezing and jumping.
+const snaps = [];            // [{ s: msg, st }], oldest first
+let clockOffset = null;      // local time − server time, from the least-delayed arrival
+let lateMs = 0;              // how late snapshots have recently been, beyond that
+let viewDelay = 60;          // smoothed render delay (ms)
+function pushSnapshot(msg, nowT) {
+  const st = Number.isFinite(msg.st) ? msg.st : null;
+  if (st === null) { snaps.length = 0; return; }
+  const off = nowT - st;
+  // Track the fastest arrival; creep up slowly so a clock or route change is followed.
+  if (clockOffset === null || off < clockOffset) clockOffset = off; else clockOffset += 0.05;
+  const late = Math.min(250, off - clockOffset);
+  lateMs = late > lateMs ? late : lateMs + (late - lateMs) * 0.03;
+  if (snaps.length && st <= snaps[snaps.length - 1].st) snaps.length = 0;   // server restarted / clock jumped
+  snaps.push({ s: msg, st });
+  while (snaps.length > 2 && snaps[1].st < st - 1000) snaps.shift();
+}
+// The pair of snapshots around render time, and how far between them it is.
+function timelineState(now, frameDt) {
+  if (snaps.length < 2 || clockOffset === null) return interpState(prevState, currState, Math.min(1, (now - stateRecvTime) / Math.max(SERVER_TICK_MS, stateIntervalMs)));
+  const want = Math.max(30, Math.min(300, stateIntervalMs + lateMs + 10));
+  viewDelay += (want - viewDelay) * Math.min(1, frameDt / 400);
+  const rt = now - clockOffset - viewDelay;
+  let i = snaps.length - 2;
+  while (i > 0 && snaps[i].st > rt) i--;
+  const a = snaps[i], b = snaps[i + 1];
+  const t = Math.max(0, Math.min(1, (rt - a.st) / Math.max(1, b.st - a.st)));
+  return interpState(a.s, b.s, t);
+}
+
 let pendingName = 'PLAYER', pendingMode = 'pvp', pendingPass = '', pendingBotLevel = 'average';
 let pendingMapSize = lsGetSafe('weponare_map') || 'medium', pendingRoom = {};
 function lsGetSafe(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -389,6 +423,7 @@ function connect() {
         if (gap > 0 && gap < 250) stateIntervalMs = stateIntervalMs * 0.9 + gap * 0.1;
       }
       stateRecvTime = nowT;
+      pushSnapshot(msg, nowT);
       syncAdminTools(msg);
       syncSandbox(msg);
       updateScreens(msg);
@@ -397,6 +432,7 @@ function connect() {
   ws.onclose = () => {
     connected = false;
     currState = null; prevState = null; pred = null; stateRecvTime = 0;
+    snaps.length = 0; clockOffset = null; lateMs = 0;
     clearInterval(pingTimer);
     if (window.GameAudio) GameAudio.stopMusic();
     showGameControls(false);
@@ -504,7 +540,12 @@ function updatePrediction(frameDt, now) {
   // ourselves to be when it computed that position?
   if (currState !== reconciledState) {
     reconciledState = currState;
-    const past = predictedAt(now - (rttMs + stateIntervalMs * 0.5));
+    // Server time → local time via the least-delayed arrival, then back half a
+    // round trip for our inputs to have reached it. A snapshot that arrived late
+    // in a clump is still compared with the right moment of our path.
+    const at = Number.isFinite(currState.st) && clockOffset !== null
+      ? currState.st + clockOffset - rttMs : now - (rttMs + stateIntervalMs * 0.5);
+    const past = predictedAt(at);
     const ex = past ? me.x - past.x : me.x - pred.x;
     const ey = past ? me.y - past.y : me.y - pred.y;
     const err = Math.hypot(ex, ey);
@@ -690,6 +731,7 @@ function weaponPose(kind, e) {
 // reach, so a range upgrade is immediately visible as a wider sweep. Ranged shots
 // keep their burst at the muzzle.
 function pushSlash(cp, angle, key) {
+  const owner = key || null;
   const melee = !isRanged(cp.weaponId);
   const reach = cp.reach || 44;
   const tipR = cp.w + 12;
@@ -699,6 +741,7 @@ function pushSlash(cp, angle, key) {
   slashes.push({
     px: cp.x + cp.w / 2,
     py: cp.y + cp.h / 2,
+    owner,
     x: cp.x + cp.w / 2 + Math.cos(angle) * tipR,
     y: cp.y + cp.h / 2 + Math.sin(angle) * tipR,
     angle,
@@ -3266,8 +3309,7 @@ function renderLoop(now) {
     updatePrediction(dt, now);
     // Blend over the real gap between states, so others move smoothly instead
     // of finishing early and stalling until the next message.
-    const t = Math.min(1, (now - stateRecvTime) / Math.max(SERVER_TICK_MS, stateIntervalMs));
-    draw(pinToOwners(applyPrediction(interpState(prevState, currState, t))));
+    draw(pinToOwners(applyPrediction(timelineState(now, dt))));
   } else {
     pred = null;
     slashes.length = 0;
@@ -3286,6 +3328,12 @@ function draw(state) {
   drawTraps(state.traps || []);
   drawItems(state.items || []);
   drawCoins(state.coins || []);
+  for (const sl of slashes) {
+    const o = sl.owner && state.players[sl.owner];
+    if (!o || o.dead) continue;
+    const dx = o.x + o.w / 2 - sl.px, dy = o.y + o.h / 2 - sl.py;
+    sl.px += dx; sl.py += dy; sl.x += dx; sl.y += dy;
+  }
   drawSlashes();
   drawFireRings(state.fires || []);
   drawChains(state.chains || []);

@@ -5991,6 +5991,7 @@ function buildStateMsg(playerNum) {
   const key = 'p' + playerNum;
   return {
     type: 'state',
+    st: Date.now(),   // server clock: lets the client place snapshots on a steady timeline
     myNum: playerNum,
     gameState: room.gameState,
     gameMode: room.gameMode,
@@ -6050,10 +6051,12 @@ function buildStateMsg(playerNum) {
   };
 }
 
-// A snapshot goes out every tick (compression keeps them small); this only stops
-// two going out back to back. It must stay below the real tick gap, which on
-// some hosts is ~28 ms, or it would skip every other tick.
-const STATE_MIN_GAP_MS = 14;
+// Snapshots go out at most every 26 ms: every other 20 ms tick on Linux hosts
+// (25/s), every tick where the timer really lands ~28 ms apart (Windows). The
+// client buffers and blends them, so fewer arrive without looking choppier — and
+// building, stringifying and compressing each one is most of the server's CPU,
+// which on a small shared host (Render free: 0.1 CPU) is what caused the lag.
+const STATE_MIN_GAP_MS = 26;
 // A socket with more than this still waiting to leave is on a slow link; sending
 // it more only makes its picture older and older, so it skips frames instead
 // and always gets the freshest state once it catches up.
