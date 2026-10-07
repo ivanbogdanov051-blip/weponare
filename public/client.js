@@ -237,6 +237,9 @@ function restoreCredentials() {
 // Title-screen readout of the progress held against the current password, so it
 // is obvious the slot is saved and which slot you are on.
 async function refreshSavedBanner() {
+  try { return await refreshSavedBanner0(); } finally { fitMenu(); }
+}
+async function refreshSavedBanner0() {
   const el = document.getElementById('savedInfo');
   if (!el) return;
   const pw = (document.getElementById('passInput')?.value || '').trim();
@@ -315,6 +318,68 @@ function leaveGame() {
 
 // Back to the title screen from the connecting / waiting-for-opponent screen
 // or an error. Works whether the connection is still opening, open, or gone.
+// ── Invite links & installing ──
+// A room's link is the game's address plus ?room=<id>: opening it shows a JOIN
+// button for that room (the name and password are still the visitor's own).
+let invite = null;
+function inviteUrl() { return location.origin + location.pathname + '?room=' + encodeURIComponent(invite.id); }
+async function shareInvite() {
+  if (!invite) return;
+  const url = inviteUrl(), msgEl = document.getElementById('inviteMsg');
+  const say = t => { if (msgEl) { msgEl.style.display = ''; msgEl.textContent = t; } };
+  try {
+    if (navigator.share) { await navigator.share({ title: 'WEPONARE', text: 'Join my room "' + invite.name + '" on WEPONARE!', url }); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(url); say('LINK COPIED - SEND IT TO YOUR FRIENDS'); }
+  catch { say(url); }
+}
+function syncInviteButton() {
+  const on = !!invite && document.getElementById('lobbyScreen')?.classList.contains('active');
+  const b = document.getElementById('inviteBtn');
+  if (b) b.style.display = on ? '' : 'none';
+  if (!on) { const m = document.getElementById('inviteMsg'); if (m) m.style.display = 'none'; }
+}
+setInterval(syncInviteButton, 400);
+
+// Opened from an invite link: look the room up and offer to join it.
+let invitedRoom = null;
+async function checkInviteLink() {
+  const id = new URLSearchParams(location.search).get('room');
+  const box = document.getElementById('inviteBanner');
+  if (!id || !box) return;
+  try {
+    const list = (await (await fetch('/api/rooms')).json()).rooms || [];
+    const r = list.find(o => o.id === id);
+    if (r) {
+      invitedRoom = r;
+      box.style.display = '';
+      box.innerHTML = 'YOU WERE INVITED TO<br><b>' + escapeHtml(r.name) + '</b><br>' + r.players + '/' + r.maxPlayers + ' PLAYERS<br><button class="mode-btn btn-room" onclick="joinInvited()">JOIN THIS ROOM</button>';
+    } else {
+      box.style.display = '';
+      box.textContent = 'THAT ROOM IS FULL OR HAS ALREADY STARTED';
+    }
+  } catch {}
+  fitMenu();
+}
+function joinInvited() {
+  if (!invitedRoom) return;
+  history.replaceState(null, '', location.pathname);
+  readCredentials();
+  joinRoom(invitedRoom.id, invitedRoom.size);
+}
+window.addEventListener('load', checkInviteLink);
+
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault(); installPrompt = e;
+  const b = document.getElementById('installBtn'); if (b) b.style.display = ''; fitMenu();
+});
+window.addEventListener('appinstalled', () => { installPrompt = null; const b = document.getElementById('installBtn'); if (b) b.style.display = 'none'; });
+function installApp() { if (installPrompt) { installPrompt.prompt(); installPrompt = null; } }
+if ('serviceWorker' in navigator && location.protocol !== 'file:' && location.hostname !== '10.0.2.2') {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+
 function exitToMenu() {
   if (ws && ws.readyState <= 1) { leaveGame(); return; }   // connecting or open: close it properly
   if (window.GameAudio) GameAudio.stopMusic();
@@ -403,6 +468,7 @@ function connect() {
     }
     if (msg.type === 'seat') {
       myNum = msg.num;
+      invite = null;
       const mode = msg.mode || pendingMode;
       const modeLabel = mode === 'coop' ? 'CO-OP' : (msg.maxPlayers || 2) > 2 ? 'LAST ONE STANDING' : 'PvP';
       if (mode === 'waves') {
@@ -3089,7 +3155,27 @@ const ABILITY_ICONS = {
 };
 
 const SCREENS = ['startScreen','lobbyScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen'];
-function showScreen(id) { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay '+(s===id?'active':'hidden'); }); }
+// The main menu is shrunk to whatever the screen allows (never below 45%), so the
+// name and password fields and the mode buttons are all in view on small phones
+// and short windows. Re-measured on resize / rotation / when it is shown.
+function fitMenu() {
+  const box = document.querySelector('#startScreen > .pixel-box');
+  if (!box) return;
+  box.style.zoom = '';
+  const scr = document.getElementById('startScreen');
+  if (!scr || scr.classList.contains('hidden')) return;
+  const vw = window.innerWidth - 24, vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight) - 24;
+  const w = box.offsetWidth, h = box.offsetHeight;
+  if (!w || !h) return;
+  const z = Math.max(0.45, Math.min(1, vw / w, vh / h));
+  if (z < 0.999) box.style.zoom = z.toFixed(3);
+}
+window.addEventListener('resize', fitMenu);
+window.addEventListener('orientationchange', () => setTimeout(fitMenu, 200));
+if (window.visualViewport) window.visualViewport.addEventListener('resize', fitMenu);
+window.addEventListener('load', fitMenu);
+
+function showScreen(id) { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay '+(s===id?'active':'hidden'); }); if (id === 'startScreen') fitMenu(); }
 function hideAllScreens() { SCREENS.forEach(s => { const el=document.getElementById(s); if(el && el.className!=='overlay hidden') el.className='overlay hidden'; }); }
 function setLobbyMsg(html) { showScreen('lobbyScreen'); document.getElementById('lobbyMsg').innerHTML = html; }
 const PORTAL_LOBBY = `<span style="color:#c8a0ff">THE PORTAL MAGE</span><br>`
@@ -3232,6 +3318,7 @@ function updateScreens(state) {
     } else {
       const modeStr = state.gameMode === 'coop' ? 'CO-OP MODE' : state.maxPlayers > 2 ? 'LAST ONE STANDING' : 'PvP MODE';
       const k = myKeyOf();
+      if (state.roomId && state.gameState === 'LOBBY') invite = { id: state.roomId, name: state.roomName };
       const head = state.roomName ? `<span style="color:#ffe45a">${escapeHtml(state.roomName)}</span><br>` : '';
       const who = KEYS.slice(0, state.maxPlayers || 2).map(q => state.playerNames?.[q] && (state.seated || 0) > KEYS.indexOf(q)
         ? `<span class="${q}-color">${escapeHtml(state.playerNames[q])}</span>` : '<span style="color:#555">· empty ·</span>').join(' &nbsp; ');

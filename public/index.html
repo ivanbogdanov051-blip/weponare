@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>WEPONARE</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0a0a14">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Weponare">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
 </head>
 <body>
 
@@ -13,6 +21,7 @@
     <div class="pixel-box">
       <div class="title-text">WEPONARE</div>
       <div class="subtitle">ONLINE BATTLE</div>
+      <div id="inviteBanner" class="invite-banner" style="display:none"></div>
       <input type="text" id="nameInput" class="name-input" placeholder="YOUR NAME" maxlength="12" autocomplete="off" spellcheck="false">
       <input type="password" id="passInput" class="name-input pass-input" placeholder="PASSWORD (saves progress)" maxlength="32" autocomplete="new-password" spellcheck="false">
       <div class="map-row">
@@ -38,6 +47,7 @@
         <button class="mode-btn btn-howto" onclick="openHowTo()">? HOW TO PLAY</button>
       </div>
       <div class="hint-text">PvP/Co-op: 2 players &nbsp;|&nbsp; Rooms: 2-4 players, last one standing &nbsp;|&nbsp; Bot Battle: PvP vs a bot &nbsp;|&nbsp; Waves: solo endless &nbsp;|&nbsp; Extreme: solo, strongest monsters, huge coin rewards &nbsp;|&nbsp; Sandbox: solo practice, nothing saved</div>
+      <button id="installBtn" class="skin-btn" style="display:none" onclick="installApp()">&#11015; INSTALL APP</button>
       <div id="savedInfo" class="saved-info"></div>
       <button class="skin-btn shop-open-btn" onclick="openShop()">&#9670; UPGRADE WEAPONS</button>
       <button class="skin-btn abil-open-btn" onclick="openAbilities()">&#10038; ABILITIES</button>
@@ -218,6 +228,8 @@
       <div class="subtitle">ONLINE BATTLE</div>
       <div id="lobbyMsg" class="body-text">Connecting...</div>
       <div id="xpDisplay" class="xp-text"></div>
+      <button id="inviteBtn" class="mode-btn btn-room invite-btn" style="display:none" onclick="shareInvite()">&#9993; INVITE FRIENDS</button>
+      <div id="inviteMsg" class="hint-text" style="display:none;animation:none"></div>
       <button class="mode-btn exit-btn" onclick="exitToMenu()">&#10005; EXIT TO MENU</button>
     </div>
   </div>

@@ -44,13 +44,21 @@ body {
   position: fixed;
   inset: 0;
   display: flex;
-  align-items: center;
+  /* Centre with auto margins, not align-items: a centred box taller than the
+     screen overflows off the TOP, where scrolling can't reach it (that hid the
+     name and password fields on small devices). */
+  align-items: flex-start;
   justify-content: center;
   background: rgba(10, 10, 20, 0.92);
   z-index: 10;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 12px;
+  padding-top: max(12px, env(safe-area-inset-top));
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
 }
+.overlay > * { margin-top: auto; margin-bottom: auto; flex-shrink: 0; }
 .overlay.hidden { display: none; }
 .overlay.active { display: flex; }
 
@@ -70,6 +78,13 @@ body {
   .title-text { font-size: 24px !important; letter-spacing: 4px; }
   .subtitle { margin-bottom: 12px; }
 }
+
+.invite-banner {
+  margin: 0 0 14px; padding: 10px; border: 2px solid #ffe45a; background: rgba(255, 228, 90, 0.08);
+  color: #ffe45a; font-size: 12px; letter-spacing: 2px; line-height: 1.6;
+}
+.invite-banner button { margin-top: 8px; }
+.invite-btn { margin-top: 12px; }
 
 /* ── Typography ── */
 

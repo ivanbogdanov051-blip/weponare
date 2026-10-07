@@ -5997,7 +5997,7 @@ function buildStateMsg(playerNum) {
     gameMode: room.gameMode,
     world: { size: room.mapSize, w: CANVAS_W, h: CANVAS_H },
     maxPlayers: room.maxPlayers,
-    ...(room.custom ? { roomName: room.custom.name } : {}),
+    ...(room.custom ? { roomName: room.custom.name, roomId: room.id } : {}),
     seated: seatKeys().filter(k => room[k] || (room.bot && k === 'p2')).length,
     chats: room.chats.map(c => ({ key: c.key, id: c.id, age: Date.now() - c.t })),
     ...(room.bot ? { bot: room.bot.level } : {}),
