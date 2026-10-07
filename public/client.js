@@ -3632,7 +3632,12 @@ function updateScreens(state) {
 // ─── Render Loop ──────────────────────────────────────────────────────────────
 
 let lastFrameTime = 0;
+// Draw at most ~60 times a second: a 120/144 Hz screen would otherwise redraw the
+// whole scene twice as often as anyone can see, doubling heat and battery use.
+// (12 ms, not 16, so a 144 Hz screen still lands on 72 rather than dropping to 48.)
+const MIN_FRAME_MS = 12;
 function renderLoop(now) {
+  if (lastFrameTime && now - lastFrameTime < MIN_FRAME_MS) { requestAnimationFrame(renderLoop); return; }
   const dt = lastFrameTime ? Math.min(now - lastFrameTime, 100) : 16;
   lastFrameTime = now;
   drainStates();
@@ -5783,7 +5788,13 @@ function drawHUD(state) {
 
 // Compact numbers for the HUD (12,345 · 1.2M · 3.4B ...), so a huge XP total
 // can't run into the wave counter.
+let _snIn = NaN, _snOut = '';
 function shortNum(n) {
+  if (n === _snIn) return _snOut;   // called every frame with the same value
+  _snIn = n; _snOut = shortNum0(n);
+  return _snOut;
+}
+function shortNum0(n) {
   if (n < 100000) return Math.floor(n).toLocaleString();
   const units = [[1e18, 'Qi'], [1e15, 'Q'], [1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K']];
   for (const [v, u] of units) {
@@ -5891,10 +5902,9 @@ function drawWeaponPanel(state) {
       ctx.save(); ctx.globalAlpha=0.35; ctx.strokeStyle=wc; ctx.lineWidth=1;
       ctx.strokeRect(sx-0.5, sy-0.5, slotW+1, slotH+1); ctx.restore();
     }
-    ctx.save();
     ctx.globalAlpha = (sel ? 1 : 0.5) * alpha;   // unselected slots dim, but still readable
     drawWeaponPixelsFitted(ctx, wId, sx + slotW/2, sy + slotH/2, slotW - 3, slotH - 3, wc);
-    ctx.restore();
+    ctx.globalAlpha = alpha * 0.85;
   }
   // The held weapon's name, just under the rack.
   const held = weapons[mp.weaponIdx];
