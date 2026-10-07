@@ -523,7 +523,7 @@ function tutorialLeft() { if (pendingTutorial) { markTutorialDone(); pendingTuto
     for (let y = 0; y < 135; y += 12) for (let x = (y / 12) % 2 ? 12 : 0; x < 240; x += 24) g.fillRect(x, y, 12, 12);
     g.fillStyle = '#2a2a4a'; g.fillRect(0, 0, 240, 6); g.fillRect(0, 129, 240, 6);
     // hero runs right on a loop, monsters scroll toward him
-    const loop = t % 4, hx = 30 + Math.sin(t * 1.3) * 6, hy = 82 + Math.abs(Math.sin(t * 9)) * -3;
+    const loop = t % 4, hx = 30 + Math.sin(t * 1.3) * 6, hy = 84 + Math.abs(Math.sin(t * 9)) * -3;
     for (const m of mons) {
       const mx = ((m.x - loop * 50) % 260 + 260) % 260 - 10;
       const hit = mx - hx < 34 && mx - hx > 10;
@@ -533,17 +533,21 @@ function tutorialLeft() { if (pendingTutorial) { markTutorialDone(); pendingTuto
       } catch {}
       if (hit && Math.random() < 0.15) coins.push({ x: mx + 8, y: 90, vx: -1 - Math.random(), vy: -2 - Math.random() * 1.5, life: 1 });
     }
-    if (hero) g.drawImage(hero, Math.round(hx), Math.round(hy - hero.height + 26));
-    // sword swing arc
-    const sw = (t * 3) % 1;
+    // Placed exactly as in the game: the body sprite sits 7px above the player's
+    // box, the front hand is 14px right and 15px down, and the blade is drawn at
+    // 1.2x pointing along +X, resting with a slight tilt and swinging from the hand.
+    const px = Math.round(hx), py = Math.round(hy);
+    if (hero) g.drawImage(hero, px, py - 7);
+    const sw = (t * 2.2) % 1;
+    const swing = sw < 0.45 ? -1.3 + (sw / 0.45) * 2.3 : 0.12;   // quick slash, then rest
     if (typeof drawWeaponPixels === 'function') {
-      g.save(); g.translate(hx + 16, hy + 2); g.rotate(-1.2 + sw * 2.2);
-      try { drawWeaponPixels(g, 'sword', 1, '#c8d8e8'); } catch {}
+      g.save(); g.translate(px + 14, py + 15); g.rotate(swing);
+      try { drawWeaponPixels(g, 'sword', 1.2, '#c8d8e8'); } catch {}
       g.restore();
     }
-    if (sw < 0.5) {
-      g.strokeStyle = 'rgba(232,240,250,' + (0.7 - sw) + ')'; g.lineWidth = 2;
-      g.beginPath(); g.arc(hx + 14, hy + 8, 22, -1.1 + sw * 2, -0.2 + sw * 2.6); g.stroke();
+    if (sw < 0.45) {
+      g.strokeStyle = 'rgba(232,240,250,' + (0.75 - sw) + ')'; g.lineWidth = 2;
+      g.beginPath(); g.arc(px + 14, py + 15, 24, -1.3 + (sw / 0.45) * 2.3 - 0.9, -1.3 + (sw / 0.45) * 2.3); g.stroke();
     }
     for (let i = coins.length - 1; i >= 0; i--) {
       const c = coins[i]; c.x += c.vx; c.y += c.vy; c.vy += 0.15; c.life -= 0.02;
@@ -4428,6 +4432,7 @@ function drawNametag(cx, bottomY, label, color) {
 // Held weapons are drawn a size up so they stay in proportion with the bigger
 // 16x22 characters.
 const HELD_SCALE = 1.2;
+const SCYTHES = new Set(['reaper', 'frostscythe']);
 
 function drawWeaponSprite(p, px, py, key) {
   const wId = p.weaponId;
@@ -4445,9 +4450,18 @@ function drawWeaponSprite(p, px, py, key) {
   const anim = attackProgress(key, wId);
   const pose = anim ? weaponPose(anim.kind, anim.e) : { rot: 0.12 };
 
+  // A scythe's blade curves to one side, and the whirl turns clockwise, so held
+  // blade-up it would lead with its blunt back. For the spin it turns over (a
+  // quick flip at each end) so the cutting edge always goes first.
+  let flipY = 1;
+  if (anim && anim.kind === 'spin' && SCYTHES.has(wId)) {
+    const e = anim.e;
+    flipY = e < 0.1 ? 1 - e * 20 : e > 0.9 ? -1 + (e - 0.9) * 20 : -1;
+  }
+
   ctx.save();
   ctx.translate(hx + (pose.dx || 0) * d, hy + (pose.dy || 0));
-  ctx.scale(d, 1);   // art is authored pointing +X; mirroring handles facing
+  ctx.scale(d, flipY);   // art is authored pointing +X; mirroring handles facing
   ctx.rotate(pose.rot);
   if (pose.alpha != null) ctx.globalAlpha = pose.alpha;
 
