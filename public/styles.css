@@ -852,3 +852,50 @@ body {
 .legend-tag.ghost-tag { color: #e8fcff; border-color: #a8f0ff; background: rgba(168, 240, 255, 0.12); }
 .shop-row.light-row { border-color: #e0c84a; background: linear-gradient(90deg, rgba(120, 110, 40, 0.28), rgba(40, 36, 14, 0.2)); }
 .legend-tag.light-tag { color: #fffbe0; border-color: #fff27a; background: rgba(255, 242, 122, 0.14); box-shadow: 0 0 6px rgba(255, 242, 122, 0.35); }
+
+/* ── Loading screen ── */
+#splash {
+  position: fixed; inset: 0; z-index: 100; background: #0a0a14;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  transition: opacity 0.45s ease;
+}
+#splash.gone { opacity: 0; pointer-events: none; }
+#splashScene {
+  width: min(560px, 88vw); aspect-ratio: 16 / 9; height: auto; image-rendering: pixelated;
+  border: 3px solid #2a2a4a; box-shadow: 0 0 0 1px #aa44ff, 4px 4px 0 #000;
+}
+.splash-brand { display: flex; align-items: center; gap: 10px; color: #ffcc00; font-weight: bold;
+  font-size: clamp(20px, 5vw, 30px); letter-spacing: 6px; text-shadow: 2px 2px 0 #000, 0 0 14px #ffcc00; }
+.splash-icon { width: 28px; height: 28px; image-rendering: pixelated; }
+.splash-bar { width: min(320px, 70vw); height: 10px; border: 2px solid #2a2a4a; background: #0a0a18; }
+#splashFill { height: 100%; width: 0; background: linear-gradient(90deg, #aa44ff, #ffcc00); transition: width 0.2s; }
+.splash-tip { color: #888; font-size: 11px; letter-spacing: 2px; text-align: center; padding: 0 16px; }
+
+/* ── Tutorial panel ── */
+#tutPanel {
+  position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 30;
+  width: min(460px, 94vw); background: rgba(14, 14, 32, 0.94); border: 2px solid #7affc8;
+  box-shadow: 0 0 0 1px #000, 0 0 14px rgba(122, 255, 200, 0.25); padding: 8px 12px 10px;
+  font-family: 'Courier New', monospace; color: #e8e8e8; text-align: center;
+}
+#tutPanel.hidden { display: none; }
+.tut-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 10px; letter-spacing: 2px; color: #7affc8; }
+#tutSkip {
+  font-family: inherit; font-size: 11px; font-weight: bold; letter-spacing: 1px; cursor: pointer;
+  background: #3a1020; color: #ffb0c0; border: 2px solid #ff5a7a; padding: 5px 9px;
+}
+#tutSkip:hover { background: #5a1830; }
+.tut-title { font-size: 16px; font-weight: bold; letter-spacing: 3px; color: #ffcc00; margin: 6px 0 4px; }
+.tut-text { font-size: 12px; letter-spacing: 1px; line-height: 1.5; }
+.tut-text kbd { display: inline-block; border: 1px solid #7a7aa8; border-bottom-width: 3px; padding: 0 5px; margin: 0 1px;
+  background: #1a1a2e; color: #fff; font-family: inherit; font-size: 11px; }
+.tut-text .done { color: #7aff9a; }
+.tut-next { margin-top: 8px; font-family: inherit; font-weight: bold; letter-spacing: 2px; font-size: 12px; cursor: pointer;
+  background: #103a28; color: #9fffd0; border: 2px solid #7affc8; padding: 6px 16px; }
+.tut-next.hidden { display: none; }
+.tut-replay { margin: 0 auto 12px; display: block; }
+@media (max-height: 420px) {
+  #tutPanel { top: 4px; padding: 5px 10px 6px; width: min(420px, 60vw); }
+  .tut-title { font-size: 13px; margin: 3px 0 2px; }
+  .tut-text { font-size: 10px; line-height: 1.35; }
+}

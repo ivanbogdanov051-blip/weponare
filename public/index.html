@@ -15,6 +15,25 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 </head>
 <body>
+  <!-- Loading screen: a little battle scene drawn with the game's own sprites -->
+  <div id="splash">
+    <canvas id="splashScene" width="240" height="135"></canvas>
+    <div class="splash-brand"><img src="icon-192.png" alt="" class="splash-icon"><span>WEPONARE</span></div>
+    <div class="splash-bar"><div id="splashFill"></div></div>
+    <div class="splash-tip" id="splashTip">LOADING...</div>
+  </div>
+
+  <!-- First visit: offer the tutorial -->
+  <div id="tutAskScreen" class="overlay hidden" style="z-index:20">
+    <div class="pixel-box">
+      <div class="title-text">WEPONARE</div>
+      <div class="subtitle">WELCOME, FIGHTER!</div>
+      <div class="body-text">WOULD YOU LIKE A QUICK TUTORIAL?</div>
+      <div class="body-text" style="color:#888;font-size:11px">1 MINUTE &middot; LEARN THE CONTROLS</div>
+      <button class="mode-btn btn-sandbox" style="margin-top:16px" onclick="tutAsk(true)">&#9654; YES, SHOW ME</button>
+      <button class="mode-btn exit-btn" onclick="tutAsk(false)">NO THANKS</button>
+    </div>
+  </div>
 
   <!-- Start / name + mode selection -->
   <div id="startScreen" class="overlay active">
@@ -139,6 +158,7 @@
     <div class="pixel-box shop-box howto-box">
       <div class="title-text shop-title howto-title">HOW TO PLAY</div>
       <div class="subtitle">EVERYTHING YOU NEED TO KNOW</div>
+      <button class="mode-btn btn-sandbox tut-replay" onclick="startTutorial()">&#9654; PLAY THE TUTORIAL</button>
       <div class="howto-list">
         <div class="howto-sec"><h3>CONTROLS</h3>
           <p><b>Keyboard:</b> ARROWS or WASD move &middot; SPACE attack &middot; SHIFT special &middot; R super &middot; P (or CTRL) parry &middot; ENTER (or Z for the one before) next weapon &middot; Q / E abilities (F, G, V, B for extra slots) &middot; 1-4 use an item &middot; M sound.</p>
@@ -345,6 +365,14 @@
         <button id="btn-attack" class="action-btn big-btn">ATK</button>
       </div>
     </div>
+  </div>
+
+  <!-- First-time tutorial: instructions over a gentle practice game -->
+  <div id="tutPanel" class="hidden">
+    <div class="tut-head"><span id="tutStep">TUTORIAL</span><button id="tutSkip" onclick="skipTutorial()">SKIP TUTORIAL &#9654;&#9654;</button></div>
+    <div id="tutTitle" class="tut-title"></div>
+    <div id="tutText" class="tut-text"></div>
+    <button id="tutNext" class="tut-next hidden" onclick="tutorialNext()">NEXT &#9654;</button>
   </div>
 
   <script src="audio.js"></script>

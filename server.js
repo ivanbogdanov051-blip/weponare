@@ -4327,6 +4327,15 @@ function startSandbox() {
     // Every ability slot, to try any combination.
     while (p.abilities.length < MAX_ABILITY_SLOTS) p.abilities.push(null);
   }
+  // The first-time tutorial: a gentle sandbox — can't die, weak monsters, and
+  // just three weapons so swapping is easy to follow.
+  if (room.tutorial) {
+    room.sandbox.tutorial = true;
+    room.sandbox.god = true;
+    room.sandbox.level = 1;
+    if (p) { p.unlockedWeapons = ['sword', 'bow', 'staff']; p.weaponIdx = 0; refreshWeapon(p); }
+    return;
+  }
   room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
                         text: 'SANDBOX - TRY ANYTHING', color: '#7affc8', timer: 2600, max: 2600 });
 }
@@ -6791,6 +6800,7 @@ wss.on('connection', (ws) => {
         const [r, key] = seat || (mode === 'bot' ? newBotRoom(BOT_LEVELS[msg.level] ? msg.level : 'average', size)
           : mode === 'create' ? createRoom({ ...msg, size }) : findSeat(mode, size));
         ws.room = r; ws.key = key;
+        if (mode === 'sandbox' && msg.tutorial) r.tutorial = true;
         r[key] = ws;
         ws.send(JSON.stringify({ type: 'seat', num: KEYS.indexOf(key) + 1, mode, maxPlayers: r.maxPlayers, roomName: r.custom ? r.custom.name : null }));
       }

@@ -308,6 +308,8 @@ function cycleMusic() {
 let leaving = false, returningToMenu = false;
 function leaveGame() {
   leaving = true;
+  tutorialLeft();
+  document.getElementById('tutPanel')?.classList.add('hidden');
   toggleChat(false);
   toggleSandboxPanel(false);
   if (window.GameAudio) GameAudio.stopMusic();
@@ -380,7 +382,201 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:' && location.ho
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
 
+// ── First-time tutorial ──────────────────────────────────────────────────────
+// A practice game (a gentle sandbox: can't die, weak monsters, three weapons)
+// with a panel on top walking through the basics one at a time. Each step is
+// ticked off by actually doing it; the explanation steps have a NEXT button.
+// The controls shown match the device: keys on a computer, buttons on touch.
+let pendingTutorial = false;
+const tut = { on: false, i: 0, entered: false, base: null };
+const TUT_DONE_KEY = 'weponare_tutorial_done';
+function tutorialDone() { try { return localStorage.getItem(TUT_DONE_KEY) === '1'; } catch { return true; } }
+function markTutorialDone() { try { localStorage.setItem(TUT_DONE_KEY, '1'); } catch {} }
+const kb = (...k) => k.map(x => '<kbd>' + x + '</kbd>').join(' ');
+const touchUi = () => isTouchDevice && !mouseAim;
+const TUT_STEPS = [
+  { title: 'WELCOME!', next: true,
+    text: () => 'This quick practice game teaches you the basics. You <b>can\'t lose</b> here, so try everything!' },
+  { title: 'MOVE',
+    text: () => touchUi() ? 'Use the <b>arrow pad</b> on the left of the screen to walk around.'
+                          : 'Walk around with ' + kb('W', 'A', 'S', 'D') + ' or the ' + kb('&#8593;', '&#8592;', '&#8595;', '&#8594;') + ' arrow keys.',
+    enter: (me) => ({ x: me.x, y: me.y }),
+    done: (me, s, b) => Math.hypot(me.x - b.x, me.y - b.y) > 120 },
+  { title: 'ATTACK',
+    text: () => touchUi() ? 'Tap the big <b>ATK</b> button to swing your weapon.' : 'Press ' + kb('SPACE') + ' to swing your weapon.',
+    done: () => currentInputs().attack },
+  { title: 'DEFEAT A MONSTER',
+    text: () => 'A monster appeared! Walk up to it and attack until it falls. You aim at the nearest enemy automatically.',
+    enter: () => { tutSend({ type: 'sandbox', action: 'spawn', what: 'grunt', count: 1 }); return { seen: false }; },
+    done: (me, s, b) => { if ((s.monsters || []).length) b.seen = true; return b.seen && !(s.monsters || []).length; } },
+  { title: 'SWITCH WEAPONS',
+    text: () => (touchUi() ? 'Tap the <b>&lt;</b> / <b>&gt;</b> buttons' : 'Press ' + kb('ENTER') + ' (or ' + kb('Z') + ' for the previous one)')
+      + ' to change weapons. Every weapon plays differently: swords swing, bows shoot, staffs blast.',
+    enter: (me) => ({ w: me.weaponId }),
+    done: (me, s, b) => me.weaponId !== b.w },
+  { title: 'SPECIAL ATTACK',
+    text: () => (touchUi() ? 'Tap <b>SPECIAL</b>' : 'Press ' + kb('SHIFT')) + ' for your weapon\'s special move. It has to recharge after each use.',
+    done: (me) => (me.specialCd || 0) > 0 },
+  { title: 'PARRY',
+    text: () => (touchUi() ? 'Tap <b>PARRY</b>' : 'Press ' + kb('P') + ' or ' + kb('CTRL')) + ' just before a hit lands to block it and stun the attacker.',
+    done: (me) => me.parryActive || (me.parryCd || 0) > 0 },
+  { title: 'ITEMS',
+    text: () => 'A glowing gem dropped near you. Walk over it to pick it up, then use it: '
+      + (touchUi() ? 'tap its <b>slot</b> in the item bar.' : 'press ' + kb('1') + '-' + kb('4') + ' or click its slot in the item bar.')
+      + ' You can carry 4.',
+    enter: () => { tutSend({ type: 'sandbox', action: 'item', what: 'speed' }); return { had: false }; },
+    done: (me, s, b) => { const n = (s.inventory || []).length; if (n) b.had = true; return b.had && !n; } },
+  { title: 'FIGHT A FEW MORE',
+    text: () => 'Three monsters are coming. Use everything you learned!',
+    enter: () => { tutSend({ type: 'sandbox', action: 'spawn', what: 'grunt', count: 3 }); return { seen: false }; },
+    done: (me, s, b) => { if ((s.monsters || []).length) b.seen = true; return b.seen && !(s.monsters || []).length; } },
+  { title: 'XP, COINS & UPGRADES', next: true,
+    text: () => 'Defeating monsters and winning fights gives <b>XP</b> (unlocks new weapons) and <b>coins</b>, which fly to you on their own. '
+      + 'Spend coins in <b>UPGRADE WEAPONS</b> and <b>ABILITIES</b>' + (touchUi() ? '' : ' (abilities go on ' + kb('Q') + ' ' + kb('E') + ')') + '. '
+      + 'Set a <b>password</b> on the menu so your progress is saved.' },
+  { title: 'READY TO PLAY!', next: true, last: true,
+    text: () => '<b>PvP</b> or <b>rooms</b>: fight friends. <b>Bot battle</b>: fight a bot. <b>Waves</b> / <b>Extreme</b>: survive monster waves. '
+      + '<b>Sandbox</b>: practise anything. You can replay this from <b>HOW TO PLAY</b>.' },
+];
+function tutSend(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+function startTutorial() {
+  readCredentials();
+  pendingTutorial = true;
+  tut.on = false; tut.i = 0; tut.entered = false;
+  pendingRoom = {};
+  joinGame('sandbox');
+}
+function finishTutorial() {
+  markTutorialDone();
+  pendingTutorial = false;
+  tut.on = false;
+  document.getElementById('tutPanel')?.classList.add('hidden');
+  if (ws && ws.readyState <= 1) leaveGame(); else showScreen('startScreen');
+  refreshSavedBanner();
+}
+function skipTutorial() { finishTutorial(); }
+function tutorialNext() {
+  const st = TUT_STEPS[tut.i];
+  if (st && st.last) { finishTutorial(); return; }
+  tut.i++; tut.entered = false;
+}
+let tutRendered = '';
+function tutorialTick() {
+  const panel = document.getElementById('tutPanel');
+  const s = currState;
+  const active = pendingTutorial && s && s.gameState === 'GAMEPLAY' && s.sandbox && s.sandbox.tutorial;
+  if (!active) {
+    if (panel && !panel.classList.contains('hidden')) panel.classList.add('hidden');
+    return;
+  }
+  const me = s.players && s.players[myKeyOf()];
+  if (!me) return;
+  const view = pred ? { ...me, x: pred.x, y: pred.y } : me;
+  const st = TUT_STEPS[tut.i];
+  if (!st) return;
+  if (!tut.entered) { tut.entered = true; tut.base = st.enter ? st.enter(view, s) : null; }
+  if (!st.next && st.done(view, s, tut.base)) {
+    if (window.GameAudio) GameAudio.sfx.pickup();
+    tut.i++; tut.entered = false;
+    return;
+  }
+  // Only touch the DOM when what is shown changes.
+  const key = tut.i + ':' + touchUi();
+  if (panel.classList.contains('hidden')) panel.classList.remove('hidden');
+  if (key !== tutRendered) {
+    tutRendered = key;
+    document.getElementById('tutStep').textContent = 'TUTORIAL ' + (tut.i + 1) + '/' + TUT_STEPS.length;
+    document.getElementById('tutTitle').textContent = st.title;
+    document.getElementById('tutText').innerHTML = st.text();
+    const nb = document.getElementById('tutNext');
+    nb.classList.toggle('hidden', !st.next);
+    nb.innerHTML = st.last ? 'START PLAYING &#9654;' : 'NEXT &#9654;';
+  }
+}
+// Leaving the tutorial any other way (EXIT, disconnect) also counts as seen.
+function tutorialLeft() { if (pendingTutorial) { markTutorialDone(); pendingTutorial = false; } }
+
+// ── Loading screen ──────────────────────────────────────────────────────────
+// A short animated scene drawn with the game's own sprites: a hero cutting
+// through a line of monsters while coins fly. Shown for a moment on every
+// launch; on the very first visit it leads straight into the tutorial.
+(function splash() {
+  const el = document.getElementById('splash');
+  if (!el) return;
+  const cv = document.getElementById('splashScene'), g = cv.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  const fill = document.getElementById('splashFill'), tipEl = document.getElementById('splashTip');
+  const TIPS = ['TIP: PARRY JUST BEFORE A HIT TO STUN THE ATTACKER', 'TIP: SET A PASSWORD TO SAVE YOUR PROGRESS',
+                'TIP: COINS FLY TO YOU ON THEIR OWN', 'TIP: EVERY WEAPON HAS A SPECIAL MOVE', 'TIP: CREATE A ROOM AND INVITE YOUR FRIENDS'];
+  tipEl.textContent = TIPS[Math.floor(Math.random() * TIPS.length)];
+  const t0 = performance.now(), MIN_MS = 1700;
+  let loaded = document.readyState === 'complete';
+  window.addEventListener('load', () => { loaded = true; });
+  const mons = [{ t: 'grunt', x: 150, w: 23, h: 27 }, { t: 'brute', x: 185, w: 30, h: 34 }, { t: 'runner', x: 222, w: 20, h: 22 }];
+  const coins = [];
+  let hero = null;
+  try { hero = playerSprite('#4488ff', 1, 1, false, '', 7); } catch {}
+  function frame(now) {
+    const t = (now - t0) / 1000;
+    g.fillStyle = '#1a1a2e'; g.fillRect(0, 0, 240, 135);
+    g.fillStyle = 'rgba(255,255,255,0.03)';
+    for (let y = 0; y < 135; y += 12) for (let x = (y / 12) % 2 ? 12 : 0; x < 240; x += 24) g.fillRect(x, y, 12, 12);
+    g.fillStyle = '#2a2a4a'; g.fillRect(0, 0, 240, 6); g.fillRect(0, 129, 240, 6);
+    // hero runs right on a loop, monsters scroll toward him
+    const loop = t % 4, hx = 30 + Math.sin(t * 1.3) * 6, hy = 82 + Math.abs(Math.sin(t * 9)) * -3;
+    for (const m of mons) {
+      const mx = ((m.x - loop * 50) % 260 + 260) % 260 - 10;
+      const hit = mx - hx < 34 && mx - hx > 10;
+      try {
+        const sp = monsterSprite(m.t, m.w, m.h, hit ? 'flash' : 'normal');
+        if (sp) g.drawImage(sp, Math.round(mx), Math.round(110 - (sp.height || m.h)));
+      } catch {}
+      if (hit && Math.random() < 0.15) coins.push({ x: mx + 8, y: 90, vx: -1 - Math.random(), vy: -2 - Math.random() * 1.5, life: 1 });
+    }
+    if (hero) g.drawImage(hero, Math.round(hx), Math.round(hy - hero.height + 26));
+    // sword swing arc
+    const sw = (t * 3) % 1;
+    if (typeof drawWeaponPixels === 'function') {
+      g.save(); g.translate(hx + 16, hy + 2); g.rotate(-1.2 + sw * 2.2);
+      try { drawWeaponPixels(g, 'sword', 1, '#c8d8e8'); } catch {}
+      g.restore();
+    }
+    if (sw < 0.5) {
+      g.strokeStyle = 'rgba(232,240,250,' + (0.7 - sw) + ')'; g.lineWidth = 2;
+      g.beginPath(); g.arc(hx + 14, hy + 8, 22, -1.1 + sw * 2, -0.2 + sw * 2.6); g.stroke();
+    }
+    for (let i = coins.length - 1; i >= 0; i--) {
+      const c = coins[i]; c.x += c.vx; c.y += c.vy; c.vy += 0.15; c.life -= 0.02;
+      if (c.life <= 0) { coins.splice(i, 1); continue; }
+      g.fillStyle = '#ffd24a'; g.fillRect(Math.round(c.x), Math.round(c.y), 3, 3);
+    }
+    const p = Math.min(1, (now - t0) / MIN_MS) * (loaded ? 1 : 0.85);
+    fill.style.width = Math.round(p * 100) + '%';
+    if (loaded && now - t0 >= MIN_MS) {
+      el.classList.add('gone');
+      setTimeout(() => el.remove(), 500);
+      afterSplash();
+      return;
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+// First visit (and not arriving on an invite link): straight into the tutorial.
+function afterSplash() {
+  if (tutorialDone()) return;
+  if (new URLSearchParams(location.search).get('room')) return;
+  document.getElementById('tutAskScreen').className = 'overlay active';
+}
+// YES goes straight into the tutorial; NO just removes the screen (it can
+// still be played any time from HOW TO PLAY).
+function tutAsk(yes) {
+  document.getElementById('tutAskScreen').className = 'overlay hidden';
+  if (yes) startTutorial(); else markTutorialDone();
+}
+
 function exitToMenu() {
+  tutorialLeft();
   if (ws && ws.readyState <= 1) { leaveGame(); return; }   // connecting or open: close it properly
   if (window.GameAudio) GameAudio.stopMusic();
   showGameControls(false);
@@ -451,7 +647,7 @@ function connect() {
       if (Array.isArray(msg.chatLines)) { CHAT_LINES = msg.chatLines; buildChatPanel(); }
       ws.send(JSON.stringify({
         type: 'join', name: pendingName, mode: pendingMode, password: pendingPass, level: pendingBotLevel,
-        size: pendingMapSize, ...pendingRoom,
+        size: pendingMapSize, ...pendingRoom, tutorial: pendingTutorial,
         skin: pendingSkin, skinModified,
         localXp: loadLocalXp(pendingPass), localCoins: loadLocalCoins(pendingPass), backup: loadBackup(pendingPass),
       }));
@@ -2028,7 +2224,7 @@ function toggleSandboxPanel(show) {
   panel.classList.toggle('hidden', !open);
 }
 function syncSandbox(state) {
-  const on = state.gameMode === 'sandbox' && state.gameState === 'GAMEPLAY';
+  const on = state.gameMode === 'sandbox' && state.gameState === 'GAMEPLAY' && !state.sandbox?.tutorial;
   if (on !== sandboxShown) {
     sandboxShown = on;
     document.getElementById('sandboxBtn')?.classList.toggle('shown', on);
@@ -3313,6 +3509,8 @@ function updateScreens(state) {
       setLobbyMsg(`<span style="color:#ff5a3a">EXTREME MODE</span><br><span style="color:#888">SOLO · STRONGEST MONSTERS</span><br>Loading...`);
     } else if (state.gameMode === 'portal') {
       setLobbyMsg(PORTAL_LOBBY);
+    } else if (state.gameMode === 'sandbox' && pendingTutorial) {
+      setLobbyMsg(`<span style="color:#7affc8">TUTORIAL</span><br><span style="color:#888">LEARN THE BASICS</span><br>Loading...`);
     } else if (state.gameMode === 'sandbox') {
       setLobbyMsg(`<span style="color:#9fffd0">SANDBOX</span><br><span style="color:#888">SOLO PRACTICE · NOTHING IS SAVED</span><br>Loading...`);
     } else {
@@ -3434,6 +3632,7 @@ function renderLoop(now) {
   const dt = lastFrameTime ? Math.min(now - lastFrameTime, 100) : 16;
   lastFrameTime = now;
   drainStates();
+  tutorialTick();
   netStats.frames++;
   if (now - netStats.since >= 1000) {
     netStats.fps = Math.round(netStats.frames * 1000 / (now - netStats.since || 1000));
@@ -5460,7 +5659,10 @@ function drawHUD(state) {
 
   const w = state.wave;
   ctx.textAlign = 'center';
-  if (state.gameMode === 'sandbox') {
+  if (state.gameMode === 'sandbox' && state.sandbox?.tutorial) {
+    ctx.fillStyle = '#000'; ctx.fillText('TUTORIAL', HUD_W/2 + 1, 3);
+    ctx.fillStyle = '#7affc8'; ctx.fillText('TUTORIAL', HUD_W/2, 2);
+  } else if (state.gameMode === 'sandbox') {
     const t = 'SANDBOX';
     const sub = 'LEVEL ' + (state.sandbox?.level || 1) + ' · ' + (state.monsters || []).length + ' MONSTERS'
               + (state.sandbox?.god ? ' · GOD' : '') + (state.sandbox?.freeze ? ' · FROZEN' : '');
