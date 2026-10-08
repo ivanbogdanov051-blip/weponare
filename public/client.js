@@ -2240,7 +2240,7 @@ function tryLocalAttack() {
   if (!currState || currState.gameState !== 'GAMEPLAY' || !myNum) return;
   const key = myKeyOf();
   const me = currState.players?.[key];
-  if (!me || me.dead || me.controlling || localAtkCd > 0) return;
+  if (!me || me.dead || me.controlling || me.kspin > 0 || localAtkCd > 0) return;   // no swings mid-spin
   const haste = me.effects && me.effects.haste > 0;
   // atkSpd comes from the server so weapon upgrades stay in sync.
   localAtkCd = (me.atkSpd || WEAPON_META[me.weaponId]?.atkSpd || 400) * (haste ? 0.5 : 1);
@@ -4498,7 +4498,7 @@ function drawPlayerBody(p, baseColor, label, key) {
   if (p.lightspeed > 0) drawLightspeedFx(p, x, y);
 
   drawNametag(x + p.w / 2, y - 13, label, skinCol);
-  drawWeaponSprite(p, x, y, key);
+  if (!(p.kspin > 0)) drawWeaponSprite(p, x, y, key);
   if (p.weaponId === 'infinitybow' && !p.dead) drawInfinityFloaters(p, x, y);
   if (p.weaponId === 'endlessscythe' && !p.dead) drawEndlessFloaters(p, x, y, key);
   if (p.kspin > 0 && !p.dead) drawKatanaSpin(p, x, y);
@@ -5291,7 +5291,7 @@ function drawScytheWhirl(f, now) {
 
 // A slash wave: a bright crescent of steel, its edge burning, ghosts trailing behind.
 function drawSlashWave(pr, ang, now, edge) {
-  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang); ctx.scale(2, 2);
   for (let i = 3; i >= 0; i--) {
     ctx.save(); ctx.translate(-i * 5, 0);
     ctx.globalAlpha = i ? 0.12 * (4 - i) : 1;
@@ -5310,7 +5310,7 @@ function drawSlashWave(pr, ang, now, edge) {
 }
 // The quiet wave: a pale, rippling crescent — harmless, but it marks you.
 function drawDashWave(pr, ang, now) {
-  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang); ctx.scale(2, 2);
   const pulse = 0.5 + 0.5 * Math.sin(now / 70);
   for (let i = 0; i < 3; i++) {
     ctx.globalAlpha = (0.55 - i * 0.15) * (0.7 + 0.3 * pulse);
@@ -5409,14 +5409,15 @@ function drawKatanaSpin(p, x, y) {
   const fade = Math.min(1, p.kspin / 400);
   ctx.save();
   ctx.globalAlpha = 0.18 * fade; ctx.fillStyle = '#ff5a5a';
-  ctx.beginPath(); ctx.arc(mx, my, 30, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(mx, my, 48, 0, Math.PI * 2); ctx.fill();
   const a = now / 45;
-  ctx.globalAlpha = 0.6 * fade; ctx.strokeStyle = '#ffd0d0'; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.arc(mx, my, 26, a - 2.2, a); ctx.stroke();
+  ctx.globalAlpha = 0.6 * fade; ctx.strokeStyle = '#ffd0d0'; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.arc(mx, my, 44, a - 2.2, a); ctx.stroke();
+  ctx.beginPath(); ctx.arc(mx, my, 44, a + Math.PI - 2.2, a + Math.PI); ctx.stroke();
   ctx.globalAlpha = fade;
   for (const off of [0, Math.PI]) {
     ctx.save(); ctx.translate(mx, my); ctx.rotate(a + off);
-    drawWeaponPixels(ctx, 'samuraiblade', 0.75, WEAPON_COLOR.samuraiblade);
+    drawWeaponPixels(ctx, 'samuraiblade', 1.5, WEAPON_COLOR.samuraiblade);
     ctx.restore();
   }
   ctx.restore();

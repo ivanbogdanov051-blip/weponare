@@ -314,10 +314,10 @@ const WEAPONS = [
   // Attack: a slash wave that seeks out foes. Special: a dash wave — when it
   // reaches a foe you flash through them at near light speed. SUPER: spin for 5s,
   // much faster and gliding, cutting and slowing everything you touch.
-  { id: 'samuraiblade', name: "SAMURAI'S KATANA", damage: 30, range: 260, atkSpd: 520, type: 'ranged', unlockXp: 0,
+  { id: 'samuraiblade', name: "SAMURAI'S KATANA", damage: 48, range: 260, atkSpd: 520, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, needSamurai: true, price: 30000, slashWave: true,
-    special: { kind: 'dashwave', dmg: 150, range: 340, cd: 6500 },
-    super:   { kind: 'katanaspin', dmg: 22, cd: 20000 } },
+    special: { kind: 'dashwave', dmg: 240, range: 340, cd: 6500 },
+    super:   { kind: 'katanaspin', dmg: 45, cd: 20000 } },
   { id: 'lightblade', name: 'LIGHT BLADE', damage: 40, range: 56, atkSpd: 620, type: 'melee', unlockXp: 0,
     shopOnly: true, noRequirement: true, needLight: true, price: 0, lightDash: true,
     special: { kind: 'lightdashes', dmg: 70, range: 260, cd: 9000 },
@@ -711,7 +711,7 @@ const MONSTER_TYPES = {
   // that does nothing itself — if it touches you, he flashes through you with
   // his katana for huge damage. Parry that and he is left stunned.
   samurai: {
-    name: 'SAMURAI', minWave: 4, weight: 3, hp: 1.1, dmg: 1.1, speed: 1.15, size: 1.0,
+    name: 'SAMURAI', minWave: 3, weight: 7, hp: 1.1, dmg: 1.1, speed: 1.15, size: 1.0,
     color: '#c8303a', xp: 1.8, coins: 2.0, ai: 'samurai',
   },
   // Blindingly fast and rare (see maybeLightWave): sweeps through you and
@@ -770,7 +770,7 @@ const MONSTER_TYPES = {
 // EXTREME mode fields only the strongest monsters, starts as hard as a deep
 // normal run (EXTREME_LEVEL_OFFSET waves in) and pays far more.
 const EXTREME_ROSTER = { brute: 2, warden: 3, behemoth: 3, titan: 2, wraith: 4, infernal: 3,
-                         bomber: 2, shaman: 2, splitter: 2, charger: 3, necromancer: 2, samurai: 3 };
+                         bomber: 2, shaman: 2, splitter: 2, charger: 3, necromancer: 2, samurai: 8 };
 const EXTREME_LEVEL_OFFSET = 9;
 const EXTREME_COIN_MULT = 3;        // on top of the normal kill payout
 const EXTREME_WAVE_BONUS = 120;     // coins per wave number, paid on every clear
@@ -1813,7 +1813,8 @@ function turnToward(a, want, max) {
 }
 // ─── Samurai ──────────────────────────────────────────────────────────────────
 const SAM_CD = 2200, SAM_WIND = 380, SAM_RANGE = 300, SAM_DASHWAVE_CHANCE = 0.3;
-const SAM_WAVE_SPEED = 4.2, SAM_WAVE_MULT = 1.1, SAM_DASH_SPEED = 14, SAM_DASH_MULT = 3.6, SAM_DASH_MIN = 40;
+const SAM_WAVE_SPEED = 8, SAM_WAVE_MULT = 2.0, SAM_DASH_SPEED = 16, SAM_DASH_MULT = 6, SAM_DASH_MIN = 65;
+const SAM_WAVE_R = 16;     // a wave's hit radius (drawn twice the old size)
 const SAM_STUN_MS = 2200, SAM_TOWARD_DOT = 0.5, SAM_TOWARD_MULT = 1.75;
 const SAM_KILLS_NEED = 30;
 // A slash wave: a crescent of steel flying at its target (the samurai's, or a katana's).
@@ -1821,7 +1822,7 @@ function slashWave(owner, x, y, a, dmg, opts = {}) {
   room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * (opts.speed || SAM_WAVE_SPEED), dy: Math.sin(a) * (opts.speed || SAM_WAVE_SPEED),
     damage: dmg, owner, traveled: 0, maxRange: opts.range || 420, weaponId: opts.dash ? 'samdashwave' : 'samwave',
     isAoe: false, aoeRadius: 0, pierce: false, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: null,
-    hitR: 7, homing: !!opts.homing, ...(opts.dash ? { dashWave: opts.dash } : {}), ...(opts.upg ? { upg: opts.upg } : {}) });
+    hitR: SAM_WAVE_R, homing: !!opts.homing, ...(opts.dash ? { dashWave: opts.dash } : {}), ...(opts.upg ? { upg: opts.upg } : {}) });
 }
 function aiSamurai(m, t, dist, dx, dy, spd, factor, dt) {
   if (m.dazed > 0) { m.dazed -= dt; return true; }   // stunned by a parried flash
@@ -1857,7 +1858,7 @@ function aiSamurai(m, t, dist, dx, dy, spd, factor, dt) {
     m.samWind -= dt; m.face = dx > 0 ? 1 : -1;
     if (m.samWind <= 0) {
       const a = Math.atan2(dy, dx);
-      if (m.samNext === 'dash') slashWave('monster', cx(m), cy(m), a, 0, { dash: { mon: m.id }, speed: 3.6, range: 460 });
+      if (m.samNext === 'dash') slashWave('monster', cx(m), cy(m), a, 0, { dash: { mon: m.id }, speed: 7.5, range: 520 });
       else slashWave('monster', cx(m), cy(m), a, Math.round(m.atkDamage * SAM_WAVE_MULT));
       m.samCd = SAM_CD;
     }
@@ -1906,7 +1907,7 @@ function creditSamuraiKill() {
   }
 }
 // The katana's SUPER: spinning, faster, gliding, cutting all you touch.
-const KSPIN_MS = 5000, KSPIN_SPEED = 1.9, KSPIN_R = 30, KSPIN_TICK = 220, KSPIN_SLOW = 900, KSPIN_GLIDE = 0.07;
+const KSPIN_MS = 5000, KSPIN_SPEED = 1.9, KSPIN_R = 48, KSPIN_TICK = 220, KSPIN_SLOW = 900, KSPIN_GLIDE = 0.07;
 function katanaSpinTick(p, key, dt) {
   p.kspin -= dt;
   p.kspinT = (p.kspinT || 0) - dt;
@@ -2086,7 +2087,19 @@ function startWave(num) {
     spawnMonster('giant');
     room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
                           text: 'THE GIANT APPROACHES', color: '#c8e07a', timer: 3200, max: 3200 });
-  } else maybeLightWave(num);
+  } else { maybeLightWave(num); maybeSamuraiHorde(num); }
+}
+
+// In EXTREME a wave may bring a samurai horde: 10 to 20 of them at once.
+const SAM_HORDE_CHANCE = 0.4, SAM_HORDE_MIN = 10, SAM_HORDE_MAX = 20;
+function maybeSamuraiHorde(num) {
+  if (room.gameMode !== 'extreme' || num < 2 || Math.random() >= SAM_HORDE_CHANCE) return;
+  const count = SAM_HORDE_MIN + Math.floor(Math.random() * (SAM_HORDE_MAX - SAM_HORDE_MIN + 1));
+  room.seenTypes.add('samurai');
+  room.wave.monstersLeft += count;
+  for (let i = 0; i < count; i++) spawnMonster('samurai');
+  room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
+                        text: 'SAMURAI HORDE x' + count, color: '#ff5a5a', timer: 3000, max: 3000 });
 }
 
 function clearField() {
@@ -2573,6 +2586,14 @@ function tickRoom(dt) {
       continue;
     }
 
+    // The katana's spin is all you do while it lasts — only parry gets through.
+    if (p.kspin > 0) {
+      if (room.parryJustPressed[key] && p.parryCooldown <= 0) {
+        p.parryTimer = p.parryWindow || PARRY_WINDOW; p.parryCooldown = p.parryCd || PARRY_COOLDOWN;
+        spawnParrySpark(cx(p), cy(p));
+      }
+      continue;
+    }
     // > goes to the next weapon, < to the one before (they wrap round).
     const nWeapons = p.unlockedWeapons.length;
     const step = (room.swapJustPressed[key] ? 1 : 0) - (room.swapPrevJustPressed[key] ? 1 : 0);
@@ -3239,7 +3260,7 @@ function doAttack(p, pKey) {
     p.facing = Math.cos(aim) < 0 ? -1 : 1;
     for (let i = 0; i < 1 + (w.multi || 0); i++) {
       slashWave(pKey, cx(p), cy(p), aim + (i - (w.multi || 0) / 2) * 0.22, Math.round(w.damage * dmgMult),
-                { speed: 5.4, range: w.range, homing: true, upg: p.upgrades?.[w.id] || null });
+                { speed: 9, range: w.range, homing: true, upg: p.upgrades?.[w.id] || null });
     }
     return;
   }
@@ -6386,7 +6407,7 @@ function doSpecial(p, pKey) {
     // A quiet wave: when it reaches a foe, you flash through them.
     const aim = nearestTargetAngle(p, pKey);
     p.facing = Math.cos(aim) < 0 ? -1 : 1;
-    slashWave(pKey, px, py, aim, 0, { dash: { dmg: spDmg }, speed: 5.5, range: sp.range, homing: true });
+    slashWave(pKey, px, py, aim, 0, { dash: { dmg: spDmg }, speed: 9, range: sp.range, homing: true });
     return;
   }
   if (sp.kind === 'voidbeam') {
