@@ -306,7 +306,7 @@ const WEAPONS = [
   // swipe whose hits drag foes in. Special: a void beam that spins a full circle
   // round you, fast, pulling everything in like a black hole. SUPER: the Abyss's
   // second phase — six scythes whirl round you, are flung out, then one huge slash.
-  { id: 'endlessscythe', name: 'ENDLESS SCYTHE', damage: 46, range: 82, atkSpd: 900, type: 'melee', unlockXp: 0, shopOnly: true, bossReward: true, price: 0,
+  { id: 'endlessscythe', name: 'ENDLESS SCYTHE', damage: 46, range: 82, atkSpd: 1500, type: 'melee', unlockXp: 0, shopOnly: true, bossReward: true, price: 0,
     voidPull: true,
     special: { kind: 'voidbeam',   dmg: 34, range: 320, cd: 9000 },
     super:   { kind: 'abysswhirl', dmg: 95, cd: 20000 } },
