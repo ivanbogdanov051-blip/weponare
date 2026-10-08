@@ -293,6 +293,15 @@ const WEAPONS = [
   // nearest pickup if there are none), stunning them and hurling them to the
   // wall. SUPER: LIGHTSPEED — triple speed, a crackling aura that zaps anything
   // close, and crashing into a foe sets off a huge lightning blast.
+  // Never for sale: won by surviving the Abyss. Attack: a rapid burst of void
+  // bolts from your crossbow and the two floating beside you. Special: the
+  // Abyss's own massive orb (charged, then sent; it bursts only on impact).
+  // SUPER: all three shoot one spot; where the bolts meet a black hole opens
+  // that spits even more bolts and collapses for extreme damage.
+  { id: 'infinitybow', name: 'CROSSBOWS OF INFINITY', damage: 12, range: 330, atkSpd: 330, type: 'ranged', unlockXp: 0, shopOnly: true, bossReward: true, price: 0,
+    projSpeed: 7, infinityShot: true,
+    special: { kind: 'abyssorb',    dmg: 240, range: 900, cd: 9000, aoe: 90 },
+    super:   { kind: 'abyssvolley', dmg: 420, cd: 24000 } },
   { id: 'lightblade', name: 'LIGHT BLADE', damage: 40, range: 56, atkSpd: 620, type: 'melee', unlockXp: 0,
     shopOnly: true, noRequirement: true, needLight: true, price: 0, lightDash: true,
     special: { kind: 'lightdashes', dmg: 70, range: 260, cd: 9000 },
@@ -320,7 +329,7 @@ const WEAPON_COLORS = {
   glaive: '#b0d8c0', katana: '#eef0ff', chakram: '#66e0c0', cannon: '#9a90a8', reaper: '#cc66aa',
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
   shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
-  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff',
+  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff',
   ghostdagger: '#a8f0ff', stormhammer: '#7ac8ff', frostscythe: '#bfefff', sunbow: '#ffd24a',
 };
 
@@ -381,6 +390,7 @@ const WEAPON_UPGRADES = {
   windwand:    ['dmg', 'spd', 'knock', 'rng', 'aoe'],
   revolver:    ['dmg', 'spd', 'aoe', 'crit', 'multi'],
   portalwand:  ['dmg', 'crit', 'cdr', 'aoe'],
+  infinitybow: ['dmg', 'spd', 'crit', 'cdr', 'multi'],
   ghostdagger: ['dmg', 'spd', 'crit', 'cdr'],
   stormhammer: ['dmg', 'spd', 'crit', 'cdr', 'knock'],
   frostscythe: ['dmg', 'rng', 'chill', 'cdr', 'aoe'],
@@ -417,6 +427,7 @@ const PASSIVES = {
   vortex:      { name: 'AEGIS',          color: '#7ad8ff', desc: 'blocks one hit completely every 4s' },
   windwand:    { name: 'GALE GUARD',     color: '#d8f4ff', desc: 'blows away an enemy shot that comes close, every 0.5s' },
   revolver:    { name: 'CHAIN REACTION', color: '#ffa040', desc: 'every hit explodes onto the foes around it, and everything you kill blows up even bigger' },
+  infinitybow: { name: 'ENDLESS VOLLEY', color: '#9a5aff', desc: 'every 5th attack fires twice as many bolts' },
   portalwand:  { name: 'ESCAPE PORTAL',  color: '#b07aff', desc: 'when a hit drops you below 35% health you warp to safety and heal 20% (every 8s)' },
   ghostdagger: { name: 'HAUNTING',       color: '#a8f0ff', desc: 'your thrown daggers turn in the air and chase down your enemies' },
   stormhammer: { name: 'THUNDERSTRUCK',  color: '#7ac8ff', desc: '35% of your hits call down lightning for +80% damage' },
@@ -704,6 +715,12 @@ const MONSTER_TYPES = {
     name: 'PORTAL MAGE', minWave: 1, weight: 0, hp: 1, dmg: 1.4, speed: 1.7, size: 1.6,
     color: '#7a3aff', xp: 0, coins: 0, armor: 0.15, boss: true, mage: true, fixedW: 30, fixedH: 42,
   },
+  // The Abyss: four arms, two legs, fought on his own (mode 'abyss'). Health
+  // is ABYSS_HP — see startAbyssFight.
+  abyss: {
+    name: 'THE ABYSS', minWave: 1, weight: 0, hp: 1, dmg: 1.6, speed: 1.35, size: 1.9,
+    color: '#5a2aa8', xp: 0, coins: 0, armor: 0.2, boss: true, fixedW: 40, fixedH: 54,
+  },
   // ── EXTREME only (extremeOnly: never in normal waves) ──
   // A walking fortress: the most health and armour in the game.
   titan: {
@@ -750,7 +767,7 @@ function isBossWave(num) {
 // The Portal Mage's minions arrive as tough as a deep EXTREME wave.
 const PORTAL_LEVEL = 15;
 function modeLevel(num) {
-  if (room.gameMode === 'portal') return PORTAL_LEVEL;
+  if (room.gameMode === 'portal' || room.gameMode === 'abyss') return PORTAL_LEVEL;
   if (room.gameMode === 'sandbox') return room.sandbox.level;
   return num + (room.gameMode === 'extreme' ? EXTREME_LEVEL_OFFSET : 0);
 }
@@ -1163,7 +1180,9 @@ const seatKeys = (r = room) => KEYS.slice(0, r.maxPlayers);
 const rooms = [];
 let room = makeRoom();   // the room being worked on right now
 
-const SOLO_MODES = ['waves', 'extreme', 'portal', 'sandbox'];
+const SOLO_MODES = ['waves', 'extreme', 'portal', 'abyss', 'sandbox'];
+// XP needed before a mode opens (kept in step with MODE_XP in client.js).
+const MODE_XP = { extreme: 5000, portal: 15000, abyss: 30000 };
 function isSolo() { return SOLO_MODES.includes(room.gameMode); }
 
 // Seats (room + slot) held by a password, for pushing shop changes into live games.
@@ -1438,7 +1457,7 @@ function spawnMonster(forceType) {
   const lvl = modeLevel(room.wave.num);
 
   // Call out a type the first time it appears in this run.
-  if (!def.boss && !def.minion && !room.seenTypes.has(type) && room.gameMode !== 'portal') {
+  if (!def.boss && !def.minion && !room.seenTypes.has(type) && room.gameMode !== 'portal' && room.gameMode !== 'abyss') {
     room.seenTypes.add(type);
     if (room.wave.num > 1 || room.gameMode === 'extreme') {
       room.particles.push({
@@ -1963,6 +1982,7 @@ function startGame() {
   room.gameState = 'GAMEPLAY';
   room.victory = false;
   if (room.gameMode === 'portal') startMageFight();
+  else if (room.gameMode === 'abyss') startAbyssFight();
   else if (room.gameMode === 'sandbox') startSandbox();
   else if (room.gameMode !== 'pvp') startWave(START_WAVE);
 }
@@ -1978,7 +1998,7 @@ function resetToLobby() {
 }
 
 function applyDamage(target, dmg, attackerKey) {
-  if (target.dead || target.dying || target.invincible > 0 || target.hidden) return;
+  if (target.dead || target.dying || target.invincible > 0 || target.hidden || target.p3) return;
   if (target.num && hasEffect(target, 'shield')) {  // shield item: ignore all incoming damage
     target.hitFlash = 80;
     return;
@@ -2068,6 +2088,7 @@ function handleKill(target, attackerKey) {
     if (ctrl && ctrl.controlling) endMindControl(ctrl, target.controlledBy);
   }
   if (target.mage) { mageDefeated(target); return; }
+  if (target.abyss) { abyssPhase3(target); return; }
   // A monster dies once. Blasts set off inside its own death (a bomber, a
   // chain reaction) could otherwise reach it again before it is marked dead.
   if (!target.num) { if (target.dying || target.dead) return; target.dying = true; }
@@ -2232,7 +2253,7 @@ function checkRoundEnd() {
   if (isSolo()) {
     if (p1 && p1.dead && p1.lives <= 0) {
       // The boss fight has no leaderboard: you win or you don't.
-      room.lastLeaderboard = room.gameMode === 'portal' ? []
+      room.lastLeaderboard = room.gameMode === 'portal' || room.gameMode === 'abyss' ? []
         : addLeaderboardEntry(room.playerNames.p1, room.wave.num, room.gameMode);
       room.gameState      = 'ROUND_OVER';
       room.roundOverTimer = 6000;
@@ -2468,6 +2489,7 @@ function tickRoom(dt) {
 
       if (m.boss) {
         if (m.mage) updateMage(m, nearest, dist, dx, dy, spd, factor, dt);
+        else if (m.abyss) updateAbyss(m, nearest, dist, dx, dy, spd, factor, dt);
         else updateGiant(m, nearest, dist, dx, dy, spd, factor, dt);
         applyPull(m, dt);
         clampToArena(m);
@@ -2533,7 +2555,7 @@ function tickRoom(dt) {
 
   // ── Wave spawner ── (the Portal Mage fight has no waves: he brings his own;
   // in the sandbox you spawn what you like)
-  if (room.gameMode !== 'pvp' && room.gameMode !== 'portal' && room.gameMode !== 'sandbox') {
+  if (room.gameMode !== 'pvp' && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'sandbox') {
     if (room.wave.betweenTimer > 0) {
       room.wave.betweenTimer -= dt;
       if (room.wave.betweenTimer <= 0) startWave(room.wave.num + 1);
@@ -2572,7 +2594,7 @@ function tickRoom(dt) {
 
   // ── Traps ── (in the Portal Mage fight only he lays them)
   room.trapSpawnTimer -= dt;
-  if (room.trapSpawnTimer <= 0 && room.gameMode !== 'portal' && room.gameMode !== 'sandbox') {
+  if (room.trapSpawnTimer <= 0 && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'sandbox') {
     if (room.traps.filter(t => !t.owner).length < MAX_TRAPS) spawnTrap();
     room.trapSpawnTimer = TRAP_SPAWN_MIN + Math.random() * (TRAP_SPAWN_MAX - TRAP_SPAWN_MIN);
   }
@@ -2787,6 +2809,7 @@ function homeProjectile(proj, dt) {
 }
 
 function updateProjectile(proj, factor, dt) {
+  if (proj.dead) return false;   // shot down
   const stepLen = Math.hypot(proj.dx, proj.dy) * factor;
   const subs = Math.max(1, Math.ceil(stepLen / 5));
   for (let i = 0; i < subs; i++) {
@@ -2847,7 +2870,17 @@ function advanceProjectile(proj, factor, dt) {
     return false;
   }
 
-  const hitBox = { x: proj.x - 4, y: proj.y - 4, w: 8, h: 8 };
+  const hr = proj.hitR || 4;
+  const hitBox = { x: proj.x - hr, y: proj.y - hr, w: hr * 2, h: hr * 2 };
+  // A player's shot knocks the Abyss's rapid-fire bolts out of the air.
+  if (proj.owner !== 'monster') {
+    const shot = room.projectiles.find(o => o.shootable && !o.dead && o.owner === 'monster' && Math.abs(o.x - proj.x) < 8 && Math.abs(o.y - proj.y) < 8);
+    if (shot) {
+      shot.dead = true;
+      room.particles.push({ type: 'shockwave', x: shot.x, y: shot.y, maxR: 12, timer: 220, max: 220, color: '#c89aff' });
+      if (!proj.pierce && !proj.isAoe) return false;
+    }
+  }
   for (const t of enemyTargets(proj.owner)) {
     if (t === proj.ignore || !aabb(hitBox, t)) continue;
     const tk = playerKeyOf(t);
@@ -2892,6 +2925,7 @@ function advanceProjectile(proj, factor, dt) {
       continue;
     }
     if (proj.ghostThrow) { ghostThrowHit(proj, t); return false; }
+    if (proj.noIframe && !t.num) t.invincible = 0;   // a rapid burst: every bolt counts
     applyDamage(t, proj.damage, proj.owner);
     onHitExtras(proj, t);
     return false;
@@ -2935,7 +2969,7 @@ function dotDamage(t, dmg) {
   if (t.armor) dmg = Math.max(1, Math.round(dmg * (1 - t.armor)));
   if (t.num && t.defense) dmg = Math.max(1, Math.round(dmg * (1 - t.defense)));
   if (t.num && t.vortexShield > 0) { bankVortex(t, dmg); return; }   // blocked, but banked
-  if (t.hidden) return;
+  if (t.hidden || t.p3) return;
   t.hp -= dmg;
   if (t.mage) mageFloor(t);
   t.hitFlash = Math.max(t.hitFlash || 0, 90);
@@ -3040,6 +3074,8 @@ function doAttack(p, pKey) {
   }
   // Any attack can swat an enemy's fire hand out of the air.
   swatFireHands(p, pKey, w.type === 'melee' ? w.range : 48);
+  swatShots(p, w.type === 'melee' ? w.range + 10 : 44);
+  if (w.infinityShot) { infinityAttack(p, pKey, w, dmgMult); return; }
 
   if (w.mindTrap) { placeMindTrap(p, pKey, w, dmgMult); return; }
   if (w.lightDash) { p.swingTimer = 0; bladeAttack(p, pKey, w, dmgMult); return; }
@@ -3207,6 +3243,17 @@ function doSuper(p, pKey) {
   p.superCooldown = su.cd;
   p.swingTimer = 300;
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
+  if (su.kind === 'abyssvolley') {
+    // All three crossbows shoot one spot: a bolt-spitting black hole opens there.
+    const t = nearestFoe(p, pKey);
+    const at = t ? { x: cx(t), y: cy(t) } : { x: cx(p) + (p.facing || 1) * 140, y: cy(p) };
+    const from = infinityMuzzles(p);
+    abyssConverge(pKey, from, at, Math.round(40 * dmgMult), {
+      r: 26, pullR: 170, dmg: Math.round(30 * dmgMult), life: 3200,
+      boom: Math.round(su.dmg * dmgMult), boomR: 120, spit: { every: 160, range: 260, dmg: Math.round(22 * dmgMult) } });
+    room.particles.push({ type: 'trapburst', x: at.x, y: at.y, maxR: 50, timer: 800, max: 800, color: WEAPON_COLORS.infinitybow, text: 'INFINITY' });
+    return;
+  }
   if (su.kind === 'lightspeed') {
     p.lightspeed = LIGHTSPEED_MS; p.lsMult = dmgMult; p.crashCd = 0; p.lsAcc = 0;
     room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 80, timer: 500, max: 500, color: WEAPON_COLORS.lightblade });
@@ -3836,8 +3883,14 @@ function updateFires(factor, dt) {
       if (f.kind === 'knife') explodeKnife(f);
       if (f.kind === 'runecast') placeMageTrap(f);
       if (f.kind === 'blackhole' && f.boom) collapseSingularity(f);
+      if (f.kind === 'abyssmark') openAbyssHole(f);
+      if (f.kind === 'abysscharge') launchAbyssOrb(f);
       return false;
     }
+    if (f.kind === 'abyssmark') return true;   // the bolts are still on their way
+    if (f.kind === 'abysscharge') return updateAbyssCharge(f);
+    if (f.kind === 'abyssblade') return updateAbyssBlade(f, factor);
+    if (f.kind === 'ibburst') return updateIbBurst(f);
     if (f.kind === 'runecast') return true;   // the warning circle, still drawing itself
     if (f.kind === 'meteor' || f.kind === 'knife') return true;   // still falling: only the warning shows
     if (f.kind === 'portal') return updatePortal(f, dt);
@@ -4255,6 +4308,324 @@ function placeMageTrap(f) {
   room.particles.push({ type: 'trapburst', x: f.x, y: f.y, maxR: def.size, timer: 260, max: 260, color: def.color });
 }
 
+// ─── The Abyss ────────────────────────────────────────────────────────────────
+// Four arms and two legs, 1.5x the Portal Mage's health, fought on his own.
+//   phase 1  four void crossbows:
+//            converge  all four shoot one spot; where the bolts meet, a small,
+//                      strong black hole opens
+//            rapid     a stream of spitter bolts (any attack shoots them down)
+//            orb       a massive purple orb gathers, then is sent (bursts on impact)
+//   phase 2  (below half) the crossbows become scythes, two more float behind
+//            him, and the old attacks are gone:
+//            spinfling all six scythes whirl round him, then are flung out
+//            bigslash  a wind-up, then all six scythes slash, growing huge
+//   phase 3  (at 0 health) he rises to the top of the map, immortal, and
+//            unleashes black holes, meteors and spinning scythes. Survive
+//            ABYSS_P3_MS and he is gone.
+const ABYSS_HP = Math.round(MAGE_HP * 1.5);
+const ABYSS_PHASE2 = 0.5;
+const ABYSS_P3_MS = 10000;
+const ABYSS_REWARD_COINS = 100000, ABYSS_REWARD_XP = 75000;
+const ABYSS_CONVERGE_MS = 700;
+const ABYSS_PLAYER_CHARGE_MS = 650, ABYSS_CHARGE_MS = 1500;
+const ABYSS_ORB_DMG = 75, ABYSS_ORB_AOE = 85;
+const ABYSS_RAPID_SHOTS = 22, ABYSS_RAPID_EVERY = 90, ABYSS_RAPID_DMG = 9;
+const ABYSS_SPIN_MS = 1500, ABYSS_SPIN_R = 62, ABYSS_FLING_DMG = 28;
+const ABYSS_SLASH_WIND = 650, ABYSS_SLASH_MS = 950, ABYSS_SLASH_R = 165, ABYSS_SLASH_DMG = 52;
+
+function startAbyssFight() {
+  room.wave = { num: 1, monstersLeft: 1, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 };
+  room.waveHpMult = 1; room.waveSpeedMult = 1;
+  spawnMonster('abyss');
+  const m = room.monsters[room.monsters.length - 1];
+  m.hp = m.maxHp = ABYSS_HP;
+  m.x = CANVAS_W / 2 - m.w / 2; m.y = ARENA_Y + 30;
+  Object.assign(m, { abyss: true, phase: 1, act: null, actT: 0, actCd: 2000, lastAct: null, orbit: 1,
+                     p3: false, p3T: 0, chaos: null, rapid: 0, rapidT: 0 });
+  room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
+                        text: 'THE ABYSS AWAKENS', color: '#b07aff', timer: 3200, max: 3200 });
+}
+
+// Where his four hands are (upper pair, lower pair).
+function abyssHands(m) {
+  const c = { x: cx(m), y: cy(m) };
+  return [[-0.62, -0.18], [0.62, -0.18], [-0.7, 0.14], [0.7, 0.14]].map(([ox, oy]) => ({ x: c.x + ox * m.w, y: c.y + oy * m.h }));
+}
+
+// A void bolt (the boss's crossbows, and the Crossbows of Infinity).
+function abyssBolt(owner, x, y, a, speed, dmg, range, extra) {
+  room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * speed, dy: Math.sin(a) * speed, damage: dmg, owner,
+    traveled: 0, maxRange: range, weaponId: owner === 'monster' ? 'abyssbolt' : 'infinitybow', isAoe: false, aoeRadius: 0,
+    pierce: false, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: null, ...(extra || {}) });
+}
+
+// Bolts from every origin, timed to meet on one spot; a black hole opens there.
+function abyssConverge(owner, from, at, boltDmg, hole) {
+  const frames = ABYSS_CONVERGE_MS / 16.67;
+  for (const o of from) {
+    const d = Math.hypot(at.x - o.x, at.y - o.y) || 1;
+    abyssBolt(owner, o.x, o.y, Math.atan2(at.y - o.y, at.x - o.x), d / frames, boltDmg, d, { hitR: 5 });
+  }
+  room.fires.push({ id: nextId(), kind: 'abyssmark', owner, x: at.x, y: at.y, r: hole.r, t: 0, life: ABYSS_CONVERGE_MS, hole });
+}
+function openAbyssHole(f) {
+  const h = f.hole;
+  room.fires.push({ id: nextId(), kind: 'blackhole', owner: f.owner, x: f.x, y: f.y, r: h.r, t: 0, life: h.life, tick: 0,
+                    dmg: h.dmg, pullR: h.pullR, ...(h.boom ? { boom: h.boom, boomR: h.boomR } : {}), ...(h.spit ? { spit: h.spit, spitT: 0 } : {}) });
+  room.particles.push({ type: 'shockwave', x: f.x, y: f.y, maxR: 46, timer: 420, max: 420, color: '#b07aff' });
+}
+
+// The orb gathering: it rides its caster, growing, then is sent at the nearest foe.
+function updateAbyssCharge(f) {
+  const o = f.mon ? room.monsters.find(m => m.id === f.mon && !m.dead) : room.players[f.owner];
+  if (!o || o.dead) return false;
+  const k = f.t / f.life;
+  f.r = 4 + (f.maxR - 4) * k;
+  const lift = f.mon ? -o.h * 0.75 : -16;
+  f.x = cx(o); f.y = cy(o) + lift;
+  return true;
+}
+function launchAbyssOrb(f) {
+  const foes = enemyTargets(f.owner);
+  let best = null, bd = Infinity;
+  for (const t of foes) { const d = Math.hypot(cx(t) - f.x, cy(t) - f.y); if (d < bd) { bd = d; best = t; } }
+  const o = f.mon ? null : room.players[f.owner];
+  const a = best ? Math.atan2(cy(best) - f.y, cx(best) - f.x) : (o && o.facing < 0 ? Math.PI : 0);
+  room.projectiles.push({ id: nextId(), x: f.x, y: f.y, dx: Math.cos(a) * f.speed, dy: Math.sin(a) * f.speed, damage: f.dmg,
+    owner: f.owner, traveled: 0, maxRange: 1400, weaponId: 'abyssorb', isAoe: true, aoeRadius: f.aoe, hitR: f.maxR,
+    pierce: false, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: null, special: !f.mon });
+  room.particles.push({ type: 'shockwave', x: f.x, y: f.y, maxR: 30, timer: 300, max: 300, color: '#b07aff' });
+}
+
+// Phase 3's scythes: spinning across the field, bouncing off the walls.
+function updateAbyssBlade(f, factor) {
+  if (!room.monsters.some(m => m.abyss && m.p3 && !m.dead)) return false;
+  f.x += f.vx * factor; f.y += f.vy * factor;
+  if (f.x < ARENA_X + f.r || f.x > ARENA_X + ARENA_W - f.r) { f.vx = -f.vx; f.x = Math.max(ARENA_X + f.r, Math.min(ARENA_X + ARENA_W - f.r, f.x)); }
+  if (f.y < ARENA_Y + f.r || f.y > ARENA_Y + ARENA_H - f.r) { f.vy = -f.vy; f.y = Math.max(ARENA_Y + f.r, Math.min(ARENA_Y + ARENA_H - f.r, f.y)); }
+  f.a = (f.a || 0) + 0.35 * factor;
+  for (const t of enemyTargets('monster')) {
+    if (Math.hypot(cx(t) - f.x, cy(t) - f.y) <= f.r + t.w / 2) applyDamage(t, f.dmg, 'monster');
+  }
+  return true;
+}
+
+// Crossbows of Infinity: a quick burst, one bolt from each crossbow in turn.
+function infinityMuzzles(p) {
+  const d = p.facing < 0 ? -1 : 1;
+  return [{ x: cx(p) + d * 10, y: cy(p) + 2 }, { x: cx(p) + d * 2, y: cy(p) - 19 }, { x: cx(p), y: cy(p) + 15 }];   // held, upper, lower (as drawn)
+}
+function infinityAttack(p, pKey, w, dmgMult) {
+  const aim = nearestTargetAngle(p, pKey);
+  p.facing = Math.cos(aim) < 0 ? -1 : 1;
+  p.ibCount = (p.ibCount || 0) + 1;
+  const double = p.passive === 'infinitybow' && p.ibCount % 5 === 0;   // ENDLESS VOLLEY
+  const n = (3 + (w.multi || 0)) * (double ? 2 : 1);
+  const shots = [];
+  for (let i = 0; i < n; i++) shots.push(i * 55);
+  room.fires.push({ id: nextId(), kind: 'ibburst', owner: pKey, x: cx(p), y: cy(p), r: 0, t: 0, life: shots[n - 1] + 30,
+                    shots, shot: 0, dmg: Math.round(w.damage * dmgMult), speed: w.projSpeed || 7, range: w.range,
+                    upg: p.upgrades?.[w.id] || null });
+}
+function updateIbBurst(f) {
+  const p = room.players[f.owner];
+  if (!p || p.dead) return false;
+  while (f.shot < f.shots.length && f.t >= f.shots[f.shot]) {
+    const from = infinityMuzzles(p)[f.shot % 3];
+    const a = nearestTargetAngle(p, f.owner) + (Math.random() - 0.5) * 0.08;
+    abyssBolt(f.owner, from.x, from.y, a, f.speed, f.dmg, f.range, { upg: f.upg, hitR: 4, noIframe: true });
+    f.shot++;
+  }
+  return true;
+}
+
+// Any attack knocks the rapid-fire bolts that are close enough out of the air.
+function swatShots(p, range) {
+  let hit = 0;
+  for (const pr of room.projectiles) {
+    if (!pr.shootable || pr.dead || pr.owner !== 'monster') continue;
+    if (Math.hypot(pr.x - cx(p), pr.y - cy(p)) > range) continue;
+    pr.dead = true; hit++;
+    room.particles.push({ type: 'shockwave', x: pr.x, y: pr.y, maxR: 12, timer: 220, max: 220, color: '#c89aff' });
+  }
+  return hit;
+}
+
+function updateAbyss(m, target, dist, dx, dy, spd, factor, dt) {
+  // ── Phase 3: immortal at the top of the map; survive the chaos ──
+  if (m.p3) {
+    m.hp = 1;
+    const tx = CANVAS_W / 2 - m.w / 2, ty = ARENA_Y + ARENA_H * 0.2;   // high up, but clear of the weapon rack
+    m.x += (tx - m.x) * Math.min(1, 0.06 * factor); m.y += (ty - m.y) * Math.min(1, 0.06 * factor);
+    m.p3T -= dt;
+    const c = m.chaos;
+    c.hole -= dt; c.meteor -= dt; c.blade -= dt;
+    if (c.hole <= 0) {
+      c.hole = 900;
+      const near = Math.random() < 0.5 && target;
+      const at = near ? arenaClamp(cx(target) + (Math.random() - 0.5) * 140, cy(target) + (Math.random() - 0.5) * 140, 30)
+                      : arenaClamp(ARENA_X + Math.random() * ARENA_W, ARENA_Y + 60 + Math.random() * (ARENA_H - 60), 30);
+      room.fires.push({ id: nextId(), kind: 'blackhole', owner: 'monster', x: at.x, y: at.y, r: 16, t: 0, life: 2300, tick: 0, dmg: 7, pullR: 115 });
+    }
+    if (c.meteor <= 0) {
+      c.meteor = 420;
+      room.fires.push({ id: nextId(), kind: 'meteor', owner: 'monster', x: cx(m), y: cy(m), r: 38, t: 0, life: METEOR_FALL_MS,
+                        seek: Math.random() < 0.6, placed: false, pvp: 24, base: 0, pct: 0 });
+    }
+    if (c.blade <= 0 && room.fires.filter(f => f.kind === 'abyssblade').length < 7) {
+      c.blade = 1100;
+      const a = Math.PI * (0.15 + Math.random() * 0.7);
+      room.fires.push({ id: nextId(), kind: 'abyssblade', owner: 'monster', x: cx(m), y: cy(m) + 20, r: 11, t: 0, life: ABYSS_P3_MS + 5000,
+                        vx: Math.cos(a) * 3.1 * (Math.random() < 0.5 ? -1 : 1), vy: Math.sin(a) * 3.1, dmg: 15, a: 0 });
+    }
+    if (m.p3T <= 0) abyssDefeated(m);
+    return;
+  }
+
+  // ── Half health: crossbows become scythes ──
+  if (m.phase === 1 && m.hp <= m.maxHp * ABYSS_PHASE2) {
+    m.phase = 2; m.act = null; m.actT = 0; m.rapid = 0; m.actCd = 1400; m.invincible = 1200;
+    room.projectiles = room.projectiles.filter(pr => !(pr.owner === 'monster' && pr.shootable));
+    room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 160, timer: 800, max: 800, color: '#b07aff' });
+    room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
+                          text: 'PHASE 2 - THE CROSSBOWS BECOME SCYTHES', color: '#e0a0ff', timer: 3000, max: 3000 });
+  }
+
+  // Rapid fire runs on its own clock (he can strafe while shooting).
+  if (m.rapid > 0) {
+    m.rapidT -= dt;
+    while (m.rapid > 0 && m.rapidT <= 0) {
+      m.rapidT += ABYSS_RAPID_EVERY;
+      const hand = abyssHands(m)[m.rapid % 4];
+      const a = Math.atan2(cy(target) - hand.y, cx(target) - hand.x) + (Math.random() - 0.5) * 0.22;
+      room.projectiles.push({ id: nextId(), x: hand.x, y: hand.y, dx: Math.cos(a) * 4.4, dy: Math.sin(a) * 4.4, damage: ABYSS_RAPID_DMG,
+        owner: 'monster', traveled: 0, maxRange: 620, weaponId: 'spit', isAoe: false, aoeRadius: 0, pierce: false, grapple: false,
+        boomerang: false, returning: false, life: 0, hitTargets: null, shootable: true });
+      m.rapid--;
+    }
+    if (m.rapid <= 0) m.act = null;
+  }
+
+  // An attack in progress.
+  if (m.act === 'spin') {
+    m.actT += dt;
+    // The scythes whirl round him: touching the ring hurts.
+    for (const t of enemyTargets('monster')) {
+      const d = Math.hypot(cx(t) - cx(m), cy(t) - cy(m));
+      if (Math.abs(d - ABYSS_SPIN_R) < 16 + t.w / 2) applyDamage(t, 14, 'monster');
+    }
+    if (m.actT >= ABYSS_SPIN_MS) {
+      const a0 = Math.atan2(cy(target) - cy(m), cx(target) - cx(m));
+      for (let i = 0; i < 6; i++) {
+        const a = a0 + i * Math.PI / 3;
+        room.projectiles.push({ id: nextId(), x: cx(m) + Math.cos(a) * ABYSS_SPIN_R, y: cy(m) + Math.sin(a) * ABYSS_SPIN_R,
+          dx: Math.cos(a) * 6.2, dy: Math.sin(a) * 6.2, damage: ABYSS_FLING_DMG, owner: 'monster', traveled: 0, maxRange: 700,
+          weaponId: 'abyssscythe', isAoe: false, aoeRadius: 0, pierce: true, grapple: false, boomerang: false, returning: false,
+          life: 0, hitTargets: new Set(), hitR: 8 });
+      }
+      room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 90, timer: 400, max: 400, color: '#e0a0ff' });
+      m.act = null; m.actCd = 1700;
+    }
+    return;
+  }
+  if (m.act === 'slash') {
+    m.actT += dt;
+    if (!m.slashHit && m.actT >= ABYSS_SLASH_WIND) {
+      m.slashHit = true;
+      for (const t of enemyTargets('monster')) {
+        const d = Math.hypot(cx(t) - cx(m), cy(t) - cy(m));
+        if (d > ABYSS_SLASH_R + t.w / 2) continue;
+        let diff = Math.abs(Math.atan2(cy(t) - cy(m), cx(t) - cx(m)) - m.slashA) % (Math.PI * 2);
+        if (diff > Math.PI) diff = Math.PI * 2 - diff;
+        if (diff > 1.45 && d > 30) continue;
+        if (t.parryTimer > 0) { applyDamage(m, Math.round(ABYSS_SLASH_DMG * reflectOf(t)), playerKeyOf(t)); spawnParrySpark(cx(t), cy(t)); continue; }
+        applyDamage(t, ABYSS_SLASH_DMG, 'monster');
+        const k = Math.hypot(cx(t) - cx(m), cy(t) - cy(m)) || 1;
+        t.x += (cx(t) - cx(m)) / k * 26; t.y += (cy(t) - cy(m)) / k * 26; clampToArena(t);
+      }
+      room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: ABYSS_SLASH_R, timer: 380, max: 380, color: '#e0a0ff' });
+    }
+    if (m.actT >= ABYSS_SLASH_MS) { m.act = null; m.actCd = 1500; }
+    return;
+  }
+  if (m.act === 'converge' || m.act === 'orb') {
+    m.actT += dt;
+    if (m.actT >= (m.act === 'orb' ? ABYSS_CHARGE_MS + 300 : ABYSS_CONVERGE_MS + 300)) { m.act = null; m.actCd = 1800; }
+    return;   // planted while aiming
+  }
+
+  // ── Moving ──
+  if (m.phase === 1) {
+    // Keeps his distance, circling.
+    let vx = -dy / dist * 0.6 * m.orbit, vy = dx / dist * 0.6 * m.orbit;
+    if (dist > 230) { vx += dx / dist; vy += dy / dist; }
+    else if (dist < 150) { vx -= dx / dist; vy -= dy / dist; }
+    m.x += vx * spd * factor; m.y += vy * spd * factor;
+    if (Math.random() < 0.006) m.orbit = -m.orbit;
+  } else if (dist > 75) {
+    // Phase 2: he comes for you.
+    m.x += dx / dist * spd * 1.25 * factor; m.y += dy / dist * spd * 1.25 * factor;
+  }
+
+  if (m.actCd > 0) { m.actCd -= dt; return; }
+  if (m.act) return;
+  const pool = m.phase === 1 ? ['converge', 'rapid', 'orb'] : ['spin', 'slash', 'slash'];
+  let pick;
+  do { pick = pool[Math.floor(Math.random() * pool.length)]; } while (pick === m.lastAct && Math.random() < 0.8);
+  m.lastAct = pick; m.act = pick; m.actT = 0;
+  if (pick === 'converge') {
+    abyssConverge('monster', abyssHands(m), { x: cx(target), y: cy(target) }, 16,
+                  { r: 14, pullR: 135, dmg: 12, life: 2600, boom: 45, boomR: 70 });
+  } else if (pick === 'rapid') {
+    m.rapid = ABYSS_RAPID_SHOTS; m.rapidT = 250; m.actCd = 0;
+  } else if (pick === 'orb') {
+    room.fires.push({ id: nextId(), kind: 'abysscharge', owner: 'monster', mon: m.id, x: cx(m), y: cy(m) - m.h * 0.75, r: 4, t: 0,
+                      life: ABYSS_CHARGE_MS, dmg: ABYSS_ORB_DMG, aoe: ABYSS_ORB_AOE, maxR: 22, speed: 2.6 });
+  } else if (pick === 'slash') {
+    m.slashA = Math.atan2(cy(target) - cy(m), cx(target) - cx(m)); m.slashHit = false;
+  }
+}
+
+// Brought to 0: he does not fall — he rises, immortal, for the last stand.
+function abyssPhase3(m) {
+  if (m.p3 || m.dead) return;
+  m.p3 = true; m.hp = 1; m.phase = 3;
+  m.act = null; m.rapid = 0; m.p3T = ABYSS_P3_MS;
+  m.chaos = { hole: 600, meteor: 300, blade: 200 };
+  room.projectiles = room.projectiles.filter(pr => pr.owner !== 'monster');
+  room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 240, timer: 1000, max: 1000, color: '#7a2aff' });
+  room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
+                        text: 'FINAL PHASE - SURVIVE 10 SECONDS!', color: '#ff7ad8', timer: 3000, max: 3000 });
+}
+
+function abyssDefeated(m) {
+  if (m.dead) return;
+  m.dead = true; m.p3 = false;
+  for (const o of room.monsters) {
+    o.dead = true;
+    room.particles.push({ type: 'teleport', x: cx(o), y: cy(o), timer: 420, max: 420, color: '#b07aff' });
+  }
+  room.monsters = [];
+  room.wave.monstersLeft = 0;
+  room.projectiles = room.projectiles.filter(pr => pr.owner !== 'monster');
+  room.fires = room.fires.filter(f => f.owner !== 'monster');
+  room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 260, timer: 1000, max: 1000, color: '#b07aff' });
+  room.particles.push({ type: 'waveclear', x: CANVAS_W / 2, y: CANVAS_H / 2 - 10, text: 'THE ABYSS IS DEFEATED!', timer: 4000 });
+  if (room.gameMode === 'sandbox') return;
+  for (const key of KEYS) {
+    const p = room.players[key];
+    if (!p) continue;
+    addCoins(key, ABYSS_REWARD_COINS);
+    creditXp(key, ABYSS_REWARD_XP);
+    room.particles.push({ type: 'coin', x: cx(p), y: p.y - 10, text: '+' + ABYSS_REWARD_COINS.toLocaleString() + ' COINS', timer: 3000, max: 3000 });
+    room.particles.push({ type: 'xp', x: cx(p), y: p.y - 22, text: '+' + ABYSS_REWARD_XP.toLocaleString() + ' XP', timer: 3000 });
+    grantBossWeapon(key, 'infinitybow');
+  }
+  room.victory = true;
+  room.gameState = 'ROUND_OVER';
+  room.roundOverTimer = 8000;
+}
+
 // Victory: everything he summoned vanishes and the reward is paid out.
 function mageDefeated(m) {
   if (m.dead) return;
@@ -4379,6 +4750,11 @@ function sandboxAction(key, msg) {
         startMageFight();
         break;
       }
+      if (type === 'abyss') {
+        if (room.monsters.some(o => o.abyss)) break;
+        startAbyssFight();
+        break;
+      }
       spawnMonster(type);
     }
   } else if (act === 'item') {
@@ -4479,6 +4855,11 @@ function adminSkipWave() {
   if (room.gameMode === 'portal') {
     const m = room.monsters.find(o => o.mage);
     if (m) mageDefeated(m);
+    return;
+  }
+  if (room.gameMode === 'abyss') {
+    const m = room.monsters.find(o => o.abyss);
+    if (m) abyssDefeated(m);
     return;
   }
   for (const m of room.monsters) {
@@ -4653,7 +5034,7 @@ function updateMindBeams(f, dt) {
 function startMindControl(p, pKey) {
   let best = null;
   for (const t of enemyTargets(pKey)) {
-    if (t.controlledBy || t.mindControlledBy || t.ally) continue;
+    if (t.controlledBy || t.mindControlledBy || t.ally || t.abyss) continue;
     if (!best || t.hp > best.hp) best = t;
   }
   if (!best) return false;
@@ -5563,6 +5944,16 @@ function abilityBlackhole(p, pKey) {
 }
 
 function updateBlackhole(f, factor, dt) {
+  if (f.spit) {
+    f.spitT = (f.spitT || 0) - dt;
+    if (f.spitT <= 0) {
+      f.spitT = f.spit.every;
+      const foes = enemyTargets(f.owner).filter(t => Math.hypot(cx(t) - f.x, cy(t) - f.y) < f.spit.range);
+      const t = foes.length ? foes[Math.floor(Math.random() * foes.length)] : null;
+      const a = t ? Math.atan2(cy(t) - f.y, cx(t) - f.x) : Math.random() * Math.PI * 2;
+      abyssBolt(f.owner, f.x, f.y, a, 6, f.spit.dmg, 260);
+    }
+  }
   f.tick -= dt;
   const hurt = f.tick <= 0;
   if (hurt) f.tick = HOLE_TICK;
@@ -5718,6 +6109,12 @@ function doSpecial(p, pKey) {
 
   if (sp.kind === 'firehand') {
     castFireHand(p, pKey, sp, dmgMult);
+    return;
+  }
+  if (sp.kind === 'abyssorb') {
+    // The Abyss's orb: it gathers at your crossbow, then flies.
+    room.fires.push({ id: nextId(), kind: 'abysscharge', owner: pKey, x: px, y: py, r: 4, t: 0, life: ABYSS_PLAYER_CHARGE_MS,
+                      dmg: spDmg, aoe: sp.aoe, maxR: 12, speed: 4 });
     return;
   }
   if (sp.kind === 'lightdashes') {
@@ -6028,7 +6425,10 @@ function buildStateMsg(playerNum) {
                   ...(m.pupRush ? { ldash: { a: Math.round(m.pupRush.a * 100) / 100, wind: false, n: m.pupRush.n || 1 } } : {}),
                   ...(m.raiseT > 0 && m.raiseAt ? { raise: m.raiseAt.map(r => ({ x: r1(r.x), y: r1(r.y) })) } : {}),
                   ...(m.boss ? { boss: true, wind: m.windup > 0 ? m.wind : null, windup: Math.max(0, Math.round(m.windup)), stun: Math.max(0, Math.round(m.stun)) } : {}),
-                  ...(m.mage ? { mage: true, hidden: !!m.hidden, phase: m.phase, cast: m.tpT > 0 ? 'teleport' : m.castT > 0 ? m.cast : null } : {}) })),
+                  ...(m.mage ? { mage: true, hidden: !!m.hidden, phase: m.phase, cast: m.tpT > 0 ? 'teleport' : m.castT > 0 ? m.cast : null } : {}),
+                  ...(m.abyss ? { abyss: true, phase: m.phase, act: m.rapid > 0 ? 'rapid' : m.act, actT: Math.round(m.actT || 0),
+                                  ...(m.act === 'slash' ? { sa: Math.round(m.slashA * 100) / 100 } : {}),
+                                  ...(m.p3 ? { p3: Math.max(0, Math.ceil(m.p3T / 1000)) } : {}) } : {}) })),
     allies:      room.allies.map(a => ({ id: a.id, type: a.type, owner: a.owner, x: r1(a.x), y: r1(a.y), w: a.w, h: a.h,
                   hp: a.hp, maxHp: a.maxHp, hitFlash: a.hitFlash, burning: (a.burnTimer || 0) > 0,
                   face: a.face, swing: a.swing > 0 ? Math.round(a.swing) : 0, fade: a.life < 1500 })),
@@ -6624,7 +7024,7 @@ app.post('/api/buy_weapon', (req, res) => {
   const weaponId = sanitizeText(req.body?.weaponId, 24);
   const def = WEAPON_BY_ID[weaponId];
   if (!def || !def.shopOnly) return res.status(400).json({ error: 'That weapon is not for sale.' });
-  if (def.bossReward) return res.status(400).json({ error: 'Only won by defeating the Portal Mage.' });
+  if (def.bossReward) return res.status(400).json({ error: def.id === 'infinitybow' ? 'Only won by defeating the Abyss.' : 'Only won by defeating the Portal Mage.' });
   if (def.needAll) {
     const prof0 = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });
     const left = WEAPONS.filter(w => w.id !== weaponId && !prof0.weapons.includes(w.id)).length;
@@ -6785,8 +7185,15 @@ wss.on('connection', (ws) => {
         return;
       }
       if (msg.type === 'join' && !ws.room) {
-        const mode = ['pvp', 'coop', 'waves', 'extreme', 'portal', 'sandbox', 'bot', 'create', 'joinroom'].includes(msg.mode) ? msg.mode : 'pvp';
+        const mode = ['pvp', 'coop', 'waves', 'extreme', 'portal', 'abyss', 'sandbox', 'bot', 'create', 'joinroom'].includes(msg.mode) ? msg.mode : 'pvp';
         const size = MAP_SIZES[msg.size] ? msg.size : 'medium';
+        // EXTREME and the PORTAL MAGE open up with XP (admins skip the wait).
+        if (MODE_XP[mode]) {
+          const pw = sanitizeText(msg.password, 32);
+          const saved = pw ? (isAdminPw(pw) ? Infinity : (progress().players[pw] || 0)) : 0;
+          const xp = Math.max(saved, Math.floor(Number(msg.localXp) || 0));
+          if (xp < MODE_XP[mode]) { ws.send(JSON.stringify({ type: 'mode_locked', mode, need: MODE_XP[mode], xp: Number.isFinite(xp) ? xp : 0 })); return; }
+        }
         reapRooms();
         let seat = null;
         if (mode === 'joinroom') {

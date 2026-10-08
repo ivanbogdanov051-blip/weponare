@@ -899,3 +899,44 @@ body {
   .tut-title { font-size: 13px; margin: 3px 0 2px; }
   .tut-text { font-size: 10px; line-height: 1.35; }
 }
+
+/* ── Simplified main menu ── */
+.menu-box { position: relative; }
+.gear-btn {
+  position: absolute; top: 8px; right: 8px; width: 34px; height: 34px; padding: 0;
+  font-size: 22px; line-height: 30px; cursor: pointer; color: #c8c8e8;
+  background: #12122a; border: 2px solid #3a3a5a; transition: transform 0.25s, color 0.15s, border-color 0.15s;
+}
+.gear-btn:hover { color: #fff; border-color: var(--c-accent); transform: rotate(60deg); }
+.menu-sec {
+  display: flex; align-items: center; gap: 8px; margin: 14px 0 6px;
+  font-size: 11px; letter-spacing: 3px; color: #8a8ab0; font-weight: bold;
+}
+.menu-sec::before, .menu-sec::after { content: ''; flex: 1; height: 1px; background: #2e2e4e; }
+.menu-box .mode-row { margin: 0 0 6px; }
+.menu-box .mode-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; flex: 1; }
+.menu-box .mode-btn small { font-size: 8px; letter-spacing: 1px; opacity: 0.6; font-weight: normal; text-transform: uppercase; }
+.mode-btn.btn-cust { border-color: #4a4a7a; color: #c8c8f0; }
+.mode-btn.btn-cust:hover { border-color: var(--c-accent); color: #fff; }
+.mode-btn.locked { filter: grayscale(1); opacity: 0.55; border-style: dashed; }
+.mode-btn.locked small { opacity: 0.9; color: #ffcc66; }
+.lock-msg { min-height: 0; font-size: 10px; letter-spacing: 1px; color: #ffcc66; }
+.lock-msg:empty { display: none; }
+.lock-msg.flash { animation: lockflash 0.5s; }
+@keyframes lockflash { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+.saved-info { margin: -6px 0 4px; }
+
+/* ── Settings ── */
+.settings-box { min-width: min(360px, 92vw); }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid #24243c; flex-wrap: wrap; }
+.set-label { font-size: 12px; letter-spacing: 2px; color: #c8c8dc; }
+.set-group { display: flex; gap: 4px; }
+.set-btn { font-family: inherit; font-size: 11px; letter-spacing: 1px; cursor: pointer; padding: 6px 10px;
+  background: #0a0a18; color: #e8e8e8; border: 2px solid #3a3a5a; min-width: 64px; }
+.set-btn:hover { border-color: var(--c-accent); }
+.set-btn.on { border-color: #7aff9a; color: #7aff9a; }
+.set-links { justify-content: center; border-bottom: none; padding-top: 14px; }
+.set-links .mode-btn { flex: 1; }
+
+.mode-btn.btn-abyss { border-color: #7a3aff; color: #d8b8ff; background: linear-gradient(180deg, #1a0a2e, #0a0414); box-shadow: 0 0 8px rgba(122, 58, 255, 0.35); }
+.mode-btn.btn-abyss:hover { border-color: #b07aff; color: #fff; }

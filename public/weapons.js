@@ -674,6 +674,36 @@ const WEAPON_ART = {
     k.line(20, -2, 23.5, -4, 0.7, wc); k.line(20, 2, 23.5, 4, 0.7, '#e8fcff');
   }},
 
+  // The Abyss's crossbow (and the Crossbows of Infinity): a black stock bound in
+  // violet, a prod of void glass, a glowing string and a bolt of pure dark.
+  infinitybow: { draw(k, wc) {
+    const cxA = 3, R = 12, SPAN = Math.PI * 0.46;
+    const tipX = cxA + Math.cos(SPAN) * R, tipY = Math.sin(SPAN) * R;
+    k.glow(10, 0, 12, wc, 0.35);
+    k.r(-4, -2.4, 18, 4.8, '#140a22');                   // stock
+    k.r(-4, -2.4, 18, 1.2, '#3a1f5e');
+    for (const x of [0, 5, 10]) k.r(x, -2.6, 1.2, 5.2, wc);   // violet bands
+    k.poly([[-4, 2.4], [0, 2.4], [-1.4, 7.6], [-4.8, 7.6]], '#0c0616');   // grip
+    k.ring(cxA, 0, R, 2.8, '#2a1146', -SPAN, SPAN);      // prod
+    k.ring(cxA, 0, R - 0.9, 1.1, wc, -SPAN * 0.95, SPAN * 0.95);
+    k.line(tipX, -tipY, tipX, tipY, 0.9, '#e0c8ff');     // glowing string
+    k.r(tipX - 1, -1, 16, 2, '#0c0616');                 // groove
+    k.r(tipX, -0.6, 13, 1.2, '#2a1146');                 // bolt
+    k.poly([[16.5, -2.4], [22, 0], [16.5, 2.4]], '#12051f');
+    k.poly([[16.5, -2.4], [22, 0], [17.5, 0]], wc);
+    k.circ(3, 0, 1.6, '#e0c8ff');                        // void gem
+    k.r(23.5, -3, 1, 1, '#e0c8ff'); k.r(24.5, 2, 0.8, 0.8, wc);
+  }},
+  m_abyssbow: { draw(k, wc) {
+    k.r(-3, -2.2, 16, 4.4, '#140a22');
+    k.r(-3, -2.2, 16, 1, '#3a1f5e');
+    k.ring(3, 0, 11, 2.6, '#2a1146', -1.4, 1.4);
+    k.ring(3, 0, 10, 1, wc, -1.35, 1.35);
+    k.line(4.8, -10.8, 4.8, 10.8, 0.8, '#e0c8ff');
+    k.r(4, -0.6, 12, 1.2, '#2a1146');
+    k.poly([[15, -2.4], [20, 0], [15, 2.4]], wc);
+    k.glow(19, 0, 6, wc, 0.4);
+  }},
   portalwand: { draw(k, wc) {
     // The Portal Mage's wand: a dark rune-cut shaft bound in gold, twin gold
     // prongs cradling a swirling portal, and a flicker of his fire inside it.

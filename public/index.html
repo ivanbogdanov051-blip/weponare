@@ -37,42 +37,69 @@
 
   <!-- Start / name + mode selection -->
   <div id="startScreen" class="overlay active">
-    <div class="pixel-box">
+    <div class="pixel-box menu-box">
+      <button class="gear-btn" onclick="openSettings()" title="Settings" aria-label="Settings">&#9881;</button>
       <div class="title-text">WEPONARE</div>
       <div class="subtitle">ONLINE BATTLE</div>
       <div id="inviteBanner" class="invite-banner" style="display:none"></div>
       <input type="text" id="nameInput" class="name-input" placeholder="YOUR NAME" maxlength="12" autocomplete="off" spellcheck="false">
       <input type="password" id="passInput" class="name-input pass-input" placeholder="PASSWORD (saves progress)" maxlength="32" autocomplete="new-password" spellcheck="false">
-      <div class="map-row">
-        <span class="map-label">MAP SIZE</span>
-        <button class="map-btn" data-size="small" onclick="pickMapSize('small')">SMALL</button>
-        <button class="map-btn" data-size="medium" onclick="pickMapSize('medium')">MEDIUM</button>
-        <button class="map-btn" data-size="big" onclick="pickMapSize('big')">BIG</button>
+      <div id="savedInfo" class="saved-info"></div>
+
+      <div class="menu-sec"><span>&#9876; MULTIPLAYER</span></div>
+      <div class="mode-row">
+        <button class="mode-btn btn-pvp" onclick="joinGame('pvp')">PvP<small>1 vs 1</small></button>
+        <button class="mode-btn btn-coop" onclick="joinGame('coop')">CO-OP<small>2 vs monsters</small></button>
       </div>
       <div class="mode-row">
-        <button class="mode-btn btn-pvp"  onclick="joinGame('pvp')">&#9876; PvP</button>
-        <button class="mode-btn btn-coop" onclick="joinGame('coop')">&#9760; CO-OP</button>
-        <button class="mode-btn btn-waves" onclick="joinGame('waves')">&#9670; WAVES</button>
-        <button class="mode-btn btn-extreme" onclick="joinGame('extreme')">&#9888; EXTREME &#9888;</button>
+        <button class="mode-btn btn-room" onclick="openCreateRoom()">CREATE ROOM<small>2-4 friends</small></button>
+        <button class="mode-btn btn-room" onclick="openRoomBrowser()">JOIN ROOM<small>see open rooms</small></button>
+      </div>
+
+      <div class="menu-sec"><span>&#9673; SOLO</span></div>
+      <div class="mode-row">
+        <button class="mode-btn btn-waves" onclick="joinGame('waves')">WAVES<small>survive</small></button>
+        <button class="mode-btn btn-bot" onclick="openBotPicker()">BOT BATTLE<small>vs a bot</small></button>
+        <button class="mode-btn btn-sandbox" onclick="joinGame('sandbox')">SANDBOX<small>practice</small></button>
       </div>
       <div class="mode-row">
-        <button class="mode-btn btn-room" onclick="openCreateRoom()">&#10010; CREATE ROOM</button>
-        <button class="mode-btn btn-room" onclick="openRoomBrowser()">&#9776; JOIN A ROOM</button>
+        <button class="mode-btn btn-extreme" id="modeExtreme" onclick="playLocked('extreme')">EXTREME<small>hardest waves</small></button>
+        <button class="mode-btn btn-portal" id="modePortal" onclick="playLocked('portal')">PORTAL MAGE<small>boss fight</small></button>
+        <button class="mode-btn btn-abyss" id="modeAbyss" onclick="playLocked('abyss')">THE ABYSS<small>final boss</small></button>
       </div>
-      <button class="mode-btn btn-portal" onclick="joinGame('portal')">&#10022; FIGHT THE PORTAL MAGE &#10022;</button>
-      <div class="mode-row mode-row-2">
-        <button class="mode-btn btn-bot" onclick="openBotPicker()">&#9881; BOT BATTLE</button>
-        <button class="mode-btn btn-sandbox" onclick="joinGame('sandbox')">&#9874; SANDBOX</button>
+      <div id="lockMsg" class="lock-msg"></div>
+
+      <div class="menu-sec"><span>&#10022; CUSTOMIZE</span></div>
+      <div class="mode-row">
+        <button class="mode-btn btn-cust" onclick="openShop()">UPGRADES<small>weapons</small></button>
+        <button class="mode-btn btn-cust" onclick="openAbilities()">ABILITIES<small>powers</small></button>
+        <button class="mode-btn btn-cust" onclick="openSkinsScreen()">SKINS<small>look</small></button>
+      </div>
+      <button id="installBtn" class="skin-btn" style="display:none" onclick="installApp()">&#11015; INSTALL APP</button>
+    </div>
+  </div>
+
+  <!-- Settings (the gear on the menu) -->
+  <div id="settingsScreen" class="overlay hidden">
+    <div class="pixel-box settings-box">
+      <div class="title-text shop-title">SETTINGS</div>
+      <div class="set-row"><span class="set-label">SOUND</span>
+        <button class="set-btn" id="soundBtn" onclick="toggleSound()">ON</button></div>
+      <div class="set-row"><span class="set-label">MUSIC</span>
+        <button class="set-btn" id="musicBtn" onclick="cycleMusic()">1/21: HEROIC</button></div>
+      <div class="set-row"><span class="set-label">MAP SIZE</span>
+        <span class="set-group">
+          <button class="map-btn" data-size="small" onclick="pickMapSize('small')">SMALL</button>
+          <button class="map-btn" data-size="medium" onclick="pickMapSize('medium')">MEDIUM</button>
+          <button class="map-btn" data-size="big" onclick="pickMapSize('big')">BIG</button>
+        </span></div>
+      <div class="set-row"><span class="set-label">SHOW FPS &amp; PING</span>
+        <button class="set-btn" id="fpsBtn" onclick="toggleNetOverlay()">OFF</button></div>
+      <div class="set-row set-links">
+        <button class="mode-btn btn-sandbox" onclick="startTutorial()">&#9654; TUTORIAL</button>
         <button class="mode-btn btn-howto" onclick="openHowTo()">? HOW TO PLAY</button>
       </div>
-      <div class="hint-text">PvP/Co-op: 2 players &nbsp;|&nbsp; Rooms: 2-4 players, last one standing &nbsp;|&nbsp; Bot Battle: PvP vs a bot &nbsp;|&nbsp; Waves: solo endless &nbsp;|&nbsp; Extreme: solo, strongest monsters, huge coin rewards &nbsp;|&nbsp; Sandbox: solo practice, nothing saved</div>
-      <button id="installBtn" class="skin-btn" style="display:none" onclick="installApp()">&#11015; INSTALL APP</button>
-      <div id="savedInfo" class="saved-info"></div>
-      <button class="skin-btn shop-open-btn" onclick="openShop()">&#9670; UPGRADE WEAPONS</button>
-      <button class="skin-btn abil-open-btn" onclick="openAbilities()">&#10038; ABILITIES</button>
-      <button class="skin-btn" onclick="openSkinsScreen()">&#10022; CUSTOMIZE &amp; SKIN SHOP</button>
-      <button class="skin-btn" id="soundBtn" onclick="toggleSound()">&#9834; SOUND: ON</button>
-      <button class="skin-btn" id="musicBtn" onclick="cycleMusic()">&#9835; MUSIC 1/21: HEROIC</button>
+      <button class="mode-btn shop-back" onclick="closeSettings()">&#10003; DONE</button>
     </div>
   </div>
 

@@ -47,7 +47,7 @@ let WEAPON_COLOR = {
   glaive:'#b0d8c0', katana:'#eef0ff', chakram:'#66e0c0', cannon:'#9a90a8',
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
-  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff',
+  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff',
   ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
   scimitar:'#e8e0c8', slingshot:'#b08a5a', mace:'#9aa4b0', javelin:'#d8c8a0', claws:'#e0e4ec',
   emberstaff:'#ff7a2a', halberd:'#c0c8d8', frostbow:'#9fe8ff', chronostaff:'#e8c87a', voidblade:'#9a5aff',
@@ -70,6 +70,7 @@ const WEAPON_DESC = {
   windwand:'Gusts that shove foes, tornadoes and a SUPER hurricane',
   revolver:'Every bullet explodes',
   portalwand:"The Portal Mage's own wand: fireballs, portal jumps and a SUPER army of your own monsters",
+  infinitybow:"The Abyss's crossbows: one in your hands and two floating beside you",
   ghostdagger:'The rarest weapon of all: turn invisible, throw a deadly dagger, and make it rain knives',
   stormhammer:'A war hammer full of lightning that comes back when you throw it',
   frostscythe:'A sweeping scythe of ice that freezes whatever it keeps cutting',
@@ -146,7 +147,12 @@ let handleMessage = () => {};
 let chatSolo = null;
 // Shown with F3: what the connection is doing right now.
 const netStats = { ping: 0, bytes: 0, dropped: 0, kbps: 0, fps: 0, frames: 0, since: 0 };
-let netOverlay = false;
+let netOverlay = (() => { try { return localStorage.getItem('weponare_fps') === '1'; } catch { return false; } })();
+function toggleNetOverlay() {
+  netOverlay = !netOverlay;
+  try { localStorage.setItem('weponare_fps', netOverlay ? '1' : '0'); } catch {}
+  syncSettings();
+}
 function drainStates() {
   if (!stateInbox.length) return;
   // Behind? Keep only the newest two (enough to blend between).
@@ -244,9 +250,11 @@ async function refreshSavedBanner0() {
   if (!el) return;
   const pw = (document.getElementById('passInput')?.value || '').trim();
   if (!pw) {
+    menuXp = 0; syncModeLocks();
     el.innerHTML = '<span style="color:#555">No password — progress will not be saved</span>';
     return;
   }
+  menuXp = loadLocalXp(pw) || 0; syncModeLocks();
   el.innerHTML = '<span style="color:#555">Loading save...</span>';
   try {
     const res = await fetch('/api/profile', {
@@ -259,6 +267,7 @@ async function refreshSavedBanner0() {
     applyCatalog(d.catalog, d.colors);
     saveLocalCoins(pw, d.coins);
     saveLocalXp(pw, d.xp);
+    menuXp = d.xp || 0; syncModeLocks();
     const upgCount = Object.values(d.upgrades || {})
       .reduce((n, lv) => n + Object.values(lv).reduce((a, b) => a + b, 0), 0);
     el.innerHTML = `<span style="color:#6a6a80">SAVE:</span> `
@@ -288,12 +297,12 @@ function toggleSound() {
   GameAudio.init();
   const m = GameAudio.toggleMute();
   const btn = document.getElementById('soundBtn');
-  if (btn) btn.innerHTML = '♪ SOUND: ' + (m ? 'OFF' : 'ON');
+  if (btn) { btn.textContent = m ? 'OFF' : 'ON'; btn.classList.toggle('on', !m); }
 }
 
 function updateMusicButtons(info) {
   const sb = document.getElementById('musicBtn');
-  if (sb) sb.innerHTML = '♫ MUSIC ' + (info.idx + 1) + '/' + info.count + ': ' + info.name;
+  if (sb) sb.textContent = (info.idx + 1) + '/' + info.count + ': ' + info.name;
   const gb = document.getElementById('musicBtnGame');
   if (gb) gb.innerHTML = '♫ ' + (info.idx + 1) + '/' + info.count;
 }
@@ -579,6 +588,48 @@ function tutAsk(yes) {
   if (yes) startTutorial(); else markTutorialDone();
 }
 
+// ── Settings (gear on the menu) ──
+function syncSettings() {
+  const f = document.getElementById('fpsBtn');
+  if (f) { f.textContent = netOverlay ? 'ON' : 'OFF'; f.classList.toggle('on', netOverlay); }
+}
+function openSettings() { syncSettings(); showScreen('settingsScreen'); }
+function closeSettings() { showScreen('startScreen'); }
+
+// ── Modes unlock with XP ──
+// You start with every multiplayer mode, Waves, Bot Battle and Sandbox;
+// EXTREME and then the PORTAL MAGE open up as your saved XP grows.
+const MODE_XP = { extreme: 5000, portal: 15000, abyss: 30000 };
+let menuXp = 0;
+function modeOpen(mode) { return menuXp >= (MODE_XP[mode] || 0); }
+function syncModeLocks() {
+  for (const [mode, id] of [['extreme', 'modeExtreme'], ['portal', 'modePortal'], ['abyss', 'modeAbyss']]) {
+    const b = document.getElementById(id);
+    if (!b) continue;
+    const open = modeOpen(mode);
+    b.classList.toggle('locked', !open);
+    const sm = b.querySelector('small');
+    if (sm) sm.innerHTML = open ? (mode === 'extreme' ? 'hardest waves' : mode === 'abyss' ? 'final boss' : 'boss fight')
+                                : '&#128274; ' + MODE_XP[mode].toLocaleString() + ' XP';
+  }
+}
+function playLocked(mode) {
+  const msg = document.getElementById('lockMsg');
+  if (!modeOpen(mode)) {
+    const pw = (document.getElementById('passInput')?.value || '').trim();
+    if (msg) {
+      msg.textContent = (mode === 'extreme' ? 'EXTREME' : mode === 'abyss' ? 'THE ABYSS' : 'THE PORTAL MAGE') + ' UNLOCKS AT ' + MODE_XP[mode].toLocaleString()
+        + ' XP (YOU HAVE ' + Math.floor(menuXp).toLocaleString() + ')' + (pw ? '' : ' - SET A PASSWORD TO SAVE XP');
+      msg.classList.remove('flash'); void msg.offsetWidth; msg.classList.add('flash');
+    }
+    return;
+  }
+  if (msg) msg.textContent = '';
+  joinGame(mode);
+}
+syncModeLocks();
+syncSettings();
+
 function exitToMenu() {
   tutorialLeft();
   if (ws && ws.readyState <= 1) { leaveGame(); return; }   // connecting or open: close it properly
@@ -662,6 +713,13 @@ function connect() {
     }
     // The server seats us once we've picked a mode: solo modes get a room of
     // their own; PvP / co-op pair us with someone who picked the same mode.
+    if (msg.type === 'mode_locked') {
+      menuXp = msg.xp || 0;
+      leaveGame();
+      syncModeLocks();
+      playLocked(msg.mode);
+      return;
+    }
     if (msg.type === 'room_gone') {
       setLobbyMsg('That room is full or has already started.');
       setTimeout(() => { leaveGame(); openRoomBrowser(); }, 1600);
@@ -677,6 +735,8 @@ function connect() {
         setLobbyMsg(`<span style="color:#ff5a3a">EXTREME MODE</span><br><span style="color:#888">SOLO · STRONGEST MONSTERS · HUGE REWARDS</span><br>Loading...`);
       } else if (mode === 'portal') {
         setLobbyMsg(PORTAL_LOBBY);
+      } else if (mode === 'abyss') {
+        setLobbyMsg(ABYSS_LOBBY);
       } else if (mode === 'bot') {
         setLobbyMsg(BOT_LOBBY());
       } else {
@@ -708,7 +768,7 @@ function connect() {
       }
       // The server only sends a player's unlock list when it changes.
       applyWorld(msg.world);
-      const solo = ['waves', 'extreme', 'portal', 'sandbox'].includes(msg.gameMode);   // nobody to talk to in the solo modes
+      const solo = ['waves', 'extreme', 'portal', 'abyss', 'sandbox'].includes(msg.gameMode);   // nobody to talk to in the solo modes
       if (solo !== chatSolo) {
         chatSolo = solo;
         const chatBtn = document.getElementById('chatBtn');
@@ -966,7 +1026,7 @@ const ATTACK_ANIM = {
   bow: 'draw', crossbow: 'recoil', grapple: 'recoil', cannon: 'heavy', blunderbuss: 'heavy',
   staff: 'cast', frostrod: 'cast', wand: 'flick', stormtome: 'tome',
   chakram: 'throw', boomerang: 'throw', shuriken: 'throw',
-  fireglove: 'punch', vortex: 'shieldup', windwand: 'flick', revolver: 'recoil', portalwand: 'cast', ghostdagger: 'stab',
+  fireglove: 'punch', vortex: 'shieldup', windwand: 'flick', revolver: 'recoil', portalwand: 'cast', infinitybow: 'recoil', ghostdagger: 'stab',
   stormhammer: 'chop', frostscythe: 'spin', sunbow: 'draw',
   scimitar: 'slash', slingshot: 'draw', mace: 'chop', javelin: 'throw', claws: 'stab',
   emberstaff: 'cast', halberd: 'sweep', frostbow: 'draw', chronostaff: 'cast', voidblade: 'slash', mindtome: 'tome',
@@ -1771,6 +1831,16 @@ function drawFireRings(fires) {
   const now = performance.now() / 1000;
   for (const f of fires) {
     if (f.kind === 'vortexfield') { drawVortexField(f, now); continue; }
+    if (f.kind === 'ibburst') continue;
+    if (f.kind === 'abyssmark') { drawAbyssMark(f, now); continue; }
+    if (f.kind === 'abysscharge') { drawAbyssCharge(f, now); continue; }
+    if (f.kind === 'abyssblade') {
+      ctx.save(); ctx.translate(f.x, f.y);
+      ctx.globalAlpha = 0.3; ctx.fillStyle = '#7a2aff'; ctx.beginPath(); ctx.arc(0, 0, f.r + 4, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1; ctx.rotate(now * 14 + f.id);
+      for (let i = 0; i < 2; i++) { ctx.rotate(Math.PI); drawWeaponPixels(ctx, 'm_scythe', 0.9, '#c88aff'); }
+      ctx.restore(); continue;
+    }
     if (f.kind === 'meteor') { if ((f.k || 0) >= 0) drawMeteor(f, now); continue; }
     if (f.kind === 'knife') { if ((f.k || 0) >= 0) drawKnife(f, now); continue; }
     if (f.kind === 'tornado') { drawTornado(f, now); continue; }
@@ -2079,7 +2149,7 @@ window.addEventListener('keydown', (e) => {
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','ShiftLeft','ShiftRight','KeyP','ControlLeft','ControlRight'].includes(e.code)) e.preventDefault();
   if (e.code === 'Space' && currState && currState.gameState === 'WEAPON_UNLOCK' && currState.pendingUnlock) sendAckUnlock();
   if (e.code === 'KeyM') toggleSound();
-  if (e.code === 'F3') { e.preventDefault(); netOverlay = !netOverlay; }
+  if (e.code === 'F3') { e.preventDefault(); toggleNetOverlay(); }
   if (e.code === 'KeyT' && currState && currState.gameState === 'GAMEPLAY' && document.activeElement?.tagName !== 'INPUT') toggleChat();
   if (e.code === 'Escape') toggleChat(false);
   if (e.code.startsWith('Digit')) {
@@ -2335,10 +2405,8 @@ restoreCredentials();
 
 // Reflect saved audio preferences on the start-screen buttons
 if (window.GameAudio) {
-  if (GameAudio.isMuted()) {
-    const b = document.getElementById('soundBtn');
-    if (b) b.innerHTML = '♪ SOUND: OFF';
-  }
+  const sbtn = document.getElementById('soundBtn');
+  if (sbtn) { const m = GameAudio.isMuted(); sbtn.textContent = m ? 'OFF' : 'ON'; sbtn.classList.toggle('on', !m); }
   updateMusicButtons(GameAudio.trackInfo());
 }
 
@@ -2673,6 +2741,9 @@ const LEGEND_MOVES = {
             + ' anything you hit is stunned and hurled into the wall · <b>SUPER</b> LIGHTSPEED: 8s at triple speed,'
             + ' lightning zapping everything that comes close, and crash into a foe for a huge lightning blast that'
             + ' stuns everyone around for 2s.',
+  infinitybow: '<b>ATK</b> a rapid burst of void bolts from all three crossbows · <b>SPECIAL</b> the Abyss\'s massive orb gathers, then flies'
+             + ' (it bursts only on impact) · <b>SUPER</b> all three shoot one spot: a black hole opens there that spits even more bolts'
+             + ' and collapses for extreme damage',
   portalwand: '<b>ATK</b> small fire portals open beside you and throw exploding fireballs · <b>SPECIAL</b> jump through a portal to the safest spot on the'
             + ' field (furthest from foes, clear of shots and traps), leaving a fire portal behind that keeps shooting ·'
             + ' <b>SUPER</b> portal legion: portals in your colour pour out monsters that fight on your side for 14s.'
@@ -2712,7 +2783,7 @@ function legendaryCards(weapons, coins) {
         <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>${legendPassive(w.id)}
         <div class="legend-buy">
           <button class="buy-weapon poor" disabled>BOSS REWARD</button>
-          <span class="legend-need">Defeat the Portal Mage to earn it</span>
+          <span class="legend-need">${w.id === 'infinitybow' ? 'Survive the Abyss to earn it' : 'Defeat the Portal Mage to earn it'}</span>
         </div>
       </div>`;
     }
@@ -3354,7 +3425,7 @@ const ABILITY_ICONS = {
   },
 };
 
-const SCREENS = ['startScreen','lobbyScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen'];
+const SCREENS = ['settingsScreen', 'startScreen','lobbyScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen'];
 // The main menu is shrunk to whatever the screen allows (never below 45%), so the
 // name and password fields and the mode buttons are all in view on small phones
 // and short windows. Re-measured on resize / rotation / when it is shown.
@@ -3381,6 +3452,8 @@ function setLobbyMsg(html) { showScreen('lobbyScreen'); document.getElementById(
 const PORTAL_LOBBY = `<span style="color:#c8a0ff">THE PORTAL MAGE</span><br>`
   + `<span style="color:#888">SOLO BOSS FIGHT · WIN 50,000 COINS + 50,000 XP</span><br>Opening the portal...`;
 
+const ABYSS_LOBBY = `<span style="color:#b07aff">THE ABYSS</span><br>`
+  + `<span style="color:#888">FINAL BOSS · WIN 100,000 COINS + THE CROSSBOWS OF INFINITY</span><br>Something stirs below...`;
 const BOT_LOBBY = () => `<span style="color:#ff9a5a">BOT BATTLE</span><br><span style="color:#888">PvP VS A ${(pendingBotLevel || 'average').toUpperCase()} BOT</span><br>Loading...`;
 
 // ── Map size (all modes) ──
@@ -3513,6 +3586,8 @@ function updateScreens(state) {
       setLobbyMsg(`<span style="color:#ff5a3a">EXTREME MODE</span><br><span style="color:#888">SOLO · STRONGEST MONSTERS</span><br>Loading...`);
     } else if (state.gameMode === 'portal') {
       setLobbyMsg(PORTAL_LOBBY);
+    } else if (state.gameMode === 'abyss') {
+      setLobbyMsg(ABYSS_LOBBY);
     } else if (state.gameMode === 'sandbox' && pendingTutorial) {
       setLobbyMsg(`<span style="color:#7affc8">TUTORIAL</span><br><span style="color:#888">LEARN THE BASICS</span><br>Loading...`);
     } else if (state.gameMode === 'sandbox') {
@@ -3558,7 +3633,21 @@ function updateScreens(state) {
     const r = state.round;
     const lb = document.getElementById('leaderboardBox');
     const hint = document.getElementById('roundHint');
-    if (state.gameMode === 'portal') {
+    if (state.gameMode === 'abyss') {
+      lb.classList.add('hidden');
+      hint.textContent = 'RETURNING TO MENU...';
+      const ab = (state.monsters || []).find(m => m.abyss);
+      document.getElementById('roundTitle').innerHTML = state.victory
+        ? '<span style="color:#7aff9a">VICTORY!</span>' : '<span style="color:#ff5a6a">DEFEATED</span>';
+      document.getElementById('roundStats').innerHTML = state.victory
+        ? `YOU SURVIVED THE ABYSS<br><span style="color:${PAL.coin}">+100,000 COINS</span> &nbsp; <span style="color:${PAL.xp}">+75,000 XP</span>`
+          + ` &nbsp; <span style="color:#b07aff">+ THE CROSSBOWS OF INFINITY</span>`
+          + `<br>XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`
+        : `THE ABYSS SWALLOWS YOU<br>`
+          + (ab ? (ab.p3 ? `ONLY <span style="color:#ff7ad8">${ab.p3}s</span> LEFT TO SURVIVE<br>`
+                 : `HE HAD <span style="color:#c8a0ff">${Math.ceil(ab.hp).toLocaleString()}</span> HP LEFT (PHASE ${ab.phase || 1})<br>`) : '')
+          + `XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`;
+    } else if (state.gameMode === 'portal') {
       lb.classList.add('hidden');
       hint.textContent = 'RETURNING TO MENU...';
       const mage = (state.monsters || []).find(m => m.mage);
@@ -4314,6 +4403,7 @@ function drawPlayerBody(p, baseColor, label, key) {
 
   drawNametag(x + p.w / 2, y - 13, label, skinCol);
   drawWeaponSprite(p, x, y, key);
+  if (p.weaponId === 'infinitybow' && !p.dead) drawInfinityFloaters(p, x, y);
   drawStatusMarks(p, x, y);
   if (p.puppet) drawPuppetMark(x + p.w / 2, y - 6, null);
   if (p.shuffleIn != null && key === 'p' + myNum) drawShuffleCountdown(p, x, y);
@@ -4510,6 +4600,7 @@ function drawWeaponSprite(p, px, py, key) {
 // roughly how hard it hits — is readable at a glance, not just from its size.
 function drawMonster(m) {
   if (m.mage && m.hidden) return;   // gone into hiding behind his giants
+  if (m.abyss) { drawAbyss(m); return; }
   const type = m.type || 'grunt';
   const state = m.hitFlash > 0 ? 'flash' : monsterBodyState(m);
   const x = Math.round(m.x), y = Math.round(m.y);
@@ -4884,6 +4975,219 @@ function drawIceBlock(x, y, w, h) {
   ctx.restore();
 }
 
+// ─── The Abyss ────────────────────────────────────────────────────────────────
+// Drawn by hand rather than from a sprite: a hooded void body on two legs, four
+// arms, and whatever they hold — void crossbows, then six scythes.
+const ABYSS_HANDS = [[-0.62, -0.18], [0.62, -0.18], [-0.7, 0.14], [0.7, 0.14]];   // mirrors the server
+function abyssTarget() {
+  const me = currState && currState.players && currState.players[myKeyOf()];
+  return me ? { x: me.x + me.w / 2, y: me.y + me.h / 2 } : null;
+}
+function drawAbyss(m) {
+  const now = performance.now();
+  const x = Math.round(m.x), y = Math.round(m.y), w = m.w, h = m.h;
+  const c = { x: x + w / 2, y: y + h / 2 };
+  const tgt = abyssTarget() || { x: c.x + 50, y: c.y };
+  const flash = m.hitFlash > 0;
+  ctx.save();
+  // Aura: a slow pulse of void (a storm of it in the last stand).
+  const pulse = 0.5 + 0.5 * Math.sin(now / 260);
+  ctx.globalAlpha = (m.p3 ? 0.32 : 0.18) + 0.08 * pulse; ctx.fillStyle = '#5a1aaa';
+  ctx.beginPath(); ctx.ellipse(c.x, c.y, w * (m.p3 ? 1.6 : 1.05) + pulse * 3, h * (m.p3 ? 1.1 : 0.75) + pulse * 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.3; ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(c.x, y + h + 1, w * 0.45, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // Legs: two, striding.
+  const step = Math.sin(now / 130) * 4;
+  ctx.lineCap = 'round';
+  for (const [side, s] of [[-1, step], [1, -step]]) {
+    const hip = { x: c.x + side * w * 0.17, y: y + h * 0.62 };
+    const foot = { x: hip.x + s + side * 2, y: y + h };
+    ctx.strokeStyle = '#0a0414'; ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.moveTo(hip.x, hip.y); ctx.lineTo(foot.x, foot.y); ctx.stroke();
+    ctx.strokeStyle = flash ? '#ffffff' : '#2a1446'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(hip.x, hip.y); ctx.lineTo(foot.x, foot.y); ctx.stroke();
+    ctx.fillStyle = '#7a3aff'; ctx.fillRect(Math.round(foot.x) - 3, Math.round(foot.y) - 1, 6, 2);
+  }
+
+  // Body: a tattered void robe, ribs of violet light.
+  ctx.fillStyle = '#0a0414';
+  ctx.beginPath();
+  ctx.moveTo(c.x - w * 0.36, y + h * 0.24); ctx.lineTo(c.x + w * 0.36, y + h * 0.24);
+  ctx.lineTo(c.x + w * 0.3, y + h * 0.7); ctx.lineTo(c.x - w * 0.3, y + h * 0.7); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = flash ? '#ffffff' : '#1e0e36';
+  ctx.beginPath();
+  ctx.moveTo(c.x - w * 0.32, y + h * 0.26); ctx.lineTo(c.x + w * 0.32, y + h * 0.26);
+  ctx.lineTo(c.x + w * 0.26, y + h * 0.68); ctx.lineTo(c.x - w * 0.26, y + h * 0.68); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#9a5aff'; ctx.lineWidth = 1; ctx.globalAlpha = 0.55 + 0.35 * pulse;
+  for (let i = 0; i < 3; i++) {
+    const ry = y + h * (0.36 + i * 0.09);
+    ctx.beginPath(); ctx.moveTo(c.x - w * 0.2, ry); ctx.quadraticCurveTo(c.x, ry - 3, c.x + w * 0.2, ry); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  // Core: a tiny black hole in his chest.
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(c.x, y + h * 0.47, 3.4, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#c88aff'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(c.x, y + h * 0.47, 4.4, now / 200, now / 200 + 4.5); ctx.stroke();
+
+  // Head: a hood with three burning eyes.
+  ctx.fillStyle = '#0a0414';
+  ctx.beginPath(); ctx.moveTo(c.x - w * 0.24, y + h * 0.27); ctx.lineTo(c.x, y - 2); ctx.lineTo(c.x + w * 0.24, y + h * 0.27); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = flash ? '#ffffff' : '#160a28';
+  ctx.beginPath(); ctx.ellipse(c.x, y + h * 0.15, w * 0.17, h * 0.11, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = m.p3 ? '#ff7ad8' : '#e0b0ff';
+  const blink = Math.sin(now / 900) > 0.97 ? 0.3 : 1;
+  for (const [ex, ey, r] of [[-0.08, 0.15, 1.6], [0.08, 0.15, 1.6], [0, 0.09, 1.2]]) {
+    ctx.globalAlpha = blink; ctx.beginPath(); ctx.arc(c.x + ex * w, y + ey * h, r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Arms and what they hold.
+  const scythes = (m.phase || 1) >= 2;
+  const hands = ABYSS_HANDS.map(([ox, oy]) => ({ x: c.x + ox * w, y: c.y + oy * h }));
+  const shoulders = [[-0.3, -0.2], [0.3, -0.2], [-0.3, -0.06], [0.3, -0.06]].map(([ox, oy]) => ({ x: c.x + ox * w, y: c.y + oy * h }));
+  const act = m.act;
+  // Six scythes whirling around him, or all six rising for the slash.
+  if (scythes && act === 'spin') {
+    const k = Math.min(1, (m.actT || 0) / 1500);
+    for (let i = 0; i < 6; i++) {
+      const a = now / (110 - k * 50) + i * Math.PI / 3;
+      ctx.save(); ctx.translate(c.x + Math.cos(a) * 62, c.y + Math.sin(a) * 62); ctx.rotate(a + Math.PI / 2);
+      drawWeaponPixels(ctx, 'm_scythe', 1.4, '#c88aff'); ctx.restore();
+    }
+    ctx.globalAlpha = 0.25; ctx.strokeStyle = '#c88aff'; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.arc(c.x, c.y, 62, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  for (let i = 0; i < 4; i++) {
+    const sh = shoulders[i], hd = hands[i];
+    ctx.strokeStyle = '#0a0414'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(sh.x, sh.y); ctx.lineTo(hd.x, hd.y); ctx.stroke();
+    ctx.strokeStyle = flash ? '#ffffff' : '#2a1446'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(sh.x, sh.y); ctx.lineTo(hd.x, hd.y); ctx.stroke();
+    if (scythes && act === 'spin') continue;   // the scythes are out whirling
+    ctx.save(); ctx.translate(hd.x, hd.y);
+    if (!scythes) {
+      // Crossbows aim at you — or up at the orb gathering over his head.
+      let a = Math.atan2(tgt.y - hd.y, tgt.x - hd.x);
+      if (act === 'orb') a = -Math.PI / 2 + (i % 2 ? 0.35 : -0.35);
+      const kick = act === 'rapid' ? Math.sin(now / 25 + i) * 1.5 : 0;
+      ctx.rotate(a); if (Math.cos(a) < 0) ctx.scale(1, -1);
+      ctx.translate(-kick, 0);
+      drawWeaponPixels(ctx, 'm_abyssbow', 1.15, flash ? '#ffffff' : '#b07aff');
+    } else {
+      let a = (i % 2 ? -1 : 1) * 0 + (i % 2 === 0 ? Math.PI + 0.9 : -0.9);   // raised, outward
+      let sc = 1.25;
+      if (act === 'slash') {
+        const t = m.actT || 0, sa = m.sa || 0;
+        const grow = Math.min(1, t / 650);
+        sc = 1.25 + 0.9 * (t < 950 ? grow : 0);
+        a = t < 650 ? sa - 2.1 + Math.sin(now / 30) * 0.05 : sa - 1.6 + Math.min(1, (t - 650) / 220) * 3.2 + (i - 1.5) * 0.15;
+      }
+      ctx.rotate(a); if (Math.cos(a) < 0) ctx.scale(1, -1);
+      drawWeaponPixels(ctx, 'm_scythe', Math.round(sc * 10) / 10, flash ? '#ffffff' : '#c88aff');
+    }
+    ctx.restore();
+  }
+  // The two extra scythes that follow him in phase 2.
+  if (scythes && act !== 'spin') {
+    for (const side of [-1, 1]) {
+      const fx = c.x + side * w * 0.95, fy = y + h * 0.1 + Math.sin(now / 300 + side) * 4;
+      let a = side < 0 ? Math.PI + 0.5 : -0.5, sc = 1.1;
+      if (act === 'slash') { const t = m.actT || 0; sc = 1.1 + 0.9 * Math.min(1, t / 650); a = (m.sa || 0) + (t < 650 ? -2.1 : -1.6 + Math.min(1, (t - 650) / 220) * 3.2) + side * 0.3; }
+      ctx.save(); ctx.translate(fx, fy); ctx.globalAlpha = 0.9;
+      ctx.rotate(a); if (Math.cos(a) < 0) ctx.scale(1, -1);
+      drawWeaponPixels(ctx, 'm_scythe', Math.round(sc * 10) / 10, '#c88aff');
+      ctx.restore();
+    }
+  }
+  // The big slash: a wide violet arc as it lands.
+  if (scythes && act === 'slash' && (m.actT || 0) >= 650) {
+    const k = Math.min(1, ((m.actT || 0) - 650) / 300), sa = m.sa || 0;
+    ctx.globalAlpha = 0.55 * (1 - k * 0.7); ctx.strokeStyle = '#e0a0ff'; ctx.lineWidth = 10;
+    ctx.beginPath(); ctx.arc(c.x, c.y, 165 * 0.8, sa - 1.45, sa - 1.45 + 2.9 * Math.min(1, k * 1.6)); ctx.stroke();
+    ctx.globalAlpha = 1;
+  } else if (scythes && act === 'slash') {
+    // Wind-up warning: the cone it will cover.
+    const sa = m.sa || 0, k = (m.actT || 0) / 650;
+    ctx.globalAlpha = 0.12 + 0.12 * k; ctx.fillStyle = '#ff4a8a';
+    ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.arc(c.x, c.y, 165, sa - 1.45, sa + 1.45); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  // Last stand: the countdown, big, by his side.
+  if (m.p3) {
+    ctx.font = 'bold 22px "Courier New",monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const tx = c.x + w * 1.6, ty = c.y;
+    ctx.fillStyle = '#000'; ctx.fillText(String(m.p3), tx + 2, ty + 2);
+    ctx.fillStyle = m.p3 <= 3 ? '#ff5a7a' : '#ff9ae8'; ctx.fillText(String(m.p3), tx, ty);
+    ctx.font = 'bold 7px "Courier New",monospace'; ctx.fillStyle = '#e0c8ff'; ctx.fillText('SURVIVE', tx, ty + 15);
+  }
+  ctx.restore();
+}
+
+function drawVoidBolt(pr, ang) {
+  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+  ctx.globalAlpha = 0.35; ctx.fillStyle = '#7a2aff';
+  ctx.beginPath(); ctx.ellipse(-5, 0, 9, 3.4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#12051f'; ctx.fillRect(-9, -0.9, 10, 1.8);
+  ctx.fillStyle = '#c88aff';
+  ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(-1, -2.4); ctx.lineTo(-1, 2.4); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(1, -0.5, 1.5, 1);
+  ctx.restore();
+}
+function drawAbyssOrb(x, y, r, now) {
+  ctx.save();
+  for (let i = 3; i >= 1; i--) {
+    ctx.globalAlpha = 0.12 * i; ctx.fillStyle = '#7a2aff';
+    ctx.beginPath(); ctx.arc(x, y, r + i * 4, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1; ctx.fillStyle = '#12051f';
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#c88aff'; ctx.lineWidth = 2;
+  for (let i = 0; i < 3; i++) { const a = now / 160 + i * 2.1; ctx.beginPath(); ctx.arc(x, y, r * 0.75, a, a + 1.3); ctx.stroke(); }
+  ctx.fillStyle = '#e0c8ff'; ctx.beginPath(); ctx.arc(x - r * 0.25, y - r * 0.25, Math.max(1.5, r * 0.18), 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+// Where all the bolts will meet: a closing target ring.
+function drawAbyssMark(f, now) {
+  const k = Math.min(1, f.k || 0);
+  ctx.save(); ctx.translate(f.x, f.y);
+  ctx.globalAlpha = 0.18 + 0.25 * k; ctx.fillStyle = '#5a1aaa';
+  ctx.beginPath(); ctx.arc(0, 0, 14 + 8 * k, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.85; ctx.strokeStyle = '#c88aff'; ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 3]); ctx.lineDashOffset = -now * 20;
+  ctx.beginPath(); ctx.arc(0, 0, 46 - 30 * k, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  ctx.rotate(now * 2);
+  for (let i = 0; i < 4; i++) { ctx.rotate(Math.PI / 2); ctx.fillRect(10, -0.8, 8, 1.6); }
+  ctx.restore();
+}
+// The orb gathering: void streaks pulled into a growing sphere.
+function drawAbyssCharge(f, now) {
+  ctx.save();
+  ctx.strokeStyle = '#b07aff'; ctx.lineWidth = 1.2;
+  for (let i = 0; i < 10; i++) {
+    const a = i * 0.63 + now * 3, d = 18 + f.r + ((now * 60 + i * 13) % 26);
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath(); ctx.moveTo(f.x + Math.cos(a) * d, f.y + Math.sin(a) * d); ctx.lineTo(f.x + Math.cos(a) * (f.r + 4), f.y + Math.sin(a) * (f.r + 4)); ctx.stroke();
+  }
+  ctx.restore();
+  drawAbyssOrb(f.x, f.y, Math.max(3, f.r), now * 1000);
+}
+// Crossbows of Infinity: two more crossbows floating beside you.
+function drawInfinityFloaters(p, x, y) {
+  const now = performance.now(), d = p.facing < 0 ? -1 : 1;
+  const mx = x + p.w / 2, my = y + p.h / 2;
+  for (const [ox, oy, ph] of [[-12, -19, 0], [-14, 15, 2]]) {
+    const fx = mx + ox * d, fy = my + oy + Math.sin(now / 280 + ph) * 2;
+    ctx.save(); ctx.translate(Math.round(fx), Math.round(fy)); ctx.scale(d, 1);
+    ctx.globalAlpha = 0.25; ctx.fillStyle = '#7a2aff'; ctx.beginPath(); ctx.ellipse(6, 0, 10, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.95;
+    drawWeaponPixels(ctx, 'infinitybow', 0.65, WEAPON_COLOR.infinitybow);
+    ctx.restore();
+  }
+}
+
 // Over the Giant: a flashing "!" while it winds up (red for the close swipe,
 // yellow for the ranged slam), and circling stars while it's stunned.
 function drawBossMarks(m, x, y) {
@@ -4938,6 +5242,8 @@ function drawBossMarks(m, x, y) {
 function drawBossBar(monsters) {
   const ms = monsters || [];
   // The Portal Mage's bar, or — while he hides — his giants'.
+  const ab = ms.find(m => m.abyss);
+  if (ab) { drawOneBossBar(ab, 0); return; }
   const mage = ms.find(m => m.mage);
   if (mage && !mage.hidden) { drawOneBossBar(mage, 0); return; }
   const giants = ms.filter(m => m.boss && !m.mage);
@@ -4946,22 +5252,24 @@ function drawBossBar(monsters) {
 function drawOneBossBar(b, row) {
   const w = Math.min(240, HUD_W * 0.5), h = 7;
   const x = Math.round(HUD_W / 2 - w / 2), y = HUD_H - (isTouchDevice ? 16 : 28) - row * 22;
-  const ratio = Math.max(0, b.hp / b.maxHp);
+  // The Abyss's last stand: the bar becomes the countdown to survive.
+  const ratio = b.p3 ? b.p3 / 10 : Math.max(0, b.hp / b.maxHp);
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.7)';
   ctx.fillRect(x - 4, y - 12, w + 8, h + 16);
   ctx.fillStyle = '#2a0808'; ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = b.stun > 0 ? '#ffd84a' : '#d8342a';
+  ctx.fillStyle = b.p3 ? '#c84aff' : b.stun > 0 ? '#ffd84a' : '#d8342a';
   ctx.fillRect(x, y, Math.round(w * ratio), h);
   ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(x, y, Math.round(w * ratio), 2);
   ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.strokeRect(x, y, w, h);
   for (let i = 1; i < 10; i++) { ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(x + Math.round(w * i / 10), y, 1, h); }
   ctx.font = 'bold 8px "Courier New",monospace'; ctx.textBaseline = 'bottom';
-  const label = b.mage ? 'THE PORTAL MAGE' + (b.phase === 2 ? ' - PHASE 2' : '') : 'THE GIANT';
+  const label = b.abyss ? 'THE ABYSS' + (b.p3 ? ' - SURVIVE!' : b.phase === 2 ? ' - PHASE 2' : '')
+    : b.mage ? 'THE PORTAL MAGE' + (b.phase === 2 ? ' - PHASE 2' : '') : 'THE GIANT';
   ctx.textAlign = 'left';  ctx.fillStyle = '#000'; ctx.fillText(label, x + 1, y - 1);
-  ctx.fillStyle = b.mage ? (b.phase === 2 ? '#ff7aaa' : '#c8a0ff') : '#c8e07a'; ctx.fillText(label, x, y - 2);
+  ctx.fillStyle = b.abyss ? (b.p3 ? '#ff7ad8' : '#b07aff') : b.mage ? (b.phase === 2 ? '#ff7aaa' : '#c8a0ff') : '#c8e07a'; ctx.fillText(label, x, y - 2);
   ctx.textAlign = 'right'; ctx.fillStyle = b.stun > 0 ? '#ffd84a' : '#ccc';
-  ctx.fillText(b.stun > 0 ? 'STUNNED!' : Math.ceil(b.hp).toLocaleString() + ' / ' + b.maxHp.toLocaleString(), x + w, y - 2);
+  ctx.fillText(b.p3 ? b.p3 + 's LEFT' : b.stun > 0 ? 'STUNNED!' : Math.ceil(b.hp).toLocaleString() + ' / ' + b.maxHp.toLocaleString(), x + w, y - 2);
   ctx.restore();
 }
 
@@ -5076,6 +5384,14 @@ function drawProjectiles(projs) {
     const ang = Math.atan2(pr.dy, pr.dx);
     const u = upgScale(pr.upg);
 
+    if (pr.weaponId === 'abyssbolt' || pr.weaponId === 'infinitybow') { drawVoidBolt(pr, ang); continue; }
+    if (pr.weaponId === 'abyssorb') { drawAbyssOrb(pr.x, pr.y, pr.special ? 12 : 20, now); continue; }
+    if (pr.weaponId === 'abyssscythe') {
+      ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(now / 45);
+      ctx.globalAlpha = 0.35; ctx.fillStyle = '#7a2aff'; ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1; drawWeaponPixels(ctx, 'm_scythe', 1.1, '#c88aff');
+      ctx.restore(); continue;
+    }
     // Spitter venom: a monster's shot, not a player's weapon.
     if (pr.weaponId === 'spit') {
       ctx.save();
@@ -5689,6 +6005,15 @@ function drawHUD(state) {
     ctx.fillStyle = '#9fffd0'; ctx.fillText(t, HUD_W/2, 2);
     ctx.font = '8px "Courier New",monospace';
     ctx.fillStyle = '#999'; ctx.fillText(sub, HUD_W/2, 15);
+    ctx.font = '10px "Courier New",monospace';
+  } else if (state.gameMode === 'abyss') {
+    const ab = (state.monsters || []).find(m => m.abyss);
+    const t = 'THE ABYSS';
+    const sub = !ab ? '' : ab.p3 ? 'SURVIVE ' + ab.p3 + 's' : 'PHASE ' + (ab.phase || 1);
+    ctx.fillStyle = '#000'; ctx.fillText(t, HUD_W/2 + 1, 3);
+    ctx.fillStyle = '#b07aff'; ctx.fillText(t, HUD_W/2, 2);
+    ctx.font = '8px "Courier New",monospace';
+    ctx.fillStyle = ab && ab.p3 ? '#ff7ad8' : ab && ab.phase === 2 ? '#e0a0ff' : '#999'; ctx.fillText(sub, HUD_W/2, 15);
     ctx.font = '10px "Courier New",monospace';
   } else if (state.gameMode === 'portal') {
     const mage = (state.monsters || []).find(m => m.mage);
