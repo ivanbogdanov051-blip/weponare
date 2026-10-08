@@ -306,7 +306,7 @@ const WEAPONS = [
   // swipe whose hits drag foes in. Special: a void beam that spins a full circle
   // round you, fast, pulling everything in like a black hole. SUPER: the Abyss's
   // second phase — six scythes whirl round you, are flung out, then one huge slash.
-  { id: 'endlessscythe', name: 'ENDLESS SCYTHE', damage: 46, range: 82, atkSpd: 560, type: 'melee', unlockXp: 0, shopOnly: true, bossReward: true, price: 0,
+  { id: 'endlessscythe', name: 'ENDLESS SCYTHE', damage: 46, range: 82, atkSpd: 900, type: 'melee', unlockXp: 0, shopOnly: true, bossReward: true, price: 0,
     voidPull: true,
     special: { kind: 'voidbeam',   dmg: 34, range: 320, cd: 9000 },
     super:   { kind: 'abysswhirl', dmg: 95, cd: 20000 } },
@@ -314,7 +314,7 @@ const WEAPONS = [
   // Attack: a slash wave that seeks out foes. Special: a dash wave — when it
   // reaches a foe you flash through them at near light speed. SUPER: spin for 5s,
   // much faster and gliding, cutting and slowing everything you touch.
-  { id: 'samuraiblade', name: "SAMURAI'S KATANA", damage: 48, range: 260, atkSpd: 520, type: 'ranged', unlockXp: 0,
+  { id: 'samuraiblade', name: "SAMURAI'S KATANA", damage: 34, range: 260, atkSpd: 520, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, needSamurai: true, price: 30000, slashWave: true,
     special: { kind: 'dashwave', dmg: 240, range: 340, cd: 6500 },
     super:   { kind: 'katanaspin', dmg: 45, cd: 20000 } },
@@ -1821,8 +1821,8 @@ const SAM_KILLS_NEED = 30;
 function slashWave(owner, x, y, a, dmg, opts = {}) {
   room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * (opts.speed || SAM_WAVE_SPEED), dy: Math.sin(a) * (opts.speed || SAM_WAVE_SPEED),
     damage: dmg, owner, traveled: 0, maxRange: opts.range || 420, weaponId: opts.dash ? 'samdashwave' : 'samwave',
-    isAoe: false, aoeRadius: 0, pierce: false, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: null,
-    hitR: SAM_WAVE_R, homing: !!opts.homing, ...(opts.dash ? { dashWave: opts.dash } : {}), ...(opts.upg ? { upg: opts.upg } : {}) });
+    isAoe: false, aoeRadius: 0, pierce: !!opts.pierce, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: opts.pierce ? new Set() : null,
+    hitR: owner === 'monster' ? SAM_WAVE_R : SAM_WAVE_R * 2, homing: !!opts.homing, ...(opts.dash ? { dashWave: opts.dash } : {}), ...(opts.upg ? { upg: opts.upg } : {}) });
 }
 function aiSamurai(m, t, dist, dx, dy, spd, factor, dt) {
   if (m.dazed > 0) { m.dazed -= dt; return true; }   // stunned by a parried flash
@@ -2975,7 +2975,7 @@ function homeProjectile(proj, dt) {
   let best = proj.quarry && !proj.quarry.dead && (proj.quarry.num || room.monsters.includes(proj.quarry)) ? proj.quarry : null;
   let bd = HOMING_SEEK_R;
   if (!best) for (const t of enemyTargets(proj.owner)) {
-    if (proj.hitTargets && proj.hitTargets.has(t)) continue;
+    if (proj.hitTargets && (proj.hitTargets.has(t) || proj.hitTargets.has(t.id) || proj.hitTargets.has(playerKeyOf(t)))) continue;
     const d = Math.hypot(cx(t) - proj.x, cy(t) - proj.y);
     if (d < bd) { bd = d; best = t; }
   }
@@ -3097,6 +3097,7 @@ function advanceProjectile(proj, factor, dt) {
       const tId = tk || t.id;
       if (proj.hitTargets && !proj.hitTargets.has(tId)) {
         proj.hitTargets.add(tId);
+        if (proj.quarry === t) proj.quarry = null;   // on to the next foe
         applyDamage(t, proj.damage, proj.owner);
         onHitExtras(proj, t);
       }
@@ -3260,7 +3261,7 @@ function doAttack(p, pKey) {
     p.facing = Math.cos(aim) < 0 ? -1 : 1;
     for (let i = 0; i < 1 + (w.multi || 0); i++) {
       slashWave(pKey, cx(p), cy(p), aim + (i - (w.multi || 0) / 2) * 0.22, Math.round(w.damage * dmgMult),
-                { speed: 9, range: w.range, homing: true, upg: p.upgrades?.[w.id] || null });
+                { speed: 9, range: 99999, homing: true, pierce: true, upg: p.upgrades?.[w.id] || null });
     }
     return;
   }
@@ -6407,7 +6408,7 @@ function doSpecial(p, pKey) {
     // A quiet wave: when it reaches a foe, you flash through them.
     const aim = nearestTargetAngle(p, pKey);
     p.facing = Math.cos(aim) < 0 ? -1 : 1;
-    slashWave(pKey, px, py, aim, 0, { dash: { dmg: spDmg }, speed: 9, range: sp.range, homing: true });
+    slashWave(pKey, px, py, aim, 0, { dash: { dmg: spDmg }, speed: 9, range: 99999, homing: true });
     return;
   }
   if (sp.kind === 'voidbeam') {

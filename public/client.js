@@ -5291,7 +5291,7 @@ function drawScytheWhirl(f, now) {
 
 // A slash wave: a bright crescent of steel, its edge burning, ghosts trailing behind.
 function drawSlashWave(pr, ang, now, edge) {
-  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang); ctx.scale(2, 2);
+  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang); ctx.scale(2, pr.owner === 'monster' ? 2 : 3.6);   // a katana's waves are wider
   for (let i = 3; i >= 0; i--) {
     ctx.save(); ctx.translate(-i * 5, 0);
     ctx.globalAlpha = i ? 0.12 * (4 - i) : 1;
@@ -5310,7 +5310,7 @@ function drawSlashWave(pr, ang, now, edge) {
 }
 // The quiet wave: a pale, rippling crescent — harmless, but it marks you.
 function drawDashWave(pr, ang, now) {
-  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang); ctx.scale(2, 2);
+  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang); ctx.scale(2, pr.owner === 'monster' ? 2 : 3.6);
   const pulse = 0.5 + 0.5 * Math.sin(now / 70);
   for (let i = 0; i < 3; i++) {
     ctx.globalAlpha = (0.55 - i * 0.15) * (0.7 + 0.3 * pulse);
