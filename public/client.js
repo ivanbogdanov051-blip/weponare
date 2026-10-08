@@ -2790,7 +2790,7 @@ const LEGEND_MOVES = {
             + ' anything you hit is stunned and hurled into the wall · <b>SUPER</b> LIGHTSPEED: 8s at triple speed,'
             + ' lightning zapping everything that comes close, and crash into a foe for a huge lightning blast that'
             + ' stuns everyone around for 2s.',
-  endlessscythe: '<b>ATK</b> a scythe swipe · <b>SPECIAL</b> a void beam spins a full circle round you, fast, dragging everything in'
+  endlessscythe: '<b>ATK</b> a scythe swipe, joined by the two scythes floating behind you · <b>SPECIAL</b> a void beam spins a full circle round you, fast, dragging everything in'
              + ' like a black hole · <b>SUPER</b> the Abyss\'s second phase: six scythes whirl round you, are flung out, then one huge slash',
   infinitybow: '<b>ATK</b> a rapid burst of void bolts from all three crossbows · <b>SPECIAL</b> the Abyss\'s massive orb gathers, then flies'
              + ' (it bursts only on impact) · <b>SUPER</b> all three shoot one spot: a black hole opens there that spits even more bolts'
@@ -4455,6 +4455,7 @@ function drawPlayerBody(p, baseColor, label, key) {
   drawNametag(x + p.w / 2, y - 13, label, skinCol);
   drawWeaponSprite(p, x, y, key);
   if (p.weaponId === 'infinitybow' && !p.dead) drawInfinityFloaters(p, x, y);
+  if (p.weaponId === 'endlessscythe' && !p.dead) drawEndlessFloaters(p, x, y, key);
   drawStatusMarks(p, x, y);
   if (p.puppet) drawPuppetMark(x + p.w / 2, y - 6, null);
   if (p.shuffleIn != null && key === 'p' + myNum) drawShuffleCountdown(p, x, y);
@@ -5275,6 +5276,35 @@ function drawAbyssCharge(f, now) {
   drawAbyssOrb(f.x, f.y, Math.max(3, f.r), now * 1000);
 }
 // Crossbows of Infinity: two more crossbows floating beside you.
+// Endless Scythe: two more scythes hover behind you; on every swing they join
+// in like the Abyss's slash — raised back, growing, then sweeping through.
+function drawEndlessFloaters(p, x, y, key) {
+  const now = performance.now(), d = p.facing < 0 ? -1 : 1;
+  const mx = x + p.w / 2, my = y + p.h / 2;
+  const anim = attackProgress(key, 'endlessscythe');
+  const e = anim ? anim.e : -1;
+  for (const [oy, ph, lag] of [[-12, 0, 0], [10, 2, 0.12]]) {
+    const fx = mx - d * 17, fy = my + oy + Math.sin(now / 300 + ph) * 2.5;
+    let rot = -0.5, sc = 0.55;
+    if (e >= 0) {
+      const k = Math.max(0, Math.min(1, (e - lag) / (1 - lag)));
+      // Wind back, then a fast sweep forward past the body, then settle.
+      rot = k < 0.3 ? -0.5 - (k / 0.3) * 1.6 : -2.1 + Math.min(1, (k - 0.3) / 0.35) * 3.4;
+      sc = 0.55 + 0.4 * Math.sin(Math.min(1, k) * Math.PI);
+      if (k > 0.3 && k < 0.8) {
+        ctx.save(); ctx.globalAlpha = 0.45 * (1 - (k - 0.3) / 0.5); ctx.strokeStyle = '#c88aff'; ctx.lineWidth = 3;
+        ctx.beginPath();
+        const a0 = d > 0 ? -2.1 : Math.PI + 2.1, a1 = d > 0 ? rot : Math.PI - rot;
+        ctx.arc(fx, fy, 26 * sc, Math.min(a0, a1), Math.max(a0, a1)); ctx.stroke(); ctx.restore();
+      }
+    }
+    ctx.save(); ctx.translate(Math.round(fx), Math.round(fy)); ctx.scale(d, 1); ctx.rotate(rot);
+    ctx.globalAlpha = e >= 0 ? 1 : 0.9;
+    drawWeaponPixels(ctx, 'endlessscythe', Math.round(sc * 10) / 10, WEAPON_COLOR.endlessscythe);
+    ctx.restore();
+  }
+}
+
 function drawInfinityFloaters(p, x, y) {
   const now = performance.now(), d = p.facing < 0 ? -1 : 1;
   const mx = x + p.w / 2, my = y + p.h / 2;

@@ -436,7 +436,7 @@ const PASSIVES = {
   vortex:      { name: 'AEGIS',          color: '#7ad8ff', desc: 'blocks one hit completely every 4s' },
   windwand:    { name: 'GALE GUARD',     color: '#d8f4ff', desc: 'blows away an enemy shot that comes close, every 0.5s' },
   revolver:    { name: 'CHAIN REACTION', color: '#ffa040', desc: 'every hit explodes onto the foes around it, and everything you kill blows up even bigger' },
-  endlessscythe: { name: 'EVENT HORIZON', color: '#7a2aff', desc: 'every hit drags the target toward you' },
+  endlessscythe: { name: 'EVENT HORIZON', color: '#7a2aff', desc: 'every hit stuns the target and drags it toward you' },
   infinitybow: { name: 'ENDLESS VOLLEY', color: '#9a5aff', desc: 'every 5th attack fires twice as many bolts' },
   portalwand:  { name: 'ESCAPE PORTAL',  color: '#b07aff', desc: 'when a hit drops you below 35% health you warp to safety and heal 20% (every 8s)' },
   ghostdagger: { name: 'HAUNTING',       color: '#a8f0ff', desc: 'your thrown daggers turn in the air and chase down your enemies' },
@@ -3140,9 +3140,10 @@ function doAttack(p, pKey) {
         if (w.stunHit) stagger(t, w.stunHit, 'stun');              // MACE
         if (w.burn) ignite(t, w.burn);
         if (w.chill) chillTarget(t, w.chill);
-        if (w.voidPull && p.passive === 'endlessscythe' && !t.boss && !t.dead) {   // EVENT HORIZON
+        if (w.voidPull && p.passive === 'endlessscythe' && !t.dead) {   // EVENT HORIZON
+          stagger(t, HORIZON_STUN_MS, 'stun');   // bosses and players are slowed instead
           const ddx = cx(p) - cx(t), ddy = cy(p) - cy(t), dd = Math.hypot(ddx, ddy) || 1;
-          if (dd > 20) { t.x += ddx / dd * 12; t.y += ddy / dd * 12; clampToArena(t); }
+          if (!t.boss && dd > 20) { t.x += ddx / dd * 12; t.y += ddy / dd * 12; clampToArena(t); }
         }
       }
     }
@@ -4356,6 +4357,7 @@ const ABYSS_SPIN_MS = 1500, ABYSS_SPIN_R = 62, ABYSS_FLING_DMG = 28;
 const ABYSS_SLASH_WIND = 650, ABYSS_SLASH_MS = 950, ABYSS_SLASH_R = 165, ABYSS_SLASH_DMG = 52;
 
 // ── Endless Scythe ──
+const HORIZON_STUN_MS = 450;
 const VOIDBEAM_MS = 2000, VOIDBEAM_SPIN = Math.PI * 3, VOIDBEAM_W = 12, VOIDBEAM_TICK = 110, VOIDBEAM_PULL_R = 240, VOIDBEAM_HOLD = 50;
 const WHIRL_MS = 1200, WHIRL_R = 58, WHIRL_TICK = 250, WHIRL_SLASH_R = 160;
 // A void beam sweeping round you one and a half times, fast, dragging foes in.
