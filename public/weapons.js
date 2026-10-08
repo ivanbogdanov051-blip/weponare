@@ -674,6 +674,28 @@ const WEAPON_ART = {
     k.line(20, -2, 23.5, -4, 0.7, wc); k.line(20, 2, 23.5, 4, 0.7, '#e8fcff');
   }},
 
+  // The Samurai's Katana: a long red-wrapped tsuka with gold menuki, a gold
+  // flower tsuba, and a deeply curved blade with a wavy hamon and a glowing edge.
+  samuraiblade: { draw(k, wc) {
+    k.r(-1, -1.8, 9, 3.6, '#1a0a0e');                     // tsuka
+    for (let i = 0; i < 5; i++) k.poly([[-0.4 + i * 1.8, -1.8], [0.9 + i * 1.8, -1.8], [0.2 + i * 1.8, 1.8]], '#c8283a');   // red ito wrap
+    k.r(3, -0.6, 2, 1.2, '#ffd24a');                      // menuki
+    k.r(-2, -1.3, 1.2, 2.6, '#ffd24a');                   // kashira
+    k.circ(9.4, 0, 3, '#c8a040'); k.circ(9.4, 0, 1.9, '#ffd24a');   // tsuba
+    for (let a = 0; a < 6; a++) k.r(9.4 + Math.cos(a) * 2.4 - 0.4, Math.sin(a) * 2.4 - 0.4, 0.8, 0.8, '#7a5a10');
+    k.r(11.4, -1.2, 1.6, 2.4, '#d8dde6');                 // habaki
+    k.glow(24, -3, 10, wc, 0.25);
+    // A deep, even curve (sori), widest near the hilt, built from slivers.
+    for (let i = 0; i < 24; i++) {
+      const x = 13 + i * 1.05, u = i / 23;
+      const y = -Math.pow(u, 1.6) * 4.6, hw = 1.25 - u * 0.35;
+      k.r(x, y - hw, 1.2, hw * 2, '#c8d4e4');
+      k.r(x, y - hw, 1.2, hw * 0.7, '#ffffff');             // shinogi light
+      k.r(x, y + hw * 0.25 + Math.sin(i * 1.3) * 0.25, 1.2, 0.5, '#e8f0ff');   // wavy hamon
+      k.r(x, y + hw - 0.35, 1.2, 0.35, wc);                // edge glow
+    }
+    k.poly([[37, -6.2], [39.4, -6.4], [37.4, -4.1]], '#ffffff');   // kissaki
+  }},
   // The Endless Scythe: a black haft wound with violet, a huge crescent of void
   // with a burning edge, and a small black hole set where blade meets haft.
   endlessscythe: { draw(k, wc) {

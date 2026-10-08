@@ -961,3 +961,5 @@ body {
   pointer-events: none;
 }
 .joystick.active { border-color: rgba(140, 170, 255, 0.95); }
+
+.legend-tag.samurai-tag { color: #ffd0d0; border-color: #ff5a5a; background: rgba(255, 90, 90, 0.14); }

@@ -47,7 +47,7 @@ let WEAPON_COLOR = {
   glaive:'#b0d8c0', katana:'#eef0ff', chakram:'#66e0c0', cannon:'#9a90a8',
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
-  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff',
+  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff', samuraiblade:'#ff5a5a',
   ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
   scimitar:'#e8e0c8', slingshot:'#b08a5a', mace:'#9aa4b0', javelin:'#d8c8a0', claws:'#e0e4ec',
   emberstaff:'#ff7a2a', halberd:'#c0c8d8', frostbow:'#9fe8ff', chronostaff:'#e8c87a', voidblade:'#9a5aff',
@@ -72,6 +72,7 @@ const WEAPON_DESC = {
   portalwand:"The Portal Mage's own wand: fireballs, portal jumps and a SUPER army of your own monsters",
   infinitybow:"The Abyss's crossbows: one in your hands and two floating beside you",
   endlessscythe:"The Abyss's own scythe, won by beating him a second time",
+  samuraiblade:"The samurai's own katana, deeply curved and razor bright",
   ghostdagger:'The rarest weapon of all: turn invisible, throw a deadly dagger, and make it rain knives',
   stormhammer:'A war hammer full of lightning that comes back when you throw it',
   frostscythe:'A sweeping scythe of ice that freezes whatever it keeps cutting',
@@ -936,6 +937,7 @@ function updatePrediction(frameDt, now) {
   if (ghostNow(me, now)) spd *= 1.75;
   if (me.lightspeed > 0) spd *= 3;            // LIGHTSPEED
   if (me.passive === 'dagger') spd *= 1.45;   // SWIFTNESS
+  if (me.kspin > 0) spd *= 1.9;               // the katana's spin
   if (me.effects && me.effects.slow  > 0) spd *= 0.4;
   if (me.effects && me.effects.root  > 0) spd = 0;            // ROOT VINES
 
@@ -948,11 +950,33 @@ function updatePrediction(frameDt, now) {
   if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
   if (me.effects && me.effects.confuse > 0) { vx = -vx; vy = -vy; if (vx) pred.facing = vx > 0 ? 1 : -1; }   // MIRROR RUNE
   const f = frameDt / 16.67;
+  if (me.passive === 'samuraiblade' && (vx || vy)) {   // WAY OF THE BLADE (mirrors the server)
+    const foe = nearestFoeForPrediction(me);
+    if (foe) {
+      const ax = foe.x - (pred.x + me.w / 2), ay = foe.y - (pred.y + me.h / 2), al = Math.hypot(ax, ay) || 1, vl = Math.hypot(vx, vy);
+      if ((ax * vx + ay * vy) / (al * vl) > 0.5) { vx *= 1.75; vy *= 1.75; }
+    }
+  }
+  if (me.kspin > 0) {   // gliding while spinning
+    const g = Math.min(1, 0.07 * f);
+    pred.kvx = (pred.kvx || 0) + (vx - (pred.kvx || 0)) * g; pred.kvy = (pred.kvy || 0) + (vy - (pred.kvy || 0)) * g;
+    vx = pred.kvx; vy = pred.kvy;
+  } else { pred.kvx = 0; pred.kvy = 0; }
   pred.x = Math.max(ARENA_X + 2, Math.min(ARENA_X + ARENA_W - me.w - 2, pred.x + vx * f));
   pred.y = Math.max(ARENA_Y + 2, Math.min(ARENA_Y + ARENA_H - me.h - 2, pred.y + vy * f));
 
   predHist.push({ t: now, x: pred.x, y: pred.y });
   while (predHist.length && now - predHist[0].t > 1000) predHist.shift();
+}
+
+function nearestFoeForPrediction(me) {
+  const s = currState; if (!s) return null;
+  const px = (pred ? pred.x : me.x) + me.w / 2, py = (pred ? pred.y : me.y) + me.h / 2;
+  let best = null, bd = Infinity;
+  const consider = (x, y) => { const d = Math.hypot(x - px, y - py); if (d < bd) { bd = d; best = { x, y }; } };
+  for (const m of s.monsters || []) if (!m.dead && !m.hidden && !m.ctl) consider(m.x + m.w / 2, m.y + m.h / 2);
+  if (s.gameMode === 'pvp') for (const k of KEYS) { const o = s.players?.[k]; if (o && k !== myKeyOf() && !o.dead) consider(o.x + o.w / 2, o.y + o.h / 2); }
+  return best;
 }
 
 function applyPrediction(state) {
@@ -1027,7 +1051,7 @@ const ATTACK_ANIM = {
   bow: 'draw', crossbow: 'recoil', grapple: 'recoil', cannon: 'heavy', blunderbuss: 'heavy',
   staff: 'cast', frostrod: 'cast', wand: 'flick', stormtome: 'tome',
   chakram: 'throw', boomerang: 'throw', shuriken: 'throw',
-  fireglove: 'punch', vortex: 'shieldup', windwand: 'flick', revolver: 'recoil', portalwand: 'cast', infinitybow: 'recoil', endlessscythe: 'sweep', ghostdagger: 'stab',
+  fireglove: 'punch', vortex: 'shieldup', windwand: 'flick', revolver: 'recoil', portalwand: 'cast', infinitybow: 'recoil', endlessscythe: 'sweep', samuraiblade: 'slash', ghostdagger: 'stab',
   stormhammer: 'chop', frostscythe: 'spin', sunbow: 'draw',
   scimitar: 'slash', slingshot: 'draw', mace: 'chop', javelin: 'throw', claws: 'stab',
   emberstaff: 'cast', halberd: 'sweep', frostbow: 'draw', chronostaff: 'cast', voidblade: 'slash', mindtome: 'tome',
@@ -2790,6 +2814,9 @@ const LEGEND_MOVES = {
             + ' anything you hit is stunned and hurled into the wall · <b>SUPER</b> LIGHTSPEED: 8s at triple speed,'
             + ' lightning zapping everything that comes close, and crash into a foe for a huge lightning blast that'
             + ' stuns everyone around for 2s.',
+  samuraiblade: '<b>ATK</b> a slash wave that flies after your enemies · <b>SPECIAL</b> a quiet wave: when it reaches a foe you'
+             + ' flash through them at near light speed for huge damage · <b>SUPER</b> spin for 5s, far faster and gliding, cutting and'
+             + ' slowing everything you touch',
   endlessscythe: '<b>ATK</b> a scythe swipe, joined by the two scythes floating behind you · <b>SPECIAL</b> a void beam spins a full circle round you, fast, dragging everything in'
              + ' like a black hole · <b>SUPER</b> the Abyss\'s second phase: six scythes whirl round you, are flung out, then one huge slash',
   infinitybow: '<b>ATK</b> a rapid burst of void bolts from all three crossbows · <b>SPECIAL</b> the Abyss\'s massive orb gathers, then flies'
@@ -2859,6 +2886,24 @@ function legendaryCards(weapons, coins) {
         <div class="legend-buy">
           <button class="buy-weapon${ok && coins >= w.price ? '' : ' poor'}" onclick="buyWeapon('${w.id}')" ${ok ? '' : 'disabled'}>BUY ◆${w.price.toLocaleString()}</button>
           <span class="legend-need">${need}</span>
+        </div>
+      </div>`;
+    }
+    if (w.needSamurai) {
+      const kills = (shopData && shopData.samuraiKills) || 0, need = (shopData && shopData.samuraiNeed) || 30;
+      const ok = kills >= need, afford = coins >= w.price;
+      const msg = !ok ? `Defeat ${need} samurai (any runs): ${Math.min(kills, need)}/${need}`
+        : afford ? 'His katana is yours to buy!' : `Need ${(w.price - coins).toLocaleString()} more coins`;
+      return `<div class="shop-row legendary samurai-row">
+        <div class="shop-head">
+          <canvas class="shop-ic" data-weapon="${w.id}" width="56" height="32"></canvas>
+          <span class="shop-name" style="color:${col}">${w.name}</span>
+          <span class="legend-tag samurai-tag">LEGENDARY</span>
+        </div>
+        <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>${legendPassive(w.id)}
+        <div class="legend-buy">
+          <button class="buy-weapon${ok && afford ? '' : ' poor'}" onclick="buyWeapon('${w.id}')" ${ok && afford ? '' : 'disabled'}>◆ ${w.price.toLocaleString()}</button>
+          <span class="legend-need">${msg}</span>
         </div>
       </div>`;
     }
@@ -4456,6 +4501,7 @@ function drawPlayerBody(p, baseColor, label, key) {
   drawWeaponSprite(p, x, y, key);
   if (p.weaponId === 'infinitybow' && !p.dead) drawInfinityFloaters(p, x, y);
   if (p.weaponId === 'endlessscythe' && !p.dead) drawEndlessFloaters(p, x, y, key);
+  if (p.kspin > 0 && !p.dead) drawKatanaSpin(p, x, y);
   drawStatusMarks(p, x, y);
   if (p.puppet) drawPuppetMark(x + p.w / 2, y - 6, null);
   if (p.shuffleIn != null && key === 'p' + myNum) drawShuffleCountdown(p, x, y);
@@ -4723,6 +4769,23 @@ function drawMonsterTells(m, x, y) {
     ctx.beginPath(); ctx.arc(mx, my, BOMB_R, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
     if (blink) { ctx.globalAlpha = 0.5; ctx.fillStyle = '#ffffff'; ctx.fillRect(x, y, m.w, m.h); }
+  }
+  if (m.samWind) {
+    // The glint before he throws: red for a slash wave, white for the quiet one.
+    const k = (now / 60) % 1;
+    ctx.globalAlpha = 0.9; ctx.strokeStyle = m.samWind === 'dash' ? '#ffffff' : '#ff5a5a'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(mx - 6 - k * 4, y - 6); ctx.lineTo(mx + 6 + k * 4, y - 6); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(mx, y - 12 - k * 4); ctx.lineTo(mx, y); ctx.stroke();
+    ctx.globalAlpha = 0.25; ctx.fillStyle = m.samWind === 'dash' ? '#ffffff' : '#ff5a5a';
+    ctx.beginPath(); ctx.arc(mx, my, m.w * 0.9, 0, Math.PI * 2); ctx.fill();
+  }
+  if (m.samDash != null) {
+    // The flash: a long bright streak trailing back from him.
+    const a = m.samDash;
+    ctx.globalAlpha = 0.55; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = m.h * 0.5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx - Math.cos(a) * 60, my - Math.sin(a) * 60); ctx.stroke();
+    ctx.globalAlpha = 0.8; ctx.strokeStyle = '#ff5a5a'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx - Math.cos(a) * 80, my - Math.sin(a) * 80); ctx.stroke();
   }
   if (m.ward) {
     ctx.globalAlpha = 0.35 + 0.15 * Math.sin(now / 150); ctx.strokeStyle = '#5aff9a'; ctx.lineWidth = 1.5;
@@ -5226,6 +5289,41 @@ function drawScytheWhirl(f, now) {
   ctx.restore();
 }
 
+// A slash wave: a bright crescent of steel, its edge burning, ghosts trailing behind.
+function drawSlashWave(pr, ang, now, edge) {
+  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+  for (let i = 3; i >= 0; i--) {
+    ctx.save(); ctx.translate(-i * 5, 0);
+    ctx.globalAlpha = i ? 0.12 * (4 - i) : 1;
+    ctx.fillStyle = i ? edge : '#ffffff';
+    ctx.beginPath();
+    ctx.arc(-4, 0, 11, -1.15, 1.15);              // outer edge
+    ctx.arc(-9, 0, 8.5, 1.05, -1.05, true);       // inner edge, making a crescent
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 0.9; ctx.strokeStyle = edge; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.arc(-4, 0, 11, -1.1, 1.1); ctx.stroke();
+  ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.9;
+  ctx.fillRect(6, -0.5 + Math.sin(now / 40) * 4, 1.5, 1.5);
+  ctx.restore();
+}
+// The quiet wave: a pale, rippling crescent — harmless, but it marks you.
+function drawDashWave(pr, ang, now) {
+  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+  const pulse = 0.5 + 0.5 * Math.sin(now / 70);
+  for (let i = 0; i < 3; i++) {
+    ctx.globalAlpha = (0.55 - i * 0.15) * (0.7 + 0.3 * pulse);
+    ctx.strokeStyle = i ? '#9ad8ff' : '#ffffff'; ctx.lineWidth = 2 - i * 0.5;
+    ctx.setLineDash([3, 2]); ctx.lineDashOffset = -now / 30;
+    ctx.beginPath(); ctx.arc(-4 - i * 5, 0, 12 - i, -1.2, 1.2); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 0.8; ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(7, 0, 1.6 + pulse, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
 function drawVoidBolt(pr, ang) {
   ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
   ctx.globalAlpha = 0.35; ctx.fillStyle = '#7a2aff';
@@ -5303,6 +5401,25 @@ function drawEndlessFloaters(p, x, y, key) {
     drawWeaponPixels(ctx, 'endlessscythe', Math.round(sc * 10) / 10, WEAPON_COLOR.endlessscythe);
     ctx.restore();
   }
+}
+
+// The katana's SUPER: the blade whirling round you, ringed in red light.
+function drawKatanaSpin(p, x, y) {
+  const now = performance.now(), mx = x + p.w / 2, my = y + p.h / 2;
+  const fade = Math.min(1, p.kspin / 400);
+  ctx.save();
+  ctx.globalAlpha = 0.18 * fade; ctx.fillStyle = '#ff5a5a';
+  ctx.beginPath(); ctx.arc(mx, my, 30, 0, Math.PI * 2); ctx.fill();
+  const a = now / 45;
+  ctx.globalAlpha = 0.6 * fade; ctx.strokeStyle = '#ffd0d0'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(mx, my, 26, a - 2.2, a); ctx.stroke();
+  ctx.globalAlpha = fade;
+  for (const off of [0, Math.PI]) {
+    ctx.save(); ctx.translate(mx, my); ctx.rotate(a + off);
+    drawWeaponPixels(ctx, 'samuraiblade', 0.75, WEAPON_COLOR.samuraiblade);
+    ctx.restore();
+  }
+  ctx.restore();
 }
 
 function drawInfinityFloaters(p, x, y) {
@@ -5424,6 +5541,7 @@ const MONSTER_ARMS = {
   necromancer: { art: 'm_bonestaff', color: '#9aff7a', size: 0.66, rest: -1.1,  move: 'cast'   },
   skeleton:    { art: 'm_shiv',      color: '#c8c0a8', size: 0.8,  rest:  0.3,  move: 'stab'   },
   light:       { art: 'm_scythe',    color: '#fff6a0', size: 0.8,  rest: -0.6,  move: 'chop'   },
+  samurai:     { art: 'katana',      color: '#e8eef8', size: 0.72, rest: -0.35, move: 'chop'   },
   // Boss
   giant:    { art: 'm_tree',      color: '#4e8a3a', size: 0.62, rest: -0.95, move: 'giant'  },
   portalmage: { art: 'm_portalstaff', color: '#b07aff', size: 0.6, rest: -1.15, move: 'cast' },
@@ -5515,6 +5633,8 @@ function drawProjectiles(projs) {
     const u = upgScale(pr.upg);
 
     if (pr.weaponId === 'abyssbolt' || pr.weaponId === 'infinitybow') { drawVoidBolt(pr, ang); continue; }
+    if (pr.weaponId === 'samwave') { drawSlashWave(pr, ang, now, pr.special ? '#ff5a5a' : (pr.owner === 'monster' ? '#ff4a5a' : '#ff8a8a')); continue; }
+    if (pr.weaponId === 'samdashwave') { drawDashWave(pr, ang, now); continue; }
     if (pr.weaponId === 'abyssorb') { drawAbyssOrb(pr.x, pr.y, pr.special ? 12 : 20, now); continue; }
     if (pr.weaponId === 'abyssscythe') {
       ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(now / 45);

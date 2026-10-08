@@ -728,6 +728,7 @@ const MONSTER_SKIN = {
   necromancer: { base: '#5a4a7a', eye: '#9aff7a', eyes: 2 },
   skeleton:    { base: '#d8d0b8', eye: '#ff5a3a', eyes: 2 },
   light:       { base: '#f2ecc0', eye: '#3ad0ff', eyes: 2 },
+  samurai:     { base: '#b8283a', eye: '#ffe08a', eyes: 2 },
   // Boss
   giant:    { base: '#7a9a56', eye: '#ffe25a', eyes: 2 },
   portalmage: { base: '#5a2aa8', eye: '#ff9aff', eyes: 2 },
@@ -820,6 +821,13 @@ const MONSTER_SHAPE = {
     // A skull on a thin ribcage.
     body: [[0.30,0.00],[0.70,0.00],[0.76,0.26],[0.60,0.32],[0.74,0.40],[0.70,0.70],[0.30,0.70],[0.26,0.40],[0.40,0.32],[0.24,0.26]],
     legs: [[0.30,0.30],[0.56,0.30]], legTop: 0.68, headV: 0.16,
+  },
+  samurai: {
+    // A kabuto with a tall crescent crest, broad lacquered shoulder plates,
+    // and a skirt of armour over planted legs.
+    body: [[0.14,0.00],[0.30,0.12],[0.42,0.08],[0.58,0.08],[0.70,0.12],[0.86,0.00],[0.74,0.20],[0.98,0.32],[0.90,0.44],
+           [0.80,0.44],[0.84,0.72],[0.16,0.72],[0.20,0.44],[0.10,0.44],[0.02,0.32],[0.26,0.20]],
+    legs: [[0.26,0.26],[0.56,0.26]], legTop: 0.70, headV: 0.22,
   },
   light: {
     // A slim, sharp figure leaning into a sprint, with a swept-back crest.

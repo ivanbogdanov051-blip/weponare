@@ -310,6 +310,14 @@ const WEAPONS = [
     voidPull: true,
     special: { kind: 'voidbeam',   dmg: 34, range: 320, cd: 9000 },
     super:   { kind: 'abysswhirl', dmg: 95, cd: 20000 } },
+  // Bought for SAM_PRICE once you have cut down SAM_KILLS_NEED samurai (any runs).
+  // Attack: a slash wave that seeks out foes. Special: a dash wave — when it
+  // reaches a foe you flash through them at near light speed. SUPER: spin for 5s,
+  // much faster and gliding, cutting and slowing everything you touch.
+  { id: 'samuraiblade', name: "SAMURAI'S KATANA", damage: 30, range: 260, atkSpd: 520, type: 'ranged', unlockXp: 0,
+    shopOnly: true, noRequirement: true, needSamurai: true, price: 30000, slashWave: true,
+    special: { kind: 'dashwave', dmg: 150, range: 340, cd: 6500 },
+    super:   { kind: 'katanaspin', dmg: 22, cd: 20000 } },
   { id: 'lightblade', name: 'LIGHT BLADE', damage: 40, range: 56, atkSpd: 620, type: 'melee', unlockXp: 0,
     shopOnly: true, noRequirement: true, needLight: true, price: 0, lightDash: true,
     special: { kind: 'lightdashes', dmg: 70, range: 260, cd: 9000 },
@@ -337,7 +345,7 @@ const WEAPON_COLORS = {
   glaive: '#b0d8c0', katana: '#eef0ff', chakram: '#66e0c0', cannon: '#9a90a8', reaper: '#cc66aa',
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
   shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
-  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff', endlessscythe: '#7a2aff',
+  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff', samuraiblade: '#ff5a5a', endlessscythe: '#7a2aff',
   ghostdagger: '#a8f0ff', stormhammer: '#7ac8ff', frostscythe: '#bfefff', sunbow: '#ffd24a',
 };
 
@@ -399,6 +407,7 @@ const WEAPON_UPGRADES = {
   revolver:    ['dmg', 'spd', 'aoe', 'crit', 'multi'],
   portalwand:  ['dmg', 'crit', 'cdr', 'aoe'],
   infinitybow: ['dmg', 'spd', 'crit', 'cdr', 'multi'],
+  samuraiblade: ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   endlessscythe: ['dmg', 'spd', 'rng', 'crit', 'cdr'],
   ghostdagger: ['dmg', 'spd', 'crit', 'cdr'],
   stormhammer: ['dmg', 'spd', 'crit', 'cdr', 'knock'],
@@ -437,6 +446,7 @@ const PASSIVES = {
   windwand:    { name: 'GALE GUARD',     color: '#d8f4ff', desc: 'blows away an enemy shot that comes close, every 0.5s' },
   revolver:    { name: 'CHAIN REACTION', color: '#ffa040', desc: 'every hit explodes onto the foes around it, and everything you kill blows up even bigger' },
   endlessscythe: { name: 'EVENT HORIZON', color: '#7a2aff', desc: 'every hit stuns the target and drags it toward you' },
+  samuraiblade: { name: 'WAY OF THE BLADE', color: '#ff5a5a', desc: 'you move 75% faster while heading toward an enemy' },
   infinitybow: { name: 'ENDLESS VOLLEY', color: '#9a5aff', desc: 'every 5th attack fires twice as many bolts' },
   portalwand:  { name: 'ESCAPE PORTAL',  color: '#b07aff', desc: 'when a hit drops you below 35% health you warp to safety and heal 20% (every 8s)' },
   ghostdagger: { name: 'HAUNTING',       color: '#a8f0ff', desc: 'your thrown daggers turn in the air and chase down your enemies' },
@@ -697,6 +707,13 @@ const MONSTER_TYPES = {
     name: 'NECROMANCER', minWave: 12, weight: 2, hp: 1.6, dmg: 1.0, speed: 0.8, size: 1.1,
     color: '#5a4a7a', xp: 2.0, coins: 2.2, ai: 'necro',
   },
+  // A common duelist: throws slash waves at you, and now and then a quiet wave
+  // that does nothing itself — if it touches you, he flashes through you with
+  // his katana for huge damage. Parry that and he is left stunned.
+  samurai: {
+    name: 'SAMURAI', minWave: 4, weight: 3, hp: 1.1, dmg: 1.1, speed: 1.15, size: 1.0,
+    color: '#c8303a', xp: 1.8, coins: 2.0, ai: 'samurai',
+  },
   // Blindingly fast and rare (see maybeLightWave): sweeps through you and
   // blinks away, or chains curving dashes. Usually comes alone.
   light: {
@@ -753,7 +770,7 @@ const MONSTER_TYPES = {
 // EXTREME mode fields only the strongest monsters, starts as hard as a deep
 // normal run (EXTREME_LEVEL_OFFSET waves in) and pays far more.
 const EXTREME_ROSTER = { brute: 2, warden: 3, behemoth: 3, titan: 2, wraith: 4, infernal: 3,
-                         bomber: 2, shaman: 2, splitter: 2, charger: 3, necromancer: 2 };
+                         bomber: 2, shaman: 2, splitter: 2, charger: 3, necromancer: 2, samurai: 3 };
 const EXTREME_LEVEL_OFFSET = 9;
 const EXTREME_COIN_MULT = 3;        // on top of the normal kill payout
 const EXTREME_WAVE_BONUS = 120;     // coins per wave number, paid on every clear
@@ -840,6 +857,7 @@ function progress() {
   if (!d.abilitySlots) d.abilitySlots = {};
   if (!d.abilitySlotCount) d.abilitySlotCount = {};
   if (!d.lightKills)  d.lightKills = {};
+  if (!d.samuraiKills) d.samuraiKills = {};
   return d;
 }
 function markDirty() { progressDirty = true; }
@@ -888,6 +906,7 @@ function saveData(pw) {
     abilities: d.abilities[pw] || [], abilitySlots: d.abilitySlots[pw] || [],
     slotCount: d.abilitySlotCount[pw] || ABILITY_SLOTS,
     lightKills: d.lightKills[pw] || 0,
+    samuraiKills: d.samuraiKills[pw] || 0,
   });
 }
 function makeSave(pw) {
@@ -934,6 +953,7 @@ function restoreBackup(pw, backup) {
     d.abilitySlotCount[pw] = clampSlots(b.slotCount);
     d.abilitySlots[pw] = cleanSlots(b.abilitySlots, abils, d.abilitySlotCount[pw]);
     d.lightKills[pw] = num(b.lightKills);
+    d.samuraiKills[pw] = num(b.samuraiKills);
     if (b.skin && typeof b.skin === 'object' && d.skins[pw] === undefined) d.skins[pw] = b.skin;
     markDirty();
     return;
@@ -950,6 +970,7 @@ function restoreBackup(pw, backup) {
   if (abils.some(id => !haveAb.includes(id))) { d.abilities[pw] = [...new Set([...haveAb, ...abils])]; changed = true; }
   if (clampSlots(b.slotCount) > (d.abilitySlotCount[pw] || ABILITY_SLOTS)) { d.abilitySlotCount[pw] = clampSlots(b.slotCount); changed = true; }
   if (num(b.lightKills) > (d.lightKills[pw] || 0)) { d.lightKills[pw] = num(b.lightKills); changed = true; }
+  if (num(b.samuraiKills) > (d.samuraiKills[pw] || 0)) { d.samuraiKills[pw] = num(b.samuraiKills); changed = true; }
   for (const [wid, lv] of Object.entries(ups)) {
     const allowed = upgradesFor(wid);
     for (const [k, n] of Object.entries(lv)) {
@@ -1274,6 +1295,7 @@ function effectiveSpeed(p) {
   if (hasEffect(p, 'ghost')) s *= 1.75;
   if (p.lightspeed > 0) s *= LIGHTSPEED_MULT;          // the Light Blade's SUPER
   if (p.passive === 'dagger') s *= PASSIVE_SPEED;
+  if (p.kspin > 0) s *= KSPIN_SPEED;                    // the katana's SUPER
   if (hasEffect(p, 'slow'))  s *= 0.4;
   if (hasEffect(p, 'root'))  s = 0;          // ROOT VINES
   return s;
@@ -1789,6 +1811,115 @@ function turnToward(a, want, max) {
   while (d < -Math.PI) d += Math.PI * 2;
   return a + Math.max(-max, Math.min(max, d));
 }
+// ─── Samurai ──────────────────────────────────────────────────────────────────
+const SAM_CD = 2200, SAM_WIND = 380, SAM_RANGE = 300, SAM_DASHWAVE_CHANCE = 0.3;
+const SAM_WAVE_SPEED = 4.2, SAM_WAVE_MULT = 1.1, SAM_DASH_SPEED = 14, SAM_DASH_MULT = 3.6, SAM_DASH_MIN = 40;
+const SAM_STUN_MS = 2200, SAM_TOWARD_DOT = 0.5, SAM_TOWARD_MULT = 1.75;
+const SAM_KILLS_NEED = 30;
+// A slash wave: a crescent of steel flying at its target (the samurai's, or a katana's).
+function slashWave(owner, x, y, a, dmg, opts = {}) {
+  room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * (opts.speed || SAM_WAVE_SPEED), dy: Math.sin(a) * (opts.speed || SAM_WAVE_SPEED),
+    damage: dmg, owner, traveled: 0, maxRange: opts.range || 420, weaponId: opts.dash ? 'samdashwave' : 'samwave',
+    isAoe: false, aoeRadius: 0, pierce: false, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: null,
+    hitR: 7, homing: !!opts.homing, ...(opts.dash ? { dashWave: opts.dash } : {}), ...(opts.upg ? { upg: opts.upg } : {}) });
+}
+function aiSamurai(m, t, dist, dx, dy, spd, factor, dt) {
+  if (m.dazed > 0) { m.dazed -= dt; return true; }   // stunned by a parried flash
+  m.samCd = (m.samCd ?? 1400 + Math.random() * 1200) - dt;
+  const d = m.samDash;
+  if (d) {
+    // The flash: straight through the target at near light speed.
+    const step = Math.min(d.left, SAM_DASH_SPEED * factor), ox = m.x, oy = m.y;
+    m.x += Math.cos(d.a) * step; m.y += Math.sin(d.a) * step; d.left -= step;
+    clampToArena(m);
+    m.face = Math.cos(d.a) < 0 ? -1 : 1;
+    for (const o of shieldFoes()) {
+      if (d.hit.has(o) || (o.num && unseen(o)) || !aabb(m, o)) continue;
+      d.hit.add(o);
+      if (o.parryTimer > 0) {
+        // Parried: the blade is turned and he is left reeling.
+        applyDamage(m, Math.round(m.atkDamage * reflectOf(o)) + 10, playerKeyOf(o));
+        spawnParrySpark(cx(o), cy(o));
+        m.samDash = null; m.dazed = SAM_STUN_MS; m.samCd = SAM_CD;
+        room.particles.push({ type: 'crit', x: cx(m), y: m.y - 8, text: 'STUNNED', timer: 900, max: 900 });
+        return true;
+      }
+      applyDamage(o, Math.round(Math.max(SAM_DASH_MIN, m.atkDamage * SAM_DASH_MULT)), 'monster');
+      room.particles.push({ type: 'crit', x: cx(o), y: o.y - 8, text: 'IAI!', timer: 700, max: 700 });
+    }
+    if (d.left <= 0.5 || Math.hypot(m.x - ox, m.y - oy) < step * 0.4) {
+      room.particles.push({ type: 'streak', x: d.sx, y: d.sy, x2: cx(m), y2: cy(m), timer: 380, max: 380, color: '#ff5a5a' });
+      m.samDash = null; m.samCd = SAM_CD; m.dazed = 250;
+    }
+    return true;
+  }
+  if (m.samWind > 0) {
+    m.samWind -= dt; m.face = dx > 0 ? 1 : -1;
+    if (m.samWind <= 0) {
+      const a = Math.atan2(dy, dx);
+      if (m.samNext === 'dash') slashWave('monster', cx(m), cy(m), a, 0, { dash: { mon: m.id }, speed: 3.6, range: 460 });
+      else slashWave('monster', cx(m), cy(m), a, Math.round(m.atkDamage * SAM_WAVE_MULT));
+      m.samCd = SAM_CD;
+    }
+    return true;
+  }
+  if (m.samCd <= 0 && dist < SAM_RANGE) {
+    m.samWind = SAM_WIND; m.swing = MONSTER_SWING_MS;
+    m.samNext = Math.random() < SAM_DASHWAVE_CHANCE ? 'dash' : 'wave';
+    return true;
+  }
+  return false;   // otherwise a swordsman like any other
+}
+// A dash wave reached someone: whoever threw it flashes through them.
+function triggerDashWave(proj, t) {
+  const dw = proj.dashWave;
+  if (dw.mon) {
+    const m = room.monsters.find(o => o.id === dw.mon && !o.dead);
+    if (!m || m.dazed > 0 || m.controlledBy) return;
+    const a = Math.atan2(cy(t) - cy(m), cx(t) - cx(m));
+    m.samDash = { a, left: Math.hypot(cx(t) - cx(m), cy(t) - cy(m)) + 70, hit: new Set(), sx: cx(m), sy: cy(m) };
+    m.samWind = 0;
+  } else {
+    const p = room.players[proj.owner];
+    if (!p || p.dead) return;
+    const a = Math.atan2(cy(t) - cy(p), cx(t) - cx(p));
+    p.facing = Math.cos(a) < 0 ? -1 : 1;
+    startBladeDash(p, { kind: 'sam', a, dist: Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) + 60, speed: SAM_DASH_SPEED * 1.2,
+                        n: 1, turn: 0, dmg: dw.dmg });
+    room.particles.push({ type: 'streak', x: cx(p), y: cy(p), x2: cx(t), y2: cy(t), timer: 380, max: 380, color: '#ff5a5a' });
+  }
+}
+// Cutting down a samurai counts toward his katana, for every player in the run.
+function creditSamuraiKill() {
+  if (room.gameMode === 'sandbox') return;
+  const d = progress();
+  for (const k of KEYS) {
+    const pw = room.passwords[k];
+    if (!room.players[k] || !pw || isAdminPw(pw)) continue;
+    const n = d.samuraiKills[pw] = (d.samuraiKills[pw] || 0) + 1;
+    markDirty();
+    if (n <= SAM_KILLS_NEED && (n % 5 === 0 || n === SAM_KILLS_NEED)) {
+      room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26 + KEYS.indexOf(k) * 16,
+                            text: n >= SAM_KILLS_NEED ? "SAMURAI'S KATANA UNLOCKED IN THE SHOP" : `SAMURAI DEFEATED ${n}/${SAM_KILLS_NEED}`,
+                            color: '#ff7a7a', timer: 2600, max: 2600 });
+    }
+  }
+}
+// The katana's SUPER: spinning, faster, gliding, cutting all you touch.
+const KSPIN_MS = 5000, KSPIN_SPEED = 1.9, KSPIN_R = 30, KSPIN_TICK = 220, KSPIN_SLOW = 900, KSPIN_GLIDE = 0.07;
+function katanaSpinTick(p, key, dt) {
+  p.kspin -= dt;
+  p.kspinT = (p.kspinT || 0) - dt;
+  if (p.kspinT > 0) return;
+  p.kspinT = KSPIN_TICK;
+  for (const t of enemyTargets(key)) {
+    if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) > KSPIN_R + t.w / 2) continue;
+    if (!t.num) t.invincible = 0;
+    applyDamage(t, p.kspinDmg || 20, key);
+    if (!t.dead) chillTarget(t, KSPIN_SLOW);
+  }
+}
+
 function aiLight(m, t, dist, dx, dy, spd, factor, dt) {
   m.lightCd = (m.lightCd ?? 1300) - dt;
   if (m.dazed > 0) { m.dazed -= dt; return true; }
@@ -1904,13 +2035,14 @@ function monsterSearch(m, spd, factor, dt) {
   }
 }
 
-const MONSTER_AI = { bomber: aiBomber, shaman: aiShaman, charger: aiCharger, necro: aiNecro, light: aiLight };
+const MONSTER_AI = { bomber: aiBomber, shaman: aiShaman, charger: aiCharger, necro: aiNecro, light: aiLight, samurai: aiSamurai };
 
 // After a monster is killed (and paid for): bombers pop, splitters split,
 // a necromancer's skeletons crumble.
 function monsterDied(m, killer) {
   const def = MONSTER_TYPES[m.type] || {};
   if (m.type === 'light' && !m.controlledBy) creditLightKill();
+  if (m.type === 'samurai' && !m.controlledBy) creditSamuraiKill();
   if (def.ai === 'bomber') bomberBlast(m, killer || true);
   if (def.split) {
     for (let i = 0; i < (def.splitCount || 2); i++) {
@@ -2349,7 +2481,7 @@ function tickRoom(dt) {
   for (const key of KEYS) {
     const p = room.players[key];
     if (!p || p.dead) {
-      if (p) { p.bladeDash = null; p.lightspeed = 0; p.bladeClick = null; }
+      if (p) { p.bladeDash = null; p.lightspeed = 0; p.bladeClick = null; p.kspin = 0; }
       if (p && p.respawnTimer > 0) {
         p.respawnTimer -= dt;
         if (p.respawnTimer <= 0) respawnPlayer(p);
@@ -2367,6 +2499,20 @@ function tickRoom(dt) {
     if (inp.down)  vy =  spd;
     if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
     if (hasEffect(p, 'confuse')) { vx = -vx; vy = -vy; if (vx) p.facing = vx > 0 ? 1 : -1; }   // MIRROR RUNE
+    if (p.passive === 'samuraiblade' && (vx || vy)) {                  // WAY OF THE BLADE
+      const f = nearestFoe(p, key);
+      if (f) {
+        const ax = cx(f) - cx(p), ay = cy(f) - cy(p), al = Math.hypot(ax, ay) || 1, vl = Math.hypot(vx, vy);
+        if ((ax * vx + ay * vy) / (al * vl) > SAM_TOWARD_DOT) { vx *= SAM_TOWARD_MULT; vy *= SAM_TOWARD_MULT; }
+      }
+    }
+    if (p.kspin > 0) {
+      // Spinning: less grip — speed builds up and carries on after you let go.
+      const g = Math.min(1, KSPIN_GLIDE * factor);
+      p.kvx = (p.kvx || 0) + (vx - (p.kvx || 0)) * g; p.kvy = (p.kvy || 0) + (vy - (p.kvy || 0)) * g;
+      vx = p.kvx; vy = p.kvy;
+      katanaSpinTick(p, key, dt);
+    }
 
     if (p.bladeDash && !p.controlling) updateBladeDash(p, key, factor, dt);   // a Light Blade dash carries you
     else {
@@ -2893,6 +3039,7 @@ function advanceProjectile(proj, factor, dt) {
   }
   for (const t of enemyTargets(proj.owner)) {
     if (t === proj.ignore || !aabb(hitBox, t)) continue;
+    if (proj.dashWave) { triggerDashWave(proj, t); return false; }
     const tk = playerKeyOf(t);
     if (tk && t.parryTimer > 0) {
       // Parried: bounce the projectile back at its owner
@@ -3086,6 +3233,16 @@ function doAttack(p, pKey) {
   swatFireHands(p, pKey, w.type === 'melee' ? w.range : 48);
   swatShots(p, w.type === 'melee' ? w.range + 10 : 44);
   if (w.infinityShot) { infinityAttack(p, pKey, w, dmgMult); return; }
+  if (w.slashWave) {
+    // A slash wave that seeks out the nearest foe.
+    const aim = nearestTargetAngle(p, pKey);
+    p.facing = Math.cos(aim) < 0 ? -1 : 1;
+    for (let i = 0; i < 1 + (w.multi || 0); i++) {
+      slashWave(pKey, cx(p), cy(p), aim + (i - (w.multi || 0) / 2) * 0.22, Math.round(w.damage * dmgMult),
+                { speed: 5.4, range: w.range, homing: true, upg: p.upgrades?.[w.id] || null });
+    }
+    return;
+  }
 
   if (w.mindTrap) { placeMindTrap(p, pKey, w, dmgMult); return; }
   if (w.lightDash) { p.swingTimer = 0; bladeAttack(p, pKey, w, dmgMult); return; }
@@ -3258,6 +3415,11 @@ function doSuper(p, pKey) {
   p.superCooldown = su.cd;
   p.swingTimer = 300;
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
+  if (su.kind === 'katanaspin') {
+    p.kspin = KSPIN_MS; p.kspinT = 0; p.kspinDmg = Math.round(su.dmg * dmgMult); p.kvx = 0; p.kvy = 0;
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 46, timer: 700, max: 700, color: WEAPON_COLORS.samuraiblade, text: 'WHIRLWIND' });
+    return;
+  }
   if (su.kind === 'abysswhirl') {
     room.fires.push({ id: nextId(), kind: 'scythewhirl', owner: pKey, x: cx(p), y: cy(p), r: WHIRL_R, t: 0, life: WHIRL_MS + 450,
                       tick: 0, dmg: Math.round(su.dmg * dmgMult), flung: false, slashed: false, a: nearestTargetAngle(p, pKey) });
@@ -6220,6 +6382,13 @@ function doSpecial(p, pKey) {
     castFireHand(p, pKey, sp, dmgMult);
     return;
   }
+  if (sp.kind === 'dashwave') {
+    // A quiet wave: when it reaches a foe, you flash through them.
+    const aim = nearestTargetAngle(p, pKey);
+    p.facing = Math.cos(aim) < 0 ? -1 : 1;
+    slashWave(pKey, px, py, aim, 0, { dash: { dmg: spDmg }, speed: 5.5, range: sp.range, homing: true });
+    return;
+  }
   if (sp.kind === 'voidbeam') {
     const a0 = nearestTargetAngle(p, pKey);
     room.fires.push({ id: nextId(), kind: 'voidbeam', owner: pKey, x: px, y: py, r: VOIDBEAM_W, t: 0, life: VOIDBEAM_MS,
@@ -6502,6 +6671,7 @@ function playerView(p) {
     ...(p.mindControlledBy ? { puppet: p.mindControlledBy } : {}),
     ...(p.bladeDash ? { dashing: p.bladeDash.kind } : {}),
     ...(p.lightspeed > 0 ? { lightspeed: Math.round(p.lightspeed) } : {}),
+    ...(p.kspin > 0 ? { kspin: Math.round(p.kspin) } : {}),
     ...(p.passive === 'mindtome' ? { shuffleIn: Math.max(0, Math.round(p.shuffleT ?? MIND_SHUFFLE_MS)) } : {}),
     ...(p.passive === 'vortex' ? { aegis: !(p.aegisCd > 0) } : {}),
     effects: p.effects,
@@ -6536,6 +6706,8 @@ function buildStateMsg(playerNum) {
                   ...(m.fuse > 0 ? { fuse: Math.round(m.fuse) } : {}), ...(m.ward > 0 ? { ward: true } : {}),
                   ...(m.charge ? { charge: { a: Math.round(m.charge.a * 100) / 100, wind: m.charge.wind > 0 } } : {}),
                   ...(m.dazed > 0 ? { dazed: true } : {}),
+                  ...(m.samWind > 0 ? { samWind: m.samNext === 'dash' ? 'dash' : 'wave' } : {}),
+                  ...(m.samDash ? { samDash: Math.round(m.samDash.a * 100) / 100 } : {}),
                   ...(m.sweep ? { lsweep: { a: Math.round(m.sweep.a * 100) / 100, wind: m.sweep.wind > 0 } } : {}),
                   ...(m.dashes ? { ldash: { a: Math.round(m.dashes.a * 100) / 100, wind: m.dashes.wind > 0, n: m.dashes.n } } : {}),
                   ...(m.pupRush ? { ldash: { a: Math.round(m.pupRush.a * 100) / 100, wind: false, n: m.pupRush.n || 1 } } : {}),
@@ -6632,6 +6804,7 @@ function weaponCatalog() {
     needAll: !!w.needAll,
     needMind: !!w.needMind,
     needLight: !!w.needLight,
+    needSamurai: !!w.needSamurai,
     bossReward: !!w.bossReward,
     special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd } : null,
     super: w.super ? { kind: w.super.kind, dmg: w.super.dmg, cd: w.super.cd } : null,
@@ -6690,7 +6863,8 @@ function profileFor(pw, opts = {}) {
   const slotCount = admin ? MAX_ABILITY_SLOTS : clampSlots(d.abilitySlotCount[pw]);
   const abilitySlots = cleanSlots(d.abilitySlots[pw], abilities, slotCount);
   const lightKills = admin ? LIGHT_KILLS_NEED : (d.lightKills[pw] || 0);
-  return { xp, coins, weapons, upgrades, ownedSkins, abilities, abilitySlots, slotCount, lightKills,
+  const samuraiKills = admin ? SAM_KILLS_NEED : (d.samuraiKills[pw] || 0);
+  return { xp, coins, weapons, upgrades, ownedSkins, abilities, abilitySlots, slotCount, lightKills, samuraiKills, samuraiNeed: SAM_KILLS_NEED,
            lightMaxed: maxedWeaponCount(weapons, upgrades), lightMaxedNeed: lightMaxedNeed(),
            nextSlotPrice: slotCount < MAX_ABILITY_SLOTS ? SLOT_PRICES[slotCount - ABILITY_SLOTS] : 0,
            refunded, save: makeSave(pw) };
@@ -7159,6 +7333,9 @@ app.post('/api/buy_weapon', (req, res) => {
     const legends = SHOP_WEAPONS.filter(w => w.id !== weaponId && prof.weapons.includes(w.id)).length;
     if (!tomeMaxed) return res.status(400).json({ error: 'Max out every upgrade on the Storm Tome first.' });
     if (legends < MIND_LEGENDS) return res.status(400).json({ error: `Own ${MIND_LEGENDS} other legendary weapons first (${legends}/${MIND_LEGENDS}).` });
+  }
+  if (def.needSamurai && !admin && prof.samuraiKills < SAM_KILLS_NEED) {
+    return res.status(400).json({ error: `Defeat ${SAM_KILLS_NEED} samurai first (${prof.samuraiKills}/${SAM_KILLS_NEED}).` });
   }
   if (def.needLight && !admin) {
     if (prof.lightKills < LIGHT_KILLS_NEED) return res.status(400).json({ error: `Beat Light ${LIGHT_KILLS_NEED} times first (${prof.lightKills}/${LIGHT_KILLS_NEED}).` });
