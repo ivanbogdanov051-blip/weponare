@@ -2435,9 +2435,16 @@ function checkRoundEnd() {
       room.round.matchWinner = champ ? Number(champ.slice(1)) : 0;
       room.gameState      = 'ROUND_OVER';
       room.roundOverTimer = room.round.matchWinner ? 6000 : 4000;
+      // Beating the admin bot pays out big.
+      if (room.bot?.level === 'admin' && room.round.matchWinner === 1) {
+        addCoins('p1', ADMIN_BOT_REWARD);
+        const w = room.players.p1;
+        room.particles.push({ type: 'coin', x: w ? cx(w) : CANVAS_W / 2, y: w ? w.y - 10 : CANVAS_H / 2, text: '+' + ADMIN_BOT_REWARD.toLocaleString() + ' COINS', timer: 4000, max: 4000 });
+      }
     }
   }
 }
+const ADMIN_BOT_REWARD = 200000;
 
 // ─── Game Loop ────────────────────────────────────────────────────────────────
 
