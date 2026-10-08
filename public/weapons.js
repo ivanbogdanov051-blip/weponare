@@ -674,6 +674,20 @@ const WEAPON_ART = {
     k.line(20, -2, 23.5, -4, 0.7, wc); k.line(20, 2, 23.5, 4, 0.7, '#e8fcff');
   }},
 
+  // The Endless Scythe: a black haft wound with violet, a huge crescent of void
+  // with a burning edge, and a small black hole set where blade meets haft.
+  endlessscythe: { draw(k, wc) {
+    k.r(-2, -1.3, 24, 2.6, '#140a22');                   // haft
+    k.r(-2, -1.3, 24, 0.8, '#3a1f5e');
+    for (const x of [2, 8, 14]) k.r(x, -1.7, 1.2, 3.4, wc);   // violet bindings
+    k.glow(22, -9, 12, wc, 0.45);
+    k.poly([[21, -1.5], [24, -9], [22, -16], [15, -20], [6, -19.5], [15, -15.5], [20.5, -10], [21.5, -2]], '#1a0a30');   // blade
+    k.poly([[24, -9], [22, -16], [15, -20], [6, -19.5], [14, -17.2], [20, -13.5], [22.3, -8.5]], wc);                  // burning edge
+    k.poly([[22, -16], [15, -20], [6, -19.5], [14.5, -18.6], [20.5, -14.8]], '#e0c8ff');
+    k.circ(22.5, -0.5, 2.6, '#000000');                  // the little black hole
+    k.ring(22.5, -0.5, 3.2, 0.9, '#c88aff', 0.3, 5.5);
+    k.r(4, -22, 1, 1, '#e0c8ff'); k.r(26, -12, 1, 1, wc); k.r(18, -23, 0.8, 0.8, '#ffffff');
+  }},
   // The Abyss's crossbow (and the Crossbows of Infinity): a black stock bound in
   // violet, a prod of void glass, a glowing string and a bolt of pure dark.
   infinitybow: { draw(k, wc) {

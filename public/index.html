@@ -368,14 +368,10 @@
 
   <!-- Touch controls (mobile only) -->
   <div id="touchControls">
-    <div class="dpad">
-      <button id="btn-up" class="dpad-btn">&#9650;</button>
-      <div class="dpad-mid">
-        <button id="btn-left" class="dpad-btn">&#9664;</button>
-        <div class="dpad-center"></div>
-        <button id="btn-right" class="dpad-btn">&#9654;</button>
-      </div>
-      <button id="btn-down" class="dpad-btn">&#9660;</button>
+    <!-- Movement joystick (kept in the .dpad slot so the layout code still measures it) -->
+    <div class="dpad joystick" id="joystick">
+      <div class="joy-ring"></div>
+      <div class="joy-knob" id="joyKnob"></div>
     </div>
     <div class="action-btns">
       <div class="ability-btns">

@@ -302,6 +302,14 @@ const WEAPONS = [
     projSpeed: 7, infinityShot: true,
     special: { kind: 'abyssorb',    dmg: 240, range: 900, cd: 9000, aoe: 90 },
     super:   { kind: 'abyssvolley', dmg: 420, cd: 24000 } },
+  // Never for sale: won by beating the Abyss a second time. Attack: a scythe
+  // swipe whose hits drag foes in. Special: a void beam that spins a full circle
+  // round you, fast, pulling everything in like a black hole. SUPER: the Abyss's
+  // second phase — six scythes whirl round you, are flung out, then one huge slash.
+  { id: 'endlessscythe', name: 'ENDLESS SCYTHE', damage: 46, range: 82, atkSpd: 560, type: 'melee', unlockXp: 0, shopOnly: true, bossReward: true, price: 0,
+    voidPull: true,
+    special: { kind: 'voidbeam',   dmg: 34, range: 320, cd: 9000 },
+    super:   { kind: 'abysswhirl', dmg: 95, cd: 20000 } },
   { id: 'lightblade', name: 'LIGHT BLADE', damage: 40, range: 56, atkSpd: 620, type: 'melee', unlockXp: 0,
     shopOnly: true, noRequirement: true, needLight: true, price: 0, lightDash: true,
     special: { kind: 'lightdashes', dmg: 70, range: 260, cd: 9000 },
@@ -329,7 +337,7 @@ const WEAPON_COLORS = {
   glaive: '#b0d8c0', katana: '#eef0ff', chakram: '#66e0c0', cannon: '#9a90a8', reaper: '#cc66aa',
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
   shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
-  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff',
+  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff', endlessscythe: '#7a2aff',
   ghostdagger: '#a8f0ff', stormhammer: '#7ac8ff', frostscythe: '#bfefff', sunbow: '#ffd24a',
 };
 
@@ -391,6 +399,7 @@ const WEAPON_UPGRADES = {
   revolver:    ['dmg', 'spd', 'aoe', 'crit', 'multi'],
   portalwand:  ['dmg', 'crit', 'cdr', 'aoe'],
   infinitybow: ['dmg', 'spd', 'crit', 'cdr', 'multi'],
+  endlessscythe: ['dmg', 'spd', 'rng', 'crit', 'cdr'],
   ghostdagger: ['dmg', 'spd', 'crit', 'cdr'],
   stormhammer: ['dmg', 'spd', 'crit', 'cdr', 'knock'],
   frostscythe: ['dmg', 'rng', 'chill', 'cdr', 'aoe'],
@@ -427,6 +436,7 @@ const PASSIVES = {
   vortex:      { name: 'AEGIS',          color: '#7ad8ff', desc: 'blocks one hit completely every 4s' },
   windwand:    { name: 'GALE GUARD',     color: '#d8f4ff', desc: 'blows away an enemy shot that comes close, every 0.5s' },
   revolver:    { name: 'CHAIN REACTION', color: '#ffa040', desc: 'every hit explodes onto the foes around it, and everything you kill blows up even bigger' },
+  endlessscythe: { name: 'EVENT HORIZON', color: '#7a2aff', desc: 'every hit drags the target toward you' },
   infinitybow: { name: 'ENDLESS VOLLEY', color: '#9a5aff', desc: 'every 5th attack fires twice as many bolts' },
   portalwand:  { name: 'ESCAPE PORTAL',  color: '#b07aff', desc: 'when a hit drops you below 35% health you warp to safety and heal 20% (every 8s)' },
   ghostdagger: { name: 'HAUNTING',       color: '#a8f0ff', desc: 'your thrown daggers turn in the air and chase down your enemies' },
@@ -3130,6 +3140,10 @@ function doAttack(p, pKey) {
         if (w.stunHit) stagger(t, w.stunHit, 'stun');              // MACE
         if (w.burn) ignite(t, w.burn);
         if (w.chill) chillTarget(t, w.chill);
+        if (w.voidPull && p.passive === 'endlessscythe' && !t.boss && !t.dead) {   // EVENT HORIZON
+          const ddx = cx(p) - cx(t), ddy = cy(p) - cy(t), dd = Math.hypot(ddx, ddy) || 1;
+          if (dd > 20) { t.x += ddx / dd * 12; t.y += ddy / dd * 12; clampToArena(t); }
+        }
       }
     }
     // VOID BLADE: a wave of void flies on ahead of every swing.
@@ -3243,6 +3257,12 @@ function doSuper(p, pKey) {
   p.superCooldown = su.cd;
   p.swingTimer = 300;
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
+  if (su.kind === 'abysswhirl') {
+    room.fires.push({ id: nextId(), kind: 'scythewhirl', owner: pKey, x: cx(p), y: cy(p), r: WHIRL_R, t: 0, life: WHIRL_MS + 450,
+                      tick: 0, dmg: Math.round(su.dmg * dmgMult), flung: false, slashed: false, a: nearestTargetAngle(p, pKey) });
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 50, timer: 700, max: 700, color: WEAPON_COLORS.endlessscythe, text: 'ABYSSAL WHIRL' });
+    return;
+  }
   if (su.kind === 'abyssvolley') {
     // All three crossbows shoot one spot: a bolt-spitting black hole opens there.
     const t = nearestFoe(p, pKey);
@@ -3891,6 +3911,8 @@ function updateFires(factor, dt) {
     if (f.kind === 'abysscharge') return updateAbyssCharge(f);
     if (f.kind === 'abyssblade') return updateAbyssBlade(f, factor);
     if (f.kind === 'ibburst') return updateIbBurst(f);
+    if (f.kind === 'voidbeam') return updateVoidBeam(f, factor, dt);
+    if (f.kind === 'scythewhirl') return updateScytheWhirl(f, dt);
     if (f.kind === 'runecast') return true;   // the warning circle, still drawing itself
     if (f.kind === 'meteor' || f.kind === 'knife') return true;   // still falling: only the warning shows
     if (f.kind === 'portal') return updatePortal(f, dt);
@@ -4326,12 +4348,87 @@ const ABYSS_HP = Math.round(MAGE_HP * 1.5);
 const ABYSS_PHASE2 = 0.5;
 const ABYSS_P3_MS = 10000;
 const ABYSS_REWARD_COINS = 100000, ABYSS_REWARD_XP = 75000;
-const ABYSS_CONVERGE_MS = 700;
+const ABYSS_CONVERGE_MS = 700, ABYSS_HOLE_WARN_MS = 900;
 const ABYSS_PLAYER_CHARGE_MS = 650, ABYSS_CHARGE_MS = 1500;
 const ABYSS_ORB_DMG = 75, ABYSS_ORB_AOE = 85;
 const ABYSS_RAPID_SHOTS = 22, ABYSS_RAPID_EVERY = 90, ABYSS_RAPID_DMG = 9;
 const ABYSS_SPIN_MS = 1500, ABYSS_SPIN_R = 62, ABYSS_FLING_DMG = 28;
 const ABYSS_SLASH_WIND = 650, ABYSS_SLASH_MS = 950, ABYSS_SLASH_R = 165, ABYSS_SLASH_DMG = 52;
+
+// ── Endless Scythe ──
+const VOIDBEAM_MS = 2000, VOIDBEAM_SPIN = Math.PI * 3, VOIDBEAM_W = 12, VOIDBEAM_TICK = 110, VOIDBEAM_PULL_R = 240, VOIDBEAM_HOLD = 50;
+const WHIRL_MS = 1200, WHIRL_R = 58, WHIRL_TICK = 250, WHIRL_SLASH_R = 160;
+// A void beam sweeping round you one and a half times, fast, dragging foes in.
+function updateVoidBeam(f, factor, dt) {
+  const o = room.players[f.owner];
+  if (!o || o.dead) return false;
+  f.x = cx(o); f.y = cy(o);
+  f.a = f.a0 + VOIDBEAM_SPIN * Math.min(1, f.t / f.life);
+  for (const t of enemyTargets(f.owner)) {
+    if (t.boss) continue;
+    const dx = f.x - cx(t), dy = f.y - cy(t), d = Math.hypot(dx, dy) || 1;
+    // Dragged in to just outside the beam's root, so it still has to sweep past them.
+    if (d > VOIDBEAM_PULL_R || d < VOIDBEAM_HOLD) continue;
+    const pull = Math.min(d - VOIDBEAM_HOLD, (0.9 + 1.8 * (1 - d / VOIDBEAM_PULL_R)) * factor);
+    t.x += dx / d * pull; t.y += dy / d * pull;
+    clampToArena(t);
+  }
+  f.tick -= dt;
+  if (f.tick > 0) return true;
+  f.tick = VOIDBEAM_TICK;
+  const ex = f.x + Math.cos(f.a) * f.len, ey = f.y + Math.sin(f.a) * f.len;
+  for (const t of enemyTargets(f.owner)) {
+    if (distToSegment(cx(t), cy(t), f.x, f.y, ex, ey) > f.r + t.w / 2) continue;
+    t.invincible = 0;
+    applyDamage(t, f.dmg + (t.num ? 0 : Math.round((t.maxHp || 0) * (t.boss ? 0.003 : 0.01))), f.owner);
+  }
+  return true;
+}
+// The Abyss's second phase, yours: scythes whirl, fly out, then one huge slash.
+function updateScytheWhirl(f, dt) {
+  const o = room.players[f.owner];
+  if (!o || o.dead) return false;
+  f.x = cx(o); f.y = cy(o);
+  if (f.t < WHIRL_MS) {
+    f.tick -= dt;
+    if (f.tick <= 0) {
+      f.tick = WHIRL_TICK;
+      for (const t of enemyTargets(f.owner)) {
+        const d = Math.hypot(cx(t) - f.x, cy(t) - f.y);
+        if (Math.abs(d - WHIRL_R) > 18 + t.w / 2 && d > WHIRL_R) continue;
+        if (!t.num) t.invincible = 0;
+        applyDamage(t, Math.round(f.dmg * 0.5), f.owner);
+      }
+    }
+    f.a = nearestTargetAngle(o, f.owner);
+    return true;
+  }
+  if (!f.flung) {
+    f.flung = true;
+    for (let i = 0; i < 6; i++) {
+      const a = f.a + i * Math.PI / 3;
+      room.projectiles.push({ id: nextId(), x: f.x + Math.cos(a) * WHIRL_R, y: f.y + Math.sin(a) * WHIRL_R,
+        dx: Math.cos(a) * 6.5, dy: Math.sin(a) * 6.5, damage: f.dmg, owner: f.owner, traveled: 0, maxRange: 520,
+        weaponId: 'abyssscythe', isAoe: false, aoeRadius: 0, pierce: true, grapple: false, boomerang: false, returning: false,
+        life: 0, hitTargets: new Set(), hitR: 8 });
+    }
+    room.particles.push({ type: 'shockwave', x: f.x, y: f.y, maxR: 80, timer: 380, max: 380, color: '#e0a0ff' });
+  }
+  if (!f.slashed && f.t >= WHIRL_MS + 150) {
+    f.slashed = true;
+    for (const t of enemyTargets(f.owner)) {
+      const d = Math.hypot(cx(t) - f.x, cy(t) - f.y);
+      if (d > WHIRL_SLASH_R + t.w / 2) continue;
+      let diff = Math.abs(Math.atan2(cy(t) - f.y, cx(t) - f.x) - f.a) % (Math.PI * 2);
+      if (diff > Math.PI) diff = Math.PI * 2 - diff;
+      if (diff > 1.45 && d > 30) continue;
+      if (!t.num) t.invincible = 0;
+      applyDamage(t, Math.round(f.dmg * 1.8), f.owner);
+    }
+    room.particles.push({ type: 'shockwave', x: f.x, y: f.y, maxR: WHIRL_SLASH_R, timer: 380, max: 380, color: '#e0a0ff' });
+  }
+  return true;
+}
 
 function startAbyssFight() {
   room.wave = { num: 1, monstersLeft: 1, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 };
@@ -4465,7 +4562,9 @@ function updateAbyss(m, target, dist, dx, dy, spd, factor, dt) {
       const near = Math.random() < 0.5 && target;
       const at = near ? arenaClamp(cx(target) + (Math.random() - 0.5) * 140, cy(target) + (Math.random() - 0.5) * 140, 30)
                       : arenaClamp(ARENA_X + Math.random() * ARENA_W, ARENA_Y + 60 + Math.random() * (ARENA_H - 60), 30);
-      room.fires.push({ id: nextId(), kind: 'blackhole', owner: 'monster', x: at.x, y: at.y, r: 16, t: 0, life: 2300, tick: 0, dmg: 7, pullR: 115 });
+      // Marked first, so it can be seen coming.
+      room.fires.push({ id: nextId(), kind: 'abyssmark', owner: 'monster', x: at.x, y: at.y, r: 16, t: 0, life: ABYSS_HOLE_WARN_MS,
+                        hole: { r: 16, pullR: 115, dmg: 7, life: 2300 } });
     }
     if (c.meteor <= 0) {
       c.meteor = 420;
@@ -4619,7 +4718,11 @@ function abyssDefeated(m) {
     creditXp(key, ABYSS_REWARD_XP);
     room.particles.push({ type: 'coin', x: cx(p), y: p.y - 10, text: '+' + ABYSS_REWARD_COINS.toLocaleString() + ' COINS', timer: 3000, max: 3000 });
     room.particles.push({ type: 'xp', x: cx(p), y: p.y - 22, text: '+' + ABYSS_REWARD_XP.toLocaleString() + ' XP', timer: 3000 });
-    grantBossWeapon(key, 'infinitybow');
+    // First win: the Crossbows of Infinity. Beat him again: the Endless Scythe.
+    const owned = p.unlockedWeapons || room.playerUnlocks[key] || [];
+    const drop = owned.includes('infinitybow') ? 'endlessscythe' : 'infinitybow';
+    grantBossWeapon(key, drop);
+    room.bossDrops = { ...(room.bossDrops || {}), [key]: drop };
   }
   room.victory = true;
   room.gameState = 'ROUND_OVER';
@@ -5950,8 +6053,12 @@ function updateBlackhole(f, factor, dt) {
       f.spitT = f.spit.every;
       const foes = enemyTargets(f.owner).filter(t => Math.hypot(cx(t) - f.x, cy(t) - f.y) < f.spit.range);
       const t = foes.length ? foes[Math.floor(Math.random() * foes.length)] : null;
-      const a = t ? Math.atan2(cy(t) - f.y, cx(t) - f.x) : Math.random() * Math.PI * 2;
-      abyssBolt(f.owner, f.x, f.y, a, 6, f.spit.dmg, 260);
+      // Bolts leave from the rim, so they're seen flying (not swallowed by whatever the hole is holding).
+      const rim = (a, sp) => abyssBolt(f.owner, f.x + Math.cos(a) * (f.r + 8), f.y + Math.sin(a) * (f.r + 8), a, sp, f.spit.dmg, f.spit.range, { noIframe: true });
+      if (t) rim(Math.atan2(cy(t) - f.y, cx(t) - f.x), 6);
+      // ...and a spiral of bolts streaming out of it all the while.
+      f.spin = (f.spin || 0) + 0.7;
+      for (let i = 0; i < 2; i++) rim(f.spin + i * Math.PI, 5);
     }
   }
   f.tick -= dt;
@@ -6109,6 +6216,13 @@ function doSpecial(p, pKey) {
 
   if (sp.kind === 'firehand') {
     castFireHand(p, pKey, sp, dmgMult);
+    return;
+  }
+  if (sp.kind === 'voidbeam') {
+    const a0 = nearestTargetAngle(p, pKey);
+    room.fires.push({ id: nextId(), kind: 'voidbeam', owner: pKey, x: px, y: py, r: VOIDBEAM_W, t: 0, life: VOIDBEAM_MS,
+                      a: a0, a0, tick: 0, dmg: spDmg, len: sp.range });
+    room.particles.push({ type: 'trapburst', x: px, y: py, maxR: 46, timer: 700, max: 700, color: wc, text: 'VOID BEAM' });
     return;
   }
   if (sp.kind === 'abyssorb') {
@@ -6357,7 +6471,7 @@ function buildChains() {
 
 // Fires that sit on their caster every tick. Clients pin them to wherever they
 // draw that player, so they never trail behind a predicted or smoothed position.
-const RIDES_OWNER = new Set(['barrier', 'hurricane', 'vortexfield', 'drain', 'blizzard', 'sunbeam', 'mindbeams']);
+const RIDES_OWNER = new Set(['barrier', 'hurricane', 'vortexfield', 'drain', 'blizzard', 'sunbeam', 'mindbeams', 'voidbeam', 'scythewhirl']);
 
 // Positions go out 50×/s for every entity; full float precision is ~20 characters
 // each and 0.1 world units is well under a screen pixel, so round them.
@@ -6456,6 +6570,7 @@ function buildStateMsg(playerNum) {
     finalWave:   room.gameMode === 'coop' ? COOP_FINAL_WAVE : 0,
     pendingUnlock: room.unlockQueues[key][0] || null,
     otherHasUnlocks: KEYS.some(k => k !== key && room.unlockQueues[k].length > 0),
+    bossDrop: room.bossDrops?.[key] || null,
     leaderboard: isSolo() && room.gameState === 'ROUND_OVER' ? room.lastLeaderboard : null,
   };
 }
@@ -7024,7 +7139,7 @@ app.post('/api/buy_weapon', (req, res) => {
   const weaponId = sanitizeText(req.body?.weaponId, 24);
   const def = WEAPON_BY_ID[weaponId];
   if (!def || !def.shopOnly) return res.status(400).json({ error: 'That weapon is not for sale.' });
-  if (def.bossReward) return res.status(400).json({ error: def.id === 'infinitybow' ? 'Only won by defeating the Abyss.' : 'Only won by defeating the Portal Mage.' });
+  if (def.bossReward) return res.status(400).json({ error: def.id === 'infinitybow' ? 'Only won by defeating the Abyss.' : def.id === 'endlessscythe' ? 'Only won by defeating the Abyss a second time.' : 'Only won by defeating the Portal Mage.' });
   if (def.needAll) {
     const prof0 = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });
     const left = WEAPONS.filter(w => w.id !== weaponId && !prof0.weapons.includes(w.id)).length;

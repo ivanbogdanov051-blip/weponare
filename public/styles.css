@@ -940,3 +940,24 @@ body {
 
 .mode-btn.btn-abyss { border-color: #7a3aff; color: #d8b8ff; background: linear-gradient(180deg, #1a0a2e, #0a0414); box-shadow: 0 0 8px rgba(122, 58, 255, 0.35); }
 .mode-btn.btn-abyss:hover { border-color: #b07aff; color: #fff; }
+
+/* ── Movement joystick (touch) ── */
+.joystick {
+  position: relative;
+  width: calc(var(--dpad-size, 52px) * 3 + 6px);
+  height: calc(var(--dpad-size, 52px) * 3 + 6px);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(40, 40, 110, 0.28) 0%, rgba(15, 15, 40, 0.32) 70%);
+  border: 2px solid rgba(90, 110, 210, 0.6);
+  pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.joy-ring { position: absolute; inset: 22%; border-radius: 50%; border: 1px dashed rgba(120, 150, 255, 0.35); pointer-events: none; }
+.joy-knob {
+  position: absolute; left: 50%; top: 50%; width: 42%; height: 42%; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 35% 35%, rgba(170, 190, 255, 0.85), rgba(70, 90, 200, 0.75));
+  border: 2px solid rgba(190, 210, 255, 0.9); box-shadow: 0 0 10px rgba(90, 110, 255, 0.45);
+  pointer-events: none;
+}
+.joystick.active { border-color: rgba(140, 170, 255, 0.95); }

@@ -47,7 +47,7 @@ let WEAPON_COLOR = {
   glaive:'#b0d8c0', katana:'#eef0ff', chakram:'#66e0c0', cannon:'#9a90a8',
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
-  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff',
+  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff',
   ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
   scimitar:'#e8e0c8', slingshot:'#b08a5a', mace:'#9aa4b0', javelin:'#d8c8a0', claws:'#e0e4ec',
   emberstaff:'#ff7a2a', halberd:'#c0c8d8', frostbow:'#9fe8ff', chronostaff:'#e8c87a', voidblade:'#9a5aff',
@@ -71,6 +71,7 @@ const WEAPON_DESC = {
   revolver:'Every bullet explodes',
   portalwand:"The Portal Mage's own wand: fireballs, portal jumps and a SUPER army of your own monsters",
   infinitybow:"The Abyss's crossbows: one in your hands and two floating beside you",
+  endlessscythe:"The Abyss's own scythe, won by beating him a second time",
   ghostdagger:'The rarest weapon of all: turn invisible, throw a deadly dagger, and make it rain knives',
   stormhammer:'A war hammer full of lightning that comes back when you throw it',
   frostscythe:'A sweeping scythe of ice that freezes whatever it keeps cutting',
@@ -407,7 +408,7 @@ const TUT_STEPS = [
   { title: 'WELCOME!', next: true,
     text: () => 'This quick practice game teaches you the basics. You <b>can\'t lose</b> here, so try everything!' },
   { title: 'MOVE',
-    text: () => touchUi() ? 'Use the <b>arrow pad</b> on the left of the screen to walk around.'
+    text: () => touchUi() ? 'Drag the <b>joystick</b> on the left of the screen to walk around.'
                           : 'Walk around with ' + kb('W', 'A', 'S', 'D') + ' or the ' + kb('&#8593;', '&#8592;', '&#8595;', '&#8594;') + ' arrow keys.',
     enter: (me) => ({ x: me.x, y: me.y }),
     done: (me, s, b) => Math.hypot(me.x - b.x, me.y - b.y) > 120 },
@@ -1026,7 +1027,7 @@ const ATTACK_ANIM = {
   bow: 'draw', crossbow: 'recoil', grapple: 'recoil', cannon: 'heavy', blunderbuss: 'heavy',
   staff: 'cast', frostrod: 'cast', wand: 'flick', stormtome: 'tome',
   chakram: 'throw', boomerang: 'throw', shuriken: 'throw',
-  fireglove: 'punch', vortex: 'shieldup', windwand: 'flick', revolver: 'recoil', portalwand: 'cast', infinitybow: 'recoil', ghostdagger: 'stab',
+  fireglove: 'punch', vortex: 'shieldup', windwand: 'flick', revolver: 'recoil', portalwand: 'cast', infinitybow: 'recoil', endlessscythe: 'sweep', ghostdagger: 'stab',
   stormhammer: 'chop', frostscythe: 'spin', sunbow: 'draw',
   scimitar: 'slash', slingshot: 'draw', mace: 'chop', javelin: 'throw', claws: 'stab',
   emberstaff: 'cast', halberd: 'sweep', frostbow: 'draw', chronostaff: 'cast', voidblade: 'slash', mindtome: 'tome',
@@ -1832,6 +1833,8 @@ function drawFireRings(fires) {
   for (const f of fires) {
     if (f.kind === 'vortexfield') { drawVortexField(f, now); continue; }
     if (f.kind === 'ibburst') continue;
+    if (f.kind === 'voidbeam') { drawVoidBeam(f, now); continue; }
+    if (f.kind === 'scythewhirl') { drawScytheWhirl(f, now); continue; }
     if (f.kind === 'abyssmark') { drawAbyssMark(f, now); continue; }
     if (f.kind === 'abysscharge') { drawAbyssCharge(f, now); continue; }
     if (f.kind === 'abyssblade') {
@@ -2391,6 +2394,8 @@ function setupTouchControls() {
     el.addEventListener('touchcancel',release, { passive: false });
   }
 
+  setupJoystick();
+
   // Tap unlock screen to continue
   const unlockOverlay = document.getElementById('unlockScreen');
   if (unlockOverlay) {
@@ -2399,6 +2404,50 @@ function setupTouchControls() {
       if (currState && currState.gameState === 'WEAPON_UNLOCK' && currState.pendingUnlock) sendAckUnlock();
     }, { passive: false });
   }
+}
+// Movement joystick: drag the knob; it moves you in 8 directions (the game's
+// movement is digital) and springs back when you let go. The finger may wander
+// outside the ring while dragging and it keeps working.
+function setupJoystick() {
+  const base = document.getElementById('joystick'), knob = document.getElementById('joyKnob');
+  if (!base || !knob) return;
+  let id = null;
+  const DEAD = 0.28, AXIS = 0.38;
+  const set = (u, d, l, r) => {
+    if (touchKeys.up === u && touchKeys.down === d && touchKeys.left === l && touchKeys.right === r) return;
+    touchKeys.up = u; touchKeys.down = d; touchKeys.left = l; touchKeys.right = r;
+    sendInput();
+  };
+  const move = (t) => {
+    const rc = base.getBoundingClientRect();
+    const R = rc.width / 2;
+    let dx = t.clientX - (rc.left + R), dy = t.clientY - (rc.top + R);
+    const d = Math.hypot(dx, dy), max = R * 0.62;
+    const k = d > max ? max / d : 1;
+    knob.style.transform = `translate(calc(-50% + ${dx * k}px), calc(-50% + ${dy * k}px))`;
+    const m = Math.min(1, d / max);
+    if (m < DEAD) { set(false, false, false, false); return; }
+    const nx = dx / d, ny = dy / d;
+    set(ny < -AXIS, ny > AXIS, nx < -AXIS, nx > AXIS);
+  };
+  const end = () => {
+    id = null; base.classList.remove('active');
+    knob.style.transform = 'translate(-50%, -50%)';
+    set(false, false, false, false);
+  };
+  base.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (id !== null) return;
+    const t = e.changedTouches[0]; id = t.identifier;
+    base.classList.add('active'); move(t);
+  }, { passive: false });
+  window.addEventListener('touchmove', (e) => {
+    if (id === null) return;
+    for (const t of e.changedTouches) if (t.identifier === id) { move(t); e.preventDefault(); }
+  }, { passive: false });
+  const lift = (e) => { for (const t of e.changedTouches) if (t.identifier === id) end(); };
+  window.addEventListener('touchend', lift);
+  window.addEventListener('touchcancel', lift);
 }
 setupTouchControls();
 restoreCredentials();
@@ -2741,6 +2790,8 @@ const LEGEND_MOVES = {
             + ' anything you hit is stunned and hurled into the wall · <b>SUPER</b> LIGHTSPEED: 8s at triple speed,'
             + ' lightning zapping everything that comes close, and crash into a foe for a huge lightning blast that'
             + ' stuns everyone around for 2s.',
+  endlessscythe: '<b>ATK</b> a scythe swipe · <b>SPECIAL</b> a void beam spins a full circle round you, fast, dragging everything in'
+             + ' like a black hole · <b>SUPER</b> the Abyss\'s second phase: six scythes whirl round you, are flung out, then one huge slash',
   infinitybow: '<b>ATK</b> a rapid burst of void bolts from all three crossbows · <b>SPECIAL</b> the Abyss\'s massive orb gathers, then flies'
              + ' (it bursts only on impact) · <b>SUPER</b> all three shoot one spot: a black hole opens there that spits even more bolts'
              + ' and collapses for extreme damage',
@@ -2783,7 +2834,7 @@ function legendaryCards(weapons, coins) {
         <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>${legendPassive(w.id)}
         <div class="legend-buy">
           <button class="buy-weapon poor" disabled>BOSS REWARD</button>
-          <span class="legend-need">${w.id === 'infinitybow' ? 'Survive the Abyss to earn it' : 'Defeat the Portal Mage to earn it'}</span>
+          <span class="legend-need">${w.id === 'infinitybow' ? 'Survive the Abyss to earn it' : w.id === 'endlessscythe' ? 'Defeat the Abyss a second time to earn it' : 'Defeat the Portal Mage to earn it'}</span>
         </div>
       </div>`;
     }
@@ -3641,7 +3692,7 @@ function updateScreens(state) {
         ? '<span style="color:#7aff9a">VICTORY!</span>' : '<span style="color:#ff5a6a">DEFEATED</span>';
       document.getElementById('roundStats').innerHTML = state.victory
         ? `YOU SURVIVED THE ABYSS<br><span style="color:${PAL.coin}">+100,000 COINS</span> &nbsp; <span style="color:${PAL.xp}">+75,000 XP</span>`
-          + ` &nbsp; <span style="color:#b07aff">+ THE CROSSBOWS OF INFINITY</span>`
+          + ` &nbsp; <span style="color:#b07aff">+ ${state.bossDrop === 'endlessscythe' ? 'THE ENDLESS SCYTHE' : 'THE CROSSBOWS OF INFINITY'}</span>`
           + `<br>XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`
         : `THE ABYSS SWALLOWS YOU<br>`
           + (ab ? (ab.p3 ? `ONLY <span style="color:#ff7ad8">${ab.p3}s</span> LEFT TO SURVIVE<br>`
@@ -5121,6 +5172,55 @@ function drawAbyss(m) {
     ctx.fillStyle = '#000'; ctx.fillText(String(m.p3), tx + 2, ty + 2);
     ctx.fillStyle = m.p3 <= 3 ? '#ff5a7a' : '#ff9ae8'; ctx.fillText(String(m.p3), tx, ty);
     ctx.font = 'bold 7px "Courier New",monospace'; ctx.fillStyle = '#e0c8ff'; ctx.fillText('SURVIVE', tx, ty + 15);
+  }
+  ctx.restore();
+}
+
+// Endless Scythe special: a void beam spinning round its owner.
+function drawVoidBeam(f, now) {
+  const k = Math.max(0, f.k || 0);
+  const fade = Math.min(1, k / 0.06) * Math.min(1, (1 - k) / 0.1);
+  const L = 320, a = f.a || 0;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(ARENA_X, ARENA_Y, ARENA_W, ARENA_H); ctx.clip();
+  // The pull: rings sliding inward.
+  ctx.strokeStyle = '#9a5aff'; ctx.lineWidth = 1.2;
+  for (let i = 0; i < 3; i++) {
+    const r = 240 * (1 - ((now * 0.9 + i / 3) % 1));
+    ctx.globalAlpha = 0.25 * fade; ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.translate(f.x, f.y);
+  // A faint afterimage behind the sweep.
+  ctx.globalAlpha = 0.18 * fade; ctx.fillStyle = '#5a1aaa';
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, L, a - 0.6, a); ctx.closePath(); ctx.fill();
+  ctx.rotate(a);
+  const w = (f.r || 12) * (1 + 0.15 * Math.sin(now * 40));
+  ctx.globalAlpha = 0.3 * fade; ctx.fillStyle = '#5a1aaa'; ctx.fillRect(0, -w * 1.6, L, w * 3.2);
+  ctx.globalAlpha = 0.75 * fade; ctx.fillStyle = '#12051f'; ctx.fillRect(0, -w, L, w * 2);
+  ctx.globalAlpha = 0.9 * fade; ctx.fillStyle = '#c88aff'; ctx.fillRect(0, -w, L, 1.5); ctx.fillRect(0, w - 1.5, L, 1.5);
+  ctx.fillStyle = '#e0c8ff'; ctx.fillRect(0, -w * 0.25, L, w * 0.5);
+  ctx.globalAlpha = fade; ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(0, 0, w * 1.3, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#c88aff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, w * 1.3, now * 8, now * 8 + 4.5); ctx.stroke();
+  ctx.restore();
+}
+// Endless Scythe super: six scythes round you, then the slash.
+function drawScytheWhirl(f, now) {
+  const t = (f.k || 0) * 1650;   // ms into it (life = 1200 + 450)
+  ctx.save();
+  if (t < 1200) {
+    const sp = 1 - Math.min(1, t / 1200) * 0.5;
+    for (let i = 0; i < 6; i++) {
+      const a = now * (6 / sp) + i * Math.PI / 3;
+      ctx.save(); ctx.translate(f.x + Math.cos(a) * 58, f.y + Math.sin(a) * 58); ctx.rotate(a + Math.PI / 2);
+      drawWeaponPixels(ctx, 'endlessscythe', 0.9, WEAPON_COLOR.endlessscythe); ctx.restore();
+    }
+    ctx.globalAlpha = 0.22; ctx.strokeStyle = '#c88aff'; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.arc(f.x, f.y, 58, 0, Math.PI * 2); ctx.stroke();
+  } else {
+    const k = Math.min(1, (t - 1200) / 300);
+    ctx.globalAlpha = 0.6 * (1 - k * 0.6); ctx.strokeStyle = '#e0a0ff'; ctx.lineWidth = 10;
+    ctx.beginPath(); ctx.arc(f.x, f.y, 128, (f.a || 0) - 1.45, (f.a || 0) - 1.45 + 2.9 * Math.min(1, k * 1.8)); ctx.stroke();
   }
   ctx.restore();
 }
