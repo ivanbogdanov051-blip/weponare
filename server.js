@@ -2436,6 +2436,7 @@ function checkRoundEnd() {
       room.round.matchWinner = champ ? Number(champ.slice(1)) : 0;
       room.gameState      = 'ROUND_OVER';
       room.roundOverTimer = room.round.matchWinner ? 6000 : 4000;
+      room.rematch = new Set(); room.matchWait = 0;
       // Beating a bot pays its bounty: the stronger the bot, the bigger it is.
       if (room.bot && room.round.matchWinner === 1) {
         const bounty = BOT_REWARDS[room.bot.level] || 0;
@@ -2446,6 +2447,7 @@ function checkRoundEnd() {
     }
   }
 }
+const MATCH_WAIT_MAX = 120000;   // ms a finished match waits for RESTART before restarting by itself
 const BOT_REWARDS = { easy: 500, common: 1500, average: 4000, strong: 10000, hard: 25000, insane: 60000, admin: 200000 };
 
 // ─── Game Loop ────────────────────────────────────────────────────────────────
@@ -2465,6 +2467,15 @@ setInterval(() => {
 function tickRoom(dt) {
   if (room.gameState !== 'GAMEPLAY') {
     if (room.gameState === 'ROUND_OVER') {
+      // A finished PvP / bot match waits for a choice: RESTART (everyone still
+      // here has to ask) or back to the menu. A long timeout stops it hanging.
+      if (room.round.matchWinner && !isSolo()) {
+        const here = KEYS.filter(k => room[k] && room[k].readyState === 1);
+        const all = !here.length || here.every(k => room.rematch?.has(k));
+        room.matchWait = (room.matchWait || 0) + dt;
+        if (all || room.matchWait > MATCH_WAIT_MAX) room.roundOverTimer = Math.min(room.roundOverTimer, 0);
+        else room.roundOverTimer = 1e9;
+      }
       room.roundOverTimer -= dt;
       if (room.roundOverTimer <= 0) {
         const hasUnlocks = room.unlockQueues.p1.length > 0 ||
@@ -6723,6 +6734,7 @@ function buildStateMsg(playerNum) {
     ...(room.custom ? { roomName: room.custom.name, roomId: room.id } : {}),
     seated: seatKeys().filter(k => room[k] || (room.bot && k === 'p2')).length,
     chats: room.chats.map(c => ({ key: c.key, id: c.id, age: Date.now() - c.t })),
+    ...(room.round.matchWinner && room.rematch ? { rematch: [...room.rematch] } : {}),
     ...(room.bot ? { bot: room.bot.level, botReward: BOT_REWARDS[room.bot.level] || 0 } : {}),
     playerNames: room.playerNames,
     players: perKey(k => playerView(room.players[k])),
@@ -7616,6 +7628,8 @@ wss.on('connection', (ws) => {
         const p = room.players[myKey];
         if (p && !p.dead && weapon(p).lightDash) p.bladeClick = { x: msg.x, y: msg.y, at: Date.now() };
       }
+
+      if (msg.type === 'rematch' && room.gameState === 'ROUND_OVER' && room.round.matchWinner && room.rematch) room.rematch.add(myKey);
 
       if (msg.type === 'select_weapon') {
         const p = room.players[myKey];

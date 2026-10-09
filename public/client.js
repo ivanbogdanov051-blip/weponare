@@ -3672,6 +3672,8 @@ function pickBotLevel(level) {
   joinGame('bot');
 }
 
+function sendRematch() { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'rematch' })); }
+
 function updateScreens(state) {
   if (state.gameState === 'LOBBY') {
     if (state.bot) {
@@ -3727,6 +3729,7 @@ function updateScreens(state) {
   if (state.gameState === 'ROUND_OVER') {
     showScreen('roundScreen');
     const r = state.round;
+    document.getElementById('matchChoice')?.classList.add('hidden');
     const lb = document.getElementById('leaderboardBox');
     const hint = document.getElementById('roundHint');
     if (state.gameMode === 'abyss') {
@@ -3795,7 +3798,10 @@ function updateScreens(state) {
       const nameOf = n => state.playerNames?.['p' + n] || 'P' + n;
       const fighters = KEYS.filter(k => state.players[k]);
       if (r.matchWinner) {
-        hint.textContent = 'NEW MATCH STARTING...';
+        const voted = (state.rematch || []).includes(myKeyOf());
+        hint.textContent = voted ? 'WAITING FOR THE OTHERS...' : 'PLAY AGAIN?';
+        const rb = document.getElementById('rematchBtn'); if (rb) { rb.disabled = voted; rb.textContent = voted ? 'WAITING...' : 'RESTART'; }
+        document.getElementById('matchChoice').classList.remove('hidden');
         document.getElementById('roundTitle').innerHTML =
           `<span class="p${r.matchWinner}-color">${nameOf(r.matchWinner)} TAKES THE MATCH</span>`;
       } else {

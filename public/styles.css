@@ -963,3 +963,9 @@ body {
 .joystick.active { border-color: rgba(140, 170, 255, 0.95); }
 
 .legend-tag.samurai-tag { color: #ffd0d0; border-color: #ff5a5a; background: rgba(255, 90, 90, 0.14); }
+
+/* End of a PvP / bot match: restart or back to the menu */
+.match-choice { display: flex; gap: 10px; justify-content: center; margin-top: 14px; }
+.match-choice.hidden { display: none; }
+.match-choice .mode-btn { min-width: 130px; margin: 0; }
+.match-choice .mode-btn:disabled { opacity: 0.55; cursor: default; }
