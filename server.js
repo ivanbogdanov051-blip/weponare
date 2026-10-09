@@ -2130,6 +2130,10 @@ function startGame() {
     if (room.playerUnlocks[key]) p.unlockedWeapons = room.playerUnlocks[key];
     if (room.playerAbilities[key]) p.abilities = room.playerAbilities[key].slice();
     refreshWeapon(p);
+    if (room.bot && key === 'p2') {
+      const BL = BOT_LEVELS[room.bot.level];
+      p.maxHp = Math.round(p.maxHp * (BL.hp || 1)); p.hp = p.maxHp;
+    }
   }
   clearField();
   room.unlockQueues = perKey(() => []);
@@ -2182,6 +2186,11 @@ function applyDamage(target, dmg, attackerKey) {
     room.particles.push({ type: 'shockwave', x: cx(target), y: cy(target), maxR: target.w + 12, timer: 300, max: 300, color: PASSIVES.vortex.color });
     room.particles.push({ type: 'crit', x: cx(target), y: target.y - 10, text: 'BLOCKED', timer: 500, max: 500 });
     return;
+  }
+  if (room.bot) {                                    // bots are tougher the higher their level
+    const BL = BOT_LEVELS[room.bot.level];
+    if (BL && attackerKey === 'p2' && target !== atk) dmg *= BL.dmg || 1;
+    if (BL && target === room.players.p2) dmg *= BL.armor || 1;
   }
   dmg = Math.max(1, Math.round(dmg));
   if (aw && aw.crit && Math.random() < aw.crit) {
@@ -6975,16 +6984,15 @@ function useInventorySlot(myKey, index) {
 // aggro: chance it swings when in range · parry / dodge: chance it reacts to a
 // blow or a shot · skill: how readily it uses specials, supers, abilities, items.
 const BOT_LEVELS = {
-  easy:    { name: 'EASY',    own: 0.10, think: 420, aggro: 0.45, parry: 0.00, dodge: 0.00, skill: 0.25, slots: 1 },
-  common:  { name: 'COMMON',  own: 0.20, think: 340, aggro: 0.60, parry: 0.06, dodge: 0.15, skill: 0.40, slots: 2 },
-  average: { name: 'AVERAGE', own: 0.30, think: 270, aggro: 0.70, parry: 0.15, dodge: 0.30, skill: 0.55, slots: 2 },
-  strong:  { name: 'STRONG',  own: 0.40, think: 210, aggro: 0.80, parry: 0.28, dodge: 0.45, skill: 0.70, slots: 3 },
-  hard:    { name: 'HARD',    own: 0.50, think: 160, aggro: 0.90, parry: 0.42, dodge: 0.60, skill: 0.85, slots: 4 },
-  insane:  { name: 'INSANE',  own: 0.60, think: 110, aggro: 1.00, parry: 0.60, dodge: 0.80, skill: 1.00, slots: 6 },
-  // The admin bot owns every weapon, all of them fully maxed (so every passive
-  // is live), a loadout of only the best abilities, and fights flat out,
-  // leaning on the legendaries.
-  admin:   { name: 'ADMIN',   own: 1.00, think: 70,  aggro: 1.00, parry: 0.85, dodge: 0.95, skill: 1.00, slots: 6, all: true, favor: 0.7 },
+  easy:    { name: 'EASY',    own: 0.20, think: 320, aggro: 0.60, parry: 0.10, dodge: 0.20, skill: 0.40, slots: 2, dmg: 1.00, armor: 1.00, hp: 1.0 },
+  common:  { name: 'COMMON',  own: 0.30, think: 250, aggro: 0.75, parry: 0.20, dodge: 0.30, skill: 0.55, slots: 3, dmg: 1.05, armor: 1.00, hp: 1.0 },
+  average: { name: 'AVERAGE', own: 0.42, think: 200, aggro: 0.85, parry: 0.30, dodge: 0.45, skill: 0.70, slots: 3, dmg: 1.15, armor: 0.95, hp: 1.1 },
+  strong:  { name: 'STRONG',  own: 0.55, think: 150, aggro: 0.92, parry: 0.45, dodge: 0.60, skill: 0.82, slots: 4, dmg: 1.30, armor: 0.88, hp: 1.2 },
+  hard:    { name: 'HARD',    own: 0.68, think: 110, aggro: 1.00, parry: 0.60, dodge: 0.75, skill: 0.95, slots: 5, dmg: 1.50, armor: 0.80, hp: 1.35 },
+  insane:  { name: 'INSANE',  own: 0.80, think: 75,  aggro: 1.00, parry: 0.78, dodge: 0.90, skill: 1.00, slots: 6, dmg: 1.80, armor: 0.68, hp: 1.6 },
+  // ...and on top of that it hits 2.5x as hard, takes less than half the damage
+  // and has 2.5x the health, reacting in a blink.
+  admin:   { name: 'ADMIN',   own: 1.00, think: 28,  aggro: 1.00, parry: 0.98, dodge: 1.00, skill: 1.00, slots: 6, all: true, favor: 0.85, dmg: 2.5, armor: 0.4, hp: 2.5 },
 };
 const BOT_BEST_ABILITIES = ['execute', 'meteor', 'blackhole', 'perfectguard', 'phoenix', 'airstrike'];
 const BOT_HEALS = ['heal', 'rejuvenate', 'haven', 'vampirism', 'phoenix'];
