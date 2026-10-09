@@ -1817,6 +1817,7 @@ const SAM_WAVE_SPEED = 8, SAM_WAVE_MULT = 2.0, SAM_DASH_SPEED = 16, SAM_DASH_MUL
 const SAM_WAVE_R = 16;     // a wave's hit radius (drawn twice the old size)
 const SAM_STUN_MS = 2200, SAM_TOWARD_DOT = 0.5, SAM_TOWARD_MULT = 1.75;
 const SAM_KILLS_NEED = 30;
+const SAM_PLAYER_THROUGH = 520;   // the katana's flash carries on this far past the first foe, cutting all in its path
 // A slash wave: a crescent of steel flying at its target (the samurai's, or a katana's).
 function slashWave(owner, x, y, a, dmg, opts = {}) {
   room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * (opts.speed || SAM_WAVE_SPEED), dy: Math.sin(a) * (opts.speed || SAM_WAVE_SPEED),
@@ -1885,7 +1886,7 @@ function triggerDashWave(proj, t) {
     if (!p || p.dead) return;
     const a = Math.atan2(cy(t) - cy(p), cx(t) - cx(p));
     p.facing = Math.cos(a) < 0 ? -1 : 1;
-    startBladeDash(p, { kind: 'sam', a, dist: Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) + 60, speed: SAM_DASH_SPEED * 1.2,
+    startBladeDash(p, { kind: 'sam', a, dist: Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) + (dw.dmg ? SAM_PLAYER_THROUGH : 60), speed: SAM_DASH_SPEED * 1.2,
                         n: 1, turn: 0, dmg: dw.dmg });
     room.particles.push({ type: 'streak', x: cx(p), y: cy(p), x2: cx(t), y2: cy(t), timer: 380, max: 380, color: '#ff5a5a' });
   }
@@ -1907,7 +1908,7 @@ function creditSamuraiKill() {
   }
 }
 // The katana's SUPER: spinning, faster, gliding, cutting all you touch.
-const KSPIN_MS = 5000, KSPIN_SPEED = 1.9, KSPIN_R = 48, KSPIN_TICK = 220, KSPIN_SLOW = 900, KSPIN_GLIDE = 0.07;
+const KSPIN_MS = 5000, KSPIN_SPEED = 1.9, KSPIN_R = 48, KSPIN_TICK = 220, KSPIN_SLOW = 1800, KSPIN_STUN = 500, KSPIN_GLIDE = 0.07;
 function katanaSpinTick(p, key, dt) {
   p.kspin -= dt;
   p.kspinT = (p.kspinT || 0) - dt;
@@ -1917,7 +1918,7 @@ function katanaSpinTick(p, key, dt) {
     if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) > KSPIN_R + t.w / 2) continue;
     if (!t.num) t.invincible = 0;
     applyDamage(t, p.kspinDmg || 20, key);
-    if (!t.dead) chillTarget(t, KSPIN_SLOW);
+    if (!t.dead) { stagger(t, KSPIN_STUN, 'stun'); chillTarget(t, KSPIN_STUN + KSPIN_SLOW); }   // stunned, then still slowed
   }
 }
 
@@ -2435,16 +2436,17 @@ function checkRoundEnd() {
       room.round.matchWinner = champ ? Number(champ.slice(1)) : 0;
       room.gameState      = 'ROUND_OVER';
       room.roundOverTimer = room.round.matchWinner ? 6000 : 4000;
-      // Beating the admin bot pays out big.
-      if (room.bot?.level === 'admin' && room.round.matchWinner === 1) {
-        addCoins('p1', ADMIN_BOT_REWARD);
+      // Beating a bot pays its bounty: the stronger the bot, the bigger it is.
+      if (room.bot && room.round.matchWinner === 1) {
+        const bounty = BOT_REWARDS[room.bot.level] || 0;
+        addCoins('p1', bounty);
         const w = room.players.p1;
-        room.particles.push({ type: 'coin', x: w ? cx(w) : CANVAS_W / 2, y: w ? w.y - 10 : CANVAS_H / 2, text: '+' + ADMIN_BOT_REWARD.toLocaleString() + ' COINS', timer: 4000, max: 4000 });
+        room.particles.push({ type: 'coin', x: w ? cx(w) : CANVAS_W / 2, y: w ? w.y - 10 : CANVAS_H / 2, text: '+' + bounty.toLocaleString() + ' COINS', timer: 4000, max: 4000 });
       }
     }
   }
 }
-const ADMIN_BOT_REWARD = 200000;
+const BOT_REWARDS = { easy: 500, common: 1500, average: 4000, strong: 10000, hard: 25000, insane: 60000, admin: 200000 };
 
 // ─── Game Loop ────────────────────────────────────────────────────────────────
 
@@ -6721,7 +6723,7 @@ function buildStateMsg(playerNum) {
     ...(room.custom ? { roomName: room.custom.name, roomId: room.id } : {}),
     seated: seatKeys().filter(k => room[k] || (room.bot && k === 'p2')).length,
     chats: room.chats.map(c => ({ key: c.key, id: c.id, age: Date.now() - c.t })),
-    ...(room.bot ? { bot: room.bot.level } : {}),
+    ...(room.bot ? { bot: room.bot.level, botReward: BOT_REWARDS[room.bot.level] || 0 } : {}),
     playerNames: room.playerNames,
     players: perKey(k => playerView(room.players[k])),
     monsters:    room.monsters.map(m => ({ id: m.id, type: m.type, x: r1(m.x), y: r1(m.y), w: m.w, h: m.h,

@@ -4498,6 +4498,7 @@ function drawPlayerBody(p, baseColor, label, key) {
   if (p.lightspeed > 0) drawLightspeedFx(p, x, y);
 
   drawNametag(x + p.w / 2, y - 13, label, skinCol);
+  if (key === 'p2' && currState?.bot && currState.botReward) drawBounty(x + p.w / 2, y - 25, currState.botReward);
   if (!(p.kspin > 0)) drawWeaponSprite(p, x, y, key);
   if (p.weaponId === 'infinitybow' && !p.dead) drawInfinityFloaters(p, x, y);
   if (p.weaponId === 'endlessscythe' && !p.dead) drawEndlessFloaters(p, x, y, key);
@@ -4603,6 +4604,19 @@ function drawLightspeedFx(p, x, y) {
     ctx.globalAlpha = (1 - k) * 0.8 * fadeOut; ctx.fillStyle = i % 3 ? '#fff27a' : '#ffffff';
     ctx.fillRect(Math.round(sx), Math.round(sy), Math.round(6 - k * 4), 1);
   }
+  ctx.restore();
+}
+
+// A bot's bounty: what beating it pays, floating over its name.
+function drawBounty(cx, bottomY, coins) {
+  ctx.save();
+  ctx.font = 'bold 9px "Courier New",monospace';
+  ctx.textBaseline = 'bottom'; ctx.textAlign = 'center';
+  const label = 'BOUNTY ◆ ' + coins.toLocaleString();
+  const rx = Math.round(cx), tw = ctx.measureText(label).width;
+  ctx.fillStyle = 'rgba(40,24,0,0.85)'; ctx.fillRect(rx - tw/2 - 3, bottomY - 10, tw + 6, 12);
+  ctx.strokeStyle = '#ffcc33'; ctx.lineWidth = 1; ctx.strokeRect(rx - tw/2 - 2.5, bottomY - 9.5, tw + 5, 11);
+  ctx.fillStyle = '#ffd84a'; ctx.fillText(label, rx, bottomY);
   ctx.restore();
 }
 
