@@ -318,10 +318,10 @@ const WEAPONS = [
     shopOnly: true, noRequirement: true, needSamurai: true, price: 30000, slashWave: true,
     special: { kind: 'dashwave', dmg: 240, range: 340, cd: 6500 },
     super:   { kind: 'katanaspin', dmg: 45, cd: 20000 } },
-  { id: 'lightblade', name: 'LIGHT BLADE', damage: 40, range: 56, atkSpd: 620, type: 'melee', unlockXp: 0,
+  { id: 'lightblade', name: 'LIGHT BLADE', damage: 30, range: 56, atkSpd: 900, type: 'melee', unlockXp: 0,
     shopOnly: true, noRequirement: true, needLight: true, price: 0, lightDash: true,
-    special: { kind: 'lightdashes', dmg: 70, range: 260, cd: 9000 },
-    super:   { kind: 'lightspeed', dmg: 320, cd: 26000 } },
+    special: { kind: 'lightdashes', dmg: 55, range: 260, cd: 9000 },
+    super:   { kind: 'lightspeed', dmg: 240, cd: 26000 } },
   // ── MYTHIC ── Only sold in the rare shop that opens after a Giant wave
   // (WAVES, EXTREME), for a fortune, once you have maxed the weapons it
   // asks for and cut down enough enemies. Only one mythic goes into a game, and a
@@ -332,8 +332,8 @@ const WEAPONS = [
   // light kunai at blinding speed into one foe: parried, they shatter; if not,
   // the foe suffers every bad effect for 5s, and so does anyone who comes close.
   { id: 'darklight', name: 'DARKLIGHT', damage: 32, range: 240, atkSpd: 380, type: 'ranged', unlockXp: 0,
-    shopOnly: true, noRequirement: true, mythic: true, price: 500000, kunaiOrbit: true,
-    mythicKills: 250, mythicNeeds: ['lightblade', 'samuraiblade', 'endlessscythe'],
+    shopOnly: true, noRequirement: true, mythic: true, price: 150000, kunaiOrbit: true,
+    mythicKills: 100, mythicNeeds: ['lightblade'],
     special: { kind: 'kunaistorm', dmg: 60, range: 400, cd: 7000 },
     super:   { kind: 'darklightpair', dmg: 90, cd: 22000 } },
   // STARFALL: a staff with a crescent moon cradling a star. ATK: a star falls on
@@ -342,10 +342,32 @@ const WEAPONS = [
   // dazed. SUPER: a 4s star shower on everything around. PASSIVE: every foe your
   // stars hit heals you.
   { id: 'starfall', name: 'STARFALL', damage: 44, range: 320, atkSpd: 560, type: 'ranged', unlockXp: 0,
-    shopOnly: true, noRequirement: true, mythic: true, price: 750000, starStaff: true,
-    mythicKills: 400, mythicNeeds: ['portalwand', 'infinitybow', 'sunbow'],
+    shopOnly: true, noRequirement: true, mythic: true, price: 250000, starStaff: true,
+    mythicKills: 150, mythicNeeds: ['sunbow'],
     special: { kind: 'constellation', dmg: 80, range: 420, cd: 8000 },
     super:   { kind: 'starrain', dmg: 55, cd: 24000 } },
+  // WORLDSPLITTER: an obsidian greatsword veined with magma. ATK: the swing
+  // splits the ground ahead — the crack erupts, then burns for a while.
+  // SPECIAL: six cracks tear out all round you, erupting one after another and
+  // knocking foes off their feet. SUPER: leap into the sky (untouchable) and come
+  // down on the nearest foe like a meteor, the ground shattering all around.
+  // PASSIVE: every 3rd swing splits the ground three ways.
+  { id: 'worldsplitter', name: 'WORLDSPLITTER', damage: 50, range: 170, atkSpd: 700, type: 'ranged', unlockXp: 0,
+    shopOnly: true, noRequirement: true, mythic: true, price: 350000, groundSplit: true,
+    mythicKills: 200, mythicNeeds: ['stormhammer'],
+    special: { kind: 'tectonic', dmg: 75, range: 230, cd: 9000 },
+    super:   { kind: 'skyfall', dmg: 170, cd: 24000 } },
+  // SOUL LANTERN: a black iron lantern burning with a ghost-green flame. ATK: a
+  // wisp that hunts the nearest foe. Every foe it kills leaves its soul in the
+  // lantern (up to 12, circling you). SPECIAL: let every soul loose as hunting
+  // wisps that heal you when they hit. SUPER: DEATH'S DOOR — three spirits rise
+  // to fight for you, and for 8s everything you kill gets up again on your side.
+  // PASSIVE: every soul you carry shields you from 2% of all damage.
+  { id: 'soullantern', name: 'SOUL LANTERN', damage: 30, range: 320, atkSpd: 420, type: 'ranged', unlockXp: 0,
+    shopOnly: true, noRequirement: true, mythic: true, price: 450000, soulWisp: true,
+    mythicKills: 250, mythicNeeds: ['reaper'],
+    special: { kind: 'soulstorm', dmg: 45, range: 600, cd: 8000 },
+    super:   { kind: 'deathsdoor', dmg: 40, cd: 28000 } },
 ];
 
 // Melee reach: the swing is 50% longer and a slam special 30% wider. The shield
@@ -369,7 +391,7 @@ const WEAPON_COLORS = {
   glaive: '#b0d8c0', katana: '#eef0ff', chakram: '#66e0c0', cannon: '#9a90a8', reaper: '#cc66aa',
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
   shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
-  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff', samuraiblade: '#ff5a5a', endlessscythe: '#7a2aff', darklight: '#e8e8f4', starfall: '#ffe9a0',
+  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff', samuraiblade: '#ff5a5a', endlessscythe: '#7a2aff', darklight: '#e8e8f4', starfall: '#ffe9a0', worldsplitter: '#ff6a1a', soullantern: '#6affc8',
   ghostdagger: '#a8f0ff', stormhammer: '#7ac8ff', frostscythe: '#bfefff', sunbow: '#ffd24a',
 };
 
@@ -435,6 +457,8 @@ const WEAPON_UPGRADES = {
   endlessscythe: ['dmg', 'spd', 'rng', 'crit', 'cdr'],
   darklight:   ['dmg', 'spd', 'crit', 'cdr'],
   starfall:    ['dmg', 'spd', 'crit', 'cdr', 'rng'],
+  worldsplitter: ['dmg', 'spd', 'crit', 'cdr', 'rng'],
+  soullantern: ['dmg', 'spd', 'crit', 'cdr'],
   ghostdagger: ['dmg', 'spd', 'crit', 'cdr'],
   stormhammer: ['dmg', 'spd', 'crit', 'cdr', 'knock'],
   frostscythe: ['dmg', 'rng', 'chill', 'cdr', 'aoe'],
@@ -471,6 +495,8 @@ const PASSIVES = {
   vortex:      { name: 'AEGIS',          color: '#7ad8ff', desc: 'blocks one hit completely every 4s' },
   windwand:    { name: 'GALE GUARD',     color: '#d8f4ff', desc: 'blows away an enemy shot that comes close, every 0.5s' },
   revolver:    { name: 'CHAIN REACTION', color: '#ffa040', desc: 'every hit explodes onto the foes around it, and everything you kill blows up even bigger' },
+  worldsplitter: { name: 'AFTERSHOCK', color: '#ff6a1a', desc: 'every 3rd swing splits the ground three ways' },
+  soullantern: { name: 'SOUL BOND', color: '#6affc8', desc: 'every soul you carry shields you from 2% of all damage (up to 24%)' },
   starfall:    { name: 'STARLIGHT', color: '#ffe9a0', desc: 'every enemy your stars hit heals you 2' },
   darklight:   { name: 'LEARNED ALL TRICKS', color: '#ffffff', desc: 'every bad effect on you becomes a little damage instead, unless it comes from a super' },
   endlessscythe: { name: 'EVENT HORIZON', color: '#7a2aff', desc: 'every hit stuns the target and drags it toward you' },
@@ -1244,7 +1270,7 @@ const seatKeys = (r = room) => KEYS.slice(0, r.maxPlayers);
 const rooms = [];
 let room = makeRoom();   // the room being worked on right now
 
-const SOLO_MODES = ['waves', 'extreme', 'portal', 'abyss', 'sandbox'];
+const SOLO_MODES = ['waves', 'extreme', 'portal', 'abyss', 'sandbox', 'sawroom'];
 // XP needed before a mode opens (kept in step with MODE_XP in client.js).
 const MODE_XP = { extreme: 5000, portal: 15000, abyss: 30000 };
 function isSolo() { return SOLO_MODES.includes(room.gameMode); }
@@ -1404,6 +1430,7 @@ function fireTrap(tr, trigger) {
     tr.tickTimer = 0;
     return;
   }
+  if (tr.element) for (const t of inRange) trapElement(t, tr, by);
   if (tr.effect === 'shock') {
     const hits = inRange
       .sort((a, b) => Math.hypot(cx(a) - tx, cy(a) - ty) - Math.hypot(cx(b) - tx, cy(b) - ty))
@@ -2062,6 +2089,246 @@ function buyMythic(key, id) {
   rareShopMsg(key, def.name + ' is yours. Swap to it with < and >.');
 }
 
+// WORLDSPLITTER
+const WS_ERUPT = 220, WS_BURN_MS = 2600, WS_BURN_TICK = 400, WS_BURN_DMG = 5, WS_W = 9, WS_AFTERSHOCK = 3;
+const TECT_N = 8, TECT_LEN = 230, TECT_STUN = 900, SKY_MS = 1100, SKY_R = 120, SKY_CRACKS = 8;
+function crackGround(owner, x, y, a, len, dmg, o = {}) {
+  if (!room.fissures) room.fissures = [];
+  room.fissures.push({ owner, x1: x, y1: y, x2: x + Math.cos(a) * len, y2: y + Math.sin(a) * len, dmg,
+                       t: -(o.delay || 0), erupt: o.erupt || WS_ERUPT, life: o.life || WS_BURN_MS, stun: o.stun || 0, tick: 0, done: false });
+}
+function segDist(px, py, q) {
+  const dx = q.x2 - q.x1, dy = q.y2 - q.y1, L = dx * dx + dy * dy || 1;
+  const u = Math.max(0, Math.min(1, ((px - q.x1) * dx + (py - q.y1) * dy) / L));
+  return Math.hypot(px - (q.x1 + dx * u), py - (q.y1 + dy * u));
+}
+function splitAttack(p, pKey, w, dmgMult) {
+  const a = nearestTargetAngle(p, pKey), dmg = Math.round(w.damage * dmgMult);
+  p.facing = Math.cos(a) < 0 ? -1 : 1;
+  const x = cx(p) + Math.cos(a) * 10, y = cy(p) + Math.sin(a) * 10;
+  crackGround(pKey, x, y, a, w.range, dmg);
+  p.splitN = (p.splitN || 0) + 1;
+  if (p.passive === 'worldsplitter' && p.splitN % WS_AFTERSHOCK === 0) {   // AFTERSHOCK
+    crackGround(pKey, x, y, a - 0.6, w.range * 0.85, dmg, { delay: 80 });
+    crackGround(pKey, x, y, a + 0.6, w.range * 0.85, dmg, { delay: 80 });
+  }
+}
+function castTectonic(p, pKey, sp, dmg) {
+  const a0 = nearestTargetAngle(p, pKey);
+  for (let i = 0; i < TECT_N; i++) crackGround(pKey, cx(p), cy(p), a0 + i * Math.PI * 2 / TECT_N, TECT_LEN, dmg,
+                                               { delay: i * 70, erupt: 300, stun: TECT_STUN, life: 3000 });
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 60, timer: 700, max: 700, color: '#ff6a1a', text: 'TECTONIC' });
+}
+function startSkyfall(p, pKey, dmg) {
+  const f = nearestFoe(p, pKey), inp = room.inputs[pKey] || {};
+  let tx, ty;
+  if (f) { tx = cx(f); ty = cy(f); }
+  else if (inp.aimX != null && inp.aimY != null) { tx = inp.aimX; ty = inp.aimY; }
+  else { tx = cx(p) + (p.facing || 1) * 140; ty = cy(p); }
+  tx = Math.max(ARENA_X + p.w, Math.min(ARENA_X + ARENA_W - p.w, tx));
+  ty = Math.max(ARENA_Y + p.h, Math.min(ARENA_Y + ARENA_H - p.h, ty));
+  p.sky = { t: 0, life: SKY_MS, sx: cx(p), sy: cy(p), tx, ty, dmg, quarry: f || null };
+  p.bladeDash = null; p.pull = null;
+}
+function updateWorldsplitter(dt) {
+  if (!room.fissures) room.fissures = [];
+  // The leap: untouchable in the air, tracking the foe until the last moment.
+  for (const key of KEYS) {
+    const p = room.players[key];
+    if (!p || !p.sky) continue;
+    if (p.dead) { p.sky = null; continue; }
+    const k = p.sky;
+    k.t += dt;
+    p.invincible = Math.max(p.invincible || 0, 120);
+    if (k.quarry && !k.quarry.dead && k.t < k.life * 0.7) { k.tx = cx(k.quarry); k.ty = cy(k.quarry); }
+    if (k.t < k.life) continue;
+    p.x = k.tx - p.w / 2; p.y = k.ty - p.h / 2; clampToArena(p, 2);
+    p.sky = null;
+    p.invincible = 300;
+    for (const t of enemyTargets(key)) {
+      let dx = cx(t) - cx(p), dy = cy(t) - cy(p), d = Math.hypot(dx, dy);
+      if (d > SKY_R + t.w / 2) continue;
+      if (!t.num) t.invincible = 0;
+      applyDamage(t, k.dmg, key);
+      if (t.dead) continue;
+      stagger(t, 600, 'quake');
+      if (!t.boss && !t.mage && !t.abyss) {
+        if (d < 1) { dx = 1; dy = 0; d = 1; }
+        t.pull = { vx: dx / d * 140 / 300, vy: dy / d * 140 / 300, timer: 300, from: null };
+      }
+    }
+    for (let i = 0; i < SKY_CRACKS; i++) crackGround(key, cx(p), cy(p), i * Math.PI * 2 / SKY_CRACKS + Math.random() * 0.3, 150,
+                                                      Math.round(k.dmg * 0.3), { erupt: 120, life: 2400 });
+    room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: SKY_R, timer: 700, max: 700, color: '#ff6a1a' });
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: SKY_R * 0.7, timer: 800, max: 800, color: '#ffd24a', text: 'SKYFALL' });
+  }
+  // The cracks: erupt once, then burn whoever stands in them.
+  room.fissures = room.fissures.filter(q => {
+    q.t += dt;
+    if (q.t < 0) return true;
+    if (!q.done && q.t >= q.erupt) {
+      q.done = true;
+      for (const t of enemyTargets(q.owner)) {
+        if (segDist(cx(t), cy(t), q) > WS_W + t.w / 2) continue;
+        if (!t.num) t.invincible = 0;
+        applyDamage(t, q.dmg, q.owner);
+        if (q.stun && !t.dead) stagger(t, q.stun, 'quake');
+      }
+    } else if (q.done) {
+      q.tick -= dt;
+      if (q.tick <= 0) {
+        q.tick = WS_BURN_TICK;
+        for (const t of enemyTargets(q.owner)) {
+          if (segDist(cx(t), cy(t), q) > WS_W * 0.7 + t.w / 2) continue;
+          dotDamage(t, WS_BURN_DMG);
+          if (!t.dead) ignite(t, 1200);
+        }
+      }
+    }
+    return q.t < q.life;
+  });
+}
+
+// SOUL LANTERN
+const SOUL_MAX = 12, SOUL_BOND = 0.02, SOUL_HEAL = 3, DOOR_MS = 8000, DOOR_LIFE = 10000, DOOR_CAP = 12, WISP_SPEED = 6;
+function wisp(pKey, x, y, a, dmg, extra) {
+  room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * WISP_SPEED, dy: Math.sin(a) * WISP_SPEED, damage: dmg, owner: pKey,
+    traveled: 0, maxRange: 1400, weaponId: 'soulwisp', isAoe: false, aoeRadius: 0, pierce: false, grapple: false, boomerang: false,
+    returning: false, life: 0, hitTargets: null, hitR: 6, homing: true, turn: 10, seekR: 900, noIframe: true, ...extra });
+}
+function soulAttack(p, pKey, w, dmgMult) {
+  const a = nearestTargetAngle(p, pKey);
+  p.facing = Math.cos(a) < 0 ? -1 : 1;
+  wisp(pKey, cx(p), cy(p) - 4, a, Math.round(w.damage * dmgMult), { quarry: nearestFoe(p, pKey) });
+}
+function castSoulStorm(p, pKey, dmg) {
+  const n = p.souls || 0, count = Math.max(3, n);
+  for (let i = 0; i < count; i++) {
+    const a = i * Math.PI * 2 / count;
+    wisp(pKey, cx(p) + Math.cos(a) * 16, cy(p) + Math.sin(a) * 16, a, n ? dmg : Math.round(dmg * 0.5), { special: true, soulHeal: SOUL_HEAL });
+  }
+  p.souls = 0;
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 50, timer: 700, max: 700, color: '#6affc8', text: n ? 'SOUL STORM x' + n : 'SOUL STORM' });
+}
+function openDeathsDoor(p, pKey, dmg) {
+  p.deathDoor = DOOR_MS; p.doorDmg = dmg;
+  for (let i = 0; i < 3; i++) {
+    const a = i * Math.PI * 2 / 3;
+    spawnAlly(pKey, cx(p) + Math.cos(a) * 30, cy(p) + Math.sin(a) * 30, dmg, { type: 'wraith', force: true, life: DOOR_LIFE });
+  }
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 80, timer: 900, max: 900, color: '#6affc8', text: "DEATH'S DOOR" });
+}
+// A kill: the lantern takes the soul; through DEATH'S DOOR, the dead get back up on your side.
+function lanternKill(key, target) {
+  const p = room.players[key];
+  if (!p || p.dead || target.num || target.ally) return;
+  if (weapon(p).id === 'soullantern' && (p.souls || 0) < SOUL_MAX) p.souls = (p.souls || 0) + 1;
+  const def = MONSTER_TYPES[target.type];
+  if (p.deathDoor > 0 && def && !def.boss && !target.mage && !target.abyss
+      && room.allies.filter(a => a.owner === key && !a.dead).length < DOOR_CAP) {
+    spawnAlly(key, cx(target), cy(target), p.doorDmg || 40, { type: target.type, force: true, life: DOOR_LIFE });
+    room.particles.push({ type: 'teleport', x: cx(target), y: cy(target), timer: 500, max: 500, color: '#6affc8' });
+  }
+}
+function updateLantern(dt) {
+  for (const key of KEYS) {
+    const p = room.players[key];
+    if (!p) continue;
+    if (p.deathDoor > 0) p.deathDoor -= dt;
+    if (p.dead || weapon(p).id !== 'soullantern') p.souls = 0;
+  }
+}
+
+// ── SAW ROOM ── No monsters: traps, far stronger, of every size, some on the
+// move, each carrying an element, and a storm of shots from the walls. Pays
+// 50,000 coins for every 20 seconds you last. It gets worse the longer you stay.
+const SAW_PAY = 50000, SAW_PAY_MS = 20000, SAW_MAX_TRAPS = 22, SAW_DMG_MULT = 2.5, SAW_MOVE_CHANCE = 0.4;
+const SAW_ELEMENTS = ['fire', 'ice', 'poison', 'shock', 'void'];
+const SAW_TRAP_TYPES = Object.keys(TRAP_TYPES).filter(t => t !== 'healspring' && t !== 'warp');
+function startSawRoom() {
+  room.saw = { t: 0, payT: SAW_PAY_MS, trapT: 600, projT: 1500, earned: 0 };
+  room.wave = { num: 1, monstersLeft: 0, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 };
+  room.waveHpMult = 1; room.waveSpeedMult = 1;
+}
+// A trap's element, on top of whatever the trap itself does.
+function trapElement(t, tr, by) {
+  if (t.dead) return;
+  const lv = tr.lvl || 1;
+  if (tr.element === 'fire') { ignite(t, 3500); applyDamage(t, Math.round(6 * lv), by); }
+  else if (tr.element === 'ice') { chillTarget(t, 2200); applyDamage(t, Math.round(5 * lv), by); }
+  else if (tr.element === 'poison') { if (t.num) applyEffect(t, 'poison', 3000); dotDamage(t, Math.round(8 * lv)); }
+  else if (tr.element === 'shock') { stagger(t, 500, 'shock'); applyDamage(t, Math.round(8 * lv), by); }
+  else if (tr.element === 'void') { if (t.num) applyEffect(t, 'confuse', 1800); applyDamage(t, Math.round(6 * lv), by); }
+}
+function spawnSawTrap(lvl) {
+  const type = SAW_TRAP_TYPES[Math.floor(Math.random() * SAW_TRAP_TYPES.length)];
+  const def = TRAP_TYPES[type];
+  const scale = 0.6 + Math.random() * 1.7;
+  const size = Math.round(def.size * scale), radius = Math.min(170, Math.round(def.radius * scale));
+  let pos = randArenaPos(size, size);
+  for (let i = 0; i < 16; i++) {
+    pos = randArenaPos(size, size);
+    if (!tooCloseToPlayers(pos.x + size / 2, pos.y + size / 2, Math.min(radius, 90) + 30)) break;
+  }
+  const tr = { id: nextId(), type, x: pos.x, y: pos.y, w: size, h: size, state: 'idle', armTimer: 0, fireTimer: 0,
+               mode: def.mode, radius, damage: Math.round((def.damage || 0) * SAW_DMG_MULT * (0.8 + lvl * 0.2)),
+               effect: def.effect || null, dur: Math.round((def.dur || 0) * 1.5), color: def.color,
+               element: SAW_ELEMENTS[Math.floor(Math.random() * SAW_ELEMENTS.length)], lvl };
+  if (Math.random() < SAW_MOVE_CHANCE) {
+    const a = Math.random() * Math.PI * 2, sp = 0.5 + Math.random() * (1 + lvl * 0.2);
+    tr.vx = Math.cos(a) * sp; tr.vy = Math.sin(a) * sp;
+  }
+  room.traps.push(tr);
+}
+// A shot from the walls, aimed (roughly) at someone, carrying an element.
+function sawShot(lvl) {
+  const foes = allPlayers().filter(p => p && !p.dead);
+  if (!foes.length) return;
+  const p = foes[Math.floor(Math.random() * foes.length)];
+  const edge = Math.floor(Math.random() * 4);
+  let x, y;
+  if (edge === 0) { x = ARENA_X + 4 + Math.random() * (ARENA_W - 8); y = ARENA_Y + 4; }
+  else if (edge === 1) { x = ARENA_X + ARENA_W - 4; y = ARENA_Y + 4 + Math.random() * (ARENA_H - 8); }
+  else if (edge === 2) { x = ARENA_X + 4 + Math.random() * (ARENA_W - 8); y = ARENA_Y + ARENA_H - 4; }
+  else { x = ARENA_X + 4; y = ARENA_Y + 4 + Math.random() * (ARENA_H - 8); }
+  const a = Math.atan2(cy(p) - y, cx(p) - x) + (Math.random() - 0.5) * 0.5;
+  const sp = Math.min(7, 2.8 + Math.random() * 2 + lvl * 0.3);
+  const el = SAW_ELEMENTS[Math.floor(Math.random() * SAW_ELEMENTS.length)];
+  room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * sp, dy: Math.sin(a) * sp, damage: Math.min(32, Math.round(10 + lvl * 3)),
+    owner: 'monster', traveled: 0, maxRange: 1600, weaponId: 'saw_' + el, isAoe: false, aoeRadius: 0, pierce: false, grapple: false,
+    boomerang: false, returning: false, life: 0, hitTargets: null, hitR: 5,
+    ...(el === 'fire' ? { burn: 2500 } : el === 'ice' ? { chill: 1500 } : el === 'shock' ? { stun: 400 }
+      : el === 'void' ? { confuseMs: 1200 } : { poisonMs: 2500 }) });
+}
+function updateSawRoom(dt) {
+  const s = room.saw;
+  if (!s) return;
+  s.t += dt;
+  const lvl = 1 + s.t / 30000;   // a little worse every 30 seconds
+  s.payT -= dt;
+  if (s.payT <= 0) {
+    s.payT += SAW_PAY_MS;
+    for (const k of KEYS) {
+      const p = room.players[k];
+      if (!p || p.dead) continue;
+      addCoins(k, SAW_PAY);
+      s.earned += SAW_PAY;
+      room.particles.push({ type: 'coin', x: cx(p), y: p.y - 10, text: '+' + SAW_PAY.toLocaleString() + ' COINS', timer: 2200, max: 2200 });
+    }
+  }
+  s.trapT -= dt;
+  if (s.trapT <= 0) {
+    s.trapT = Math.max(380, 1000 - s.t / 80);
+    if (room.traps.filter(t => !t.owner).length < SAW_MAX_TRAPS) spawnSawTrap(lvl);
+  }
+  s.projT -= dt;
+  if (s.projT <= 0) {
+    s.projT = Math.max(200, 800 - s.t / 90);
+    const n = 1 + Math.floor(Math.random() * Math.min(5, lvl + 1));
+    for (let i = 0; i < n; i++) sawShot(lvl);
+  }
+}
+
 // STARFALL
 const SF_STARS = 3, SF_SPREAD = 30, SF_RAIN_STUN = 2000, SF_RAIN_CONFUSE = 2000;
 const SF_MARK_MS = 450, SF_R = 34, SF_HEAL = 2, SF_RAIN_MS = 4000, SF_RAIN_GAP = 220, SF_RAIN_R = 40, SF_RAIN_MARK = 500;
@@ -2513,6 +2780,8 @@ function clearField() {
   room.rareShop = null;
   room.stars = [];
   room.constels = [];
+  room.fissures = [];
+  room.saw = null;
   room.itemSpawnTimer = ITEM_SPAWN_MIN;
 }
 
@@ -2544,6 +2813,7 @@ function startGame() {
   if (room.gameMode === 'portal') startMageFight();
   else if (room.gameMode === 'abyss') startAbyssFight();
   else if (room.gameMode === 'sandbox') startSandbox();
+  else if (room.gameMode === 'sawroom') startSawRoom();
   else if (room.gameMode !== 'pvp') startWave(START_WAVE);
 }
 
@@ -2570,6 +2840,7 @@ function applyDamage(target, dmg, attackerKey) {
   if (aw && atk.passive === 'axe') dmg *= 1 + PASSIVE_RAGE * Math.max(0, 1 - atk.hp / atk.maxHp);   // BERSERKER
   if (target.num && hasEffect(target, 'ironskin')) dmg *= 0.5;                                     // IRON SKIN
   if (target.num && hasEffect(target, 'frostarmor')) dmg *= 0.75;                                  // FROST ARMOR
+  if (target.num && target.passive === 'soullantern') dmg *= 1 - SOUL_BOND * Math.min(SOUL_MAX, target.souls || 0);   // SOUL BOND
   if (target.num && target.passive === 'sword') dmg *= PASSIVE_GUARD;                              // GUARDIAN
   if (aw && atk.passive === 'frostscythe' && ((target.freeze || 0) > 0 || (target.slowTimer || 0) > 0
       || (target.num && hasEffect(target, 'slow')))) dmg *= SHATTER_MULT;                          // SHATTERPOINT
@@ -2667,7 +2938,7 @@ function handleKill(target, attackerKey) {
     room.particles.push({ type: 'shockwave', x: cx(target), y: cy(target), maxR: 80, timer: 600, max: 600, color: '#ffd84a' });
     return;
   }
-  if (isPKey(attackerKey) && room.players[attackerKey] !== target) countMythicKill(attackerKey);
+  if (isPKey(attackerKey) && room.players[attackerKey] !== target) { countMythicKill(attackerKey); lanternKill(attackerKey, target); }
   // SOUL HARVEST: the reaper's wielder feeds on every kill.
   const reaper = room.players[attackerKey];
   if (reaper && reaper !== target && !reaper.dead && reaper.passive === 'reaper') {
@@ -2819,7 +3090,7 @@ function checkRoundEnd() {
   if (isSolo()) {
     if (p1 && p1.dead && p1.lives <= 0) {
       // The boss fight has no leaderboard: you win or you don't.
-      room.lastLeaderboard = room.gameMode === 'portal' || room.gameMode === 'abyss' ? []
+      room.lastLeaderboard = room.gameMode === 'portal' || room.gameMode === 'abyss' || room.gameMode === 'sawroom' ? []
         : addLeaderboardEntry(room.playerNames.p1, room.wave.num, room.gameMode);
       room.gameState      = 'ROUND_OVER';
       room.roundOverTimer = 6000;
@@ -2949,6 +3220,7 @@ function tickRoom(dt) {
         if ((ax * vx + ay * vy) / (al * vl) > SAM_TOWARD_DOT) { vx *= SAM_TOWARD_MULT; vy *= SAM_TOWARD_MULT; }
       }
     }
+    if (p.sky) { vx = 0; vy = 0; }   // up in the air: no steering
     if (p.kspin > 0) {
       // Spinning: less grip — speed builds up and carries on after you let go.
       const g = Math.min(1, KSPIN_GLIDE * factor);
@@ -3016,8 +3288,8 @@ function tickRoom(dt) {
       continue;
     }
 
-    // The katana's spin is all you do while it lasts — only parry gets through.
-    if (p.kspin > 0) {
+    // The katana's spin (and the Worldsplitter's leap) is all you do while it lasts — only parry gets through.
+    if (p.kspin > 0 || p.sky) {
       if (room.parryJustPressed[key] && p.parryCooldown <= 0) {
         p.parryTimer = p.parryWindow || PARRY_WINDOW; p.parryCooldown = p.parryCd || PARRY_COOLDOWN;
         spawnParrySpark(cx(p), cy(p));
@@ -3172,11 +3444,14 @@ function tickRoom(dt) {
   updateFires(factor, dt);
   updateDarklight(dt);
   updateStarfall(dt);
+  updateWorldsplitter(dt);
+  updateLantern(dt);
+  if (room.gameMode === 'sawroom') updateSawRoom(dt);
   updateRareShop(dt);
 
   // ── Wave spawner ── (the Portal Mage fight has no waves: he brings his own;
   // in the sandbox you spawn what you like)
-  if (room.gameMode !== 'pvp' && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'sandbox') {
+  if (room.gameMode !== 'pvp' && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'sandbox' && room.gameMode !== 'sawroom') {
     if (room.wave.betweenTimer > 0) {
       room.wave.betweenTimer -= dt;
       if (room.wave.betweenTimer <= 0) startWave(room.wave.num + 1);
@@ -3216,11 +3491,16 @@ function tickRoom(dt) {
 
   // ── Traps ── (in the Portal Mage fight only he lays them)
   if (!room.rareShop) room.trapSpawnTimer -= dt;   // nothing new appears while the rare shop is open
-  if (room.trapSpawnTimer <= 0 && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'sandbox') {
+  if (room.trapSpawnTimer <= 0 && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'sandbox' && room.gameMode !== 'sawroom') {
     if (room.traps.filter(t => !t.owner).length < MAX_TRAPS) spawnTrap();
     room.trapSpawnTimer = TRAP_SPAWN_MIN + Math.random() * (TRAP_SPAWN_MAX - TRAP_SPAWN_MIN);
   }
   room.traps = room.traps.filter(tr => {
+    if (tr.vx || tr.vy) {   // a saw-room trap on the move: it bounces round the walls
+      tr.x += tr.vx * factor; tr.y += tr.vy * factor;
+      if (tr.x < ARENA_X + 2 || tr.x > ARENA_X + ARENA_W - tr.w - 2) { tr.vx = -tr.vx; tr.x = Math.max(ARENA_X + 2, Math.min(ARENA_X + ARENA_W - tr.w - 2, tr.x)); }
+      if (tr.y < ARENA_Y + 2 || tr.y > ARENA_Y + ARENA_H - tr.h - 2) { tr.vy = -tr.vy; tr.y = Math.max(ARENA_Y + 2, Math.min(ARENA_Y + ARENA_H - tr.h - 2, tr.y)); }
+    }
     // The mage's traps fade away if nobody steps on them.
     if (tr.expire && tr.state === 'idle') {
       tr.expire -= dt;
@@ -3644,6 +3924,9 @@ function distToSegment(px, py, ax, ay, bx, by) {
 
 // What a projectile does beyond its damage: frost slows, storm arcs onward.
 function onHitExtras(proj, t) {
+  if (proj.confuseMs && t.num) applyEffect(t, 'confuse', proj.confuseMs);
+  if (proj.poisonMs && t.num) applyEffect(t, 'poison', proj.poisonMs);
+  if (proj.soulHeal) { const o = room.players[proj.owner]; if (o && !o.dead) o.hp = Math.min(o.maxHp, o.hp + proj.soulHeal); }
   if (proj.dlChain) dlChainTarget(t, proj.owner);
   if (proj.dlCurse) dlCurse(t, proj.owner, DL_CURSE_MS);
   if (proj.chill) chillTarget(t, proj.chill, proj.weaponId === 'chronostaff' ? 'time' : 'chill');
@@ -3710,6 +3993,8 @@ function doAttack(p, pKey) {
   if (w.infinityShot) { infinityAttack(p, pKey, w, dmgMult); return; }
   if (w.kunaiOrbit) { darklightAttack(p, pKey, w, dmgMult); return; }
   if (w.starStaff) { starAttack(p, pKey, w, dmgMult); return; }
+  if (w.groundSplit) { splitAttack(p, pKey, w, dmgMult); return; }
+  if (w.soulWisp) { soulAttack(p, pKey, w, dmgMult); return; }
   if (w.slashWave) {
     // A slash wave that seeks out the nearest foe.
     const aim = nearestTargetAngle(p, pKey);
@@ -3892,6 +4177,8 @@ function doSuper(p, pKey) {
   p.superCooldown = su.cd;
   p.swingTimer = 300;
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
+  if (su.kind === 'skyfall') { startSkyfall(p, pKey, Math.round(su.dmg * dmgMult)); return; }
+  if (su.kind === 'deathsdoor') { openDeathsDoor(p, pKey, Math.round(su.dmg * dmgMult)); return; }
   if (su.kind === 'starrain') {
     p.starRain = { t: SF_RAIN_MS, acc: 0, dmg: Math.round(su.dmg * dmgMult) };
     room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 60, timer: 800, max: 800, color: '#ffe9a0', text: 'STARFALL' });
@@ -6064,8 +6351,8 @@ function puppetAttack(m, pKey) {
 // ── Light Blade ──
 // Every dash is a short sprint: the player is carried along an angle (curving
 // toward a target for the special), hitting each foe once per leg.
-const BLADE_DASH_MAX = 240, BLADE_DASH_SPEED = 15, BLADE_PATH_SHARE = 0.5, BLADE_CLICK_MS = 400;
-const BLADE_SP_DASHES = 5, BLADE_SP_SPEED = 13, BLADE_SP_TURN = 9, BLADE_SP_GAP = 110, BLADE_SP_STUN = 1500, BLADE_HURL_SPEED = 1.3;
+const BLADE_DASH_MAX = 240, BLADE_DASH_SPEED = 11, BLADE_PATH_SHARE = 0.5, BLADE_CLICK_MS = 400;
+const BLADE_SP_DASHES = 5, BLADE_SP_SPEED = 10, BLADE_SP_TURN = 9, BLADE_SP_GAP = 110, BLADE_SP_STUN = 1500, BLADE_HURL_SPEED = 1.3;
 const LIGHTSPEED_MS = 8000, LIGHTSPEED_MULT = 3, LIGHTSPEED_AURA_R = 80, LIGHTSPEED_TICK = 200, LIGHTSPEED_AURA_DMG = 18;
 const LIGHT_CRASH_R = 140, LIGHT_CRASH_STUN = 2000, LIGHT_CRASH_CD = 1200, LIGHT_CRASH_KNOCK = 140, LIGHT_CRASH_PVP = 70;
 const AFTERGLOW_MS = 2500, AFTERGLOW_TICK = 450, AFTERGLOW_SHARE = 0.4, AFTERGLOW_STUN = 400;
@@ -6883,6 +7170,8 @@ function doSpecial(p, pKey) {
     return;
   }
   if (sp.kind === 'kunaistorm') { darklightStorm(p, pKey, spDmg); return; }
+  if (sp.kind === 'tectonic') { castTectonic(p, pKey, sp, spDmg); return; }
+  if (sp.kind === 'soulstorm') { castSoulStorm(p, pKey, spDmg); return; }
   if (sp.kind === 'constellation') { castConstellation(p, pKey, sp, spDmg); return; }
   if (sp.kind === 'dashwave') {
     // A quiet wave: when it reaches a foe, you flash through them.
@@ -7180,6 +7469,9 @@ function playerView(p) {
     ...(p.kunais && p.kunais.length ? { dk: p.kunais.map(k => (k.dark ? 1 : 0)).join(''), dkA: Math.round((p.dkA || 0) * 100) / 100 } : {}),
     ...(p.dlCurse ? { curse: Math.round(p.dlCurse.ms) } : {}),
     ...(p.starRain ? { srain: Math.round(p.starRain.t) } : {}),
+    ...(p.sky ? { sky: { k: Math.round(p.sky.t / p.sky.life * 100) / 100, sx: r1(p.sky.sx), sy: r1(p.sky.sy), tx: r1(p.sky.tx), ty: r1(p.sky.ty) } } : {}),
+    ...(p.souls ? { souls: p.souls } : {}),
+    ...(p.deathDoor > 0 ? { ddoor: Math.round(p.deathDoor) } : {}),
     ...(p.dlChain ? { dlc: [r1(p.dlChain.x), r1(p.dlChain.y)] } : {}),
     ...(p.passive === 'mindtome' ? { shuffleIn: Math.max(0, Math.round(p.shuffleT ?? MIND_SHUFFLE_MS)) } : {}),
     ...(p.passive === 'vortex' ? { aegis: !(p.aegisCd > 0) } : {}),
@@ -7241,6 +7533,7 @@ function buildStateMsg(playerNum) {
                                     ...(RIDES_OWNER.has(f.kind) ? { fo: f.owner } : {}) })),
     chains:      buildChains().map(c => ({ x1: r1(c.x1), y1: r1(c.y1), x2: r1(c.x2), y2: r1(c.y2), kind: c.kind, o: c.o })),
     traps:       room.traps.map(tr => ({ x: r1(tr.x), y: r1(tr.y), w: tr.w, h: tr.h, type: tr.type, state: tr.state, radius: tr.radius, color: tr.color, o: tr.owner || null,
+                  ...(tr.element ? { el: tr.element } : {}), ...(tr.vx || tr.vy ? { mv: 1 } : {}),
                   armRatio: tr.state === 'arming' ? r1(1 - tr.armTimer / (TRAP_TYPES[tr.type].armTime || 1)) : 0 })),
     items:       room.items.map(it => ({ x: r1(it.x), y: r1(it.y), w: it.w, h: it.h, type: it.type, color: ITEM_TYPES[it.type].color })),
     coins:       room.coins.map(c => ({ id: c.id, x: r1(c.x), y: r1(c.y), w: c.w, h: c.h, value: c.value, fading: c.life < 4000 })),
@@ -7258,6 +7551,9 @@ function buildStateMsg(playerNum) {
     otherHasUnlocks: KEYS.some(k => k !== key && room.unlockQueues[k].length > 0),
     bossDrop: room.bossDrops?.[key] || null,
     noDrop: !!room.mythicNoDrop?.[key],
+    fissures: (room.fissures || []).map(q => ({ x1: r1(q.x1), y1: r1(q.y1), x2: r1(q.x2), y2: r1(q.y2),
+      k: Math.round(Math.min(1, q.t / q.erupt) * 100) / 100, l: Math.round(Math.max(0, 1 - q.t / q.life) * 100) / 100 })),
+    ...(room.saw ? { saw: { t: Math.round(room.saw.t), next: Math.round(room.saw.payT), earned: room.saw.earned } } : {}),
     stars: (room.stars || []).map(s => ({ x: r1(s.x), y: r1(s.y), r: s.r, k: Math.round(s.t / s.life * 100) / 100 })),
     constels: (room.constels || []).map(c => ({ k: Math.round(c.t / c.life * 100) / 100,
       pts: c.targets.filter(t => !t.dead).map(t => [r1(cx(t)), r1(cy(t))]) })),
@@ -8014,7 +8310,7 @@ wss.on('connection', (ws) => {
         return;
       }
       if (msg.type === 'join' && !ws.room) {
-        const mode = ['pvp', 'coop', 'waves', 'extreme', 'portal', 'abyss', 'sandbox', 'bot', 'create', 'joinroom'].includes(msg.mode) ? msg.mode : 'pvp';
+        const mode = ['pvp', 'coop', 'waves', 'extreme', 'portal', 'abyss', 'sandbox', 'sawroom', 'bot', 'create', 'joinroom'].includes(msg.mode) ? msg.mode : 'pvp';
         const size = MAP_SIZES[msg.size] ? msg.size : 'medium';
         // EXTREME and the PORTAL MAGE open up with XP (admins skip the wait).
         if (MODE_XP[mode]) {

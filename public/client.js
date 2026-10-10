@@ -47,7 +47,7 @@ let WEAPON_COLOR = {
   glaive:'#b0d8c0', katana:'#eef0ff', chakram:'#66e0c0', cannon:'#9a90a8',
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
-  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff', samuraiblade:'#ff5a5a', darklight:'#e8e8f4', starfall:'#ffe9a0',
+  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff', samuraiblade:'#ff5a5a', darklight:'#e8e8f4', starfall:'#ffe9a0', worldsplitter:'#ff6a1a', soullantern:'#6affc8',
   ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
   scimitar:'#e8e0c8', slingshot:'#b08a5a', mace:'#9aa4b0', javelin:'#d8c8a0', claws:'#e0e4ec',
   emberstaff:'#ff7a2a', halberd:'#c0c8d8', frostbow:'#9fe8ff', chronostaff:'#e8c87a', voidblade:'#9a5aff',
@@ -73,8 +73,10 @@ const WEAPON_DESC = {
   infinitybow:"The Abyss's crossbows: one in your hands and two floating beside you",
   endlessscythe:"The Abyss's own scythe, won by beating him a second time",
   samuraiblade:"The samurai's own katana, deeply curved and razor bright",
-  darklight:"MYTHIC. A kunai of dark and light, made from three legends",
+  darklight:"MYTHIC. A kunai of dark and light, forged from the Light Blade",
   starfall:"MYTHIC. A staff crowned with a crescent moon and a captive star",
+  worldsplitter:"MYTHIC. An obsidian greatsword veined with magma, heavy enough to split the world",
+  soullantern:"MYTHIC. A black iron lantern burning with the souls of the fallen",
   ghostdagger:'The rarest weapon of all: turn invisible, throw a deadly dagger, and make it rain knives',
   stormhammer:'A war hammer full of lightning that comes back when you throw it',
   frostscythe:'A sweeping scythe of ice that freezes whatever it keeps cutting',
@@ -741,6 +743,8 @@ function connect() {
         setLobbyMsg(`<span style="color:#ff5a3a">EXTREME MODE</span><br><span style="color:#888">SOLO · STRONGEST MONSTERS · HUGE REWARDS</span><br>Loading...`);
       } else if (mode === 'portal') {
         setLobbyMsg(PORTAL_LOBBY);
+      } else if (mode === 'sawroom') {
+        setLobbyMsg(`<span style="color:#ff3a3a">THE SAW ROOM</span><br><span style="color:#888">NO MONSTERS · ONLY TRAPS · ◆ 50,000 EVERY 20s</span><br>Loading...`);
       } else if (mode === 'abyss') {
         setLobbyMsg(ABYSS_LOBBY);
       } else if (mode === 'bot') {
@@ -774,7 +778,7 @@ function connect() {
       }
       // The server only sends a player's unlock list when it changes.
       applyWorld(msg.world);
-      const solo = ['waves', 'extreme', 'portal', 'abyss', 'sandbox'].includes(msg.gameMode);   // nobody to talk to in the solo modes
+      const solo = ['waves', 'extreme', 'portal', 'abyss', 'sandbox', 'sawroom'].includes(msg.gameMode);   // nobody to talk to in the solo modes
       if (solo !== chatSolo) {
         chatSolo = solo;
         const chatBtn = document.getElementById('chatBtn');
@@ -944,6 +948,7 @@ function updatePrediction(frameDt, now) {
   if (me.kspin > 0) spd *= 1.9;               // the katana's spin
   if (me.effects && me.effects.slow  > 0) spd *= 0.4;
   if (me.effects && me.effects.root  > 0) spd = 0;            // ROOT VINES
+  if (me.sky) spd = 0;                                        // up in the air (Worldsplitter's leap)
 
   // Apply currently-held inputs immediately (instant response)
   let vx = 0, vy = 0;
@@ -1063,7 +1068,7 @@ const ATTACK_ANIM = {
   stormhammer: 'chop', frostscythe: 'spin', sunbow: 'draw',
   scimitar: 'slash', slingshot: 'draw', mace: 'chop', javelin: 'throw', claws: 'stab',
   emberstaff: 'cast', halberd: 'sweep', frostbow: 'draw', chronostaff: 'cast', voidblade: 'slash', mindtome: 'tome',
-  lightblade: 'slash', darklight: 'throw', starfall: 'cast',
+  lightblade: 'slash', darklight: 'throw', starfall: 'cast', worldsplitter: 'heavy', soullantern: 'cast',
 };
 const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
                   heavy: 300, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
@@ -2783,6 +2788,14 @@ function legendPassive(id) {
 }
 
 const LEGEND_MOVES = {
+  worldsplitter: '<b>ATK</b> your swing splits the ground ahead: the crack erupts, then burns whoever stands in it · <b>SPECIAL</b>'
+               + ' eight cracks tear out all round you, erupting one after another and knocking foes off their feet · <b>SUPER</b>'
+               + ' leap into the sky (untouchable) and come down on the nearest enemy like a meteor, shattering the ground around'
+               + ' you. Only one mythic goes into a game, and a mythic never earns you another weapon.',
+  soullantern: '<b>ATK</b> a wisp that hunts down the nearest enemy; every enemy you kill leaves its soul in the lantern (up to 12,'
+             + ' circling you) · <b>SPECIAL</b> let every soul loose as hunting wisps that heal you when they hit · <b>SUPER</b>'
+             + " DEATH'S DOOR: three spirits rise to fight for you, and for 8s everything you kill gets back up on your side."
+             + ' Only one mythic goes into a game, and a mythic never earns you another weapon.',
   starfall: '<b>ATK</b> three stars fall on the nearest enemies (markers show where) · <b>SPECIAL</b> a constellation joins'
           + ' every enemy on the field: a moment later they all take the hit, are dragged together and dazed · <b>SUPER</b> a 4s'
           + ' star shower on everything around you: each star stuns for 2s, then leaves its target confused for 2s. Only one mythic goes into a game, and a mythic never earns you another weapon.',
@@ -3796,6 +3809,13 @@ function updateScreens(state) {
         : `THE PORTAL MAGE WINS THIS TIME<br>`
           + (mage ? `HE HAD <span style="color:#c8a0ff">${Math.ceil(mage.hp).toLocaleString()}</span> HP LEFT${mage.phase === 2 ? ' (PHASE 2)' : ''}<br>` : '')
           + `XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`;
+    } else if (state.gameMode === 'sawroom') {
+      lb.classList.add('hidden');
+      hint.textContent = 'RETURNING TO MENU...';
+      const sw = state.saw || { t: 0, earned: 0 }, sec = Math.floor(sw.t / 1000);
+      document.getElementById('roundTitle').innerHTML = '<span style="color:#ff3a3a">THE SAW ROOM GOT YOU</span>';
+      document.getElementById('roundStats').innerHTML = `YOU LASTED <span style="color:#ff7a7a">${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}</span><br>`
+        + `<span style="color:${PAL.coin}">+${sw.earned.toLocaleString()} COINS</span><br>XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`;
     } else if (state.gameMode === 'waves' || state.gameMode === 'extreme') {
       const ext = state.gameMode === 'extreme';
       hint.textContent = 'RETURNING TO MENU...';
@@ -3897,7 +3917,9 @@ requestAnimationFrame(renderLoop);
 function draw(state) {
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
   drawArena();
+  if (state.gameMode === 'sawroom') drawSawTint();
   drawTraps(state.traps || []);
+  drawTrapElements(state.traps || []);
   drawItems(state.items || []);
   drawCoins(state.coins || []);
   for (const sl of slashes) {
@@ -3909,6 +3931,7 @@ function draw(state) {
   drawSlashes();
   drawFireRings(state.fires || []);
   if (state.rareShop) drawRareShop(state.rareShop);
+  drawFissures(state.fissures || []);
   drawConstellations(state.constels || []);
   drawStars(state.stars || []);
   drawChains(state.chains || []);
@@ -4326,6 +4349,7 @@ function drawPlayer(p, baseColor, label, key) {
   // VANISH / ghost cloak: gone for everyone else; a faint shimmer for you.
   const unseen = p.effects && (p.effects.vanish > 0 || p.effects.ghost > 0);
   if (unseen && key !== 'p' + myNum) return;
+  if (p.sky) p = skyfallPose(p);
   if (unseen) { ctx.save(); ctx.globalAlpha = 0.35 + 0.1 * Math.sin(performance.now() / 120); }
   drawPlayerBody(p, baseColor, label, key);
   if (unseen) ctx.restore();
@@ -4570,6 +4594,8 @@ function drawPlayerBody(p, baseColor, label, key) {
   if (p.dk && !p.dead) drawDarklightOrbit(p, x, y);
   if (p.curse > 0 && !p.dead) drawCurseFx(p, x, y);
   if (p.srain > 0 && !p.dead) drawStarRainAura(p, x, y);
+  if (p.souls && !p.dead) drawSouls(p, x, y);
+  if (p.ddoor > 0 && !p.dead) drawDeathsDoor(p, x, y);
   drawStatusMarks(p, x, y);
   if (p.puppet) drawPuppetMark(x + p.w / 2, y - 6, null);
   if (p.shuffleIn != null && key === 'p' + myNum) drawShuffleCountdown(p, x, y);
@@ -5719,6 +5745,8 @@ function drawProjectiles(projs) {
     if (pr.weaponId === 'abyssbolt' || pr.weaponId === 'infinitybow') { drawVoidBolt(pr, ang); continue; }
     if (pr.weaponId === 'samwave') { drawSlashWave(pr, ang, now, pr.special ? '#ff5a5a' : (pr.owner === 'monster' ? '#ff4a5a' : '#ff8a8a')); continue; }
     if (pr.weaponId === 'samdashwave') { drawDashWave(pr, ang, now); continue; }
+    if (pr.weaponId === 'soulwisp') { drawWisp(pr, ang, now); continue; }
+    if (pr.weaponId && pr.weaponId.startsWith('saw_')) { drawSawShot(pr, now); continue; }
     if (pr.weaponId === 'dlkunai' || pr.weaponId === 'dlpair') { drawFlyingKunai(pr, ang, pr.weaponId === 'dlpair'); continue; }
     if (pr.weaponId === 'abyssorb') { drawAbyssOrb(pr.x, pr.y, pr.special ? 12 : 20, now); continue; }
     if (pr.weaponId === 'abyssscythe') {
@@ -6363,6 +6391,16 @@ function drawHUD(state) {
     const t = 'BOT BATTLE · ' + String(state.bot).toUpperCase();
     ctx.fillStyle = '#000'; ctx.fillText(t, HUD_W/2 + 1, 3);
     ctx.fillStyle = '#ff9a5a'; ctx.fillText(t, HUD_W/2, 2);
+  } else if (state.gameMode === 'sawroom') {
+    const sw = state.saw || { t: 0, next: 20000, earned: 0 };
+    const sec = Math.floor(sw.t / 1000);
+    const t = 'SAW ROOM · ' + Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+    const sub = '◆ ' + sw.earned.toLocaleString() + ' EARNED · NEXT ◆ 50,000 IN ' + Math.ceil(sw.next / 1000) + 's';
+    ctx.fillStyle = '#000'; ctx.fillText(t, HUD_W/2 + 1, 3);
+    ctx.fillStyle = '#ff4a4a'; ctx.fillText(t, HUD_W/2, 2);
+    ctx.font = '8px "Courier New",monospace';
+    ctx.fillStyle = '#ffd84a'; ctx.fillText(sub, HUD_W/2, 15);
+    ctx.font = '10px "Courier New",monospace';
   } else if (w && state.gameMode !== 'pvp') {
     const wl = (state.gameMode === 'extreme' ? 'EXTREME ' : '') + 'WAVE ' + w.num + (state.finalWave ? '/' + state.finalWave : '');
     ctx.fillStyle = '#000'; ctx.fillText(wl, HUD_W/2 + 1, 3);
@@ -6878,5 +6916,147 @@ function drawConfusedMark(m, x, y) {
     ctx.fillStyle = '#000'; ctx.fillText('?', x + m.w / 2 + Math.cos(a) * 7 + 1, y - 7 + Math.sin(a) * 2 + 1);
     ctx.fillStyle = '#ffe9a0'; ctx.fillText('?', x + m.w / 2 + Math.cos(a) * 7, y - 7 + Math.sin(a) * 2);
   }
+  ctx.restore();
+}
+
+// ─── Worldsplitter ───────────────────────────────────────────────────────────
+// A crack in the ground: it races out (dark, edged with glow), erupts, then
+// lies there as a jagged river of lava that slowly cools.
+function drawFissures(list) {
+  const now = performance.now();
+  for (const q of list) {
+    const dx = q.x2 - q.x1, dy = q.y2 - q.y1, len = Math.hypot(dx, dy);
+    if (len < 2) continue;
+    const shown = len * Math.min(1, q.k), lit = q.k >= 1, fade = Math.min(1, q.l * 1.6);
+    ctx.save(); ctx.translate(q.x1, q.y1); ctx.rotate(Math.atan2(dy, dx));
+    const seed = (q.x1 * 7 + q.y1 * 13) % 10;
+    const path = () => {
+      ctx.beginPath(); ctx.moveTo(0, 0);
+      for (let x = 6; x < shown; x += 6) ctx.lineTo(x, Math.sin(x * 0.45 + seed) * 2.6 + Math.sin(x * 0.17 + seed * 2) * 1.6);
+      ctx.lineTo(shown, 0);
+    };
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (!lit) {
+      ctx.globalAlpha = 0.5; ctx.strokeStyle = '#ff6a1a'; ctx.lineWidth = 5; path(); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.strokeStyle = '#1a0a04'; ctx.lineWidth = 2.2; path(); ctx.stroke();
+    } else {
+      ctx.globalAlpha = 0.3 * fade; ctx.strokeStyle = '#ff4a1a'; ctx.lineWidth = 14; path(); ctx.stroke();
+      ctx.globalAlpha = 0.95 * fade; ctx.strokeStyle = '#2a0e04'; ctx.lineWidth = 7; path(); ctx.stroke();
+      ctx.strokeStyle = '#ff6a1a'; ctx.lineWidth = 4; path(); ctx.stroke();
+      ctx.strokeStyle = '#ffd24a'; ctx.lineWidth = 1.6; path(); ctx.stroke();
+      ctx.fillStyle = '#ffd24a';   // embers rising off it
+      for (let i = 0; i < Math.floor(len / 18); i++) {
+        const ex = (i * 18 + seed * 3) % len, rise = ((now / 30 + i * 37) % 22);
+        ctx.globalAlpha = fade * (1 - rise / 22);
+        ctx.fillRect(ex, -rise - 2, 1.5, 1.5);
+      }
+    }
+    ctx.restore();
+  }
+}
+// The leap: the player arcs high from where they jumped to where they'll land,
+// a shadow growing on the landing spot, a trail of fire on the way down.
+function skyfallPose(p) {
+  const s = p.sky, k = Math.min(1, s.k);
+  const x = s.sx + (s.tx - s.sx) * k, ground = s.sy + (s.ty - s.sy) * k, h = Math.sin(k * Math.PI) * 120;
+  ctx.save();
+  ctx.globalAlpha = 0.25 + 0.4 * k; ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(s.tx, s.ty + p.h / 2, 6 + 16 * k, 3 + 6 * k, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.5 * k; ctx.strokeStyle = '#ff6a1a'; ctx.setLineDash([4, 3]);
+  ctx.beginPath(); ctx.arc(s.tx, s.ty, 120 * (0.4 + 0.6 * k), 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  if (k > 0.5) {
+    const g = ctx.createLinearGradient(x, ground - h, x - (s.tx - s.sx) * 0.15, ground - h - 50);
+    g.addColorStop(0, 'rgba(255,140,40,0.9)'); g.addColorStop(1, 'rgba(255,60,0,0)');
+    ctx.globalAlpha = 1; ctx.strokeStyle = g; ctx.lineWidth = 8; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x, ground - h); ctx.lineTo(x - (s.tx - s.sx) * 0.15, ground - h - 50); ctx.stroke();
+  }
+  ctx.restore();
+  return { ...p, x: x - p.w / 2, y: ground - h - p.h / 2 };
+}
+
+// ─── Soul Lantern ────────────────────────────────────────────────────────────
+function drawSoulFlame(x, y, r, now, phase) {
+  const flick = Math.sin(now / 90 + phase) * 0.15;
+  ctx.save(); ctx.translate(x, y);
+  ctx.globalAlpha = 0.35; ctx.fillStyle = '#6affc8';
+  ctx.beginPath(); ctx.arc(0, 0, r * 1.8, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.95; ctx.fillStyle = '#6affc8';
+  ctx.beginPath(); ctx.moveTo(0, -r * (1.9 + flick)); ctx.quadraticCurveTo(r * 1.1, -r * 0.2, 0, r); ctx.quadraticCurveTo(-r * 1.1, -r * 0.2, 0, -r * (1.9 + flick)); ctx.fill();
+  ctx.fillStyle = '#e8fff4';
+  ctx.beginPath(); ctx.moveTo(0, -r * 0.9); ctx.quadraticCurveTo(r * 0.5, 0, 0, r * 0.6); ctx.quadraticCurveTo(-r * 0.5, 0, 0, -r * 0.9); ctx.fill();
+  ctx.restore();
+}
+// The souls in the lantern, circling their keeper.
+function drawSouls(p, x, y) {
+  const now = performance.now(), mx = x + p.w / 2, my = y + p.h / 2;
+  for (let i = 0; i < p.souls; i++) {
+    const a = now / 700 + i * Math.PI * 2 / p.souls;
+    drawSoulFlame(mx + Math.cos(a) * 20, my + Math.sin(a) * 12 + Math.sin(now / 200 + i) * 2, 2, now, i);
+  }
+}
+// DEATH'S DOOR: a ghostly ring on the ground and spirits rising round you.
+function drawDeathsDoor(p, x, y) {
+  const now = performance.now(), mx = x + p.w / 2, my = y + p.h;
+  ctx.save();
+  ctx.globalAlpha = 0.35 + 0.15 * Math.sin(now / 200); ctx.strokeStyle = '#6affc8'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(mx, my, 26, 9, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+  for (let i = 0; i < 4; i++) {
+    const rise = (now / 25 + i * 22) % 40;
+    ctx.save(); ctx.globalAlpha = 1 - rise / 40;
+    drawSoulFlame(mx + Math.sin(i * 1.7) * 18, my - rise, 1.6, now, i);
+    ctx.restore();
+  }
+}
+// A hunting wisp: a ghost flame with a fading tail (the soul storm's are bigger).
+function drawWisp(pr, ang, now) {
+  const big = !!pr.special, sp = Math.hypot(pr.dx, pr.dy) || 1, len = big ? 22 : 14;
+  ctx.save();
+  const g = ctx.createLinearGradient(pr.x, pr.y, pr.x - pr.dx / sp * len, pr.y - pr.dy / sp * len);
+  g.addColorStop(0, 'rgba(106,255,200,0.8)'); g.addColorStop(1, 'rgba(106,255,200,0)');
+  ctx.strokeStyle = g; ctx.lineWidth = big ? 5 : 3.5; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(pr.x, pr.y); ctx.lineTo(pr.x - pr.dx / sp * len, pr.y - pr.dy / sp * len); ctx.stroke();
+  ctx.restore();
+  drawSoulFlame(pr.x, pr.y, big ? 3.4 : 2.6, now, pr.id || 0);
+}
+
+// ─── The Saw Room ────────────────────────────────────────────────────────────
+const SAW_EL_COLOR = { fire: '#ff6a1a', ice: '#9fe8ff', poison: '#8ad048', shock: '#ffe45a', void: '#b07aff' };
+// Everything bathed in red, the edges darker, pulsing like a heartbeat.
+function drawSawTint() {
+  const now = performance.now(), beat = 0.5 + 0.5 * Math.sin(now / 420);
+  ctx.save();
+  ctx.fillStyle = 'rgba(140,0,0,' + (0.16 + 0.05 * beat) + ')'; ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  const g = ctx.createRadialGradient(CANVAS_W / 2, CANVAS_H / 2, Math.min(CANVAS_W, CANVAS_H) * 0.3, CANVAS_W / 2, CANVAS_H / 2, Math.max(CANVAS_W, CANVAS_H) * 0.7);
+  g.addColorStop(0, 'rgba(60,0,0,0)'); g.addColorStop(1, 'rgba(60,0,0,' + (0.55 + 0.1 * beat) + ')');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.restore();
+}
+// A saw-room trap's element: a coloured ring (spinning on the ones that move).
+function drawTrapElements(traps) {
+  const now = performance.now();
+  for (const tr of traps) {
+    if (!tr.el) continue;
+    const col = SAW_EL_COLOR[tr.el] || '#fff', x = tr.x + tr.w / 2, y = tr.y + tr.h / 2, r = tr.w * 0.62;
+    ctx.save();
+    ctx.globalAlpha = 0.75; ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+    if (tr.mv) { ctx.setLineDash([4, 3]); ctx.lineDashOffset = -now / 25; }
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.globalAlpha = 0.2 + 0.1 * Math.sin(now / 150); ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+}
+// A shot from the walls: a glowing bolt of its element with a short tail.
+function drawSawShot(pr, now) {
+  const col = SAW_EL_COLOR[pr.weaponId.slice(4)] || '#ff4a4a', sp = Math.hypot(pr.dx, pr.dy) || 1;
+  ctx.save();
+  const g = ctx.createLinearGradient(pr.x, pr.y, pr.x - pr.dx / sp * 16, pr.y - pr.dy / sp * 16);
+  g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.strokeStyle = g; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(pr.x, pr.y); ctx.lineTo(pr.x - pr.dx / sp * 16, pr.y - pr.dy / sp * 16); ctx.stroke();
+  ctx.globalAlpha = 0.4; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(pr.x, pr.y, 6 + Math.sin(now / 60) * 0.8, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(pr.x, pr.y, 3.2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(pr.x, pr.y, 1.3, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }

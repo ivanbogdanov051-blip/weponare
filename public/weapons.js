@@ -698,6 +698,42 @@ const WEAPON_ART = {
   }},
   // Darklight: a kunai split down its ridge, one half black, one half white,
   // on a black grip wound with white and a ring pommel to match.
+  // Worldsplitter: a colossal obsidian greatsword, its blade cracked open
+  // with veins of magma, on a heavy iron hilt with a molten gem in the guard.
+  worldsplitter: { draw(k, wc) {
+    k.circ(-1.5, 0, 2.6, '#3a3a44'); k.circ(-1.5, 0, 1.3, '#ff6a1a');          // pommel with an ember
+    k.r(0, -1.8, 9, 3.6, '#2a1a12');                                            // grip
+    for (let i = 0; i < 4; i++) k.r(1 + i * 2.1, -1.8, 0.9, 3.6, '#5a3a22');   // leather bands
+    k.r(9, -6.5, 3.4, 13, '#3a3a44'); k.r(9, -6.5, 3.4, 1.2, '#6a6a78');       // crossguard
+    k.circ(10.7, 0, 2, '#ff4a1a'); k.circ(10.7, 0, 1, '#ffd24a');               // molten gem
+    k.glow(29, 0, 6, '#ff6a1a', 0.35);
+    k.poly([[12.4, -5.2], [40, -4.2], [46, 0], [40, 4.2], [12.4, 5.2]], '#1a1418');   // obsidian blade
+    k.poly([[12.4, -5.2], [40, -4.2], [46, 0], [40, -2.6], [13, -3.6]], '#3a3040');    // top facet
+    // Magma veins running down the blade.
+    k.poly([[14, -0.4], [19, -2.2], [24, 0.6], [29, -1.6], [34, 0.8], [39, -0.8], [43, 0.2], [39, 0.4], [34, 2], [29, -0.4], [24, 1.8], [19, -1], [14, 0.6]], '#ff6a1a');
+    k.poly([[19, -1.8], [24, 0.9], [29, -1.2], [24, 1.3]], '#ffd24a');
+    k.poly([[30, 0], [33, 3.4], [34, 1.6]], '#ff6a1a');
+    k.poly([[22, 0.5], [21, 4.2], [23.5, 1.5]], '#ff4a1a');
+    k.r(44.5, -0.5, 1.2, 1, '#ffd24a');                                         // the glowing tip
+    k.r(26, -6, 1, 1, '#ffd24a'); k.r(36, 5.4, 0.8, 0.8, '#ff6a1a');            // embers
+  }},
+  // Soul Lantern: a black iron lantern on a chain, a ghost-green flame inside
+  // its glass, with a little skull worked into the cap.
+  soullantern: { draw(k, wc) {
+    k.r(-2, -1, 9, 2, '#2a2a34');                                               // handle
+    for (let i = 0; i < 3; i++) { k.ring(9 + i * 3, 0, 1.6, 0.8, '#6a6a78'); } // chain links
+    k.glow(24.5, 0, 6.5, wc, 0.5);
+    k.r(17, -7, 2, 14, '#1a1a22');                                              // cap
+    k.circ(16.5, 0, 2.4, '#d8d8c8'); k.r(15.4, -0.9, 0.9, 0.9, '#1a1a22'); k.r(16.8, -0.9, 0.9, 0.9, '#1a1a22');   // the skull
+    k.r(19, -6, 11, 12, '#1e4a3c');                                              // the glass
+    k.r(19, -6, 11, 1.2, '#1a1a22'); k.r(19, 4.8, 11, 1.2, '#1a1a22');          // iron frame
+    k.r(19, -6, 1.2, 12, '#1a1a22'); k.r(23.9, -6, 1.2, 12, '#1a1a22'); k.r(28.8, -6, 1.2, 12, '#1a1a22');
+    // The flame: a ghostly teardrop.
+    k.poly([[21, 2.5], [23.5, -1], [24.5, -4.5], [26, -0.5], [27.6, 2.5], [24.3, 4]], wc);
+    k.poly([[22.6, 2.4], [24.4, 0], [24.8, -2], [25.6, 0.6], [26.2, 2.4], [24.4, 3.2]], '#e8fff4');
+    k.r(30, -3, 2, 6, '#1a1a22'); k.circ(32.6, 0, 1.4, '#3a3a44');              // bottom finial
+    k.r(26, -9, 0.9, 0.9, wc); k.r(21, 7.5, 0.8, 0.8, '#e8fff4');               // drifting motes
+  }},
   // Starfall: a midnight-blue staff bound in gold, topped by a silver crescent
   // moon cradling a burning star.
   starfall: { draw(k, wc) {

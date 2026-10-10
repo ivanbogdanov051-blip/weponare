@@ -999,3 +999,7 @@ body {
 .mp-btn { display: flex; align-items: center; gap: 6px; font-family: inherit; font-size: 11px; letter-spacing: 1px;
   padding: 4px 10px 4px 4px; background: #101018; color: #c8c8d8; border: 1px solid #4a4a5c; cursor: pointer; }
 .mp-btn.on { color: #ffffff; border-color: #ffffff; box-shadow: 0 0 8px rgba(184, 160, 255, 0.6); background: #1c1a2c; }
+
+/* The Saw Room */
+.mode-btn.btn-saw { border-color: #c81a1a; color: #ffb0b0; background: linear-gradient(180deg, #3a0606, #160202); box-shadow: 0 0 10px rgba(220, 20, 20, 0.45); }
+.mode-btn.btn-saw:hover { border-color: #ff3a3a; color: #fff; }
