@@ -47,7 +47,7 @@ let WEAPON_COLOR = {
   glaive:'#b0d8c0', katana:'#eef0ff', chakram:'#66e0c0', cannon:'#9a90a8',
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
-  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff', samuraiblade:'#ff5a5a', darklight:'#e8e8f4',
+  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff', samuraiblade:'#ff5a5a', darklight:'#e8e8f4', starfall:'#ffe9a0',
   ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
   scimitar:'#e8e0c8', slingshot:'#b08a5a', mace:'#9aa4b0', javelin:'#d8c8a0', claws:'#e0e4ec',
   emberstaff:'#ff7a2a', halberd:'#c0c8d8', frostbow:'#9fe8ff', chronostaff:'#e8c87a', voidblade:'#9a5aff',
@@ -74,6 +74,7 @@ const WEAPON_DESC = {
   endlessscythe:"The Abyss's own scythe, won by beating him a second time",
   samuraiblade:"The samurai's own katana, deeply curved and razor bright",
   darklight:"MYTHIC. A kunai of dark and light, made from three legends",
+  starfall:"MYTHIC. A staff crowned with a crescent moon and a captive star",
   ghostdagger:'The rarest weapon of all: turn invisible, throw a deadly dagger, and make it rain knives',
   stormhammer:'A war hammer full of lightning that comes back when you throw it',
   frostscythe:'A sweeping scythe of ice that freezes whatever it keeps cutting',
@@ -1062,7 +1063,7 @@ const ATTACK_ANIM = {
   stormhammer: 'chop', frostscythe: 'spin', sunbow: 'draw',
   scimitar: 'slash', slingshot: 'draw', mace: 'chop', javelin: 'throw', claws: 'stab',
   emberstaff: 'cast', halberd: 'sweep', frostbow: 'draw', chronostaff: 'cast', voidblade: 'slash', mindtome: 'tome',
-  lightblade: 'slash', darklight: 'throw',
+  lightblade: 'slash', darklight: 'throw', starfall: 'cast',
 };
 const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
                   heavy: 300, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
@@ -2733,7 +2734,7 @@ function renderShop() {
   const perkIds = Object.keys(shopData.perks || {});
   // Parry and character first, then legendary weapons for sale, then your weapons.
   list.innerHTML = [...perkIds, '__legend__', ...weapons].map(id => {
-    if (id === '__legend__') return legendaryCards(weapons, coins);
+    if (id === '__legend__') return mythicPicker(weapons) + legendaryCards(weapons, coins);
     const lv = upgrades[id] || {};
     const perk = PERK_ROWS[id];
     const name = perk ? perk.name : WEAPON_META[id]?.name || id.toUpperCase();
@@ -2782,6 +2783,9 @@ function legendPassive(id) {
 }
 
 const LEGEND_MOVES = {
+  starfall: '<b>ATK</b> a star falls on the nearest enemy (a marker shows where) · <b>SPECIAL</b> a constellation joins up to'
+          + ' 5 enemies: a moment later they all take the hit, are dragged together and dazed · <b>SUPER</b> a 4s star shower'
+          + ' on everything around you. Only one mythic goes into a game, and a mythic never earns you another weapon.',
   darklight: '<b>ATK</b> adds a kunai circling you (up to 10; each goes through one foe and breaks on the next) · <b>SPECIAL</b>'
            + ' every kunai flies at your enemies and chains whoever it hits to the spot for 3s, abilities or not ·'
            + ' <b>SUPER</b> a dark and a light kunai at blinding speed into one foe: a parry shatters them, otherwise it suffers'
@@ -2877,7 +2881,7 @@ function legendaryCards(weapons, coins) {
         <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>${legendPassive(w.id)}
         <div class="legend-buy">
           <button class="buy-weapon poor" disabled>◆ ${w.price.toLocaleString()}</button>
-          <span class="legend-need">Only sold in the <b>RARE SHOP</b> that sometimes opens between waves (WAVES, EXTREME, CO-OP).<br>
+          <span class="legend-need">Only sold in the <b>RARE SHOP</b> that opens after a Giant wave (WAVES, EXTREME).<br>
             ${needs} <span class="${kills >= w.mythicKills ? 'need-ok' : 'need-no'}">${kills >= w.mythicKills ? '✔' : '✘'} enemies killed ${kills.toLocaleString()}/${(w.mythicKills || 0).toLocaleString()}</span></span>
         </div>
       </div>`;
@@ -3905,6 +3909,8 @@ function draw(state) {
   drawSlashes();
   drawFireRings(state.fires || []);
   if (state.rareShop) drawRareShop(state.rareShop);
+  drawConstellations(state.constels || []);
+  drawStars(state.stars || []);
   drawChains(state.chains || []);
   drawProjectiles(state.projectiles || []);
   drawMonsters(state.monsters || []);
@@ -4563,6 +4569,7 @@ function drawPlayerBody(p, baseColor, label, key) {
   if (p.kspin > 0 && !p.dead) drawKatanaSpin(p, x, y);
   if (p.dk && !p.dead) drawDarklightOrbit(p, x, y);
   if (p.curse > 0 && !p.dead) drawCurseFx(p, x, y);
+  if (p.srain > 0 && !p.dead) drawStarRainAura(p, x, y);
   drawStatusMarks(p, x, y);
   if (p.puppet) drawPuppetMark(x + p.w / 2, y - 6, null);
   if (p.shuffleIn != null && key === 'p' + myNum) drawShuffleCountdown(p, x, y);
@@ -6771,4 +6778,91 @@ function showRareShop(msg) {
 }
 function buyMythic(id) {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'buy_mythic', id }));
+}
+
+// ─── Starfall ────────────────────────────────────────────────────────────────
+// A star on its way down: the marker on the ground tightens while the star
+// streaks in from above, then it lands.
+function drawStars(stars) {
+  const now = performance.now();
+  for (const s of stars) {
+    const k = Math.min(1, s.k);
+    ctx.save();
+    ctx.globalAlpha = 0.25 + 0.35 * k; ctx.strokeStyle = '#ffe9a0'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.arc(s.x, s.y, s.r * (1 - k * 0.85), 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 0.12 + 0.2 * k; ctx.fillStyle = '#ffe9a0';
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+    // the star itself, falling at a slant
+    const fx = s.x + 50 * (1 - k), fy = s.y - 160 * (1 - k);
+    const g = ctx.createLinearGradient(fx, fy, fx + 18, fy - 56);
+    g.addColorStop(0, 'rgba(255,240,180,0.9)'); g.addColorStop(1, 'rgba(255,240,180,0)');
+    ctx.globalAlpha = 1; ctx.strokeStyle = g; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(fx + 18, fy - 56); ctx.stroke();
+    drawStarShape(fx, fy, 5 + Math.sin(now / 60) * 0.8, '#ffffff', '#ffe9a0');
+    ctx.restore();
+  }
+}
+function drawStarShape(x, y, r, core, rim) {
+  ctx.save(); ctx.translate(x, y);
+  ctx.globalAlpha = 0.4; ctx.fillStyle = rim; ctx.beginPath(); ctx.arc(0, 0, r * 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1; ctx.fillStyle = rim;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, rr = i % 2 ? r * 0.35 : r; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = core; ctx.beginPath(); ctx.arc(0, 0, r * 0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+// A constellation: gold lines joining the foes, a star on each, brightening until it closes.
+function drawConstellations(list) {
+  const now = performance.now();
+  for (const c of list) {
+    if (!c.pts.length) continue;
+    ctx.save();
+    ctx.globalAlpha = 0.4 + 0.5 * c.k; ctx.strokeStyle = '#ffe9a0'; ctx.lineWidth = 1 + c.k * 1.5;
+    ctx.setLineDash([2, 3]); ctx.lineDashOffset = -now / 30;
+    ctx.beginPath();
+    c.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    if (c.pts.length > 2) ctx.closePath();
+    ctx.stroke(); ctx.setLineDash([]);
+    for (const [x, y] of c.pts) drawStarShape(x, y - 2, 4 + c.k * 3, '#ffffff', '#ffe9a0');
+    ctx.restore();
+  }
+}
+// The star shower: a halo of little stars wheeling over the caster.
+function drawStarRainAura(p, x, y) {
+  const now = performance.now(), mx = x + p.w / 2, my = y - 6;
+  for (let i = 0; i < 5; i++) {
+    const a = now / 300 + i * Math.PI * 2 / 5;
+    drawStarShape(mx + Math.cos(a) * 14, my + Math.sin(a) * 5, 2.5, '#ffffff', '#ffe9a0');
+  }
+}
+
+// ─── Picking your mythic ─────────────────────────────────────────────────────
+// Only one mythic goes into a game: with two or more, pick which.
+function mythicPicker(weapons) {
+  const owned = weapons.filter(id => WEAPON_META[id]?.mythic);
+  if (owned.length < 2) return '';
+  const pick = owned.includes(shopData?.mythicPick) ? shopData.mythicPick : owned[0];
+  return `<div class="shop-row legendary mythic-row mythic-pick">
+    <div class="shop-head"><span class="shop-name mythic-name">MYTHIC FOR YOUR GAMES</span><span class="legend-tag mythic-tag">PICK 1</span></div>
+    <div class="mp-row">${owned.map(id => `<button class="mp-btn${id === pick ? ' on' : ''}" onclick="pickMythic('${id}')">
+      <canvas class="shop-ic" data-weapon="${id}" width="56" height="32"></canvas>${WEAPON_META[id].name}</button>`).join('')}</div>
+    <div class="legend-need">Only one mythic goes into a game. The other stays home.</div>
+  </div>`;
+}
+async function pickMythic(id) {
+  if (!pendingPass || shopBusy) return;
+  shopBusy = true;
+  try {
+    const res = await fetch('/api/pick_mythic', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pendingPass, weaponId: id, backup: loadBackup(pendingPass) }) });
+    const data = await res.json();
+    if (!res.ok) { setShopMsg(data.error || 'Could not pick that.', true); return; }
+    storeBackup(pendingPass, data.save);
+    shopData = { ...shopData, ...data };
+    renderShop();
+    setShopMsg((WEAPON_META[id]?.name || id) + ' goes into your next games.');
+  } catch { setShopMsg('Could not reach the server.', true); }
+  finally { shopBusy = false; }
 }

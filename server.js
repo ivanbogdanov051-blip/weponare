@@ -322,8 +322,8 @@ const WEAPONS = [
     shopOnly: true, noRequirement: true, needLight: true, price: 0, lightDash: true,
     special: { kind: 'lightdashes', dmg: 70, range: 260, cd: 9000 },
     super:   { kind: 'lightspeed', dmg: 320, cd: 26000 } },
-  // ── MYTHIC ── Only sold in the rare shop that sometimes opens between waves
-  // (WAVES, EXTREME, CO-OP), for a fortune, once you have maxed the weapons it
+  // ── MYTHIC ── Only sold in the rare shop that opens after a Giant wave
+  // (WAVES, EXTREME), for a fortune, once you have maxed the weapons it
   // asks for and cut down enough enemies. Only one mythic goes into a game, and a
   // mythic never earns you another weapon (no kill credit, no boss drops).
   // DARKLIGHT: each attack adds a kunai circling you (up to 10; each one goes
@@ -336,6 +336,16 @@ const WEAPONS = [
     mythicKills: 250, mythicNeeds: ['lightblade', 'samuraiblade', 'endlessscythe'],
     special: { kind: 'kunaistorm', dmg: 60, range: 400, cd: 7000 },
     super:   { kind: 'darklightpair', dmg: 90, cd: 22000 } },
+  // STARFALL: a staff with a crescent moon cradling a star. ATK: a star falls on
+  // the nearest foe (a marker shows where first). SPECIAL: a constellation joins
+  // up to 5 foes; a moment later they all take the hit, are dragged together and
+  // dazed. SUPER: a 4s star shower on everything around. PASSIVE: every foe your
+  // stars hit heals you.
+  { id: 'starfall', name: 'STARFALL', damage: 44, range: 320, atkSpd: 560, type: 'ranged', unlockXp: 0,
+    shopOnly: true, noRequirement: true, mythic: true, price: 750000, starStaff: true,
+    mythicKills: 400, mythicNeeds: ['portalwand', 'infinitybow', 'sunbow'],
+    special: { kind: 'constellation', dmg: 80, range: 420, cd: 8000 },
+    super:   { kind: 'starrain', dmg: 55, cd: 24000 } },
 ];
 
 // Melee reach: the swing is 50% longer and a slam special 30% wider. The shield
@@ -359,7 +369,7 @@ const WEAPON_COLORS = {
   glaive: '#b0d8c0', katana: '#eef0ff', chakram: '#66e0c0', cannon: '#9a90a8', reaper: '#cc66aa',
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
   shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
-  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff', samuraiblade: '#ff5a5a', endlessscythe: '#7a2aff', darklight: '#e8e8f4',
+  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff', samuraiblade: '#ff5a5a', endlessscythe: '#7a2aff', darklight: '#e8e8f4', starfall: '#ffe9a0',
   ghostdagger: '#a8f0ff', stormhammer: '#7ac8ff', frostscythe: '#bfefff', sunbow: '#ffd24a',
 };
 
@@ -424,6 +434,7 @@ const WEAPON_UPGRADES = {
   samuraiblade: ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   endlessscythe: ['dmg', 'spd', 'rng', 'crit', 'cdr'],
   darklight:   ['dmg', 'spd', 'crit', 'cdr'],
+  starfall:    ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   ghostdagger: ['dmg', 'spd', 'crit', 'cdr'],
   stormhammer: ['dmg', 'spd', 'crit', 'cdr', 'knock'],
   frostscythe: ['dmg', 'rng', 'chill', 'cdr', 'aoe'],
@@ -460,6 +471,7 @@ const PASSIVES = {
   vortex:      { name: 'AEGIS',          color: '#7ad8ff', desc: 'blocks one hit completely every 4s' },
   windwand:    { name: 'GALE GUARD',     color: '#d8f4ff', desc: 'blows away an enemy shot that comes close, every 0.5s' },
   revolver:    { name: 'CHAIN REACTION', color: '#ffa040', desc: 'every hit explodes onto the foes around it, and everything you kill blows up even bigger' },
+  starfall:    { name: 'STARLIGHT', color: '#ffe9a0', desc: 'every enemy your stars hit heals you 2' },
   darklight:   { name: 'LEARNED ALL TRICKS', color: '#ffffff', desc: 'every bad effect on you becomes a little damage instead, unless it comes from a super' },
   endlessscythe: { name: 'EVENT HORIZON', color: '#7a2aff', desc: 'every hit stuns the target and drags it toward you' },
   samuraiblade: { name: 'WAY OF THE BLADE', color: '#ff5a5a', desc: 'you move 75% faster while heading toward an enemy' },
@@ -1978,15 +1990,11 @@ function mythicOffer(pw, def) {
            ok: needs.every(n => n.ok) && killsOk && coinsOk };
 }
 
-// The rare shop: now and then a wave clears and a merchant sets up in the
-// arena for the break. Walk up to it to see what's for sale.
-const RARE_SHOP_CHANCE = 0.1, RARE_SHOP_FIRST_WAVE = 3, RARE_SHOP_MS = 20000, RARE_SHOP_W = 30, RARE_SHOP_H = 26, RARE_SHOP_NEAR = 44;
+// The rare shop: once the Giant falls a merchant sets up in the arena for the
+// break. Walk up to it to see what's for sale.
+const RARE_SHOP_MS = 20000, RARE_SHOP_W = 30, RARE_SHOP_H = 26, RARE_SHOP_NEAR = 44;
 function maybeRareShop() {
-  if (!['waves', 'extreme', 'coop'].includes(room.gameMode)) return;
-  // EXTREME always opens it once the Giant falls.
-  if (room.gameMode === 'extreme' && isBossWave(room.wave.num)) { openRareShop(); return; }
-  if (room.wave.num < RARE_SHOP_FIRST_WAVE || Math.random() >= RARE_SHOP_CHANCE) return;
-  openRareShop();
+  if (['waves', 'extreme', 'coop'].includes(room.gameMode) && isBossWave(room.wave.num)) openRareShop();
 }
 function openRareShop() {
   room.rareShop = { x: Math.round(ARENA_X + ARENA_W / 2 - RARE_SHOP_W / 2), y: Math.round(ARENA_Y + ARENA_H * 0.58), t: RARE_SHOP_MS, near: new Set() };
@@ -2037,10 +2045,11 @@ function buyMythic(key, id) {
   if (!admin) {
     d.weapons[pw] = owned;
     d.coins[pw] = prof.coins - def.price;
+    d.mythicPick[pw] = id;
     room.playerCoins[key] = d.coins[pw];
     markDirty();
   }
-  const weapons = gameLoadout(owned, prof.mythicPick);
+  const weapons = gameLoadout(owned, id);
   room.playerUnlocks[key] = weapons;
   const p = room.players[key];
   if (p) {
@@ -2051,6 +2060,99 @@ function buyMythic(key, id) {
     room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 70, timer: 1100, max: 1100, color: '#ffffff', text: def.name + '!' });
   }
   rareShopMsg(key, def.name + ' is yours. Swap to it with < and >.');
+}
+
+// STARFALL
+const SF_MARK_MS = 450, SF_R = 34, SF_HEAL = 2, SF_RAIN_MS = 4000, SF_RAIN_GAP = 220, SF_RAIN_R = 40, SF_RAIN_MARK = 500;
+const CONST_N = 5, CONST_MS = 900, CONST_PULL = 0.6, CONST_STUN = 700;
+function dropStar(owner, x, y, dmg, r, ms) {
+  if (!room.stars) room.stars = [];
+  room.stars.push({ owner, x, y, dmg, r, t: 0, life: ms || SF_MARK_MS });
+}
+// STARLIGHT: the wielder heals for every foe a star hits.
+function starHeal(owner, hits) {
+  const p = room.players[owner];
+  if (!hits || !p || p.dead || p.passive !== 'starfall') return;
+  const heal = Math.min(p.maxHp - p.hp, hits * SF_HEAL);
+  if (heal <= 0) return;
+  p.hp += heal;
+  room.particles.push({ type: 'xp', x: cx(p), y: p.y - 4, text: '+' + heal, timer: 700, color: '#ffe9a0' });
+}
+// ATK: a star falls on the nearest foe in range (or where you aim, or ahead of you).
+function starAttack(p, pKey, w, dmgMult) {
+  const f = nearestFoe(p, pKey, w.range), inp = room.inputs[pKey] || {};
+  let x, y;
+  if (f) { x = cx(f); y = cy(f); }
+  else if (inp.aimX != null && inp.aimY != null) { x = inp.aimX; y = inp.aimY; }
+  else { x = cx(p) + (p.facing || 1) * 80; y = cy(p); }
+  if (f) p.facing = cx(f) < cx(p) ? -1 : 1;
+  dropStar(pKey, x, y, Math.round(w.damage * dmgMult), SF_R);
+}
+// SPECIAL: up to 5 foes joined in a constellation; then all hit, pulled together and dazed.
+function castConstellation(p, pKey, sp, dmg) {
+  const foes = enemyTargets(pKey).map(t => [t, Math.hypot(cx(t) - cx(p), cy(t) - cy(p))])
+    .filter(([, d]) => d <= sp.range).sort((a, b) => a[1] - b[1]).slice(0, CONST_N).map(([t]) => t);
+  if (!foes.length) {
+    p.specialCooldown = 0;
+    room.particles.push({ type: 'crit', x: cx(p), y: p.y - 8, text: 'NO STARS ALIGN', timer: 600, max: 600 });
+    return;
+  }
+  if (!room.constels) room.constels = [];
+  room.constels.push({ owner: pKey, targets: foes, t: 0, life: CONST_MS, dmg });
+}
+function updateStarfall(dt) {
+  if (!room.stars) room.stars = [];
+  if (!room.constels) room.constels = [];
+  // The star shower (SUPER).
+  for (const key of KEYS) {
+    const p = room.players[key];
+    if (!p || !p.starRain) continue;
+    if (p.dead) { p.starRain = null; continue; }
+    const r = p.starRain;
+    r.t -= dt; r.acc += dt;
+    while (r.acc >= SF_RAIN_GAP) {
+      r.acc -= SF_RAIN_GAP;
+      const foes = enemyTargets(key).filter(t => Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) < 420);
+      const t = foes.length ? foes[Math.floor(Math.random() * foes.length)] : null;
+      const a = Math.random() * Math.PI * 2, d = Math.random() * 150;
+      dropStar(key, t ? cx(t) + (Math.random() - 0.5) * 16 : cx(p) + Math.cos(a) * d,
+                    t ? cy(t) + (Math.random() - 0.5) * 16 : cy(p) + Math.sin(a) * d, r.dmg, SF_RAIN_R, SF_RAIN_MARK);
+    }
+    if (r.t <= 0) p.starRain = null;
+  }
+  // Stars landing.
+  room.stars = room.stars.filter(s => {
+    s.t += dt;
+    if (s.t < s.life) return true;
+    let hits = 0;
+    for (const t of enemyTargets(s.owner)) {
+      if (Math.hypot(cx(t) - s.x, cy(t) - s.y) > s.r + t.w / 2) continue;
+      if (!t.num) t.invincible = 0;
+      applyDamage(t, s.dmg, s.owner);
+      hits++;
+    }
+    starHeal(s.owner, hits);
+    room.particles.push({ type: 'shockwave', x: s.x, y: s.y, maxR: s.r, timer: 350, max: 350, color: '#ffe9a0' });
+    return false;
+  });
+  // Constellations closing.
+  room.constels = room.constels.filter(c => {
+    c.t += dt;
+    if (c.t < c.life) return true;
+    const alive = c.targets.filter(t => !t.dead);
+    if (!alive.length) return false;
+    const mx = alive.reduce((s, t) => s + cx(t), 0) / alive.length, my = alive.reduce((s, t) => s + cy(t), 0) / alive.length;
+    for (const t of alive) {
+      if (!t.num) t.invincible = 0;
+      applyDamage(t, c.dmg, c.owner);
+      if (t.dead) continue;
+      stagger(t, CONST_STUN, 'shock');
+      if (!t.boss && !t.mage && !t.abyss) { t.x += (mx - cx(t)) * CONST_PULL; t.y += (my - cy(t)) * CONST_PULL; clampToArena(t); }
+    }
+    starHeal(c.owner, alive.length);
+    room.particles.push({ type: 'shockwave', x: mx, y: my, maxR: 50, timer: 500, max: 500, color: '#ffe9a0' });
+    return false;
+  });
 }
 
 // DARKLIGHT
@@ -2377,6 +2479,8 @@ function clearField() {
   room.coins       = [];
   room.trapSpawnTimer = TRAP_SPAWN_MIN;
   room.rareShop = null;
+  room.stars = [];
+  room.constels = [];
   room.itemSpawnTimer = ITEM_SPAWN_MIN;
 }
 
@@ -3026,6 +3130,7 @@ function tickRoom(dt) {
   room.projectiles = room.projectiles.filter(proj => updateProjectile(proj, factor, dt));
   updateFires(factor, dt);
   updateDarklight(dt);
+  updateStarfall(dt);
   updateRareShop(dt);
 
   // ── Wave spawner ── (the Portal Mage fight has no waves: he brings his own;
@@ -3563,6 +3668,7 @@ function doAttack(p, pKey) {
   swatShots(p, w.type === 'melee' ? w.range + 10 : 44);
   if (w.infinityShot) { infinityAttack(p, pKey, w, dmgMult); return; }
   if (w.kunaiOrbit) { darklightAttack(p, pKey, w, dmgMult); return; }
+  if (w.starStaff) { starAttack(p, pKey, w, dmgMult); return; }
   if (w.slashWave) {
     // A slash wave that seeks out the nearest foe.
     const aim = nearestTargetAngle(p, pKey);
@@ -3745,6 +3851,11 @@ function doSuper(p, pKey) {
   p.superCooldown = su.cd;
   p.swingTimer = 300;
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
+  if (su.kind === 'starrain') {
+    p.starRain = { t: SF_RAIN_MS, acc: 0, dmg: Math.round(su.dmg * dmgMult) };
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 60, timer: 800, max: 800, color: '#ffe9a0', text: 'STARFALL' });
+    return;
+  }
   if (su.kind === 'darklightpair') { darklightPair(p, pKey, Math.round(su.dmg * dmgMult)); return; }
   if (su.kind === 'katanaspin') {
     p.kspin = KSPIN_MS; p.kspinT = 0; p.kspinDmg = Math.round(su.dmg * dmgMult); p.kvx = 0; p.kvy = 0;
@@ -6731,6 +6842,7 @@ function doSpecial(p, pKey) {
     return;
   }
   if (sp.kind === 'kunaistorm') { darklightStorm(p, pKey, spDmg); return; }
+  if (sp.kind === 'constellation') { castConstellation(p, pKey, sp, spDmg); return; }
   if (sp.kind === 'dashwave') {
     // A quiet wave: when it reaches a foe, you flash through them.
     const aim = nearestTargetAngle(p, pKey);
@@ -7026,6 +7138,7 @@ function playerView(p) {
     ...(p.kspin > 0 ? { kspin: Math.round(p.kspin) } : {}),
     ...(p.kunais && p.kunais.length ? { dk: p.kunais.map(k => (k.dark ? 1 : 0)).join(''), dkA: Math.round((p.dkA || 0) * 100) / 100 } : {}),
     ...(p.dlCurse ? { curse: Math.round(p.dlCurse.ms) } : {}),
+    ...(p.starRain ? { srain: Math.round(p.starRain.t) } : {}),
     ...(p.dlChain ? { dlc: [r1(p.dlChain.x), r1(p.dlChain.y)] } : {}),
     ...(p.passive === 'mindtome' ? { shuffleIn: Math.max(0, Math.round(p.shuffleT ?? MIND_SHUFFLE_MS)) } : {}),
     ...(p.passive === 'vortex' ? { aegis: !(p.aegisCd > 0) } : {}),
@@ -7103,6 +7216,9 @@ function buildStateMsg(playerNum) {
     otherHasUnlocks: KEYS.some(k => k !== key && room.unlockQueues[k].length > 0),
     bossDrop: room.bossDrops?.[key] || null,
     noDrop: !!room.mythicNoDrop?.[key],
+    stars: (room.stars || []).map(s => ({ x: r1(s.x), y: r1(s.y), r: s.r, k: Math.round(s.t / s.life * 100) / 100 })),
+    constels: (room.constels || []).map(c => ({ k: Math.round(c.t / c.life * 100) / 100,
+      pts: c.targets.filter(t => !t.dead).map(t => [r1(cx(t)), r1(cy(t))]) })),
     rareShop: room.rareShop ? { x: room.rareShop.x, y: room.rareShop.y, w: RARE_SHOP_W, h: RARE_SHOP_H, t: Math.round(room.rareShop.t) } : null,
     leaderboard: isSolo() && room.gameState === 'ROUND_OVER' ? room.lastLeaderboard : null,
   };
@@ -7333,7 +7449,8 @@ function setupBot() {
   const L = BOT_LEVELS[room.bot.level];
   const starters = getUnlockedWeaponIds(0);
   const all = WEAPONS.map(w => w.id);
-  const weapons = L.all ? sortWeaponIds(all) : sortWeaponIds([...new Set([...starters, ...rollOwned(all, L.own)])]);
+  const weapons = gameLoadout(L.all ? sortWeaponIds(all) : sortWeaponIds([...new Set([...starters, ...rollOwned(all, L.own)])]),
+                              ['darklight', 'starfall'][Math.floor(Math.random() * 2)]);
   const upgrades = {};
   for (const id of weapons) {
     upgrades[id] = {};
@@ -7689,7 +7806,7 @@ app.post('/api/buy_weapon', (req, res) => {
   const weaponId = sanitizeText(req.body?.weaponId, 24);
   const def = WEAPON_BY_ID[weaponId];
   if (!def || !def.shopOnly) return res.status(400).json({ error: 'That weapon is not for sale.' });
-  if (def.mythic) return res.status(400).json({ error: 'Mythics are only sold in the rare shop that sometimes opens between waves.' });
+  if (def.mythic) return res.status(400).json({ error: 'Mythics are only sold in the rare shop that opens after a Giant wave.' });
   if (def.bossReward) return res.status(400).json({ error: def.id === 'infinitybow' ? 'Only won by defeating the Abyss.' : def.id === 'endlessscythe' ? 'Only won by defeating the Abyss a second time.' : 'Only won by defeating the Portal Mage.' });
   if (def.needAll) {
     const prof0 = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });

@@ -993,3 +993,9 @@ body {
 .rs-note { text-align: center; margin-top: 6px; color: #7aff9a; }
 .rs-note.bad { color: #ff7a7a; }
 .rs-hint { text-align: center; margin-top: 6px; color: #8a8060; font-size: 9px; }
+
+/* Picking which mythic goes into games */
+.mp-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
+.mp-btn { display: flex; align-items: center; gap: 6px; font-family: inherit; font-size: 11px; letter-spacing: 1px;
+  padding: 4px 10px 4px 4px; background: #101018; color: #c8c8d8; border: 1px solid #4a4a5c; cursor: pointer; }
+.mp-btn.on { color: #ffffff; border-color: #ffffff; box-shadow: 0 0 8px rgba(184, 160, 255, 0.6); background: #1c1a2c; }

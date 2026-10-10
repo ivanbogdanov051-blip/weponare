@@ -698,6 +698,22 @@ const WEAPON_ART = {
   }},
   // Darklight: a kunai split down its ridge, one half black, one half white,
   // on a black grip wound with white and a ring pommel to match.
+  // Starfall: a midnight-blue staff bound in gold, topped by a silver crescent
+  // moon cradling a burning star.
+  starfall: { draw(k, wc) {
+    k.r(-2, -1.2, 26, 2.4, '#1a2350');                    // shaft
+    k.r(-2, -1.2, 26, 0.7, '#3a4a8a');
+    for (const x of [1, 9, 17]) k.r(x, -1.6, 1.4, 3.2, '#d9a520');   // gold bands
+    k.circ(-2.5, 0, 2, '#d9a520');                        // butt cap
+    k.glow(31, 0, 14, '#ffe9a0', 0.35);
+    k.ring(30, 0, 6.5, 2.2, '#dfe6ff', 1.9, 4.4);         // the crescent
+    k.ring(30, 0, 6.5, 0.8, '#ffffff', 2.1, 4.1);
+    k.r(23.5, -1.6, 2.2, 3.2, '#d9a520');                 // where moon meets staff
+    // The star: a bright four-point star with a hot white core.
+    k.poly([[31, -6], [32.2, -1.2], [37, 0], [32.2, 1.2], [31, 6], [29.8, 1.2], [25, 0], [29.8, -1.2]], wc);
+    k.poly([[31, -3.5], [31.7, -0.7], [34.5, 0], [31.7, 0.7], [31, 3.5], [30.3, 0.7], [27.5, 0], [30.3, -0.7]], '#ffffff');
+    k.r(36, -5, 1, 1, '#ffffff'); k.r(26, 5, 0.8, 0.8, wc); k.r(34, 5.5, 0.8, 0.8, '#ffffff');
+  }},
   darklight: { draw(k, wc) {
     k.ring(-1.2, 0, 3.4, 1.4, '#f4f4fa');                 // ring pommel
     k.ring(-1.2, 0, 3.4, 0.6, '#9a9aae', 0.4, 2.6);
