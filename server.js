@@ -1983,6 +1983,8 @@ function mythicOffer(pw, def) {
 const RARE_SHOP_CHANCE = 0.1, RARE_SHOP_FIRST_WAVE = 3, RARE_SHOP_MS = 20000, RARE_SHOP_W = 30, RARE_SHOP_H = 26, RARE_SHOP_NEAR = 44;
 function maybeRareShop() {
   if (!['waves', 'extreme', 'coop'].includes(room.gameMode)) return;
+  // EXTREME always opens it once the Giant falls.
+  if (room.gameMode === 'extreme' && isBossWave(room.wave.num)) { openRareShop(); return; }
   if (room.wave.num < RARE_SHOP_FIRST_WAVE || Math.random() >= RARE_SHOP_CHANCE) return;
   openRareShop();
 }
@@ -2921,6 +2923,7 @@ function tickRoom(dt) {
   // Snapshot: a kill during this pass replaces room.monsters mid-iteration.
   for (const m of room.monsters.slice()) {
     if (m.dead) continue;
+    if (room.rareShop) continue;   // the rare shop is open: every monster holds still
     let nearest = null, bestDist = Infinity;
     for (const p of [...allPlayers(), ...room.allies, ...room.monsters.filter(o => o.controlledBy && o !== m)]) {
       if (!p || p.dead || (p.num && unseen(p))) continue;
@@ -3066,7 +3069,7 @@ function tickRoom(dt) {
   }
 
   // ── Traps ── (in the Portal Mage fight only he lays them)
-  room.trapSpawnTimer -= dt;
+  if (!room.rareShop) room.trapSpawnTimer -= dt;   // nothing new appears while the rare shop is open
   if (room.trapSpawnTimer <= 0 && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'sandbox') {
     if (room.traps.filter(t => !t.owner).length < MAX_TRAPS) spawnTrap();
     room.trapSpawnTimer = TRAP_SPAWN_MIN + Math.random() * (TRAP_SPAWN_MAX - TRAP_SPAWN_MIN);
@@ -3142,7 +3145,7 @@ function tickRoom(dt) {
   });
 
   // ── Items ──
-  room.itemSpawnTimer -= dt;
+  if (!room.rareShop) room.itemSpawnTimer -= dt;
   if (room.itemSpawnTimer <= 0) {
     if (room.items.length < MAX_ITEMS) spawnItem();
     room.itemSpawnTimer = ITEM_SPAWN_MIN + Math.random() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN);
