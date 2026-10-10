@@ -2783,9 +2783,9 @@ function legendPassive(id) {
 }
 
 const LEGEND_MOVES = {
-  starfall: '<b>ATK</b> a star falls on the nearest enemy (a marker shows where) · <b>SPECIAL</b> a constellation joins up to'
-          + ' 5 enemies: a moment later they all take the hit, are dragged together and dazed · <b>SUPER</b> a 4s star shower'
-          + ' on everything around you. Only one mythic goes into a game, and a mythic never earns you another weapon.',
+  starfall: '<b>ATK</b> three stars fall on the nearest enemies (markers show where) · <b>SPECIAL</b> a constellation joins'
+          + ' every enemy on the field: a moment later they all take the hit, are dragged together and dazed · <b>SUPER</b> a 4s'
+          + ' star shower on everything around you: each star stuns for 2s, then leaves its target confused for 2s. Only one mythic goes into a game, and a mythic never earns you another weapon.',
   darklight: '<b>ATK</b> adds a kunai circling you (up to 10; each goes through one foe and breaks on the next) · <b>SPECIAL</b>'
            + ' every kunai flies at your enemies and chains whoever it hits to the spot for 3s, abilities or not ·'
            + ' <b>SUPER</b> a dark and a light kunai at blinding speed into one foe: a parry shatters them, otherwise it suffers'
@@ -4798,6 +4798,7 @@ function drawMonster(m) {
   if (m.burning) drawFlames(x, y, m.w, m.h);
   if (m.frozen) drawFreezeFx(m, x, y); else if (m.slowed) drawSlowFx(m, x, y);
   if (m.curse) drawCurseFx(m, x, y);
+  if (m.confused) drawConfusedMark(m, x, y);
   if (m.ctl) drawPuppetMark(x + m.w / 2, y - 8, m);
   drawMonsterTells(m, x, y);
   if (m.boss) { drawBossMarks(m, x, y); return; }
@@ -6865,4 +6866,17 @@ async function pickMythic(id) {
     setShopMsg((WEAPON_META[id]?.name || id) + ' goes into your next games.');
   } catch { setShopMsg('Could not reach the server.', true); }
   finally { shopBusy = false; }
+}
+
+// A confused monster: question marks spinning over its head.
+function drawConfusedMark(m, x, y) {
+  const now = performance.now();
+  ctx.save();
+  ctx.font = 'bold 8px "Courier New",monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  for (let i = 0; i < 2; i++) {
+    const a = now / 250 + i * Math.PI;
+    ctx.fillStyle = '#000'; ctx.fillText('?', x + m.w / 2 + Math.cos(a) * 7 + 1, y - 7 + Math.sin(a) * 2 + 1);
+    ctx.fillStyle = '#ffe9a0'; ctx.fillText('?', x + m.w / 2 + Math.cos(a) * 7, y - 7 + Math.sin(a) * 2);
+  }
+  ctx.restore();
 }

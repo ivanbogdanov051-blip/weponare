@@ -2063,11 +2063,19 @@ function buyMythic(key, id) {
 }
 
 // STARFALL
+const SF_STARS = 3, SF_SPREAD = 30, SF_RAIN_STUN = 2000, SF_RAIN_CONFUSE = 2000;
 const SF_MARK_MS = 450, SF_R = 34, SF_HEAL = 2, SF_RAIN_MS = 4000, SF_RAIN_GAP = 220, SF_RAIN_R = 40, SF_RAIN_MARK = 500;
-const CONST_N = 5, CONST_MS = 900, CONST_PULL = 0.6, CONST_STUN = 700;
-function dropStar(owner, x, y, dmg, r, ms) {
+const CONST_MS = 900, CONST_PULL = 0.6, CONST_STUN = 700;
+function dropStar(owner, x, y, dmg, r, ms, daze) {
   if (!room.stars) room.stars = [];
-  room.stars.push({ owner, x, y, dmg, r, t: 0, life: ms || SF_MARK_MS });
+  room.stars.push({ owner, x, y, dmg, r, t: 0, life: ms || SF_MARK_MS, daze: !!daze });
+}
+// Monsters have no confusion of their own: they stagger about at random instead of fighting.
+function confuseTarget(t, ms) {
+  if (t.dead) return;
+  if (t.num) { applyEffect(t, 'confuse', ms); return; }
+  if (t.boss || t.mage || t.abyss) return;
+  t.confused = Math.max(t.confused || 0, ms);
 }
 // STARLIGHT: the wielder heals for every foe a star hits.
 function starHeal(owner, hits) {
@@ -2080,18 +2088,24 @@ function starHeal(owner, hits) {
 }
 // ATK: a star falls on the nearest foe in range (or where you aim, or ahead of you).
 function starAttack(p, pKey, w, dmgMult) {
-  const f = nearestFoe(p, pKey, w.range), inp = room.inputs[pKey] || {};
+  const inp = room.inputs[pKey] || {}, dmg = Math.round(w.damage * dmgMult);
+  const foes = enemyTargets(pKey).map(t => [t, Math.hypot(cx(t) - cx(p), cy(t) - cy(p))])
+    .filter(([, d]) => d <= w.range).sort((a, b) => a[1] - b[1]).slice(0, SF_STARS).map(([t]) => t);
   let x, y;
-  if (f) { x = cx(f); y = cy(f); }
+  if (foes.length) { x = cx(foes[0]); y = cy(foes[0]); p.facing = x < cx(p) ? -1 : 1; }
   else if (inp.aimX != null && inp.aimY != null) { x = inp.aimX; y = inp.aimY; }
   else { x = cx(p) + (p.facing || 1) * 80; y = cy(p); }
-  if (f) p.facing = cx(f) < cx(p) ? -1 : 1;
-  dropStar(pKey, x, y, Math.round(w.damage * dmgMult), SF_R);
+  for (let i = 0; i < SF_STARS; i++) {
+    const t = foes[i];
+    if (t) { dropStar(pKey, cx(t), cy(t), dmg, SF_R); continue; }
+    const a = Math.random() * Math.PI * 2;   // fewer foes than stars: the rest land round the first
+    dropStar(pKey, x + Math.cos(a) * SF_SPREAD, y + Math.sin(a) * SF_SPREAD, dmg, SF_R, SF_MARK_MS + i * 90);
+  }
 }
 // SPECIAL: up to 5 foes joined in a constellation; then all hit, pulled together and dazed.
 function castConstellation(p, pKey, sp, dmg) {
   const foes = enemyTargets(pKey).map(t => [t, Math.hypot(cx(t) - cx(p), cy(t) - cy(p))])
-    .filter(([, d]) => d <= sp.range).sort((a, b) => a[1] - b[1]).slice(0, CONST_N).map(([t]) => t);
+    .sort((a, b) => a[1] - b[1]).map(([t]) => t);
   if (!foes.length) {
     p.specialCooldown = 0;
     room.particles.push({ type: 'crit', x: cx(p), y: p.y - 8, text: 'NO STARS ALIGN', timer: 600, max: 600 });
@@ -2116,7 +2130,7 @@ function updateStarfall(dt) {
       const t = foes.length ? foes[Math.floor(Math.random() * foes.length)] : null;
       const a = Math.random() * Math.PI * 2, d = Math.random() * 150;
       dropStar(key, t ? cx(t) + (Math.random() - 0.5) * 16 : cx(p) + Math.cos(a) * d,
-                    t ? cy(t) + (Math.random() - 0.5) * 16 : cy(p) + Math.sin(a) * d, r.dmg, SF_RAIN_R, SF_RAIN_MARK);
+                    t ? cy(t) + (Math.random() - 0.5) * 16 : cy(p) + Math.sin(a) * d, r.dmg, SF_RAIN_R, SF_RAIN_MARK, true);
     }
     if (r.t <= 0) p.starRain = null;
   }
@@ -2130,11 +2144,29 @@ function updateStarfall(dt) {
       if (!t.num) t.invincible = 0;
       applyDamage(t, s.dmg, s.owner);
       hits++;
+      // Once per shower: stunned 2s, then confused 2s (later stars just hurt).
+      if (s.daze && !t.dead && !((t.sfDazeAt || 0) > Date.now() - SF_RAIN_MS - SF_RAIN_MARK)) {
+        t.sfDazeAt = Date.now();
+        // A super's doing: Darklight's passive can't shrug it off.
+        room.inSuper = true;
+        stagger(t, SF_RAIN_STUN, 'stun');
+        room.inSuper = false;
+        t.sfConfuseIn = SF_RAIN_STUN;   // then confused, once the stun wears off
+      }
     }
     starHeal(s.owner, hits);
     room.particles.push({ type: 'shockwave', x: s.x, y: s.y, maxR: s.r, timer: 350, max: 350, color: '#ffe9a0' });
     return false;
   });
+  // Stunned by the shower: confusion follows when the stun ends.
+  for (const e of [...allPlayers(), ...room.monsters, ...room.allies]) {
+    if (!e || !(e.sfConfuseIn > 0)) continue;
+    e.sfConfuseIn -= dt;
+    if (e.sfConfuseIn <= 0 && !e.dead) {
+      room.inSuper = true; confuseTarget(e, SF_RAIN_CONFUSE); room.inSuper = false;
+      room.particles.push({ type: 'crit', x: cx(e), y: e.y - 8, text: 'CONFUSED', timer: 700, max: 700 });
+    }
+  }
   // Constellations closing.
   room.constels = room.constels.filter(c => {
     c.t += dt;
@@ -3048,6 +3080,15 @@ function tickRoom(dt) {
     if (m.ward        > 0) m.ward        -= dt;
     // Frozen solid by a frost nova: no moving, no attacking.
     if (m.freeze > 0) { m.freeze -= dt; continue; }
+    if (m.confused > 0) {
+      m.confused -= dt;
+      if (!m.confA || Math.random() < dt / 400) m.confA = Math.random() * Math.PI * 2;
+      const cs = m.speed * (m.slowTimer > 0 ? 0.4 : 1) * 0.8;
+      m.x += Math.cos(m.confA) * cs * factor; m.y += Math.sin(m.confA) * cs * factor;
+      m.face = Math.cos(m.confA) < 0 ? -1 : 1;
+      clampToArena(m);
+      continue;
+    }
     if (m.controlledBy) continue;   // a puppet: moved by its controller (tickMindControl)
     if (room.gameMode === 'sandbox' && room.sandbox.freeze) continue;   // sandbox: AI switched off
 
@@ -7176,6 +7217,7 @@ function buildStateMsg(playerNum) {
                   ...(m.charge ? { charge: { a: Math.round(m.charge.a * 100) / 100, wind: m.charge.wind > 0 } } : {}),
                   ...(m.dazed > 0 ? { dazed: true } : {}),
                   ...(m.dlCurse ? { curse: Math.round(m.dlCurse.ms) } : {}),
+                  ...(m.confused > 0 ? { confused: true } : {}),
                   ...(m.samWind > 0 ? { samWind: m.samNext === 'dash' ? 'dash' : 'wave' } : {}),
                   ...(m.samDash ? { samDash: Math.round(m.samDash.a * 100) / 100 } : {}),
                   ...(m.sweep ? { lsweep: { a: Math.round(m.sweep.a * 100) / 100, wind: m.sweep.wind > 0 } } : {}),
