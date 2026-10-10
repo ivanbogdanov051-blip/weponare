@@ -2009,7 +2009,11 @@ function maxedOwned(prof, id) {
 function mythicOffer(pw, def) {
   const admin = isAdminPw(pw);
   const prof = profileFor(pw, {});
-  const needs = (def.mythicNeeds || []).map(id => ({ name: WEAPON_BY_ID[id]?.name || id, ok: admin || maxedOwned(prof, id) }));
+  // To own even one mythic you must already own every legendary weapon.
+  const legends = WEAPONS.filter(w => w.shopOnly && !w.mythic);
+  const haveLegends = legends.filter(w => prof.weapons.includes(w.id)).length;
+  const needs = [{ name: 'ALL LEGENDARIES ' + haveLegends + '/' + legends.length, plain: true, ok: admin || haveLegends >= legends.length },
+    ...(def.mythicNeeds || []).map(id => ({ name: WEAPON_BY_ID[id]?.name || id, ok: admin || maxedOwned(prof, id) }))];
   const killsOk = admin || prof.mythicKills >= (def.mythicKills || 0);
   const coinsOk = admin || prof.coins >= def.price;
   return { id: def.id, name: def.name, price: def.price, owned: prof.weapons.includes(def.id),

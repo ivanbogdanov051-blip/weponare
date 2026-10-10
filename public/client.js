@@ -2883,7 +2883,9 @@ function legendaryCards(weapons, coins) {
     if (w.mythic) {
       const up = (shopData && shopData.upgrades) || {}, defs = (shopData && shopData.upgradeDefs) || {};
       const maxed = id => weapons.includes(id) && (WEAPON_META[id]?.upgrades || []).filter(k => defs[k]).every(k => ((up[id] || {})[k] || 0) >= defs[k].max);
-      const needs = (w.mythicNeeds || []).map(id => `<span class="${maxed(id) ? 'need-ok' : 'need-no'}">${maxed(id) ? '✔' : '✘'} ${WEAPON_META[id]?.name || id} maxed</span>`).join(' ');
+      const legendIds = Object.values(WEAPON_META).filter(o => o.shopOnly && !o.mythic).map(o => o.id), haveL = legendIds.filter(id => weapons.includes(id)).length;
+      const legendNeed = `<span class="${haveL >= legendIds.length ? 'need-ok' : 'need-no'}">${haveL >= legendIds.length ? '✔' : '✘'} ALL LEGENDARIES ${haveL}/${legendIds.length}</span> `;
+      const needs = legendNeed + (w.mythicNeeds || []).map(id => `<span class="${maxed(id) ? 'need-ok' : 'need-no'}">${maxed(id) ? '✔' : '✘'} ${WEAPON_META[id]?.name || id} maxed</span>`).join(' ');
       const kills = Math.min((shopData && shopData.mythicKills) || 0, w.mythicKills || 0);
       return `<div class="shop-row legendary mythic-row">
         <div class="shop-head">
@@ -6795,7 +6797,7 @@ function showRareShop(msg) {
   if (!el) return;
   if (!msg.open) { el.classList.add('hidden'); return; }
   const rows = (msg.offers || []).map(o => {
-    const needs = o.needs.map(n => `<span class="${n.ok ? 'need-ok' : 'need-no'}">${n.ok ? '✔' : '✘'} ${n.name} maxed</span>`).join('');
+    const needs = o.needs.map(n => `<span class="${n.ok ? 'need-ok' : 'need-no'}">${n.ok ? '✔' : '✘'} ${n.name}${n.plain ? '' : ' maxed'}</span>`).join('');
     const kills = `<span class="${o.kills >= o.killsNeed ? 'need-ok' : 'need-no'}">${o.kills >= o.killsNeed ? '✔' : '✘'} ${o.kills.toLocaleString()}/${o.killsNeed.toLocaleString()} enemies killed</span>`;
     const coins = `<span class="${o.coins >= o.price ? 'need-ok' : 'need-no'}">${o.coins >= o.price ? '✔' : '✘'} ◆ ${o.coins.toLocaleString()}/${o.price.toLocaleString()}</span>`;
     const btn = o.owned ? '<button class="rs-buy" disabled>OWNED</button>'
