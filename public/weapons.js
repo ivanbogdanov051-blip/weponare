@@ -696,6 +696,22 @@ const WEAPON_ART = {
     }
     k.poly([[37, -6.2], [39.4, -6.4], [37.4, -4.1]], '#ffffff');   // kissaki
   }},
+  // Darklight: a kunai split down its ridge, one half black, one half white,
+  // on a black grip wound with white and a ring pommel to match.
+  darklight: { draw(k, wc) {
+    k.ring(1.2, 0, 2.6, 1.3, '#f4f4fa');                  // ring pommel
+    k.ring(1.2, 0, 2.6, 0.6, '#15151c', 0, Math.PI);
+    k.r(3.6, -1.3, 7.6, 2.6, '#15151c');                  // grip
+    for (let i = 0; i < 4; i++) k.poly([[3.8 + i * 1.8, -1.3], [4.9 + i * 1.8, -1.3], [4.1 + i * 1.8, 1.3], [3 + i * 1.8, 1.3]], '#f4f4fa');
+    k.r(11.1, -1.8, 1.3, 3.6, '#8a8a9a');                 // collar
+    k.glow(19, 0, 10, '#ffffff', 0.2);
+    k.poly([[12.3, 0], [14.6, -3.8], [22, -2.3], [28, 0]], '#15151c');     // dark half
+    k.poly([[12.3, 0], [14.6, 3.8], [22, 2.3], [28, 0]], '#f4f4fa');       // light half
+    k.poly([[14.6, -3.8], [22, -2.3], [28, 0], [22, -1.6], [15.2, -2.8]], '#4a4a5c');
+    k.poly([[14.6, 3.8], [22, 2.3], [28, 0], [22, 1.6], [15.2, 2.8]], '#c4c4d4');
+    k.r(13.2, -0.3, 13.6, 0.6, '#9a9aae');                // the ridge between them
+    k.r(25, -0.5, 1.1, 1, '#ffffff');
+  }},
   // The Endless Scythe: a black haft wound with violet, a huge crescent of void
   // with a burning edge, and a small black hole set where blade meets haft.
   endlessscythe: { draw(k, wc) {

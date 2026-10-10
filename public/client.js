@@ -47,7 +47,7 @@ let WEAPON_COLOR = {
   glaive:'#b0d8c0', katana:'#eef0ff', chakram:'#66e0c0', cannon:'#9a90a8',
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
-  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff', samuraiblade:'#ff5a5a',
+  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff', samuraiblade:'#ff5a5a', darklight:'#e8e8f4',
   ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
   scimitar:'#e8e0c8', slingshot:'#b08a5a', mace:'#9aa4b0', javelin:'#d8c8a0', claws:'#e0e4ec',
   emberstaff:'#ff7a2a', halberd:'#c0c8d8', frostbow:'#9fe8ff', chronostaff:'#e8c87a', voidblade:'#9a5aff',
@@ -73,6 +73,7 @@ const WEAPON_DESC = {
   infinitybow:"The Abyss's crossbows: one in your hands and two floating beside you",
   endlessscythe:"The Abyss's own scythe, won by beating him a second time",
   samuraiblade:"The samurai's own katana, deeply curved and razor bright",
+  darklight:"MYTHIC. A kunai of dark and light, made from three legends",
   ghostdagger:'The rarest weapon of all: turn invisible, throw a deadly dagger, and make it rain knives',
   stormhammer:'A war hammer full of lightning that comes back when you throw it',
   frostscythe:'A sweeping scythe of ice that freezes whatever it keeps cutting',
@@ -319,6 +320,7 @@ function cycleMusic() {
 let leaving = false, returningToMenu = false;
 function leaveGame() {
   leaving = true;
+  showRareShop({ open: false });
   tutorialLeft();
   document.getElementById('tutPanel')?.classList.add('hidden');
   toggleChat(false);
@@ -722,6 +724,7 @@ function connect() {
       playLocked(msg.mode);
       return;
     }
+    if (msg.type === 'rareshop') { showRareShop(msg); return; }
     if (msg.type === 'room_gone') {
       setLobbyMsg('That room is full or has already started.');
       setTimeout(() => { leaveGame(); openRoomBrowser(); }, 1600);
@@ -964,6 +967,10 @@ function updatePrediction(frameDt, now) {
   } else { pred.kvx = 0; pred.kvy = 0; }
   pred.x = Math.max(ARENA_X + 2, Math.min(ARENA_X + ARENA_W - me.w - 2, pred.x + vx * f));
   pred.y = Math.max(ARENA_Y + 2, Math.min(ARENA_Y + ARENA_H - me.h - 2, pred.y + vy * f));
+  if (me.dlc) {   // chained by Darklight: can't stray from the stake
+    const ddx = pred.x + me.w / 2 - me.dlc[0], ddy = pred.y + me.h / 2 - me.dlc[1], dd = Math.hypot(ddx, ddy);
+    if (dd > 30) { pred.x -= ddx / dd * (dd - 30); pred.y -= ddy / dd * (dd - 30); }
+  }
 
   predHist.push({ t: now, x: pred.x, y: pred.y });
   while (predHist.length && now - predHist[0].t > 1000) predHist.shift();
@@ -1055,7 +1062,7 @@ const ATTACK_ANIM = {
   stormhammer: 'chop', frostscythe: 'spin', sunbow: 'draw',
   scimitar: 'slash', slingshot: 'draw', mace: 'chop', javelin: 'throw', claws: 'stab',
   emberstaff: 'cast', halberd: 'sweep', frostbow: 'draw', chronostaff: 'cast', voidblade: 'slash', mindtome: 'tome',
-  lightblade: 'slash',
+  lightblade: 'slash', darklight: 'throw',
 };
 const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
                   heavy: 300, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
@@ -2775,6 +2782,11 @@ function legendPassive(id) {
 }
 
 const LEGEND_MOVES = {
+  darklight: '<b>ATK</b> adds a kunai circling you (up to 10; each goes through one foe and breaks on the next) · <b>SPECIAL</b>'
+           + ' every kunai flies at your enemies and chains whoever it hits to the spot for 3s, abilities or not ·'
+           + ' <b>SUPER</b> a dark and a light kunai at blinding speed into one foe: a parry shatters them, otherwise it suffers'
+           + ' every bad effect for 5s, and so does anyone who comes close. Only one mythic goes into a game, and a mythic'
+           + ' never earns you another weapon.',
   mindtome:    '<b>ATK</b> (fast) a psychic trap appears right in the path of a nearby enemy: spikes, mines, ice,'
              + ' lava, gravity wells and more, and they only ever hurt YOUR enemies (up to 6 out at once) ·'
              + ' <b>SPECIAL</b> four beams of mind energy spin out from you; every enemy they touch is frozen for 5s'
@@ -2851,6 +2863,25 @@ function legendaryCards(weapons, coins) {
     const ready = legendOk && (w.noRequirement || have >= xpIds.length);
     const afford = coins >= w.price;
     const col = WEAPON_COLOR[w.id] || '#ff6a1a';
+    if (w.mythic) {
+      const up = (shopData && shopData.upgrades) || {}, defs = (shopData && shopData.upgradeDefs) || {};
+      const maxed = id => weapons.includes(id) && (WEAPON_META[id]?.upgrades || []).filter(k => defs[k]).every(k => ((up[id] || {})[k] || 0) >= defs[k].max);
+      const needs = (w.mythicNeeds || []).map(id => `<span class="${maxed(id) ? 'need-ok' : 'need-no'}">${maxed(id) ? '✔' : '✘'} ${WEAPON_META[id]?.name || id} maxed</span>`).join(' ');
+      const kills = Math.min((shopData && shopData.mythicKills) || 0, w.mythicKills || 0);
+      return `<div class="shop-row legendary mythic-row">
+        <div class="shop-head">
+          <canvas class="shop-ic" data-weapon="${w.id}" width="56" height="32"></canvas>
+          <span class="shop-name mythic-name">${w.name}</span>
+          <span class="legend-tag mythic-tag">MYTHIC</span>
+        </div>
+        <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>${legendPassive(w.id)}
+        <div class="legend-buy">
+          <button class="buy-weapon poor" disabled>◆ ${w.price.toLocaleString()}</button>
+          <span class="legend-need">Only sold in the <b>RARE SHOP</b> that sometimes opens between waves (WAVES, EXTREME, CO-OP).<br>
+            ${needs} <span class="${kills >= w.mythicKills ? 'need-ok' : 'need-no'}">${kills >= w.mythicKills ? '✔' : '✘'} enemies killed ${kills.toLocaleString()}/${(w.mythicKills || 0).toLocaleString()}</span></span>
+        </div>
+      </div>`;
+    }
     if (w.bossReward) {
       return `<div class="shop-row legendary">
         <div class="shop-head">
@@ -2927,7 +2958,7 @@ function legendaryCards(weapons, coins) {
       </div>`;
     }
     if (w.needAll) {
-      const left = all.filter(o => o.id !== w.id && !weapons.includes(o.id)).length;
+      const left = all.filter(o => o.id !== w.id && !o.mythic && !weapons.includes(o.id)).length;
       return `<div class="shop-row legendary ghost-row">
         <div class="shop-head">
           <canvas class="shop-ic" data-weapon="${w.id}" width="56" height="32"></canvas>
@@ -3740,7 +3771,8 @@ function updateScreens(state) {
         ? '<span style="color:#7aff9a">VICTORY!</span>' : '<span style="color:#ff5a6a">DEFEATED</span>';
       document.getElementById('roundStats').innerHTML = state.victory
         ? `YOU SURVIVED THE ABYSS<br><span style="color:${PAL.coin}">+100,000 COINS</span> &nbsp; <span style="color:${PAL.xp}">+75,000 XP</span>`
-          + ` &nbsp; <span style="color:#b07aff">+ ${state.bossDrop === 'endlessscythe' ? 'THE ENDLESS SCYTHE' : 'THE CROSSBOWS OF INFINITY'}</span>`
+          + (state.noDrop ? ` &nbsp; <span style="color:#888">NO WEAPON: A MYTHIC WAS IN HAND</span>`
+             : ` &nbsp; <span style="color:#b07aff">+ ${state.bossDrop === 'endlessscythe' ? 'THE ENDLESS SCYTHE' : 'THE CROSSBOWS OF INFINITY'}</span>`)
           + `<br>XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`
         : `THE ABYSS SWALLOWS YOU<br>`
           + (ab ? (ab.p3 ? `ONLY <span style="color:#ff7ad8">${ab.p3}s</span> LEFT TO SURVIVE<br>`
@@ -3755,7 +3787,7 @@ function updateScreens(state) {
         : '<span style="color:#ff5a6a">DEFEATED</span>';
       document.getElementById('roundStats').innerHTML = state.victory
         ? `THE PORTAL MAGE HAS FALLEN<br><span style="color:${PAL.coin}">+50,000 COINS</span> &nbsp; <span style="color:${PAL.xp}">+50,000 XP</span>`
-          + ` &nbsp; <span style="color:#b07aff">+ THE PORTAL WAND</span>`
+          + (state.noDrop ? ` &nbsp; <span style="color:#888">NO WEAPON: A MYTHIC WAS IN HAND</span>` : ` &nbsp; <span style="color:#b07aff">+ THE PORTAL WAND</span>`)
           + `<br>XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`
         : `THE PORTAL MAGE WINS THIS TIME<br>`
           + (mage ? `HE HAD <span style="color:#c8a0ff">${Math.ceil(mage.hp).toLocaleString()}</span> HP LEFT${mage.phase === 2 ? ' (PHASE 2)' : ''}<br>` : '')
@@ -3872,6 +3904,7 @@ function draw(state) {
   }
   drawSlashes();
   drawFireRings(state.fires || []);
+  if (state.rareShop) drawRareShop(state.rareShop);
   drawChains(state.chains || []);
   drawProjectiles(state.projectiles || []);
   drawMonsters(state.monsters || []);
@@ -4206,6 +4239,12 @@ function useItem(idx) {
 
 function drawChains(chains) {
   for (const ch of chains) {
+    if (ch.kind === 'dark') {   // the leash: how far a Darklight chain lets them go
+      ctx.save(); ctx.globalAlpha = 0.45; ctx.lineWidth = 1.2; ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = '#f4f4fa'; ctx.beginPath(); ctx.arc(ch.x1, ch.y1, 30, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = '#15151c'; ctx.lineDashOffset = 3.5; ctx.beginPath(); ctx.arc(ch.x1, ch.y1, 30, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
     const dx = ch.x2 - ch.x1, dy = ch.y2 - ch.y1;
     const len = Math.hypot(dx, dy);
     if (len < 2) continue;
@@ -4213,7 +4252,20 @@ function drawChains(chains) {
     ctx.save();
     ctx.translate(ch.x1, ch.y1);
     ctx.rotate(ang);
-    if (ch.kind === 'hook') {
+    if (ch.kind === 'dark') {
+      // Darklight's chain: black and white links with a faint glow.
+      ctx.globalAlpha = 0.25; ctx.strokeStyle = '#b8a0ff'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(len, 0); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.lineWidth = 1.4;
+      const n = Math.max(1, Math.floor(len / 5));
+      for (let i = 0; i < n; i++) {
+        const x = (i + 0.5) * (len / n), flat = i % 2 === 0;
+        ctx.strokeStyle = flat ? '#f4f4fa' : '#15151c';
+        ctx.beginPath(); ctx.ellipse(x, 0, flat ? 2.6 : 1.5, flat ? 1.3 : 2.4, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.fillStyle = '#f4f4fa'; ctx.beginPath(); ctx.arc(0, 0, 2.4, 0, Math.PI * 2); ctx.fill();   // the stake
+      ctx.fillStyle = '#15151c'; ctx.beginPath(); ctx.arc(0, 0, 1.2, 0, Math.PI * 2); ctx.fill();
+    } else if (ch.kind === 'hook') {
       // The teleport hook trails a taut energy line rather than iron links.
       ctx.globalAlpha = 0.35; ctx.strokeStyle = WEAPON_COLOR.grapple; ctx.lineWidth = 4;
       ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(len,0); ctx.stroke();
@@ -4509,6 +4561,8 @@ function drawPlayerBody(p, baseColor, label, key) {
   if (p.weaponId === 'infinitybow' && !p.dead) drawInfinityFloaters(p, x, y);
   if (p.weaponId === 'endlessscythe' && !p.dead) drawEndlessFloaters(p, x, y, key);
   if (p.kspin > 0 && !p.dead) drawKatanaSpin(p, x, y);
+  if (p.dk && !p.dead) drawDarklightOrbit(p, x, y);
+  if (p.curse > 0 && !p.dead) drawCurseFx(p, x, y);
   drawStatusMarks(p, x, y);
   if (p.puppet) drawPuppetMark(x + p.w / 2, y - 6, null);
   if (p.shuffleIn != null && key === 'p' + myNum) drawShuffleCountdown(p, x, y);
@@ -4736,6 +4790,7 @@ function drawMonster(m) {
   drawMonsterArms(m, x, y);
   if (m.burning) drawFlames(x, y, m.w, m.h);
   if (m.frozen) drawFreezeFx(m, x, y); else if (m.slowed) drawSlowFx(m, x, y);
+  if (m.curse) drawCurseFx(m, x, y);
   if (m.ctl) drawPuppetMark(x + m.w / 2, y - 8, m);
   drawMonsterTells(m, x, y);
   if (m.boss) { drawBossMarks(m, x, y); return; }
@@ -5656,6 +5711,7 @@ function drawProjectiles(projs) {
     if (pr.weaponId === 'abyssbolt' || pr.weaponId === 'infinitybow') { drawVoidBolt(pr, ang); continue; }
     if (pr.weaponId === 'samwave') { drawSlashWave(pr, ang, now, pr.special ? '#ff5a5a' : (pr.owner === 'monster' ? '#ff4a5a' : '#ff8a8a')); continue; }
     if (pr.weaponId === 'samdashwave') { drawDashWave(pr, ang, now); continue; }
+    if (pr.weaponId === 'dlkunai' || pr.weaponId === 'dlpair') { drawFlyingKunai(pr, ang, pr.weaponId === 'dlpair'); continue; }
     if (pr.weaponId === 'abyssorb') { drawAbyssOrb(pr.x, pr.y, pr.special ? 12 : 20, now); continue; }
     if (pr.weaponId === 'abyssscythe') {
       ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(now / 45);
@@ -6599,4 +6655,120 @@ function drawUnlockPreview(ux, weaponId) {
   ux.restore();
   ux.strokeStyle=wc; ux.lineWidth=1; ux.strokeRect(2.5,2.5,W-5,H-5);
   drawWeaponPixelsFitted(ux, weaponId, W/2, H/2, W-22, H-22, wc);
+}
+
+// ─── Darklight ───────────────────────────────────────────────────────────────
+const DL_TAU = Math.PI * 2;
+// A kunai at (x, y) pointing along ang, glowing dark or light.
+function drawKunai(x, y, ang, dark, scale) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+  ctx.globalAlpha = dark ? 0.4 : 0.3; ctx.fillStyle = dark ? '#9a7aff' : '#ffffff';
+  ctx.beginPath(); ctx.ellipse(4 * scale, 0, 16 * scale, 6 * scale, 0, 0, DL_TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.translate(-14 * scale, 0);
+  drawWeaponPixels(ctx, 'darklight', scale, WEAPON_COLOR.darklight || '#e8e8f4');
+  ctx.restore();
+}
+// The kunai circling a Darklight holder.
+function drawDarklightOrbit(p, x, y) {
+  const n = p.dk.length, mx = x + p.w / 2, my = y + p.h / 2, base = performance.now() * 0.0055;
+  ctx.save();
+  ctx.globalAlpha = 0.18; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(mx, my, 24, 0, DL_TAU); ctx.stroke();
+  ctx.restore();
+  for (let i = 0; i < n; i++) {
+    const a = base + i * DL_TAU / n;
+    drawKunai(mx + Math.cos(a) * 24, my + Math.sin(a) * 24, a + Math.PI / 2, p.dk[i] === '1', 0.72);
+  }
+}
+// A thrown kunai (the special) or one of the pair (the super, bigger, with a long streak).
+function drawFlyingKunai(pr, ang, pair) {
+  const dark = !!pr.special, sp = Math.hypot(pr.dx, pr.dy) || 1, len = pair ? 46 : 16;
+  ctx.save();
+  const g = ctx.createLinearGradient(pr.x, pr.y, pr.x - pr.dx / sp * len, pr.y - pr.dy / sp * len);
+  g.addColorStop(0, dark ? 'rgba(90,40,160,0.85)' : 'rgba(255,255,255,0.9)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.strokeStyle = g; ctx.lineWidth = pair ? 5 : 2.5; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(pr.x, pr.y); ctx.lineTo(pr.x - pr.dx / sp * len, pr.y - pr.dy / sp * len); ctx.stroke();
+  if (pair) {
+    ctx.globalAlpha = 0.35; ctx.fillStyle = dark ? '#12081f' : '#ffffff';
+    ctx.beginPath(); ctx.arc(pr.x, pr.y, 9, 0, DL_TAU); ctx.fill();
+  }
+  ctx.restore();
+  drawKunai(pr.x, pr.y, ang, dark, pair ? 1 : 0.8);
+}
+// Cursed by the pair: black and white wisps circling, and the ring it spreads within.
+function drawCurseFx(e, x, y) {
+  const now = performance.now(), mx = x + e.w / 2, my = y + e.h / 2;
+  ctx.save();
+  ctx.globalAlpha = 0.35; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
+  ctx.setLineDash([3, 4]); ctx.lineDashOffset = -now / 40;
+  ctx.beginPath(); ctx.arc(mx, my, 44, 0, DL_TAU); ctx.stroke();
+  ctx.setLineDash([]);
+  const r = Math.max(e.w, e.h) * 0.75;
+  for (let i = 0; i < 6; i++) {
+    const a = now / 260 + i * DL_TAU / 6;
+    ctx.globalAlpha = 0.85; ctx.fillStyle = i % 2 ? '#15151c' : '#f4f4fa';
+    ctx.beginPath(); ctx.arc(mx + Math.cos(a) * r, my + Math.sin(a) * r * 0.7, 2, 0, DL_TAU); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ─── The rare shop ───────────────────────────────────────────────────────────
+// A merchant's stall: a black and gold awning over a counter, a glowing sign.
+function drawRareShop(s) {
+  const now = performance.now(), x = Math.round(s.x), y = Math.round(s.y), w = s.w, h = s.h;
+  ctx.save();
+  ctx.globalAlpha = 0.18 + 0.08 * Math.sin(now / 300); ctx.fillStyle = '#ffd84a';
+  ctx.beginPath(); ctx.ellipse(x + w / 2, y + h, w * 1.3, 9, 0, 0, DL_TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(x + 1, y + h, w - 2, 3);
+  ctx.fillStyle = '#5a3a1e'; ctx.fillRect(x + 2, y + 6, 2, h - 6); ctx.fillRect(x + w - 4, y + 6, 2, h - 6);   // posts
+  ctx.fillStyle = '#7a4a22'; ctx.fillRect(x, y + h - 10, w, 10);                                           // counter
+  ctx.fillStyle = '#9a6430'; ctx.fillRect(x, y + h - 10, w, 2);
+  for (let i = 0; i < 6; i++) { ctx.fillStyle = i % 2 ? '#15151c' : '#d9a520'; ctx.fillRect(x - 2 + i * (w + 4) / 6, y, (w + 4) / 6 + 0.5, 7); }   // awning
+  for (let i = 0; i < 6; i++) { ctx.fillStyle = i % 2 ? '#15151c' : '#d9a520'; ctx.beginPath(); ctx.arc(x - 2 + (i + 0.5) * (w + 4) / 6, y + 7, (w + 4) / 12, 0, Math.PI); ctx.fill(); }
+  // A kunai on display, turning.
+  ctx.save(); ctx.translate(x + w / 2, y + h - 14); ctx.rotate(Math.sin(now / 500) * 0.4 - Math.PI / 4);
+  ctx.translate(-10, 0); drawWeaponPixels(ctx, 'darklight', 0.7, WEAPON_COLOR.darklight || '#e8e8f4'); ctx.restore();
+  ctx.font = 'bold 8px "Courier New",monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  ctx.fillStyle = '#000'; ctx.fillText('RARE SHOP', x + w / 2 + 1, y - 3);
+  ctx.fillStyle = '#ffd84a'; ctx.fillText('RARE SHOP', x + w / 2, y - 4);
+  ctx.font = '7px "Courier New",monospace'; ctx.textBaseline = 'top';
+  ctx.fillStyle = '#cfc59a'; ctx.fillText('LEAVES IN ' + Math.ceil(s.t / 1000) + 's', x + w / 2, y + h + 4);
+  for (let i = 0; i < 3; i++) {   // sparkles
+    const a = now / 700 + i * 2.1;
+    ctx.globalAlpha = 0.5 + 0.5 * Math.sin(now / 150 + i);
+    ctx.fillStyle = '#fff6c0'; ctx.fillRect(x + w / 2 + Math.cos(a) * (w * 0.8), y + h / 2 + Math.sin(a) * 14, 1.5, 1.5);
+  }
+  ctx.restore();
+}
+// The panel that opens when you walk up to it.
+function showRareShop(msg) {
+  const el = document.getElementById('rareShopPanel');
+  if (!el) return;
+  if (!msg.open) { el.classList.add('hidden'); return; }
+  const rows = (msg.offers || []).map(o => {
+    const needs = o.needs.map(n => `<span class="${n.ok ? 'need-ok' : 'need-no'}">${n.ok ? '✔' : '✘'} ${n.name} maxed</span>`).join('');
+    const kills = `<span class="${o.kills >= o.killsNeed ? 'need-ok' : 'need-no'}">${o.kills >= o.killsNeed ? '✔' : '✘'} ${o.kills.toLocaleString()}/${o.killsNeed.toLocaleString()} enemies killed</span>`;
+    const coins = `<span class="${o.coins >= o.price ? 'need-ok' : 'need-no'}">${o.coins >= o.price ? '✔' : '✘'} ◆ ${o.coins.toLocaleString()}/${o.price.toLocaleString()}</span>`;
+    const btn = o.owned ? '<button class="rs-buy" disabled>OWNED</button>'
+      : `<button class="rs-buy${o.ok ? '' : ' poor'}" ${o.ok ? '' : 'disabled'} onclick="buyMythic('${o.id}')">BUY ◆ ${o.price.toLocaleString()}</button>`;
+    return `<div class="rs-row"><canvas class="rs-ic" data-weapon="${o.id}" width="64" height="34"></canvas>
+      <div class="rs-info"><div class="rs-name">${o.name} <span class="legend-tag mythic-tag">MYTHIC</span></div>
+      <div class="rs-needs">${needs}${kills}${coins}</div></div>${btn}</div>`;
+  }).join('');
+  el.innerHTML = `<div class="rs-title">✦ RARE SHOP ✦</div>
+    ${msg.guest ? '<div class="rs-note bad">Play with a password to buy mythics.</div>' : ''}
+    ${rows || '<div class="rs-note">Nothing for sale.</div>'}
+    ${msg.note ? `<div class="rs-note${msg.bad ? ' bad' : ''}">${msg.note}</div>` : ''}
+    <div class="rs-hint">Only one mythic goes into a game · walk away to close</div>`;
+  for (const cv of el.querySelectorAll('canvas.rs-ic')) {
+    const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
+    drawWeaponPixelsFitted(g, cv.dataset.weapon, cv.width / 2, cv.height / 2, cv.width - 6, cv.height - 6, WEAPON_COLOR[cv.dataset.weapon] || '#ccc');
+  }
+  el.classList.remove('hidden');
+}
+function buyMythic(id) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'buy_mythic', id }));
 }

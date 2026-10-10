@@ -322,6 +322,20 @@ const WEAPONS = [
     shopOnly: true, noRequirement: true, needLight: true, price: 0, lightDash: true,
     special: { kind: 'lightdashes', dmg: 70, range: 260, cd: 9000 },
     super:   { kind: 'lightspeed', dmg: 320, cd: 26000 } },
+  // ── MYTHIC ── Only sold in the rare shop that sometimes opens between waves
+  // (WAVES, EXTREME, CO-OP), for a fortune, once you have maxed the weapons it
+  // asks for and cut down enough enemies. Only one mythic goes into a game, and a
+  // mythic never earns you another weapon (no kill credit, no boss drops).
+  // DARKLIGHT: each attack adds a kunai circling you (up to 10; each one goes
+  // through one foe and breaks on the next). SPECIAL: every kunai flies at your
+  // enemies and chains whoever it hits to the spot for 3s. SUPER: a dark and a
+  // light kunai at blinding speed into one foe: parried, they shatter; if not,
+  // the foe suffers every bad effect for 5s, and so does anyone who comes close.
+  { id: 'darklight', name: 'DARKLIGHT', damage: 32, range: 240, atkSpd: 380, type: 'ranged', unlockXp: 0,
+    shopOnly: true, noRequirement: true, mythic: true, price: 500000, kunaiOrbit: true,
+    mythicKills: 1000, mythicNeeds: ['lightblade', 'samuraiblade', 'endlessscythe'],
+    special: { kind: 'kunaistorm', dmg: 60, range: 400, cd: 7000 },
+    super:   { kind: 'darklightpair', dmg: 90, cd: 22000 } },
 ];
 
 // Melee reach: the swing is 50% longer and a slam special 30% wider. The shield
@@ -345,7 +359,7 @@ const WEAPON_COLORS = {
   glaive: '#b0d8c0', katana: '#eef0ff', chakram: '#66e0c0', cannon: '#9a90a8', reaper: '#cc66aa',
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
   shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
-  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff', samuraiblade: '#ff5a5a', endlessscythe: '#7a2aff',
+  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff', samuraiblade: '#ff5a5a', endlessscythe: '#7a2aff', darklight: '#e8e8f4',
   ghostdagger: '#a8f0ff', stormhammer: '#7ac8ff', frostscythe: '#bfefff', sunbow: '#ffd24a',
 };
 
@@ -409,6 +423,7 @@ const WEAPON_UPGRADES = {
   infinitybow: ['dmg', 'spd', 'crit', 'cdr', 'multi'],
   samuraiblade: ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   endlessscythe: ['dmg', 'spd', 'rng', 'crit', 'cdr'],
+  darklight:   ['dmg', 'spd', 'crit', 'cdr'],
   ghostdagger: ['dmg', 'spd', 'crit', 'cdr'],
   stormhammer: ['dmg', 'spd', 'crit', 'cdr', 'knock'],
   frostscythe: ['dmg', 'rng', 'chill', 'cdr', 'aoe'],
@@ -445,6 +460,7 @@ const PASSIVES = {
   vortex:      { name: 'AEGIS',          color: '#7ad8ff', desc: 'blocks one hit completely every 4s' },
   windwand:    { name: 'GALE GUARD',     color: '#d8f4ff', desc: 'blows away an enemy shot that comes close, every 0.5s' },
   revolver:    { name: 'CHAIN REACTION', color: '#ffa040', desc: 'every hit explodes onto the foes around it, and everything you kill blows up even bigger' },
+  darklight:   { name: 'LEARNED ALL TRICKS', color: '#ffffff', desc: 'every bad effect on you becomes a little damage instead, unless it comes from a super' },
   endlessscythe: { name: 'EVENT HORIZON', color: '#7a2aff', desc: 'every hit stuns the target and drags it toward you' },
   samuraiblade: { name: 'WAY OF THE BLADE', color: '#ff5a5a', desc: 'you move 75% faster while heading toward an enemy' },
   infinitybow: { name: 'ENDLESS VOLLEY', color: '#9a5aff', desc: 'every 5th attack fires twice as many bolts' },
@@ -858,6 +874,8 @@ function progress() {
   if (!d.abilitySlotCount) d.abilitySlotCount = {};
   if (!d.lightKills)  d.lightKills = {};
   if (!d.samuraiKills) d.samuraiKills = {};
+  if (!d.mythicKills) d.mythicKills = {};
+  if (!d.mythicPick) d.mythicPick = {};
   return d;
 }
 function markDirty() { progressDirty = true; }
@@ -907,6 +925,7 @@ function saveData(pw) {
     slotCount: d.abilitySlotCount[pw] || ABILITY_SLOTS,
     lightKills: d.lightKills[pw] || 0,
     samuraiKills: d.samuraiKills[pw] || 0,
+    mythicKills: d.mythicKills[pw] || 0,
   });
 }
 function makeSave(pw) {
@@ -954,6 +973,7 @@ function restoreBackup(pw, backup) {
     d.abilitySlots[pw] = cleanSlots(b.abilitySlots, abils, d.abilitySlotCount[pw]);
     d.lightKills[pw] = num(b.lightKills);
     d.samuraiKills[pw] = num(b.samuraiKills);
+    d.mythicKills[pw] = num(b.mythicKills);
     if (b.skin && typeof b.skin === 'object' && d.skins[pw] === undefined) d.skins[pw] = b.skin;
     markDirty();
     return;
@@ -971,6 +991,7 @@ function restoreBackup(pw, backup) {
   if (clampSlots(b.slotCount) > (d.abilitySlotCount[pw] || ABILITY_SLOTS)) { d.abilitySlotCount[pw] = clampSlots(b.slotCount); changed = true; }
   if (num(b.lightKills) > (d.lightKills[pw] || 0)) { d.lightKills[pw] = num(b.lightKills); changed = true; }
   if (num(b.samuraiKills) > (d.samuraiKills[pw] || 0)) { d.samuraiKills[pw] = num(b.samuraiKills); changed = true; }
+  if (num(b.mythicKills) > (d.mythicKills[pw] || 0)) { d.mythicKills[pw] = num(b.mythicKills); changed = true; }
   for (const [wid, lv] of Object.entries(ups)) {
     const allowed = upgradesFor(wid);
     for (const [k, n] of Object.entries(lv)) {
@@ -1286,6 +1307,7 @@ function spawnParrySpark(x, y) {
 // ── Player effects ──
 function hasEffect(p, name) { return !!(p.effects && (p.effects[name] || 0) > 0); }
 function applyEffect(p, name, dur) {
+  if (BAD_EFFECTS.includes(name) && p.passive === 'darklight' && !room.inSuper && !room.dlCursing) { trickHit(p, name); return; }
   if (!p.effects) p.effects = {};
   p.effects[name] = Math.max(p.effects[name] || 0, dur);
 }
@@ -1897,7 +1919,7 @@ function creditSamuraiKill() {
   const d = progress();
   for (const k of KEYS) {
     const pw = room.passwords[k];
-    if (!room.players[k] || !pw || isAdminPw(pw)) continue;
+    if (!room.players[k] || !pw || isAdminPw(pw) || holdsMythic(room.players[k])) continue;
     const n = d.samuraiKills[pw] = (d.samuraiKills[pw] || 0) + 1;
     markDirty();
     if (n <= SAM_KILLS_NEED && (n % 5 === 0 || n === SAM_KILLS_NEED)) {
@@ -1920,6 +1942,241 @@ function katanaSpinTick(p, key, dt) {
     applyDamage(t, p.kspinDmg || 20, key);
     if (!t.dead) { stagger(t, KSPIN_STUN, 'stun'); chillTarget(t, KSPIN_STUN + KSPIN_SLOW); }   // stunned, then still slowed
   }
+}
+
+// ─── MYTHICS ─────────────────────────────────────────────────────────────────
+const holdsMythic = p => !!(p && WEAPON_BY_ID[weapon(p).id]?.mythic);
+// Your weapons as they go into a game: every one you own, but only one mythic.
+function gameLoadout(weapons, pick) {
+  const myth = (weapons || []).filter(id => WEAPON_BY_ID[id]?.mythic);
+  if (myth.length <= 1) return weapons;
+  const keep = myth.includes(pick) ? pick : myth[0];
+  return weapons.filter(id => !WEAPON_BY_ID[id]?.mythic || id === keep);
+}
+// Every enemy you kill (anywhere but the sandbox) counts toward the mythics,
+// unless you killed it with one.
+function countMythicKill(key) {
+  if (room.gameMode === 'sandbox') return;
+  const pw = room.passwords[key];
+  if (!pw || isAdminPw(pw) || holdsMythic(room.players[key])) return;
+  const d = progress();
+  d.mythicKills[pw] = (d.mythicKills[pw] || 0) + 1;
+  markDirty();
+}
+function maxedOwned(prof, id) {
+  const lv = prof.upgrades?.[id] || {};
+  return prof.weapons.includes(id) && upgradesFor(id).every(k => (lv[k] || 0) >= UPGRADE_STATS[k].max);
+}
+function mythicOffer(pw, def) {
+  const admin = isAdminPw(pw);
+  const prof = profileFor(pw, {});
+  const needs = (def.mythicNeeds || []).map(id => ({ name: WEAPON_BY_ID[id]?.name || id, ok: admin || maxedOwned(prof, id) }));
+  const killsOk = admin || prof.mythicKills >= (def.mythicKills || 0);
+  const coinsOk = admin || prof.coins >= def.price;
+  return { id: def.id, name: def.name, price: def.price, owned: prof.weapons.includes(def.id),
+           kills: Math.min(prof.mythicKills, def.mythicKills || 0), killsNeed: def.mythicKills || 0, needs, coins: prof.coins,
+           ok: needs.every(n => n.ok) && killsOk && coinsOk };
+}
+
+// The rare shop: now and then a wave clears and a merchant sets up in the
+// arena for the break. Walk up to it to see what's for sale.
+const RARE_SHOP_CHANCE = 0.1, RARE_SHOP_FIRST_WAVE = 3, RARE_SHOP_MS = 20000, RARE_SHOP_W = 30, RARE_SHOP_H = 26, RARE_SHOP_NEAR = 44;
+function maybeRareShop() {
+  if (!['waves', 'extreme', 'coop'].includes(room.gameMode)) return;
+  if (room.wave.num < RARE_SHOP_FIRST_WAVE || Math.random() >= RARE_SHOP_CHANCE) return;
+  openRareShop();
+}
+function openRareShop() {
+  room.rareShop = { x: Math.round(ARENA_X + ARENA_W / 2 - RARE_SHOP_W / 2), y: Math.round(ARENA_Y + ARENA_H * 0.58), t: RARE_SHOP_MS, near: new Set() };
+  room.wave.betweenTimer = Math.max(room.wave.betweenTimer, RARE_SHOP_MS);
+  room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26, text: 'A RARE SHOP HAS OPENED!', color: '#ffd84a', timer: 3200, max: 3200 });
+}
+function sendTo(key, msg) {
+  const ws = room[key];
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg));
+}
+function rareShopMsg(key, note, bad) {
+  const pw = room.passwords[key];
+  const offers = pw ? WEAPONS.filter(w => w.mythic).map(w => mythicOffer(pw, w)) : [];
+  sendTo(key, { type: 'rareshop', open: true, offers, guest: !pw, note: note || '', bad: !!bad });
+}
+function closeRareShop() {
+  if (!room.rareShop) return;
+  for (const k of room.rareShop.near) sendTo(k, { type: 'rareshop', open: false });
+  room.rareShop = null;
+}
+function updateRareShop(dt) {
+  const s = room.rareShop;
+  if (!s) return;
+  s.t -= dt;
+  if (s.t <= 0) {
+    room.particles.push({ type: 'teleport', x: s.x + RARE_SHOP_W / 2, y: s.y + RARE_SHOP_H / 2, timer: 500, max: 500, color: '#ffd84a' });
+    closeRareShop();
+    return;
+  }
+  const mx = s.x + RARE_SHOP_W / 2, my = s.y + RARE_SHOP_H / 2;
+  for (const k of KEYS) {
+    const p = room.players[k];
+    const near = !!(p && !p.dead && Math.hypot(cx(p) - mx, cy(p) - my) < RARE_SHOP_NEAR);
+    if (near && !s.near.has(k)) { s.near.add(k); rareShopMsg(k); }
+    else if (!near && s.near.has(k)) { s.near.delete(k); sendTo(k, { type: 'rareshop', open: false }); }
+  }
+}
+function buyMythic(key, id) {
+  const s = room.rareShop, def = WEAPON_BY_ID[id], pw = room.passwords[key];
+  if (!s || !s.near.has(key) || !def || !def.mythic) return;
+  if (!pw) { rareShopMsg(key, 'Play with a password to buy mythics.', true); return; }
+  const offer = mythicOffer(pw, def);
+  if (offer.owned) { rareShopMsg(key, 'You already own ' + def.name + '.', true); return; }
+  if (!offer.ok) { rareShopMsg(key, 'You do not meet the requirements yet.', true); return; }
+  const admin = isAdminPw(pw), d = progress();
+  const prof = profileFor(pw, {});
+  const owned = sortWeaponIds([...prof.weapons, id]);
+  if (!admin) {
+    d.weapons[pw] = owned;
+    d.coins[pw] = prof.coins - def.price;
+    room.playerCoins[key] = d.coins[pw];
+    markDirty();
+  }
+  const weapons = gameLoadout(owned, prof.mythicPick);
+  room.playerUnlocks[key] = weapons;
+  const p = room.players[key];
+  if (p) {
+    const held = p.unlockedWeapons[p.weaponIdx];
+    p.unlockedWeapons = weapons;
+    p.weaponIdx = Math.max(0, weapons.indexOf(held));
+    refreshWeapon(p);
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 70, timer: 1100, max: 1100, color: '#ffffff', text: def.name + '!' });
+  }
+  rareShopMsg(key, def.name + ' is yours. Swap to it with < and >.');
+}
+
+// DARKLIGHT
+const DL_MAX = 10, DL_ORBIT_R = 24, DL_SPIN = 0.0055, DL_PIERCE = 2, DL_REHIT_MS = 350;
+const DL_KUNAI_SPEED = 8.5, DL_KUNAI_TURN = 14, DL_PAIR_SPEED = 16, DL_PAIR_TURN = 40;
+const DL_CHAIN_MS = 3000, DL_CHAIN_R = 30, DL_CURSE_MS = 5000, DL_SPREAD_R = 44, DL_TRICK_DMG = 3, DL_TRICK_GAP = 600;
+const BAD_EFFECTS = ['burn', 'poison', 'slow', 'root', 'confuse', 'silence'];
+// LEARNED ALL TRICKS: a bad effect lands as a little damage instead (only so often).
+function trickHit(p, name) {
+  if (!p.trickT) p.trickT = {};
+  const now = Date.now();
+  if ((p.trickT[name] || 0) > now) return;
+  p.trickT[name] = now + DL_TRICK_GAP;
+  dotDamage(p, DL_TRICK_DMG);
+  room.particles.push({ type: 'xp', x: cx(p), y: p.y - 6, text: 'TRICK', timer: 600, color: '#ffffff' });
+}
+function dlKunaiPos(p, i, n) {
+  const a = (p.dkA || 0) + i * Math.PI * 2 / n;
+  return { x: cx(p) + Math.cos(a) * DL_ORBIT_R, y: cy(p) + Math.sin(a) * DL_ORBIT_R, a };
+}
+function darklightAttack(p, pKey, w, dmgMult) {
+  if (!p.kunais) p.kunais = [];
+  p.kunaiDmg = Math.round(w.damage * dmgMult);
+  if (p.kunais.length >= DL_MAX) return;
+  p.kunais.push({ hits: 0, hit: new Map(), dark: p.kunais.length % 2 === 1 });
+  room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: DL_ORBIT_R, timer: 220, max: 220, color: '#ffffff' });
+}
+function dlProjectile(pKey, x, y, a, speed, dmg, kind, t, extra) {
+  room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * speed, dy: Math.sin(a) * speed, damage: dmg, owner: pKey,
+    traveled: 0, maxRange: 1600, weaponId: kind, isAoe: false, aoeRadius: 0, pierce: false, grapple: false, boomerang: false,
+    returning: false, life: 0, hitTargets: null, hitR: 6, homing: !!t, quarry: t || null, noIframe: true, ...extra });
+}
+// SPECIAL: every circling kunai flies at your enemies (spread across them).
+function darklightStorm(p, pKey, dmg) {
+  const ks = p.kunais || [];
+  if (!ks.length) {
+    p.specialCooldown = 0;
+    room.particles.push({ type: 'crit', x: cx(p), y: p.y - 8, text: 'NO KUNAI', timer: 600, max: 600 });
+    return;
+  }
+  const foes = enemyTargets(pKey).sort((a, b) => Math.hypot(cx(a) - cx(p), cy(a) - cy(p)) - Math.hypot(cx(b) - cx(p), cy(b) - cy(p)));
+  ks.forEach((k, i) => {
+    const pos = dlKunaiPos(p, i, ks.length);
+    const t = foes.length ? foes[i % foes.length] : null;
+    const a = t ? Math.atan2(cy(t) - pos.y, cx(t) - pos.x) : pos.a;
+    dlProjectile(pKey, pos.x, pos.y, a, DL_KUNAI_SPEED, dmg, 'dlkunai', t, { turn: DL_KUNAI_TURN, dlChain: true, special: k.dark });
+  });
+  p.kunais = [];
+}
+// SUPER: a dark and a light kunai, curving in from both sides onto one foe.
+function darklightPair(p, pKey, dmg) {
+  const t = nearestFoe(p, pKey);
+  if (!t) { p.superCooldown = 0; return; }
+  const base = Math.atan2(cy(t) - cy(p), cx(t) - cx(p));
+  for (const [off, dark] of [[-0.9, true], [0.9, false]]) {
+    const side = base + (off < 0 ? -Math.PI / 2 : Math.PI / 2);   // one from each side of you
+    dlProjectile(pKey, cx(p) + Math.cos(side) * 14, cy(p) + Math.sin(side) * 14, base + off, DL_PAIR_SPEED, dmg, 'dlpair', t,
+                 { turn: DL_PAIR_TURN, dlCurse: true, parryBreak: true, special: dark, hitR: 7 });
+  }
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 50, timer: 700, max: 700, color: '#ffffff', text: 'DARK & LIGHT' });
+}
+// Chained: held within reach of the spot it was hit, whatever it tries.
+function dlChainTarget(t, owner) {
+  if (t.dead || t.mage || t.abyss) return;
+  if (t.num && t.passive === 'darklight' && !room.inSuper) { trickHit(t, 'chain'); return; }
+  t.dlChain = { x: cx(t), y: cy(t), t: DL_CHAIN_MS };
+}
+// Cursed: every bad effect at once, and it spreads to anyone who comes close.
+function dlCurse(t, owner, ms) {
+  if (t.dead || t.p3 || ms <= 0) return;
+  t.dlCurse = { ms: Math.max(t.dlCurse?.ms || 0, ms), owner, acc: t.dlCurse?.acc || 0 };
+  const was = room.dlCursing;
+  room.dlCursing = true;
+  if (t.num) for (const e of BAD_EFFECTS) applyEffect(t, e, ms);
+  else { stagger(t, ms, 'stun'); chillTarget(t, ms, 'poison'); ignite(t, ms); }
+  room.dlCursing = was;
+  room.particles.push({ type: 'crit', x: cx(t), y: t.y - 8, text: 'CURSED', timer: 800, max: 800 });
+}
+function updateDarklight(dt) {
+  const now = Date.now();
+  // The circling kunai.
+  for (const key of KEYS) {
+    const p = room.players[key];
+    if (!p) continue;
+    if (p.dead || weapon(p).id !== 'darklight') { p.kunais = null; continue; }
+    if (!p.kunais || !p.kunais.length) continue;
+    p.dkA = ((p.dkA || 0) + DL_SPIN * dt) % (Math.PI * 2);
+    const n = p.kunais.length, foes = enemyTargets(key);
+    for (let i = n - 1; i >= 0; i--) {
+      const k = p.kunais[i], pos = dlKunaiPos(p, i, n);
+      const box = { x: pos.x - 5, y: pos.y - 5, w: 10, h: 10 };
+      for (const t of foes) {
+        if (t.dead || !aabb(box, t) || (k.hit.get(t) || 0) > now) continue;
+        k.hit.set(t, now + DL_REHIT_MS);
+        if (!t.num) t.invincible = 0;
+        applyDamage(t, p.kunaiDmg || weapon(p).damage, key);
+        if (++k.hits >= DL_PIERCE) break;
+      }
+      if (k.hits >= DL_PIERCE) {
+        p.kunais.splice(i, 1);
+        room.particles.push({ type: 'shockwave', x: pos.x, y: pos.y, maxR: 8, timer: 200, max: 200, color: k.dark ? '#3a3a4a' : '#ffffff' });
+      }
+    }
+  }
+  const all = [...allPlayers(), ...room.monsters, ...room.allies].filter(Boolean);
+  // Chains.
+  for (const e of all) {
+    if (!e.dlChain) continue;
+    e.dlChain.t -= dt;
+    if (e.dead || e.dlChain.t <= 0) { e.dlChain = null; continue; }
+    const c = e.dlChain, dx = cx(e) - c.x, dy = cy(e) - c.y, d = Math.hypot(dx, dy);
+    if (d > DL_CHAIN_R) { e.x -= dx / d * (d - DL_CHAIN_R); e.y -= dy / d * (d - DL_CHAIN_R); }
+  }
+  // Curses: poison ticks, and anyone who comes close catches it.
+  room.dlCursing = true;
+  for (const e of all) {
+    const c = e.dlCurse;
+    if (!c) continue;
+    c.ms -= dt;
+    if (e.dead || c.ms <= 0) { e.dlCurse = null; continue; }
+    c.acc += dt;
+    while (c.acc >= 500 && !e.dead) { c.acc -= 500; dotDamage(e, 3); }
+    for (const o of enemyTargets(c.owner)) {
+      if (o === e || o.dlCurse || o.dead) continue;
+      if (Math.hypot(cx(o) - cx(e), cy(o) - cy(e)) < DL_SPREAD_R) dlCurse(o, c.owner, c.ms);
+    }
+  }
+  room.dlCursing = false;
 }
 
 function aiLight(m, t, dist, dx, dy, spd, factor, dt) {
@@ -2063,6 +2320,7 @@ function monsterDied(m, killer) {
 }
 
 function startWave(num) {
+  closeRareShop();
   let cfg;
   const lvl = modeLevel(num);
   if (lvl > WAVE_CONFIG.length) {
@@ -2114,6 +2372,7 @@ function clearField() {
   room.items       = [];
   room.coins       = [];
   room.trapSpawnTimer = TRAP_SPAWN_MIN;
+  room.rareShop = null;
   room.itemSpawnTimer = ITEM_SPAWN_MIN;
 }
 
@@ -2141,6 +2400,7 @@ function startGame() {
   room.wave = emptyWave();
   room.gameState = 'GAMEPLAY';
   room.victory = false;
+  room.bossDrops = null; room.mythicNoDrop = null;
   if (room.gameMode === 'portal') startMageFight();
   else if (room.gameMode === 'abyss') startAbyssFight();
   else if (room.gameMode === 'sandbox') startSandbox();
@@ -2267,6 +2527,7 @@ function handleKill(target, attackerKey) {
     room.particles.push({ type: 'shockwave', x: cx(target), y: cy(target), maxR: 80, timer: 600, max: 600, color: '#ffd84a' });
     return;
   }
+  if (isPKey(attackerKey) && room.players[attackerKey] !== target) countMythicKill(attackerKey);
   // SOUL HARVEST: the reaper's wielder feeds on every kill.
   const reaper = room.players[attackerKey];
   if (reaper && reaper !== target && !reaper.dead && reaper.passive === 'reaper') {
@@ -2640,7 +2901,8 @@ function tickRoom(dt) {
       doSpecial(p, key);
     }
     if (room.superJustPressed[key] && p.superCooldown <= 0 && weapon(p).super) {
-      doSuper(p, key);
+      room.inSuper = true;                 // what a super does can't be shrugged off
+      try { doSuper(p, key); } finally { room.inSuper = false; }
     }
     // Abilities auto-fire while held, like attack/special/super.
     for (let i = 0; i < p.abilities.length && i < MAX_ABILITY_SLOTS; i++) {
@@ -2758,6 +3020,8 @@ function tickRoom(dt) {
   // ── Projectiles ──
   room.projectiles = room.projectiles.filter(proj => updateProjectile(proj, factor, dt));
   updateFires(factor, dt);
+  updateDarklight(dt);
+  updateRareShop(dt);
 
   // ── Wave spawner ── (the Portal Mage fight has no waves: he brings his own;
   // in the sandbox you spawn what you like)
@@ -2781,6 +3045,7 @@ function tickRoom(dt) {
         return;
       }
       room.wave.betweenTimer = 3000;
+      maybeRareShop();
       room.particles.push({
         type: 'waveclear', x: CANVAS_W / 2, y: CANVAS_H / 2 - 10,
         text: 'WAVE ' + room.wave.num + ' CLEAR!', timer: 2500,
@@ -3010,7 +3275,7 @@ function homeProjectile(proj, dt) {
   }
   if (!best) return;
   const sp = Math.hypot(proj.dx, proj.dy) || 1;
-  const a = turnToward(Math.atan2(proj.dy, proj.dx), Math.atan2(cy(best) - proj.y, cx(best) - proj.x), HOMING_TURN * dt / 1000);
+  const a = turnToward(Math.atan2(proj.dy, proj.dx), Math.atan2(cy(best) - proj.y, cx(best) - proj.x), (proj.turn || HOMING_TURN) * dt / 1000);
   proj.dx = Math.cos(a) * sp; proj.dy = Math.sin(a) * sp;
 }
 
@@ -3091,6 +3356,12 @@ function advanceProjectile(proj, factor, dt) {
     if (t === proj.ignore || !aabb(hitBox, t)) continue;
     if (proj.dashWave) { triggerDashWave(proj, t); return false; }
     const tk = playerKeyOf(t);
+    if (tk && t.parryTimer > 0 && proj.parryBreak) {
+      // Darklight's pair: a parry shatters them.
+      spawnParrySpark(proj.x, proj.y);
+      room.particles.push({ type: 'crit', x: cx(t), y: t.y - 8, text: 'SHATTERED', timer: 700, max: 700 });
+      return false;
+    }
     if (tk && t.parryTimer > 0) {
       // Parried: bounce the projectile back at its owner
       proj.dx = -proj.dx; proj.dy = -proj.dy;
@@ -3222,6 +3493,8 @@ function distToSegment(px, py, ax, ay, bx, by) {
 
 // What a projectile does beyond its damage: frost slows, storm arcs onward.
 function onHitExtras(proj, t) {
+  if (proj.dlChain) dlChainTarget(t, proj.owner);
+  if (proj.dlCurse) dlCurse(t, proj.owner, DL_CURSE_MS);
   if (proj.chill) chillTarget(t, proj.chill, proj.weaponId === 'chronostaff' ? 'time' : 'chill');
   if (proj.stun) stagger(t, proj.stun, 'shock');
   if (proj.frostbite) addFrostbite(t);
@@ -3284,6 +3557,7 @@ function doAttack(p, pKey) {
   swatFireHands(p, pKey, w.type === 'melee' ? w.range : 48);
   swatShots(p, w.type === 'melee' ? w.range + 10 : 44);
   if (w.infinityShot) { infinityAttack(p, pKey, w, dmgMult); return; }
+  if (w.kunaiOrbit) { darklightAttack(p, pKey, w, dmgMult); return; }
   if (w.slashWave) {
     // A slash wave that seeks out the nearest foe.
     const aim = nearestTargetAngle(p, pKey);
@@ -3466,6 +3740,7 @@ function doSuper(p, pKey) {
   p.superCooldown = su.cd;
   p.swingTimer = 300;
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
+  if (su.kind === 'darklightpair') { darklightPair(p, pKey, Math.round(su.dmg * dmgMult)); return; }
   if (su.kind === 'katanaspin') {
     p.kspin = KSPIN_MS; p.kspinT = 0; p.kspinDmg = Math.round(su.dmg * dmgMult); p.kvx = 0; p.kvy = 0;
     room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 46, timer: 700, max: 700, color: WEAPON_COLORS.samuraiblade, text: 'WHIRLWIND' });
@@ -4937,7 +5212,7 @@ function abyssDefeated(m) {
     const owned = p.unlockedWeapons || room.playerUnlocks[key] || [];
     const drop = owned.includes('infinitybow') ? 'endlessscythe' : 'infinitybow';
     grantBossWeapon(key, drop);
-    room.bossDrops = { ...(room.bossDrops || {}), [key]: drop };
+    if (!room.mythicNoDrop?.[key]) room.bossDrops = { ...(room.bossDrops || {}), [key]: drop };
   }
   room.victory = true;
   room.gameState = 'ROUND_OVER';
@@ -4978,6 +5253,10 @@ function mageDefeated(m) {
 // shown on the unlock screen once the fight ends.
 function grantBossWeapon(key, wid) {
   const p = room.players[key];
+  if (holdsMythic(p)) {                      // a mythic never wins you a weapon
+    room.mythicNoDrop = { ...(room.mythicNoDrop || {}), [key]: true };
+    return false;
+  }
   const cur = p?.unlockedWeapons || room.playerUnlocks[key] || [];
   if (cur.includes(wid)) return false;
   const weapons = sortWeaponIds([...cur, wid]);
@@ -5821,7 +6100,7 @@ function maxedWeaponCount(weapons, upgrades) {
   return WEAPONS.filter(w => w.id !== 'lightblade' && weapons.includes(w.id)
     && upgradesFor(w.id).every(k => ((upgrades?.[w.id] || {})[k] || 0) >= UPGRADE_STATS[k].max)).length;
 }
-const lightMaxedNeed = () => Math.ceil(WEAPONS.filter(w => w.id !== 'lightblade').length * LIGHT_MAXED_SHARE);
+const lightMaxedNeed = () => Math.ceil(WEAPONS.filter(w => w.id !== 'lightblade' && !w.mythic).length * LIGHT_MAXED_SHARE);
 
 // Beating Light counts toward the Light Blade, for every player in the run.
 function creditLightKill() {
@@ -5829,7 +6108,7 @@ function creditLightKill() {
   const d = progress();
   for (const k of KEYS) {
     const pw = room.passwords[k];
-    if (!room.players[k] || !pw || isAdminPw(pw)) continue;
+    if (!room.players[k] || !pw || isAdminPw(pw) || holdsMythic(room.players[k])) continue;
     d.lightKills[pw] = (d.lightKills[pw] || 0) + 1;
     markDirty();
     const p = room.players[k];
@@ -6433,6 +6712,7 @@ function doSpecial(p, pKey) {
     castFireHand(p, pKey, sp, dmgMult);
     return;
   }
+  if (sp.kind === 'kunaistorm') { darklightStorm(p, pKey, spDmg); return; }
   if (sp.kind === 'dashwave') {
     // A quiet wave: when it reaches a foe, you flash through them.
     const aim = nearestTargetAngle(p, pKey);
@@ -6688,6 +6968,9 @@ function buildChains() {
     if (!o || o.dead) continue;
     out.push({ x1: cx(o), y1: cy(o), x2: cx(e), y2: cy(e), kind: 'grapple', o: e.pull.from });
   }
+  for (const e of [...allPlayers(), ...room.monsters, ...room.allies]) {
+    if (e && !e.dead && e.dlChain) out.push({ x1: e.dlChain.x, y1: e.dlChain.y, x2: cx(e), y2: cy(e), kind: 'dark' });
+  }
   return out;
 }
 
@@ -6723,6 +7006,9 @@ function playerView(p) {
     ...(p.bladeDash ? { dashing: p.bladeDash.kind } : {}),
     ...(p.lightspeed > 0 ? { lightspeed: Math.round(p.lightspeed) } : {}),
     ...(p.kspin > 0 ? { kspin: Math.round(p.kspin) } : {}),
+    ...(p.kunais && p.kunais.length ? { dk: p.kunais.map(k => (k.dark ? 1 : 0)).join(''), dkA: Math.round((p.dkA || 0) * 100) / 100 } : {}),
+    ...(p.dlCurse ? { curse: Math.round(p.dlCurse.ms) } : {}),
+    ...(p.dlChain ? { dlc: [r1(p.dlChain.x), r1(p.dlChain.y)] } : {}),
     ...(p.passive === 'mindtome' ? { shuffleIn: Math.max(0, Math.round(p.shuffleT ?? MIND_SHUFFLE_MS)) } : {}),
     ...(p.passive === 'vortex' ? { aegis: !(p.aegisCd > 0) } : {}),
     effects: p.effects,
@@ -6758,6 +7044,7 @@ function buildStateMsg(playerNum) {
                   ...(m.fuse > 0 ? { fuse: Math.round(m.fuse) } : {}), ...(m.ward > 0 ? { ward: true } : {}),
                   ...(m.charge ? { charge: { a: Math.round(m.charge.a * 100) / 100, wind: m.charge.wind > 0 } } : {}),
                   ...(m.dazed > 0 ? { dazed: true } : {}),
+                  ...(m.dlCurse ? { curse: Math.round(m.dlCurse.ms) } : {}),
                   ...(m.samWind > 0 ? { samWind: m.samNext === 'dash' ? 'dash' : 'wave' } : {}),
                   ...(m.samDash ? { samDash: Math.round(m.samDash.a * 100) / 100 } : {}),
                   ...(m.sweep ? { lsweep: { a: Math.round(m.sweep.a * 100) / 100, wind: m.sweep.wind > 0 } } : {}),
@@ -6774,7 +7061,7 @@ function buildStateMsg(playerNum) {
                   face: a.face, swing: a.swing > 0 ? Math.round(a.swing) : 0, fade: a.life < 1500 })),
     projectiles: room.projectiles.map(pr => ({ id: pr.id, x: r1(pr.x), y: r1(pr.y), dx: r1(pr.dx), dy: r1(pr.dy), weaponId: pr.weaponId,
                   upg: pr.upg || null, isAoe: pr.isAoe, special: !!pr.special, grapple: !!pr.grapple,
-                  hook: !!pr.hook, boomerang: !!pr.boomerang })),
+                  hook: !!pr.hook, boomerang: !!pr.boomerang, ...(pr.owner === 'monster' ? { owner: 'monster' } : {}) })),
     fires:       room.fires.map(f => ({ id: f.id, kind: f.kind, x: r1(f.x), y: r1(f.y), r: r1(f.r || 0),
                                     a: Math.round((f.a || 0) * 100) / 100, v: f.v ? r1(f.v) : 0, k: Math.round(f.t / f.life * 100) / 100,
                                     ...(f.color ? { c: f.color } : {}), ...(f.trapType ? { tt: f.trapType } : {}),
@@ -6797,6 +7084,8 @@ function buildStateMsg(playerNum) {
     pendingUnlock: room.unlockQueues[key][0] || null,
     otherHasUnlocks: KEYS.some(k => k !== key && room.unlockQueues[k].length > 0),
     bossDrop: room.bossDrops?.[key] || null,
+    noDrop: !!room.mythicNoDrop?.[key],
+    rareShop: room.rareShop ? { x: room.rareShop.x, y: room.rareShop.y, w: RARE_SHOP_W, h: RARE_SHOP_H, t: Math.round(room.rareShop.t) } : null,
     leaderboard: isSolo() && room.gameState === 'ROUND_OVER' ? room.lastLeaderboard : null,
   };
 }
@@ -6852,7 +7141,8 @@ function weaponCatalog() {
   return WEAPONS.map(w => ({
     id: w.id, name: w.name, type: w.type, unlockXp: w.unlockXp,
     damage: w.damage, range: w.range, atkSpd: w.atkSpd, spin: !!w.swing360,
-    shopOnly: !!w.shopOnly, noRequirement: !!w.noRequirement, needLegendary: !!w.needLegendary, price: w.price || 0,
+    shopOnly: !!w.shopOnly, noRequirement: !!w.noRequirement,
+    mythic: !!w.mythic, mythicKills: w.mythicKills || 0, mythicNeeds: w.mythicNeeds || null, needLegendary: !!w.needLegendary, price: w.price || 0,
     needAll: !!w.needAll,
     needMind: !!w.needMind,
     needLight: !!w.needLight,
@@ -6916,7 +7206,10 @@ function profileFor(pw, opts = {}) {
   const abilitySlots = cleanSlots(d.abilitySlots[pw], abilities, slotCount);
   const lightKills = admin ? LIGHT_KILLS_NEED : (d.lightKills[pw] || 0);
   const samuraiKills = admin ? SAM_KILLS_NEED : (d.samuraiKills[pw] || 0);
+  const mythicKills = admin ? 999999 : (d.mythicKills[pw] || 0);
+  const mythicPick = d.mythicPick[pw] || null;
   return { xp, coins, weapons, upgrades, ownedSkins, abilities, abilitySlots, slotCount, lightKills, samuraiKills, samuraiNeed: SAM_KILLS_NEED,
+           mythicKills, mythicPick,
            lightMaxed: maxedWeaponCount(weapons, upgrades), lightMaxedNeed: lightMaxedNeed(),
            nextSlotPrice: slotCount < MAX_ABILITY_SLOTS ? SLOT_PRICES[slotCount - ABILITY_SLOTS] : 0,
            refunded, save: makeSave(pw) };
@@ -7359,6 +7652,18 @@ app.post('/api/buy_skin', (req, res) => {
   res.json({ ...next, spent: admin ? 0 : def.price, skinShop: SKIN_SHOP });
 });
 
+// Pick which mythic to take into games (only one goes in).
+app.post('/api/pick_mythic', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'A password is required.' });
+  const id = sanitizeText(req.body?.weaponId, 24);
+  const prof = profileFor(pw, { backup: req.body?.backup });
+  if (!WEAPON_BY_ID[id]?.mythic || !prof.weapons.includes(id)) return res.status(400).json({ error: 'You do not own that mythic.' });
+  progress().mythicPick[pw] = id;
+  markDirty();
+  res.json(profileFor(pw, {}));
+});
+
 // Shop-only weapons: bought with coins, and only once every XP weapon is unlocked.
 app.post('/api/buy_weapon', (req, res) => {
   const pw = sanitizeText(req.body?.password, 32);
@@ -7366,10 +7671,11 @@ app.post('/api/buy_weapon', (req, res) => {
   const weaponId = sanitizeText(req.body?.weaponId, 24);
   const def = WEAPON_BY_ID[weaponId];
   if (!def || !def.shopOnly) return res.status(400).json({ error: 'That weapon is not for sale.' });
+  if (def.mythic) return res.status(400).json({ error: 'Mythics are only sold in the rare shop that sometimes opens between waves.' });
   if (def.bossReward) return res.status(400).json({ error: def.id === 'infinitybow' ? 'Only won by defeating the Abyss.' : def.id === 'endlessscythe' ? 'Only won by defeating the Abyss a second time.' : 'Only won by defeating the Portal Mage.' });
   if (def.needAll) {
     const prof0 = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });
-    const left = WEAPONS.filter(w => w.id !== weaponId && !prof0.weapons.includes(w.id)).length;
+    const left = WEAPONS.filter(w => w.id !== weaponId && !w.mythic && !prof0.weapons.includes(w.id)).length;
     if (left) return res.status(400).json({ error: `Own every other weapon first (${left} to go).` });
   }
 
@@ -7399,9 +7705,10 @@ app.post('/api/buy_weapon', (req, res) => {
   if (!admin && prof.coins < def.price) return res.status(400).json({ error: 'Not enough coins.' });
 
   const d = progress();
-  const weapons = sortWeaponIds([...prof.weapons, weaponId]);
+  const owned = sortWeaponIds([...prof.weapons, weaponId]);
+  const weapons = gameLoadout(owned, prof.mythicPick);
   if (!admin) {
-    d.weapons[pw] = weapons;
+    d.weapons[pw] = owned;
     d.coins[pw] = prof.coins - def.price;
     markDirty();
   }
@@ -7573,7 +7880,7 @@ wss.on('connection', (ws) => {
 
         room.playerXp[myKey]       = prof.xp;
         room.playerCoins[myKey]    = prof.coins;
-        room.playerUnlocks[myKey]  = prof.weapons;
+        room.playerUnlocks[myKey]  = gameLoadout(prof.weapons, prof.mythicPick);
         room.playerUpgrades[myKey] = prof.upgrades;
         room.playerAbilities[myKey] = prof.abilitySlots || [null, null];
 
@@ -7638,6 +7945,8 @@ wss.on('connection', (ws) => {
       }
 
       if (msg.type === 'rematch' && room.gameState === 'ROUND_OVER' && room.round.matchWinner && room.rematch) room.rematch.add(myKey);
+
+      if (msg.type === 'buy_mythic') buyMythic(myKey, sanitizeText(msg.id, 24));
 
       if (msg.type === 'select_weapon') {
         const p = room.players[myKey];

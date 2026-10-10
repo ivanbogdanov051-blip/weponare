@@ -969,3 +969,27 @@ body {
 .match-choice.hidden { display: none; }
 .match-choice .mode-btn { min-width: 130px; margin: 0; }
 .match-choice .mode-btn:disabled { opacity: 0.55; cursor: default; }
+
+/* Mythic weapons */
+.legend-tag.mythic-tag { color: #ffffff; border-color: #ffffff; background: linear-gradient(90deg, #15151c 50%, #4a4a5c 50%); text-shadow: 0 0 4px #b8a0ff; }
+.shop-row.mythic-row { border-color: #e8e8f4; box-shadow: 0 0 10px rgba(184, 160, 255, 0.35); }
+.mythic-name { color: #ffffff; text-shadow: 1px 1px 0 #15151c, 0 0 6px #b8a0ff; }
+.need-ok { color: #7aff9a; margin-right: 8px; white-space: nowrap; }
+.need-no { color: #ff7a7a; margin-right: 8px; white-space: nowrap; }
+
+/* The rare shop panel */
+.rare-shop { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); z-index: 60; width: min(560px, calc(100vw - 24px));
+  background: rgba(14, 12, 6, 0.95); border: 2px solid #d9a520; box-shadow: 0 0 18px rgba(255, 216, 74, 0.35);
+  padding: 10px 12px; font-family: 'Courier New', monospace; color: #e8e0c0; font-size: 11px; }
+.rare-shop.hidden { display: none; }
+.rs-title { text-align: center; color: #ffd84a; font-size: 14px; letter-spacing: 4px; margin-bottom: 8px; text-shadow: 0 0 6px #d9a520; }
+.rs-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid #3a3010; }
+.rs-ic { flex: none; image-rendering: pixelated; background: #0a0a12; border: 1px solid #3a3a4a; }
+.rs-info { flex: 1; min-width: 0; }
+.rs-name { color: #ffffff; font-weight: bold; letter-spacing: 2px; margin-bottom: 3px; }
+.rs-needs { display: flex; flex-wrap: wrap; font-size: 10px; row-gap: 2px; }
+.rs-buy { flex: none; font-family: inherit; font-size: 11px; padding: 6px 10px; background: #2a2208; color: #ffd84a; border: 1px solid #d9a520; cursor: pointer; }
+.rs-buy.poor, .rs-buy:disabled { opacity: 0.5; cursor: default; }
+.rs-note { text-align: center; margin-top: 6px; color: #7aff9a; }
+.rs-note.bad { color: #ff7a7a; }
+.rs-hint { text-align: center; margin-top: 6px; color: #8a8060; font-size: 9px; }
