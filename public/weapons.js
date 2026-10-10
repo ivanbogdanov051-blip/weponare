@@ -699,18 +699,17 @@ const WEAPON_ART = {
   // Darklight: a kunai split down its ridge, one half black, one half white,
   // on a black grip wound with white and a ring pommel to match.
   darklight: { draw(k, wc) {
-    k.ring(1.2, 0, 2.6, 1.3, '#f4f4fa');                  // ring pommel
-    k.ring(1.2, 0, 2.6, 0.6, '#15151c', 0, Math.PI);
-    k.r(3.6, -1.3, 7.6, 2.6, '#15151c');                  // grip
-    for (let i = 0; i < 4; i++) k.poly([[3.8 + i * 1.8, -1.3], [4.9 + i * 1.8, -1.3], [4.1 + i * 1.8, 1.3], [3 + i * 1.8, 1.3]], '#f4f4fa');
-    k.r(11.1, -1.8, 1.3, 3.6, '#8a8a9a');                 // collar
-    k.glow(19, 0, 10, '#ffffff', 0.2);
-    k.poly([[12.3, 0], [14.6, -3.8], [22, -2.3], [28, 0]], '#15151c');     // dark half
-    k.poly([[12.3, 0], [14.6, 3.8], [22, 2.3], [28, 0]], '#f4f4fa');       // light half
-    k.poly([[14.6, -3.8], [22, -2.3], [28, 0], [22, -1.6], [15.2, -2.8]], '#4a4a5c');
-    k.poly([[14.6, 3.8], [22, 2.3], [28, 0], [22, 1.6], [15.2, 2.8]], '#c4c4d4');
-    k.r(13.2, -0.3, 13.6, 0.6, '#9a9aae');                // the ridge between them
-    k.r(25, -0.5, 1.1, 1, '#ffffff');
+    k.ring(-1.2, 0, 3.4, 1.4, '#f4f4fa');                 // ring pommel
+    k.ring(-1.2, 0, 3.4, 0.6, '#9a9aae', 0.4, 2.6);
+    k.r(2, -1.1, 9.5, 2.2, '#15151c');                    // slim grip
+    for (let i = 0; i < 5; i++) k.poly([[2.3 + i * 1.8, -1.1], [3.3 + i * 1.8, -1.1], [2.6 + i * 1.8, 1.1], [1.6 + i * 1.8, 1.1]], '#f4f4fa');   // white wrap
+    k.glow(22, 0, 12, '#ffffff', 0.18);
+    // The blade: widest a third of the way up, tapering long to a sharp point.
+    k.poly([[11.2, -1.4], [16, -5], [33, 0], [16, 5], [11.2, 1.4]], '#f4f4fa');      // white edge
+    k.poly([[12, -1.1], [16.2, -4], [31, 0], [16.2, 4], [12, 1.1]], '#15151c');      // black steel
+    k.poly([[12.4, -0.6], [16.4, -3.1], [29, 0], [16.4, -0.3]], '#3a3a4c');          // upper bevel catching the light
+    k.r(12.5, -0.3, 17.5, 0.6, '#c4c4d4');                // centre ridge
+    k.r(30.6, -0.5, 1.6, 1, '#ffffff');                   // glinting tip
   }},
   // The Endless Scythe: a black haft wound with violet, a huge crescent of void
   // with a burning edge, and a small black hole set where blade meets haft.

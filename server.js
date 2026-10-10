@@ -333,7 +333,7 @@ const WEAPONS = [
   // the foe suffers every bad effect for 5s, and so does anyone who comes close.
   { id: 'darklight', name: 'DARKLIGHT', damage: 32, range: 240, atkSpd: 380, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, mythic: true, price: 500000, kunaiOrbit: true,
-    mythicKills: 1000, mythicNeeds: ['lightblade', 'samuraiblade', 'endlessscythe'],
+    mythicKills: 250, mythicNeeds: ['lightblade', 'samuraiblade', 'endlessscythe'],
     special: { kind: 'kunaistorm', dmg: 60, range: 400, cd: 7000 },
     super:   { kind: 'darklightpair', dmg: 90, cd: 22000 } },
 ];
@@ -2052,9 +2052,9 @@ function buyMythic(key, id) {
 }
 
 // DARKLIGHT
-const DL_MAX = 10, DL_ORBIT_R = 24, DL_SPIN = 0.0055, DL_PIERCE = 2, DL_REHIT_MS = 350;
-const DL_KUNAI_SPEED = 8.5, DL_KUNAI_TURN = 14, DL_PAIR_SPEED = 16, DL_PAIR_TURN = 40;
-const DL_CHAIN_MS = 3000, DL_CHAIN_R = 30, DL_CURSE_MS = 5000, DL_SPREAD_R = 44, DL_TRICK_DMG = 3, DL_TRICK_GAP = 600;
+const DL_MAX = 10, DL_ORBIT_R = 40, DL_SPIN = 0.0055, DL_PIERCE = 2, DL_REHIT_MS = 350;
+const DL_KUNAI_SPEED = 8.5, DL_KUNAI_TURN = 24, DL_PAIR_SPEED = 16, DL_PAIR_TURN = 40;
+const DL_CHAIN_MS = 3000, DL_CHAIN_R = 45, DL_CURSE_MS = 8000, DL_CURSE_STUN = 1000, DL_SPREAD_R = 44, DL_TRICK_DMG = 3, DL_TRICK_GAP = 600;
 const BAD_EFFECTS = ['burn', 'poison', 'slow', 'root', 'confuse', 'silence'];
 // LEARNED ALL TRICKS: a bad effect lands as a little damage instead (only so often).
 function trickHit(p, name) {
@@ -2079,7 +2079,7 @@ function darklightAttack(p, pKey, w, dmgMult) {
 function dlProjectile(pKey, x, y, a, speed, dmg, kind, t, extra) {
   room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * speed, dy: Math.sin(a) * speed, damage: dmg, owner: pKey,
     traveled: 0, maxRange: 1600, weaponId: kind, isAoe: false, aoeRadius: 0, pierce: false, grapple: false, boomerang: false,
-    returning: false, life: 0, hitTargets: null, hitR: 6, homing: !!t, quarry: t || null, noIframe: true, ...extra });
+    returning: false, life: 0, hitTargets: null, hitR: 6, homing: true, quarry: t || null, seekR: 2000, noIframe: true, ...extra });
 }
 // SPECIAL: every circling kunai flies at your enemies (spread across them).
 function darklightStorm(p, pKey, dmg) {
@@ -2122,8 +2122,10 @@ function dlCurse(t, owner, ms) {
   t.dlCurse = { ms: Math.max(t.dlCurse?.ms || 0, ms), owner, acc: t.dlCurse?.acc || 0 };
   const was = room.dlCursing;
   room.dlCursing = true;
-  if (t.num) for (const e of BAD_EFFECTS) applyEffect(t, e, ms);
-  else { stagger(t, ms, 'stun'); chillTarget(t, ms, 'poison'); ignite(t, ms); }
+  // The stun (root, for players) is brief; everything else lasts the whole curse.
+  const stun = Math.min(ms, DL_CURSE_STUN);
+  if (t.num) for (const e of BAD_EFFECTS) applyEffect(t, e, e === 'root' ? stun : ms);
+  else { stagger(t, stun, 'stun'); chillTarget(t, ms, 'poison'); ignite(t, ms); }
   room.dlCursing = was;
   room.particles.push({ type: 'crit', x: cx(t), y: t.y - 8, text: 'CURSED', timer: 800, max: 800 });
 }
@@ -3267,7 +3269,7 @@ function startPull(target, ownerKey) {
 const HOMING_TURN = 6.5, HOMING_SEEK_R = 420;
 function homeProjectile(proj, dt) {
   let best = proj.quarry && !proj.quarry.dead && (proj.quarry.num || room.monsters.includes(proj.quarry)) ? proj.quarry : null;
-  let bd = HOMING_SEEK_R;
+  let bd = proj.seekR || HOMING_SEEK_R;
   if (!best) for (const t of enemyTargets(proj.owner)) {
     if (proj.hitTargets && (proj.hitTargets.has(t) || proj.hitTargets.has(t.id) || proj.hitTargets.has(playerKeyOf(t)))) continue;
     const d = Math.hypot(cx(t) - proj.x, cy(t) - proj.y);
@@ -5284,7 +5286,7 @@ function grantBossWeapon(key, wid) {
 const SANDBOX_MAX_MONSTERS = 40;
 
 function startSandbox() {
-  room.sandbox = { god: false, noCd: false, freeze: false, passives: false, level: 5 };
+  room.sandbox = { god: false, noCd: false, freeze: false, passives: false, maxed: false, level: 5 };
   room.wave = { num: 1, monstersLeft: 0, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 };
   room.waveHpMult = 1; room.waveSpeedMult = 1;
   const p = room.players.p1;
@@ -5373,6 +5375,19 @@ function sandboxAction(key, msg) {
     const k = String(msg.what || '');
     if (k === 'god' || k === 'noCd' || k === 'freeze' || k === 'passives') s[k] = !s[k];
     if (k === 'passives') refreshWeapon(p);
+    if (k === 'maxed') {
+      s.maxed = !s.maxed;
+      if (s.maxed) {
+        p.realUpgrades = p.upgrades;
+        const all = {};
+        for (const id of [...WEAPONS.map(w => w.id), ...Object.keys(PERK_UPGRADES)]) {
+          all[id] = {};
+          for (const st of upgradesFor(id)) all[id][st] = UPGRADE_STATS[st].max;
+        }
+        p.upgrades = all;
+      } else p.upgrades = p.realUpgrades || {};
+      refreshWeapon(p); applyPerks(p);
+    }
   } else if (act === 'level') {
     s.level = Math.max(1, Math.min(50, Math.floor(Number(msg.value) || 1)));
   } else if (act === 'ability') {

@@ -969,7 +969,7 @@ function updatePrediction(frameDt, now) {
   pred.y = Math.max(ARENA_Y + 2, Math.min(ARENA_Y + ARENA_H - me.h - 2, pred.y + vy * f));
   if (me.dlc) {   // chained by Darklight: can't stray from the stake
     const ddx = pred.x + me.w / 2 - me.dlc[0], ddy = pred.y + me.h / 2 - me.dlc[1], dd = Math.hypot(ddx, ddy);
-    if (dd > 30) { pred.x -= ddx / dd * (dd - 30); pred.y -= ddy / dd * (dd - 30); }
+    if (dd > 45) { pred.x -= ddx / dd * (dd - 45); pred.y -= ddy / dd * (dd - 45); }
   }
 
   predHist.push({ t: now, x: pred.x, y: pred.y });
@@ -2785,7 +2785,7 @@ const LEGEND_MOVES = {
   darklight: '<b>ATK</b> adds a kunai circling you (up to 10; each goes through one foe and breaks on the next) · <b>SPECIAL</b>'
            + ' every kunai flies at your enemies and chains whoever it hits to the spot for 3s, abilities or not ·'
            + ' <b>SUPER</b> a dark and a light kunai at blinding speed into one foe: a parry shatters them, otherwise it suffers'
-           + ' every bad effect for 5s, and so does anyone who comes close. Only one mythic goes into a game, and a mythic'
+           + ' every bad effect for 8s (only a short stun), and so does anyone who comes close. Only one mythic goes into a game, and a mythic'
            + ' never earns you another weapon.',
   mindtome:    '<b>ATK</b> (fast) a psychic trap appears right in the path of a nearby enemy: spikes, mines, ice,'
              + ' lava, gravity wells and more, and they only ever hurt YOUR enemies (up to 6 out at once) ·'
@@ -4241,8 +4241,8 @@ function drawChains(chains) {
   for (const ch of chains) {
     if (ch.kind === 'dark') {   // the leash: how far a Darklight chain lets them go
       ctx.save(); ctx.globalAlpha = 0.45; ctx.lineWidth = 1.2; ctx.setLineDash([4, 3]);
-      ctx.strokeStyle = '#f4f4fa'; ctx.beginPath(); ctx.arc(ch.x1, ch.y1, 30, 0, Math.PI * 2); ctx.stroke();
-      ctx.strokeStyle = '#15151c'; ctx.lineDashOffset = 3.5; ctx.beginPath(); ctx.arc(ch.x1, ch.y1, 30, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = '#f4f4fa'; ctx.beginPath(); ctx.arc(ch.x1, ch.y1, 45, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = '#15151c'; ctx.lineDashOffset = 3.5; ctx.beginPath(); ctx.arc(ch.x1, ch.y1, 45, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
     }
     const dx = ch.x2 - ch.x1, dy = ch.y2 - ch.y1;
@@ -6665,7 +6665,7 @@ function drawKunai(x, y, ang, dark, scale) {
   ctx.globalAlpha = dark ? 0.4 : 0.3; ctx.fillStyle = dark ? '#9a7aff' : '#ffffff';
   ctx.beginPath(); ctx.ellipse(4 * scale, 0, 16 * scale, 6 * scale, 0, 0, DL_TAU); ctx.fill();
   ctx.globalAlpha = 1;
-  ctx.translate(-14 * scale, 0);
+  ctx.translate(-16 * scale, 0);
   drawWeaponPixels(ctx, 'darklight', scale, WEAPON_COLOR.darklight || '#e8e8f4');
   ctx.restore();
 }
@@ -6674,11 +6674,11 @@ function drawDarklightOrbit(p, x, y) {
   const n = p.dk.length, mx = x + p.w / 2, my = y + p.h / 2, base = performance.now() * 0.0055;
   ctx.save();
   ctx.globalAlpha = 0.18; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.arc(mx, my, 24, 0, DL_TAU); ctx.stroke();
+  ctx.beginPath(); ctx.arc(mx, my, 40, 0, DL_TAU); ctx.stroke();
   ctx.restore();
   for (let i = 0; i < n; i++) {
     const a = base + i * DL_TAU / n;
-    drawKunai(mx + Math.cos(a) * 24, my + Math.sin(a) * 24, a + Math.PI / 2, p.dk[i] === '1', 0.72);
+    drawKunai(mx + Math.cos(a) * 40, my + Math.sin(a) * 40, a + Math.PI / 2, p.dk[i] === '1', 0.72);
   }
 }
 // A thrown kunai (the special) or one of the pair (the super, bigger, with a long streak).
