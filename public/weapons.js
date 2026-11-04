@@ -698,6 +698,24 @@ const WEAPON_ART = {
   }},
   // Darklight: a kunai split down its ridge, one half black, one half white,
   // on a black grip wound with white and a ring pommel to match.
+  // Ashfeather: a recurve bow whose limbs are phoenix feathers of living flame,
+  // a gold grip at the middle and a string of white fire.
+  ashfeather: { draw(k, wc) {
+    const cxA = 2, R = 13, SPAN = Math.PI * 0.44;
+    const tipX = cxA + Math.cos(SPAN) * R, tipY = Math.sin(SPAN) * R;
+    k.ring(cxA, 0, R, 3, '#c83a0a', -SPAN, SPAN);         // the limbs
+    k.ring(cxA, 0, R, 1.6, '#ff8a3a', -SPAN, SPAN);
+    k.ring(cxA, 0, R - 0.6, 0.6, '#ffd24a', -SPAN * 0.8, SPAN * 0.8);
+    // Feathers flaring off both limbs.
+    for (const sgn of [-1, 1]) for (let i = 0; i < 4; i++) {
+      const a = sgn * (0.35 + i * 0.28), fx = cxA + Math.cos(a) * R, fy = Math.sin(a) * R;
+      k.poly([[fx, fy], [fx + 3.5 + i * 0.6, fy + sgn * (1.5 + i * 0.9)], [fx + 1.2, fy + sgn * 0.4]], i % 2 ? '#ffd24a' : '#ff6a1a');
+    }
+    k.r(tipX - 1, -tipY - 1, 2, 2, '#ffd24a'); k.r(tipX - 1, tipY - 1, 2, 2, '#ffd24a');   // burning tips
+    k.r(tipX - 0.3, -tipY, 0.7, tipY * 2, '#fff2c8');                                     // string of white fire
+    k.r(cxA + R - 2.2, -2.6, 3.2, 5.2, '#d9a520'); k.r(cxA + R - 1.6, -1.6, 2, 3.2, '#ffe58a');   // gold grip
+    k.r(cxA + R + 1.5, -0.4, 8, 0.8, '#fff2c8'); k.poly([[cxA + R + 9.5, -1.6], [cxA + R + 12.5, 0], [cxA + R + 9.5, 1.6]], '#ff8a3a');   // nocked arrow
+  }},
   // Worldsplitter: a colossal obsidian greatsword, its blade cracked open
   // with veins of magma, on a heavy iron hilt with a molten gem in the guard.
   worldsplitter: { draw(k, wc) {

@@ -47,7 +47,7 @@ let WEAPON_COLOR = {
   glaive:'#b0d8c0', katana:'#eef0ff', chakram:'#66e0c0', cannon:'#9a90a8',
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
-  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff', samuraiblade:'#ff5a5a', darklight:'#e8e8f4', starfall:'#ffe9a0', worldsplitter:'#ff6a1a', soullantern:'#6affc8',
+  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff', samuraiblade:'#ff5a5a', darklight:'#e8e8f4', starfall:'#ffe9a0', worldsplitter:'#ff6a1a', soullantern:'#6affc8', ashfeather:'#ff8a3a',
   ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
   scimitar:'#e8e0c8', slingshot:'#b08a5a', mace:'#9aa4b0', javelin:'#d8c8a0', claws:'#e0e4ec',
   emberstaff:'#ff7a2a', halberd:'#c0c8d8', frostbow:'#9fe8ff', chronostaff:'#e8c87a', voidblade:'#9a5aff',
@@ -77,6 +77,7 @@ const WEAPON_DESC = {
   starfall:"MYTHIC. A staff crowned with a crescent moon and a captive star",
   worldsplitter:"MYTHIC. An obsidian greatsword veined with magma, heavy enough to split the world",
   soullantern:"MYTHIC. A black iron lantern burning with the souls of the fallen",
+  ashfeather:"MYTHIC. A bow of living flame, its limbs made of phoenix feathers",
   ghostdagger:'The rarest weapon of all: turn invisible, throw a deadly dagger, and make it rain knives',
   stormhammer:'A war hammer full of lightning that comes back when you throw it',
   frostscythe:'A sweeping scythe of ice that freezes whatever it keeps cutting',
@@ -946,6 +947,7 @@ function updatePrediction(frameDt, now) {
   if (me.lightspeed > 0) spd *= 3;            // LIGHTSPEED
   if (me.passive === 'dagger') spd *= 1.45;   // SWIFTNESS
   if (me.kspin > 0) spd *= 1.9;               // the katana's spin
+  if (me.phx > 0) spd *= 1.8;                 // Ashfeather's PHOENIX FORM
   if (me.effects && me.effects.slow  > 0) spd *= 0.4;
   if (me.effects && me.effects.root  > 0) spd = 0;            // ROOT VINES
   if (me.sky) spd = 0;                                        // up in the air (Worldsplitter's leap)
@@ -1068,7 +1070,7 @@ const ATTACK_ANIM = {
   stormhammer: 'chop', frostscythe: 'spin', sunbow: 'draw',
   scimitar: 'slash', slingshot: 'draw', mace: 'chop', javelin: 'throw', claws: 'stab',
   emberstaff: 'cast', halberd: 'sweep', frostbow: 'draw', chronostaff: 'cast', voidblade: 'slash', mindtome: 'tome',
-  lightblade: 'slash', darklight: 'throw', starfall: 'cast', worldsplitter: 'heavy', soullantern: 'cast',
+  lightblade: 'slash', darklight: 'throw', starfall: 'cast', worldsplitter: 'heavy', soullantern: 'cast', ashfeather: 'draw',
 };
 const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
                   heavy: 300, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
@@ -2788,19 +2790,22 @@ function legendPassive(id) {
 }
 
 const LEGEND_MOVES = {
+  ashfeather: '<b>ATK</b> a burning arrow that bursts into three more when it hits · <b>SPECIAL</b> a fan of nine of them ·'
+            + ' <b>SUPER</b> PHOENIX FORM: 6s ablaze, much faster, leaving a trail of fire, burning everything you touch and'
+            + ' healing as you go. Only one mythic goes into a game, and a mythic never earns you another weapon.',
   worldsplitter: '<b>ATK</b> your swing splits the ground ahead: the crack erupts, then burns whoever stands in it · <b>SPECIAL</b>'
                + ' eight cracks tear out all round you, erupting one after another and knocking foes off their feet · <b>SUPER</b>'
                + ' leap into the sky (untouchable) and come down on the nearest enemy like a meteor, shattering the ground around'
                + ' you. Only one mythic goes into a game, and a mythic never earns you another weapon.',
-  soullantern: '<b>ATK</b> a wisp that hunts down the nearest enemy; every enemy you kill leaves its soul in the lantern (up to 12,'
+  soullantern: '<b>ATK</b> a wisp that hunts down the nearest enemy; every enemy you kill leaves its soul in the lantern (up to 16,'
              + ' circling you) · <b>SPECIAL</b> let every soul loose as hunting wisps that heal you when they hit · <b>SUPER</b>'
-             + " DEATH'S DOOR: three spirits rise to fight for you, and for 8s everything you kill gets back up on your side."
+             + " DEATH'S DOOR: three spirits rise to fight for you, and for 12s everything you kill gets back up on your side."
              + ' Only one mythic goes into a game, and a mythic never earns you another weapon.',
   starfall: '<b>ATK</b> three stars fall on the nearest enemies (markers show where) · <b>SPECIAL</b> a constellation joins'
-          + ' every enemy on the field: a moment later they all take the hit, are dragged together and dazed · <b>SUPER</b> a 4s'
+          + ' every enemy on the field: a moment later they all take the hit, are dragged together and dazed · <b>SUPER</b> a 6s'
           + ' star shower on everything around you: each star stuns for 2s, then leaves its target confused for 2s. Only one mythic goes into a game, and a mythic never earns you another weapon.',
-  darklight: '<b>ATK</b> adds a kunai circling you (up to 10; each goes through one foe and breaks on the next) · <b>SPECIAL</b>'
-           + ' every kunai flies at your enemies and chains whoever it hits to the spot for 3s, abilities or not ·'
+  darklight: '<b>ATK</b> adds a kunai circling you (up to 14; each goes through one foe and breaks on the next) · <b>SPECIAL</b>'
+           + ' every kunai flies at your enemies and chains whoever it hits to the spot for 4s, abilities or not ·'
            + ' <b>SUPER</b> a dark and a light kunai at blinding speed into one foe: a parry shatters them, otherwise it suffers'
            + ' every bad effect for 8s (only a short stun), and so does anyone who comes close. Only one mythic goes into a game, and a mythic'
            + ' never earns you another weapon.',
@@ -4565,6 +4570,7 @@ function drawStatusMarks(p, x, y) {
 function drawPlayerBody(p, baseColor, label, key) {
   const skinCol = getSkinColor(p, baseColor);
   const x = Math.round(p.x), y = Math.round(p.y);
+  if (!p.dead && WEAPON_META[p.weaponId]?.mythic) drawMythicAura(p, x, y);
   drawPassiveFx(p, key, x, y);
 
   // Active-effect aura sits under the sprite.
@@ -4598,6 +4604,7 @@ function drawPlayerBody(p, baseColor, label, key) {
   if (p.srain > 0 && !p.dead) drawStarRainAura(p, x, y);
   if (p.souls && !p.dead) drawSouls(p, x, y);
   if (p.ddoor > 0 && !p.dead) drawDeathsDoor(p, x, y);
+  if (p.phx > 0 && !p.dead) drawPhoenixForm(p, x, y);
   drawStatusMarks(p, x, y);
   if (p.puppet) drawPuppetMark(x + p.w / 2, y - 6, null);
   if (p.shuffleIn != null && key === 'p' + myNum) drawShuffleCountdown(p, x, y);
@@ -5747,6 +5754,7 @@ function drawProjectiles(projs) {
     if (pr.weaponId === 'abyssbolt' || pr.weaponId === 'infinitybow') { drawVoidBolt(pr, ang); continue; }
     if (pr.weaponId === 'samwave') { drawSlashWave(pr, ang, now, pr.special ? '#ff5a5a' : (pr.owner === 'monster' ? '#ff4a5a' : '#ff8a8a')); continue; }
     if (pr.weaponId === 'samdashwave') { drawDashWave(pr, ang, now); continue; }
+    if (pr.weaponId === 'phxarrow') { drawPhoenixArrow(pr, ang, now); continue; }
     if (pr.weaponId === 'soulwisp') { drawWisp(pr, ang, now); continue; }
     if (pr.weaponId && pr.weaponId.startsWith('saw_')) { drawSawShot(pr, now); continue; }
     if (pr.weaponId === 'dlkunai' || pr.weaponId === 'dlpair') { drawFlyingKunai(pr, ang, pr.weaponId === 'dlpair'); continue; }
@@ -7060,5 +7068,63 @@ function drawSawShot(pr, now) {
   ctx.globalAlpha = 0.4; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(pr.x, pr.y, 6 + Math.sin(now / 60) * 0.8, 0, Math.PI * 2); ctx.fill();
   ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(pr.x, pr.y, 3.2, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(pr.x, pr.y, 1.3, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// ─── Mythic aura ─────────────────────────────────────────────────────────────
+// Anyone holding a mythic stands in a slowly turning ring of its colour, with
+// motes rising off it — so everyone can see what's coming.
+function drawMythicAura(p, x, y) {
+  const now = performance.now(), col = WEAPON_COLOR[p.weaponId] || '#ffffff';
+  const mx = x + p.w / 2, my = y + p.h;
+  ctx.save();
+  ctx.globalAlpha = 0.22 + 0.08 * Math.sin(now / 300); ctx.fillStyle = col;
+  ctx.beginPath(); ctx.ellipse(mx, my, 17, 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.85; ctx.strokeStyle = col; ctx.lineWidth = 1.4;
+  ctx.setLineDash([5, 4]); ctx.lineDashOffset = -now / 30;
+  ctx.beginPath(); ctx.ellipse(mx, my, 17, 6, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = 0.5; ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.ellipse(mx, my, 12, 4, 0, now / 400, now / 400 + 2); ctx.stroke();
+  for (let i = 0; i < 4; i++) {
+    const rise = (now / 28 + i * 13) % 26, a = i * 1.7 + now / 900;
+    ctx.globalAlpha = 0.8 * (1 - rise / 26); ctx.fillStyle = i % 2 ? '#ffffff' : col;
+    ctx.fillRect(Math.round(mx + Math.cos(a) * 13), Math.round(my - rise), 1.5, 1.5);
+  }
+  ctx.restore();
+}
+
+// ─── Ashfeather ──────────────────────────────────────────────────────────────
+// A burning arrow: white-hot head, a tail of flame (the split ones are smaller).
+function drawPhoenixArrow(pr, ang, now) {
+  const small = !!pr.special, len = small ? 10 : 18;
+  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+  const g = ctx.createLinearGradient(0, 0, -len, 0);
+  g.addColorStop(0, 'rgba(255,210,74,0.95)'); g.addColorStop(0.5, 'rgba(255,106,26,0.7)'); g.addColorStop(1, 'rgba(200,40,0,0)');
+  ctx.strokeStyle = g; ctx.lineWidth = small ? 3 : 5; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-len, Math.sin(now / 40) * 1.2); ctx.stroke();
+  ctx.fillStyle = '#fff2c8'; ctx.fillRect(-len * 0.6, -0.5, len * 0.6, 1);
+  ctx.fillStyle = '#ffd24a';
+  ctx.beginPath(); ctx.moveTo(small ? 3 : 5, 0); ctx.lineTo(-1, small ? -2 : -3); ctx.lineTo(-1, small ? 2 : 3); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, -0.5, 2, 1);
+  ctx.restore();
+}
+// PHOENIX FORM: great wings of flame beating behind you, and a fiery glow.
+function drawPhoenixForm(p, x, y) {
+  const now = performance.now(), mx = x + p.w / 2, my = y + p.h / 2 - 2, beat = Math.sin(now / 90) * 0.25;
+  ctx.save();
+  ctx.globalAlpha = 0.3; ctx.fillStyle = '#ff6a1a';
+  ctx.beginPath(); ctx.arc(mx, my, 20, 0, Math.PI * 2); ctx.fill();
+  for (const s of [-1, 1]) {
+    ctx.save(); ctx.translate(mx, my); ctx.scale(s, 1); ctx.rotate(-0.3 - beat);
+    for (let i = 0; i < 5; i++) {
+      const L = 24 - i * 3, a = -0.9 + i * 0.32;
+      ctx.globalAlpha = 0.85 - i * 0.1; ctx.fillStyle = i % 2 ? '#ffd24a' : '#ff6a1a';
+      ctx.beginPath(); ctx.moveTo(2, 0);
+      ctx.quadraticCurveTo(Math.cos(a) * L * 0.6 + 4, Math.sin(a) * L * 0.6 - 4, Math.cos(a) * L + 6, Math.sin(a) * L);
+      ctx.quadraticCurveTo(Math.cos(a) * L * 0.5 + 2, Math.sin(a) * L * 0.5 + 2, 2, 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
   ctx.restore();
 }

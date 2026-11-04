@@ -331,43 +331,53 @@ const WEAPONS = [
   // enemies and chains whoever it hits to the spot for 3s. SUPER: a dark and a
   // light kunai at blinding speed into one foe: parried, they shatter; if not,
   // the foe suffers every bad effect for 5s, and so does anyone who comes close.
-  { id: 'darklight', name: 'DARKLIGHT', damage: 32, range: 240, atkSpd: 380, type: 'ranged', unlockXp: 0,
+  { id: 'darklight', name: 'DARKLIGHT', damage: 46, range: 240, atkSpd: 380, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, mythic: true, price: 150000, kunaiOrbit: true,
     mythicKills: 100, mythicNeeds: ['lightblade'],
-    special: { kind: 'kunaistorm', dmg: 60, range: 400, cd: 7000 },
-    super:   { kind: 'darklightpair', dmg: 90, cd: 22000 } },
+    special: { kind: 'kunaistorm', dmg: 90, range: 400, cd: 7000 },
+    super:   { kind: 'darklightpair', dmg: 140, cd: 22000 } },
   // STARFALL: a staff with a crescent moon cradling a star. ATK: a star falls on
   // the nearest foe (a marker shows where first). SPECIAL: a constellation joins
   // up to 5 foes; a moment later they all take the hit, are dragged together and
   // dazed. SUPER: a 4s star shower on everything around. PASSIVE: every foe your
   // stars hit heals you.
-  { id: 'starfall', name: 'STARFALL', damage: 44, range: 320, atkSpd: 560, type: 'ranged', unlockXp: 0,
+  { id: 'starfall', name: 'STARFALL', damage: 62, range: 320, atkSpd: 560, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, mythic: true, price: 250000, starStaff: true,
     mythicKills: 150, mythicNeeds: ['sunbow'],
-    special: { kind: 'constellation', dmg: 80, range: 420, cd: 8000 },
-    super:   { kind: 'starrain', dmg: 55, cd: 24000 } },
+    special: { kind: 'constellation', dmg: 120, range: 420, cd: 8000 },
+    super:   { kind: 'starrain', dmg: 80, cd: 24000 } },
   // WORLDSPLITTER: an obsidian greatsword veined with magma. ATK: the swing
   // splits the ground ahead — the crack erupts, then burns for a while.
   // SPECIAL: six cracks tear out all round you, erupting one after another and
   // knocking foes off their feet. SUPER: leap into the sky (untouchable) and come
   // down on the nearest foe like a meteor, the ground shattering all around.
   // PASSIVE: every 3rd swing splits the ground three ways.
-  { id: 'worldsplitter', name: 'WORLDSPLITTER', damage: 50, range: 170, atkSpd: 700, type: 'ranged', unlockXp: 0,
+  { id: 'worldsplitter', name: 'WORLDSPLITTER', damage: 72, range: 210, atkSpd: 700, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, mythic: true, price: 350000, groundSplit: true,
     mythicKills: 200, mythicNeeds: ['stormhammer'],
-    special: { kind: 'tectonic', dmg: 75, range: 230, cd: 9000 },
-    super:   { kind: 'skyfall', dmg: 170, cd: 24000 } },
+    special: { kind: 'tectonic', dmg: 110, range: 230, cd: 9000 },
+    super:   { kind: 'skyfall', dmg: 250, cd: 24000 } },
   // SOUL LANTERN: a black iron lantern burning with a ghost-green flame. ATK: a
   // wisp that hunts the nearest foe. Every foe it kills leaves its soul in the
   // lantern (up to 12, circling you). SPECIAL: let every soul loose as hunting
   // wisps that heal you when they hit. SUPER: DEATH'S DOOR — three spirits rise
   // to fight for you, and for 8s everything you kill gets up again on your side.
   // PASSIVE: every soul you carry shields you from 2% of all damage.
-  { id: 'soullantern', name: 'SOUL LANTERN', damage: 30, range: 320, atkSpd: 420, type: 'ranged', unlockXp: 0,
+  { id: 'soullantern', name: 'SOUL LANTERN', damage: 44, range: 320, atkSpd: 420, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, mythic: true, price: 450000, soulWisp: true,
     mythicKills: 250, mythicNeeds: ['reaper'],
-    special: { kind: 'soulstorm', dmg: 45, range: 600, cd: 8000 },
-    super:   { kind: 'deathsdoor', dmg: 40, cd: 28000 } },
+    special: { kind: 'soulstorm', dmg: 65, range: 600, cd: 8000 },
+    super:   { kind: 'deathsdoor', dmg: 60, cd: 28000 } },
+  // ASHFEATHER: a bow of living flame, its limbs made of phoenix feathers. ATK:
+  // a burning arrow that bursts into three more when it hits. SPECIAL: a fan of
+  // nine of them. SUPER: PHOENIX FORM — 6s ablaze: much faster, a trail of fire
+  // behind you, burning everything you touch, healing as you go. PASSIVE: REBIRTH
+  // — the first time you'd die in a game you rise again in an explosion of fire.
+  { id: 'ashfeather', name: 'ASHFEATHER', damage: 40, range: 340, atkSpd: 420, type: 'ranged', unlockXp: 0,
+    shopOnly: true, noRequirement: true, mythic: true, price: 300000, phoenixBow: true,
+    mythicKills: 180, mythicNeeds: ['emberstaff'],
+    special: { kind: 'sunvolley', dmg: 45, range: 360, cd: 7500 },
+    super:   { kind: 'phoenixform', dmg: 30, cd: 24000 } },
 ];
 
 // Melee reach: the swing is 50% longer and a slam special 30% wider. The shield
@@ -391,7 +401,7 @@ const WEAPON_COLORS = {
   glaive: '#b0d8c0', katana: '#eef0ff', chakram: '#66e0c0', cannon: '#9a90a8', reaper: '#cc66aa',
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
   shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
-  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff', samuraiblade: '#ff5a5a', endlessscythe: '#7a2aff', darklight: '#e8e8f4', starfall: '#ffe9a0', worldsplitter: '#ff6a1a', soullantern: '#6affc8',
+  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff', samuraiblade: '#ff5a5a', endlessscythe: '#7a2aff', darklight: '#e8e8f4', starfall: '#ffe9a0', worldsplitter: '#ff6a1a', soullantern: '#6affc8', ashfeather: '#ff8a3a',
   ghostdagger: '#a8f0ff', stormhammer: '#7ac8ff', frostscythe: '#bfefff', sunbow: '#ffd24a',
 };
 
@@ -459,6 +469,7 @@ const WEAPON_UPGRADES = {
   starfall:    ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   worldsplitter: ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   soullantern: ['dmg', 'spd', 'crit', 'cdr'],
+  ashfeather:  ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   ghostdagger: ['dmg', 'spd', 'crit', 'cdr'],
   stormhammer: ['dmg', 'spd', 'crit', 'cdr', 'knock'],
   frostscythe: ['dmg', 'rng', 'chill', 'cdr', 'aoe'],
@@ -496,7 +507,8 @@ const PASSIVES = {
   windwand:    { name: 'GALE GUARD',     color: '#d8f4ff', desc: 'blows away an enemy shot that comes close, every 0.5s' },
   revolver:    { name: 'CHAIN REACTION', color: '#ffa040', desc: 'every hit explodes onto the foes around it, and everything you kill blows up even bigger' },
   worldsplitter: { name: 'AFTERSHOCK', color: '#ff6a1a', desc: 'every 3rd swing splits the ground three ways' },
-  soullantern: { name: 'SOUL BOND', color: '#6affc8', desc: 'every soul you carry shields you from 2% of all damage (up to 24%)' },
+  ashfeather:  { name: 'REBIRTH', color: '#ff8a3a', desc: 'the first time you would die in a game, you rise again at half health in an explosion of fire' },
+  soullantern: { name: 'SOUL BOND', color: '#6affc8', desc: 'every soul you carry shields you from 2% of all damage (up to 32%)' },
   starfall:    { name: 'STARLIGHT', color: '#ffe9a0', desc: 'every enemy your stars hit heals you 2' },
   darklight:   { name: 'LEARNED ALL TRICKS', color: '#ffffff', desc: 'every bad effect on you becomes a little damage instead, unless it comes from a super' },
   endlessscythe: { name: 'EVENT HORIZON', color: '#7a2aff', desc: 'every hit stuns the target and drags it toward you' },
@@ -1355,7 +1367,8 @@ function effectiveSpeed(p) {
   if (hasEffect(p, 'ghost')) s *= 1.75;
   if (p.lightspeed > 0) s *= LIGHTSPEED_MULT;          // the Light Blade's SUPER
   if (p.passive === 'dagger') s *= PASSIVE_SPEED;
-  if (p.kspin > 0) s *= KSPIN_SPEED;                    // the katana's SUPER
+  if (p.kspin > 0) s *= KSPIN_SPEED;
+  if (p.phoenix) s *= PHX_SPEEDMULT;                    // Ashfeather's PHOENIX FORM                    // the katana's SUPER
   if (hasEffect(p, 'slow'))  s *= 0.4;
   if (hasEffect(p, 'root'))  s = 0;          // ROOT VINES
   return s;
@@ -2095,7 +2108,7 @@ function buyMythic(key, id) {
 
 // WORLDSPLITTER
 const WS_ERUPT = 220, WS_BURN_MS = 2600, WS_BURN_TICK = 400, WS_BURN_DMG = 5, WS_W = 9, WS_AFTERSHOCK = 3;
-const TECT_N = 8, TECT_LEN = 230, TECT_STUN = 900, SKY_MS = 1100, SKY_R = 120, SKY_CRACKS = 8;
+const TECT_N = 8, TECT_LEN = 230, TECT_STUN = 900, SKY_MS = 1100, SKY_R = 150, SKY_CRACKS = 8;
 function crackGround(owner, x, y, a, len, dmg, o = {}) {
   if (!room.fissures) room.fissures = [];
   room.fissures.push({ owner, x1: x, y1: y, x2: x + Math.cos(a) * len, y2: y + Math.sin(a) * len, dmg,
@@ -2193,8 +2206,61 @@ function updateWorldsplitter(dt) {
   });
 }
 
+// ASHFEATHER
+const PHX_SPEED = 9, PHX_SPLIT_ANG = 0.4, PHX_BURN = 2500, PHX_VOLLEY = 9, PHX_CONE = 1.1;
+const PHX_FORM_MS = 6000, PHX_SPEEDMULT = 1.8, PHX_TOUCH_R = 34, PHX_TOUCH_GAP = 300, PHX_HEAL = 0.03, PHX_REBIRTH_R = 90, PHX_REBIRTH_DMG = 80;
+function phxArrow(pKey, x, y, a, dmg, split, extra, later) {
+  const pr = { id: nextId(), x, y, dx: Math.cos(a) * PHX_SPEED, dy: Math.sin(a) * PHX_SPEED, damage: dmg, owner: pKey,
+    traveled: 0, maxRange: split ? 700 : 220, weaponId: 'phxarrow', isAoe: false, aoeRadius: 0, pierce: false, grapple: false,
+    boomerang: false, returning: false, life: 0, hitTargets: null, hitR: split ? 6 : 4, burn: PHX_BURN, phxSplit: split,
+    special: !split, noIframe: true, ...extra };
+  if (later) (room.spawnLater = room.spawnLater || []).push(pr); else room.projectiles.push(pr);
+}
+function phoenixAttack(p, pKey, w, dmgMult) {
+  const a = nearestTargetAngle(p, pKey);
+  p.facing = Math.cos(a) < 0 ? -1 : 1;
+  phxArrow(pKey, cx(p), cy(p), a, Math.round(w.damage * dmgMult), true);
+}
+// It bursts: three smaller burning arrows carry on from where it struck.
+function phoenixSplit(proj, t) {
+  const base = Math.atan2(proj.dy, proj.dx);
+  for (let i = -1; i <= 1; i++) phxArrow(proj.owner, proj.x, proj.y, base + i * PHX_SPLIT_ANG, Math.max(1, Math.round(proj.damage * 0.5)), false, { ignore: t }, true);
+}
+function castSunVolley(p, pKey, sp, dmg) {
+  const a0 = nearestTargetAngle(p, pKey);
+  for (let i = 0; i < PHX_VOLLEY; i++) phxArrow(pKey, cx(p), cy(p), a0 - PHX_CONE / 2 + PHX_CONE * i / (PHX_VOLLEY - 1), dmg, true);
+}
+function updatePhoenix(dt) {
+  for (const key of KEYS) {
+    const p = room.players[key];
+    if (!p || !p.phoenix) continue;
+    if (p.dead) { p.phoenix = null; continue; }
+    const f = p.phoenix;
+    f.t -= dt;
+    // A trail of fire behind you.
+    const d = Math.hypot(cx(p) - f.lx, cy(p) - f.ly);
+    if (d > 8) {
+      crackGround(key, f.lx, f.ly, Math.atan2(cy(p) - f.ly, cx(p) - f.lx), d, Math.round(f.dmg * 0.4), { erupt: 60, life: 1800 });
+      f.lx = cx(p); f.ly = cy(p);
+    }
+    // Whatever you touch burns.
+    f.touch -= dt;
+    if (f.touch <= 0) {
+      f.touch = PHX_TOUCH_GAP;
+      for (const t of enemyTargets(key)) {
+        if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) > PHX_TOUCH_R + t.w / 2) continue;
+        if (!t.num) t.invincible = 0;
+        applyDamage(t, f.dmg, key);
+        if (!t.dead) ignite(t, 2000);
+      }
+    }
+    p.hp = Math.min(p.maxHp, p.hp + p.maxHp * PHX_HEAL * dt / 1000);
+    if (f.t <= 0) p.phoenix = null;
+  }
+}
+
 // SOUL LANTERN
-const SOUL_MAX = 12, SOUL_BOND = 0.02, SOUL_HEAL = 3, DOOR_MS = 8000, DOOR_LIFE = 10000, DOOR_CAP = 12, WISP_SPEED = 6;
+const SOUL_MAX = 16, SOUL_BOND = 0.02, SOUL_HEAL = 3, DOOR_MS = 12000, DOOR_LIFE = 12000, DOOR_CAP = 16, WISP_SPEED = 6;
 function wisp(pKey, x, y, a, dmg, extra) {
   room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * WISP_SPEED, dy: Math.sin(a) * WISP_SPEED, damage: dmg, owner: pKey,
     traveled: 0, maxRange: 1400, weaponId: 'soulwisp', isAoe: false, aoeRadius: 0, pierce: false, grapple: false, boomerang: false,
@@ -2335,7 +2401,7 @@ function updateSawRoom(dt) {
 
 // STARFALL
 const SF_STARS = 3, SF_SPREAD = 30, SF_RAIN_STUN = 2000, SF_RAIN_CONFUSE = 2000;
-const SF_MARK_MS = 450, SF_R = 34, SF_HEAL = 2, SF_RAIN_MS = 4000, SF_RAIN_GAP = 220, SF_RAIN_R = 40, SF_RAIN_MARK = 500;
+const SF_MARK_MS = 450, SF_R = 44, SF_HEAL = 2, SF_RAIN_MS = 6000, SF_RAIN_GAP = 220, SF_RAIN_R = 40, SF_RAIN_MARK = 500;
 const CONST_MS = 900, CONST_PULL = 0.6, CONST_STUN = 700;
 function dropStar(owner, x, y, dmg, r, ms, daze) {
   if (!room.stars) room.stars = [];
@@ -2459,9 +2525,9 @@ function updateStarfall(dt) {
 }
 
 // DARKLIGHT
-const DL_MAX = 10, DL_ORBIT_R = 40, DL_SPIN = 0.0055, DL_PIERCE = 2, DL_REHIT_MS = 350;
+const DL_MAX = 14, DL_ORBIT_R = 40, DL_SPIN = 0.0055, DL_PIERCE = 2, DL_REHIT_MS = 350;
 const DL_KUNAI_SPEED = 8.5, DL_KUNAI_TURN = 24, DL_PAIR_SPEED = 16, DL_PAIR_TURN = 40;
-const DL_CHAIN_MS = 3000, DL_CHAIN_R = 45, DL_CURSE_MS = 8000, DL_CURSE_STUN = 1000, DL_SPREAD_R = 44, DL_TRICK_DMG = 3, DL_TRICK_GAP = 600;
+const DL_CHAIN_MS = 4000, DL_CHAIN_R = 45, DL_CURSE_MS = 8000, DL_CURSE_STUN = 1000, DL_SPREAD_R = 44, DL_TRICK_DMG = 3, DL_TRICK_GAP = 600;
 const BAD_EFFECTS = ['burn', 'poison', 'slow', 'root', 'confuse', 'silence'];
 // LEARNED ALL TRICKS: a bad effect lands as a little damage instead (only so often).
 function trickHit(p, name) {
@@ -2933,6 +2999,22 @@ function handleKill(target, attackerKey) {
   // chain reaction) could otherwise reach it again before it is marked dead.
   if (!target.num) { if (target.dying || target.dead) return; target.dying = true; }
   if (target.ally) { killAlly(target); return; }   // a summoned ally: no reward for anyone
+  // REBIRTH (Ashfeather): once a game, death becomes an explosion of fire.
+  if (target.num && target.passive === 'ashfeather' && !target.reborn) {
+    target.reborn = true;
+    target.hp = Math.round(target.maxHp * 0.5);
+    target.invincible = 1500;
+    const key = playerKeyOf(target);
+    for (const t of enemyTargets(key)) {
+      if (Math.hypot(cx(t) - cx(target), cy(t) - cy(target)) > PHX_REBIRTH_R + t.w / 2) continue;
+      if (!t.num) t.invincible = 0;
+      applyDamage(t, PHX_REBIRTH_DMG, key);
+      if (!t.dead) ignite(t, 3000);
+    }
+    room.particles.push({ type: 'shockwave', x: cx(target), y: cy(target), maxR: PHX_REBIRTH_R, timer: 800, max: 800, color: '#ff8a3a' });
+    room.particles.push({ type: 'trapburst', x: cx(target), y: cy(target), maxR: 70, timer: 1000, max: 1000, color: '#ffd24a', text: 'REBIRTH!' });
+    return;
+  }
   // PHOENIX: the killing blow is undone, and nobody is paid for it.
   if (target.num && hasEffect(target, 'phoenix')) {
     delete target.effects.phoenix;
@@ -3445,11 +3527,13 @@ function tickRoom(dt) {
 
   // ── Projectiles ──
   room.projectiles = room.projectiles.filter(proj => updateProjectile(proj, factor, dt));
+  if (room.spawnLater && room.spawnLater.length) { room.projectiles.push(...room.spawnLater); room.spawnLater = []; }   // born mid-pass (Ashfeather's split arrows)
   updateFires(factor, dt);
   updateDarklight(dt);
   updateStarfall(dt);
   updateWorldsplitter(dt);
   updateLantern(dt);
+  updatePhoenix(dt);
   if (room.gameMode === 'sawroom') updateSawRoom(dt);
   updateRareShop(dt);
 
@@ -3928,6 +4012,7 @@ function distToSegment(px, py, ax, ay, bx, by) {
 
 // What a projectile does beyond its damage: frost slows, storm arcs onward.
 function onHitExtras(proj, t) {
+  if (proj.phxSplit) phoenixSplit(proj, t);
   if (proj.confuseMs && t.num) applyEffect(t, 'confuse', proj.confuseMs);
   if (proj.poisonMs && t.num) applyEffect(t, 'poison', proj.poisonMs);
   if (proj.soulHeal) { const o = room.players[proj.owner]; if (o && !o.dead) o.hp = Math.min(o.maxHp, o.hp + proj.soulHeal); }
@@ -3999,6 +4084,7 @@ function doAttack(p, pKey) {
   if (w.starStaff) { starAttack(p, pKey, w, dmgMult); return; }
   if (w.groundSplit) { splitAttack(p, pKey, w, dmgMult); return; }
   if (w.soulWisp) { soulAttack(p, pKey, w, dmgMult); return; }
+  if (w.phoenixBow) { phoenixAttack(p, pKey, w, dmgMult); return; }
   if (w.slashWave) {
     // A slash wave that seeks out the nearest foe.
     const aim = nearestTargetAngle(p, pKey);
@@ -4182,6 +4268,11 @@ function doSuper(p, pKey) {
   p.swingTimer = 300;
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
   if (su.kind === 'skyfall') { startSkyfall(p, pKey, Math.round(su.dmg * dmgMult)); return; }
+  if (su.kind === 'phoenixform') {
+    p.phoenix = { t: PHX_FORM_MS, lx: cx(p), ly: cy(p), touch: 0, dmg: Math.round(su.dmg * dmgMult) };
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 70, timer: 900, max: 900, color: '#ff8a3a', text: 'PHOENIX FORM' });
+    return;
+  }
   if (su.kind === 'deathsdoor') { openDeathsDoor(p, pKey, Math.round(su.dmg * dmgMult)); return; }
   if (su.kind === 'starrain') {
     p.starRain = { t: SF_RAIN_MS, acc: 0, dmg: Math.round(su.dmg * dmgMult) };
@@ -7175,6 +7266,7 @@ function doSpecial(p, pKey) {
   }
   if (sp.kind === 'kunaistorm') { darklightStorm(p, pKey, spDmg); return; }
   if (sp.kind === 'tectonic') { castTectonic(p, pKey, sp, spDmg); return; }
+  if (sp.kind === 'sunvolley') { castSunVolley(p, pKey, sp, spDmg); return; }
   if (sp.kind === 'soulstorm') { castSoulStorm(p, pKey, spDmg); return; }
   if (sp.kind === 'constellation') { castConstellation(p, pKey, sp, spDmg); return; }
   if (sp.kind === 'dashwave') {
@@ -7476,6 +7568,7 @@ function playerView(p) {
     ...(p.sky ? { sky: { k: Math.round(p.sky.t / p.sky.life * 100) / 100, sx: r1(p.sky.sx), sy: r1(p.sky.sy), tx: r1(p.sky.tx), ty: r1(p.sky.ty) } } : {}),
     ...(p.souls ? { souls: p.souls } : {}),
     ...(p.deathDoor > 0 ? { ddoor: Math.round(p.deathDoor) } : {}),
+    ...(p.phoenix ? { phx: Math.round(p.phoenix.t) } : {}),
     ...(p.dlChain ? { dlc: [r1(p.dlChain.x), r1(p.dlChain.y)] } : {}),
     ...(p.passive === 'mindtome' ? { shuffleIn: Math.max(0, Math.round(p.shuffleT ?? MIND_SHUFFLE_MS)) } : {}),
     ...(p.passive === 'vortex' ? { aegis: !(p.aegisCd > 0) } : {}),
