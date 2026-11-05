@@ -698,6 +698,37 @@ const WEAPON_ART = {
   }},
   // Darklight: a kunai split down its ridge, one half black, one half white,
   // on a black grip wound with white and a ring pommel to match.
+  // Chronos Edge: a sword of gold and azure. A clock face sits in the guard,
+  // gear teeth run down the back of the blade and the edge glows sky blue.
+  chronosedge: { draw(k, wc) {
+    k.circ(-1.5, 0, 2.4, '#d9a520'); k.circ(-1.5, 0, 1.2, '#7ac8ff');           // pommel gem
+    k.r(0, -1.6, 8, 3.2, '#1a2a5a');                                             // grip
+    for (let i = 0; i < 4; i++) k.r(1 + i * 1.8, -1.6, 0.8, 3.2, '#d9a520');
+    k.r(8, -5.5, 2.4, 11, '#b8860b'); k.r(8, -5.5, 2.4, 1, '#ffe58a');           // crossguard
+    k.circ(11.5, 0, 4.2, '#d9a520'); k.circ(11.5, 0, 3.2, '#f4f0e0');           // the clock
+    k.line(11.5, 0, 11.5, -2.4, 0.6, '#1a1a2a'); k.line(11.5, 0, 13.2, 0.8, 0.6, '#1a1a2a');
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; k.r(11.5 + Math.cos(a) * 2.6 - 0.3, Math.sin(a) * 2.6 - 0.3, 0.6, 0.6, '#1a1a2a'); }
+    k.poly([[15.6, -2.6], [38, -2], [43, 0], [38, 2], [15.6, 2.6]], '#c8d8f0');   // blade
+    k.poly([[15.6, -2.6], [38, -2], [43, 0], [38, -0.6], [16, -1]], '#ffffff');
+    k.r(16, 1.2, 22, 1, wc);                                                     // glowing edge
+    for (let x = 17; x < 37; x += 3) k.r(x, -3.6, 1.6, 1.2, '#d9a520');          // gear teeth on the spine
+    k.r(20, -0.3, 16, 0.6, '#7a8aa8');
+  }},
+  // Hydra's Fang: a trident whose three prongs are serpent heads, on a haft of
+  // green scales bound in gold.
+  hydrafang: { draw(k, wc) {
+    k.r(-2, -1.4, 24, 2.8, '#1e4a2a');                                           // scaled haft
+    for (let x = -1; x < 21; x += 2.4) k.r(x, -1.4, 1.2, 1.4, '#3a8a4a');
+    for (const x of [3, 12]) k.r(x, -1.8, 1.4, 3.6, '#d9a520');
+    k.r(21, -7, 2.4, 14, '#d9a520'); k.r(21, -7, 2.4, 1, '#ffe58a');             // the yoke
+    for (const [y, L] of [[-6, 10], [0, 14], [6, 10]]) {                         // three serpent prongs
+      k.r(23, y - 0.9, L - 3, 1.8, '#2a7a3a');
+      k.poly([[20 + L, y - 2.2], [24 + L, y - 0.8], [26 + L, y], [24 + L, y + 0.8], [20 + L, y + 2.2]], '#3aa84a');   // head
+      k.r(21.5 + L, y - 1.2, 1, 0.8, '#ffd84a');                                 // eye
+      k.r(25 + L, y + 0.6, 0.8, 1.4, '#ffffff');                                 // fang
+      k.r(26 + L, y - 0.2, 2, 0.4, '#ff3a5a');                                   // tongue
+    }
+  }},
   // Ashfeather: a recurve bow whose limbs are phoenix feathers of living flame,
   // a gold grip at the middle and a string of white fire.
   ashfeather: { draw(k, wc) {
@@ -849,6 +880,126 @@ const WEAPON_ART = {
     k.r(31.5, -4.5, 1, 1, '#e0c8ff'); k.r(32.5, 2.5, 1, 1, wc); k.r(30.5, 5, 0.8, 0.8, '#ff9a3a');   // sparks
   }},
 };
+
+// ── Finishing detail ──
+// Drawn over each everyday weapon's own art: rivets, engraving, wraps, gems,
+// bright cutting edges, tassels. They stay inside the original outline, so a
+// weapon's size and grip are unchanged.
+const D_G = MAT.gold, D_SD = MAT.steelDark, D_SL = MAT.steelLight, D_W = '#ffffff';
+const WEAPON_DETAIL = {
+  sword(k) {
+    k.ring(-1, 0, 2.3, 0.5, D_G);                                        // gold-ringed pommel
+    k.line(0.8, -1.4, 2.4, 1.4, 0.5, MAT.leatherLt); k.line(3, -1.4, 4.6, 1.4, 0.5, MAT.leatherLt);   // cross-wrapped grip
+    k.circ(6.6, 0, 1, '#c83a3a'); k.r(6.2, -0.5, 0.5, 0.5, D_W);          // ruby in the guard
+    k.r(5.9, -4.6, 0.8, 0.8, D_G); k.r(5.9, 3.8, 0.8, 0.8, D_G);           // guard rivets
+    k.r(9, 1.5, 15.5, 0.4, D_W);                                          // honed edge
+    k.r(10, -0.9, 0.6, 0.6, D_G); k.r(12, -0.9, 0.6, 0.6, D_G);             // smith's marks
+  },
+  dagger(k) {
+    k.circ(4.9, 0, 0.9, '#3a8aff'); k.r(4.6, -0.4, 0.4, 0.4, D_W);
+    k.r(7, -0.2, 7, 0.4, D_SD); k.r(7, 1.3, 8, 0.35, D_W);
+    k.ring(-0.6, 0, 1.6, 0.4, D_G);
+  },
+  axe(k) {
+    k.r(0.5, -1.6, 4.5, 3.2, MAT.leather); k.r(1.2, -1.6, 0.7, 3.2, MAT.leatherLt); k.r(3.2, -1.6, 0.7, 3.2, MAT.leatherLt);
+    k.r(12.8, -2.9, 0.8, 0.8, D_SL); k.r(12.8, 2.1, 0.8, 0.8, D_SL);       // collar rivets
+    k.line(17.5, -4.5, 21, -1.5, 0.5, D_SD); k.line(17.5, 4.5, 21, 1.5, 0.5, D_SD); k.circ(19.5, 0, 0.8, D_SD);   // etched knot
+    k.line(24.6, -3.8, 25, 3.8, 0.6, D_W);                               // bright cutting edge
+  },
+  spear(k) {
+    k.line(21.6, 2, 19.5, 5.6, 0.8, '#c83a3a'); k.line(22.4, 2, 21.2, 6, 0.7, '#e85a5a'); k.line(21, 2, 18.4, 4.8, 0.6, '#a82a2a');   // tassel
+    k.r(21.6, -2.2, 0.7, 0.7, D_G); k.r(21.6, 1.5, 0.7, 0.7, D_G);
+    k.line(26, 2.6, 33.6, 0.3, 0.4, D_W);
+    k.r(0.4, -1.1, 1.4, 2.2, MAT.iron);                                // butt cap
+  },
+  bow(k) {
+    k.r(0.6, -4.4, 2.6, 0.7, D_G); k.r(0.6, 3.7, 2.6, 0.7, D_G);           // gold-capped grip
+    k.circ(1.9, 0, 0.8, '#3aa84a');
+    k.r(13.5, -0.4, 2.2, 0.4, D_W);
+  },
+  staff(k) {
+    for (const x of [6.4, 8.2, 12.8]) k.r(x, -0.6, 0.7, 1.2, '#c8a0ff');   // glowing runes up the shaft
+    k.r(14.6, -2, 1.2, 4, D_G); k.r(1, -1.8, 1.2, 3.6, D_G);
+    k.line(21.5, -3, 24.8, 1.8, 0.4, D_W);                                // facet in the orb
+  },
+  hammer(k) {
+    k.r(0, -1.6, 4.5, 3.2, MAT.leather); k.r(0.8, -1.6, 0.7, 3.2, MAT.leatherLt); k.r(2.6, -1.6, 0.7, 3.2, MAT.leatherLt);
+    for (const [x, y] of [[16, -5.2], [20.4, -5.2], [16, 4], [20.4, 4]]) k.r(x, y, 0.9, 0.9, D_SL);   // rivets
+    k.r(15.4, -0.7, 6.4, 1.4, D_SD); k.r(17.6, -0.4, 2, 0.8, D_G);         // engraved band with a gold inlay
+  },
+  wand(k) {
+    for (const x of [2, 5.5, 9]) k.line(x, -1.3, x + 1.8, 1.3, 0.5, D_G);   // spiral inlay
+    k.r(18.8, -6.2, 0.7, 0.7, D_W); k.r(21, 4.2, 0.6, 0.6, D_W);
+  },
+  whip(k) { k.r(-2.6, -1.6, 1, 3.2, D_G); k.r(3, -1.6, 0.5, 3.2, D_G); },
+  crossbow(k) {
+    for (const x of [3, 7, 11]) k.r(x, -1.9, 0.8, 0.8, MAT.ironLight);  // stock rivets
+    k.r(-3, 0.9, 15, 0.4, MAT.woodDark);                               // grain
+    k.r(16, -0.3, 2.6, 0.4, D_W);
+  },
+  flail(k) {
+    k.circ(22.8, -2.2, 1, '#ff8a8a');                                  // shine on the ball
+    k.r(8.2, -1.8, 0.8, 0.8, D_SL); k.r(8.2, 1, 0.8, 0.8, D_SL);
+  },
+  greatsword(k) {
+    for (let x = 17; x < 31; x += 3.4) k.r(x, -0.5, 1.4, 1, '#9fd8ff');   // runes down the blade
+    k.circ(9.5, 0, 1.3, '#3a8aff'); k.r(9.1, -0.6, 0.5, 0.5, D_W);
+    k.r(15, 2.6, 18, 0.5, D_W);
+  },
+  glaive(k) {
+    k.line(25, -3, 30.5, -15.5, 0.5, D_SD);                              // engraved line along the blade
+    k.line(19.8, 1.6, 17.6, 5.4, 0.8, '#c83a3a'); k.line(20.6, 1.6, 19.6, 6, 0.7, '#e85a5a');   // tassel
+    k.line(30.2, -4.2, 33, -12.2, 0.5, D_W);
+  },
+  katana(k) {
+    for (let i = 0; i < 4; i++) k.r(1.1 + i * 1.7, -0.3, 0.6, 0.6, '#e8e0c8');   // ito diamonds
+    k.ring(7.4, 0, 2.6, 0.5, D_G);
+    k.r(8.6, -1.1, 1.2, 2.2, D_G);                                       // habaki
+  },
+  chakram(k) { k.ring(9, 0, 6.6, 0.4, D_G); for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + 0.4; k.r(9 + Math.cos(a) * 8 - 0.4, Math.sin(a) * 8 - 0.4, 0.8, 0.8, D_W); } },
+  boomerang(k) { for (const [x, y] of [[7, -5], [7, 5], [10.5, -8.2], [10.5, 8.2]]) k.circ(x, y, 0.7, '#ffd84a'); },
+  cannon(k) {
+    for (const x of [2.3, 9.3]) { k.r(x, -4.8, 0.8, 0.8, D_SL); k.r(x, 3.8, 0.8, 0.8, D_SL); }
+    k.circ(13.5, 0, 1.5, '#e8e2d2'); k.r(12.9, -0.4, 0.5, 0.5, MAT.dark); k.r(13.8, -0.4, 0.5, 0.5, MAT.dark);   // skull emblem
+  },
+  reaper(k) {
+    k.r(15, -1.6, 1, 3.2, D_G); k.r(18, -1.6, 1, 3.2, D_G);
+    k.line(21, -9, 12.5, -16.5, 0.5, '#7a2a5a');                       // blood groove
+  },
+  frostrod(k) { k.r(23, -5, 0.7, 0.7, D_W); k.r(19.5, 5.4, 0.6, 0.6, D_W); k.r(25.5, 2.6, 0.6, 0.6, '#bfefff'); k.r(6.4, -0.5, 1, 1, '#9fe8ff'); },
+  blunderbuss(k) {
+    k.r(8.6, -2.6, 1, 4.4, D_G); k.r(12.6, -2.6, 1, 4.4, D_G);             // brass bands
+    k.r(-2.4, 2.6, 4, 0.4, MAT.woodDark);
+  },
+  lance(k) { for (const x of [16, 21, 26]) k.line(x, -2.6 + (x - 12) * 0.08, x + 2.2, 2.2 - (x - 12) * 0.08, 0.7, '#c83a3a'); },
+  scimitar(k) {
+    k.line(-1.6, 1, -3.6, 4, 0.7, '#c83a3a'); k.line(-1, 1.2, -2.4, 4.6, 0.6, '#e85a5a');   // tassel
+    k.line(9, -0.4, 20, -2.2, 0.4, D_SD);
+    k.r(5.6, -0.6, 0.7, 1.2, '#3aa84a');
+  },
+  slingshot(k) { k.r(-1.4, -1.5, 4, 3, MAT.leather); k.r(-0.6, -1.5, 0.6, 3, MAT.leatherLt); k.r(1.2, -1.5, 0.6, 3, MAT.leatherLt); },
+  mace(k) { k.r(9.5, -1.4, 1, 2.8, D_G); k.r(13, -1.4, 1, 2.8, D_G); k.circ(19, 0, 1.4, D_G); },
+  javelin(k) {
+    k.poly([[-6, -0.9], [-3, -0.9], [-5, -3.2]], '#c83a3a'); k.poly([[-6, 0.9], [-3, 0.9], [-5, 3.2]], '#c83a3a');   // fletching
+    k.r(20, -1.2, 1, 2.4, D_G);
+  },
+  claws(k) { k.r(0.6, -3.4, 0.8, 0.8, D_SL); k.r(0.6, 2.6, 0.8, 0.8, D_SL); for (const y of [-3, 0, 3]) k.r(6, y + 0.1, 7, 0.4, D_SD); },
+  emberstaff(k) {
+    for (const x of [7.4, 9.4, 13.4]) k.r(x, -0.5, 1, 1, '#ff6a1a');    // smouldering runes
+    k.r(23.4, -6.2, 0.8, 0.8, '#ffd84a'); k.r(18.6, -7, 0.7, 0.7, '#ff9a3a');
+  },
+  halberd(k) {
+    k.line(22.6, 1.4, 20.6, 5, 0.8, '#c83a3a'); k.line(23.2, 1.4, 22.4, 5.4, 0.7, '#e85a5a');
+    k.r(22.3, -1.6, 0.7, 0.7, D_G); k.line(30.6, -9.4, 31, -3.4, 0.5, D_W);
+  },
+  frostbow(k) { k.r(0.8, -4, 2.4, 0.6, '#bfefff'); k.r(0.8, 3.4, 2.4, 0.6, '#bfefff'); k.r(14.5, -0.3, 2, 0.4, '#e8faff'); },
+};
+for (const [id, extra] of Object.entries(WEAPON_DETAIL)) {
+  const art = WEAPON_ART[id];
+  if (!art) continue;
+  const base = art.draw;
+  art.draw = (k, wc) => { base(k, wc); extra(k, wc); };
+}
 
 // Run a definition through a kit that records geometry instead of painting, to
 // learn its bounds. Glows are skipped: they're soft halos, not silhouette, and
@@ -1170,7 +1321,7 @@ const _PK = (typeof window !== 'undefined' && window.PixelKit) ||
 const WEAPON_EDGE = '#0b0b14';
 
 // A kit that speaks the same primitives as artKit but writes pixels.
-function rasterKit(buf, ox, oy, s) {
+function rasterKit(buf, ox, oy, s, glowBuf) {
   const K = _PK;
   const S = (v) => v * s;
   return {
@@ -1188,18 +1339,69 @@ function rasterKit(buf, ox, oy, s) {
     },
     // Glows are soft light, which pixel art conveys with a sparse dither rather
     // than an alpha blur.
-    glow(x, y, r, c) {
-      const cx = ox + S(x), cy = oy + S(y), rr = S(r);
+    // Soft light: a smooth falloff on a layer of its own, laid under the
+    // weapon after shading and outlining, so it is never edged or dithered.
+    glow(x, y, r, c, a) {
+      const tgt = glowBuf || buf, cx = ox + S(x), cy = oy + S(y), rr = Math.max(1.5, S(r));
+      const [cr, cg, cb] = K.hexRgb(c), peak = (a === undefined ? 0.3 : a) * 0.9;
       for (let py = Math.floor(cy - rr); py <= Math.ceil(cy + rr); py++) {
         for (let px = Math.floor(cx - rr); px <= Math.ceil(cx + rr); px++) {
-          const d = Math.hypot(px + 0.5 - cx, py + 0.5 - cy);
-          if (d > rr || d < rr * 0.45) continue;
-          if (((px * 2 + py) % 4) !== 0) continue;
-          K.setPx(buf, px, py, c);
+          const d = Math.hypot(px + 0.5 - cx, py + 0.5 - cy) / rr;
+          if (d >= 1) continue;
+          const al = Math.round(255 * peak * (1 - d) * (1 - d));
+          if (al < 6) continue;
+          K.setPx(tgt, px, py, [cr, cg, cb, al]);
         }
       }
     },
   };
+}
+
+// ─── Texture pass ─────────────────────────────────────────────────────────────
+// Gives every weapon the same light and material, whatever its art:
+//  · volume: down each column of a shape, the top third is lit and the bottom
+//    third falls into shadow, so flat bars read as round hafts and bevelled blades;
+//  · edges: a bright lip where the top meets the air, a dark one underneath;
+//  · grain: wood and leather (warm, muted colours) get a fine, fixed noise;
+//  · glints: polished metal (bright and colourless) catches a diagonal sheen.
+function texturePass(b, scale) {
+  const { w, h, data } = b, A = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : data[(y * w + x) * 4 + 3];
+  if (scale < 0.55) return;   // tiny icons: leave them crisp
+  const out = new Float32Array(w * h);   // brightness change per pixel
+  for (let x = 0; x < w; x++) {
+    let y = 0;
+    while (y < h) {
+      if (A(x, y) < 200) { y++; continue; }
+      let y2 = y; while (y2 < h && A(x, y2) >= 200) y2++;
+      const run = y2 - y;
+      if (run >= 3) for (let yy = y; yy < y2; yy++) {
+        const t = (yy - y + 0.5) / run;
+        out[yy * w + x] += t < 0.34 ? 0.16 * (0.34 - t) / 0.34 : t > 0.66 ? -0.2 * (t - 0.66) / 0.34 : 0;
+      }
+      y = y2;
+    }
+  }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4;
+    if (data[i + 3] < 200) continue;
+    if (!A(x, y - 1)) out[y * w + x] += 0.22;
+    else if (!A(x, y + 1)) out[y * w + x] -= 0.24;
+    if (!A(x - 1, y)) out[y * w + x] += 0.08;
+    const r = data[i], g = data[i + 1], bl = data[i + 2];
+    const mx = Math.max(r, g, bl), mn = Math.min(r, g, bl), sat = mx ? (mx - mn) / mx : 0, lum = (r * 3 + g * 6 + bl) / 10;
+    const hash = ((x * 73856093) ^ (y * 19349663)) >>> 0;
+    if (sat > 0.25 && lum < 150 && r >= bl) out[y * w + x] += ((hash % 7) - 3) * 0.025;        // grain
+    else if (sat < 0.16 && lum > 120 && ((x + y) % 9 === 0 || (x + y) % 9 === 1)) out[y * w + x] += 0.12;   // sheen
+  }
+  for (let p = 0; p < w * h; p++) {
+    const k = out[p];
+    if (!k || data[p * 4 + 3] < 200) continue;
+    const i = p * 4;
+    for (let c = 0; c < 3; c++) {
+      const v = data[i + c];
+      data[i + c] = k > 0 ? v + (255 - v) * k : v * (1 + k);
+    }
+  }
 }
 
 // Render a weapon to a pixel buffer at `scale`. Returns { buf, ox, oy } where the
@@ -1212,10 +1414,18 @@ function rasterWeapon(id, scale, color) {
   const w = Math.max(1, Math.ceil(b.w * scale) + pad * 2);
   const h = Math.max(1, Math.ceil(b.h * scale) + pad * 2);
   const ox = pad - b.x * scale, oy = pad - b.y * scale;
-  const buf = _PK.makeBuf(w, h);
-  art.draw(rasterKit(buf, ox, oy, scale), color);
-  _PK.rimLight(buf, null, null);          // reserved: shading is baked in the art
+  const buf = _PK.makeBuf(w, h), glow = _PK.makeBuf(w, h);
+  art.draw(rasterKit(buf, ox, oy, scale, glow), color);
+  texturePass(buf, scale);
   _PK.outline(buf, WEAPON_EDGE);
+  // The glow sits underneath everything else.
+  for (let i = 0; i < buf.data.length; i += 4) {
+    const ga = glow.data[i + 3];
+    if (!ga) continue;
+    const ba = buf.data[i + 3] / 255, g = ga / 255, oa = ba + g * (1 - ba);
+    for (let k = 0; k < 3; k++) buf.data[i + k] = (buf.data[i + k] * ba + glow.data[i + k] * g * (1 - ba)) / oa;
+    buf.data[i + 3] = oa * 255;
+  }
   return { buf, ox, oy, w, h };
 }
 

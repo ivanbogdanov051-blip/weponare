@@ -47,7 +47,7 @@ let WEAPON_COLOR = {
   glaive:'#b0d8c0', katana:'#eef0ff', chakram:'#66e0c0', cannon:'#9a90a8',
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
-  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff', samuraiblade:'#ff5a5a', darklight:'#e8e8f4', starfall:'#ffe9a0', worldsplitter:'#ff6a1a', soullantern:'#6affc8', ashfeather:'#ff8a3a',
+  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff', samuraiblade:'#ff5a5a', darklight:'#e8e8f4', starfall:'#ffe9a0', worldsplitter:'#ff6a1a', soullantern:'#6affc8', ashfeather:'#ff8a3a', chronosedge:'#7ac8ff', hydrafang:'#5ae87a',
   ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
   scimitar:'#e8e0c8', slingshot:'#b08a5a', mace:'#9aa4b0', javelin:'#d8c8a0', claws:'#e0e4ec',
   emberstaff:'#ff7a2a', halberd:'#c0c8d8', frostbow:'#9fe8ff', chronostaff:'#e8c87a', voidblade:'#9a5aff',
@@ -78,6 +78,8 @@ const WEAPON_DESC = {
   worldsplitter:"MYTHIC. An obsidian greatsword veined with magma, heavy enough to split the world",
   soullantern:"MYTHIC. A black iron lantern burning with the souls of the fallen",
   ashfeather:"MYTHIC. A bow of living flame, its limbs made of phoenix feathers",
+  chronosedge:"MYTHIC. A sword of gold and azure with a clock beating in its guard",
+  hydrafang:"MYTHIC. A trident whose three prongs are living serpent heads",
   ghostdagger:'The rarest weapon of all: turn invisible, throw a deadly dagger, and make it rain knives',
   stormhammer:'A war hammer full of lightning that comes back when you throw it',
   frostscythe:'A sweeping scythe of ice that freezes whatever it keeps cutting',
@@ -597,7 +599,47 @@ function tutAsk(yes) {
 }
 
 // ── Settings (gear on the menu) ──
+// MOVE BY CLICKING (computers): click the arena and you walk there; clicks on
+// the HUD icons still do what they do. The arrow keys keep working too.
+let tapMove = false, moveTarget = null, moveDirs = '';
+try { tapMove = localStorage.getItem('weponare_tapmove') === '1'; } catch {}
+function toggleTapMove() {
+  tapMove = !tapMove; moveTarget = null;
+  try { localStorage.setItem('weponare_tapmove', tapMove ? '1' : '0'); } catch {}
+  syncSettings();
+}
+// Which way to walk to reach the clicked spot (8 directions, like the keys).
+function tapMoveInput() {
+  if (!moveTarget || !currState || currState.gameState !== 'GAMEPLAY') return null;
+  const me = currState.players?.[myKeyOf()];
+  if (!me || me.dead) { moveTarget = null; return null; }
+  const px = (pred ? pred.x : me.x) + me.w / 2, py = (pred ? pred.y : me.y) + me.h / 2;
+  const dx = moveTarget.x - px, dy = moveTarget.y - py, d = Math.hypot(dx, dy);
+  if (d < 5) { moveTarget = null; return null; }
+  const nx = dx / d, ny = dy / d;
+  return { up: ny < -0.38, down: ny > 0.38, left: nx < -0.38, right: nx > 0.38 };
+}
+// Each frame: keep walking toward the target, telling the server only when the direction changes.
+function tickTapMove() {
+  const t = tapMoveInput();
+  const key = t ? (t.up ? 'u' : '') + (t.down ? 'd' : '') + (t.left ? 'l' : '') + (t.right ? 'r' : '') : '';
+  if (key !== moveDirs) { moveDirs = key; sendInput(); }
+}
+function drawMoveMarker() {
+  if (!moveTarget) return;
+  const k = 0.5 + 0.5 * Math.sin(performance.now() / 120);
+  ctx.save();
+  ctx.strokeStyle = '#7affb0'; ctx.globalAlpha = 0.85; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(moveTarget.x, moveTarget.y, 5 + k * 3, 0, Math.PI * 2); ctx.stroke();
+  ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.arc(moveTarget.x, moveTarget.y, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
 function syncSettings() {
+  const tm = document.getElementById('tapMoveBtn');
+  if (tm) { tm.textContent = tapMove ? 'ON' : 'OFF'; tm.classList.toggle('on', tapMove); }
+  const tmr = document.getElementById('tapMoveRow');
+  if (tmr) tmr.style.display = (('ontouchstart' in window) || navigator.maxTouchPoints > 0) ? 'none' : '';
   const f = document.getElementById('fpsBtn');
   if (f) { f.textContent = netOverlay ? 'ON' : 'OFF'; f.classList.toggle('on', netOverlay); }
 }
@@ -1070,7 +1112,7 @@ const ATTACK_ANIM = {
   stormhammer: 'chop', frostscythe: 'spin', sunbow: 'draw',
   scimitar: 'slash', slingshot: 'draw', mace: 'chop', javelin: 'throw', claws: 'stab',
   emberstaff: 'cast', halberd: 'sweep', frostbow: 'draw', chronostaff: 'cast', voidblade: 'slash', mindtome: 'tome',
-  lightblade: 'slash', darklight: 'throw', starfall: 'cast', worldsplitter: 'heavy', soullantern: 'cast', ashfeather: 'draw',
+  lightblade: 'slash', darklight: 'throw', starfall: 'cast', worldsplitter: 'heavy', soullantern: 'cast', ashfeather: 'draw', chronosedge: 'slash', hydrafang: 'stab',
 };
 const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
                   heavy: 300, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
@@ -2125,12 +2167,12 @@ function syncSuperButton(me) {
   }
   const cooling = show && (me.superCd || 0) > 0 && !me.controlling;
   if (cooling !== superBtnCooling) { superBtnCooling = cooling; el.classList.toggle('cooling', cooling); }
-  const label = me && me.controlling ? 'LET GO' : 'SUPER';
+  const label = me && me.controlling ? '🖐️' : '💥';
   if (el.textContent !== label) el.textContent = label;
   // Inside a monster, SPECIAL is its own ability.
   const sp = document.getElementById('btn-special');
   if (sp) {
-    const spLabel = me && me.pupAb ? me.pupAb : 'SPECIAL';
+    const spLabel = me && me.pupAb ? '🌀' : '✨';
     if (sp.textContent !== spLabel) sp.textContent = spLabel;
   }
 }
@@ -2208,11 +2250,14 @@ window.addEventListener('blur', () => {
 });
 
 function currentInputs() {
+  const anyKey = keys['ArrowUp'] || keys['ArrowDown'] || keys['ArrowLeft'] || keys['ArrowRight'] || keys['KeyW'] || keys['KeyS'] || keys['KeyA'] || keys['KeyD'];
+  if (anyKey) moveTarget = null;   // the keys take over from a click
+  const tm = tapMoveInput() || {};
   return {
-    up:      !!keys['ArrowUp']    || !!keys['KeyW'] || touchKeys.up,
-    down:    !!keys['ArrowDown']  || !!keys['KeyS'] || touchKeys.down,
-    left:    !!keys['ArrowLeft']  || !!keys['KeyA'] || touchKeys.left,
-    right:   !!keys['ArrowRight'] || !!keys['KeyD'] || touchKeys.right,
+    up:      !!keys['ArrowUp']    || !!keys['KeyW'] || touchKeys.up    || !!tm.up,
+    down:    !!keys['ArrowDown']  || !!keys['KeyS'] || touchKeys.down  || !!tm.down,
+    left:    !!keys['ArrowLeft']  || !!keys['KeyA'] || touchKeys.left  || !!tm.left,
+    right:   !!keys['ArrowRight'] || !!keys['KeyD'] || touchKeys.right || !!tm.right,
     attack:  !!keys['Space']      || touchKeys.attack,
     swap:    !!keys['Enter']      || touchKeys.swap,
     swapPrev: !!keys['KeyZ']      || touchKeys.swapPrev,
@@ -2393,6 +2438,15 @@ function handleCanvasTap(clientX, clientY) {
 canvas.addEventListener('pointerdown', (e) => {
   if (handleCanvasTap(e.clientX, e.clientY)) { e.preventDefault(); return; }
   if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (tapMove && e.pointerType === 'mouse' && currState && currState.gameState === 'GAMEPLAY') {
+    const r = canvas.getBoundingClientRect();
+    if (r.width && r.height) {
+      moveTarget = { x: (e.clientX - r.left) * CANVAS_W / r.width, y: (e.clientY - r.top) * CANVAS_H / r.height };
+      moveDirs = ''; tickTapMove();
+      e.preventDefault();
+      return;
+    }
+  }
   if (tryBladeDash(e.clientX, e.clientY)) e.preventDefault();
 }, { passive: false });
 
@@ -2451,7 +2505,7 @@ function setupJoystick() {
   const base = document.getElementById('joystick'), knob = document.getElementById('joyKnob');
   if (!base || !knob) return;
   let id = null;
-  const DEAD = 0.28, AXIS = 0.38;
+  const DEAD = 0.18, AXIS = 0.38;
   const set = (u, d, l, r) => {
     if (touchKeys.up === u && touchKeys.down === d && touchKeys.left === l && touchKeys.right === r) return;
     touchKeys.up = u; touchKeys.down = d; touchKeys.left = l; touchKeys.right = r;
@@ -2461,7 +2515,7 @@ function setupJoystick() {
     const rc = base.getBoundingClientRect();
     const R = rc.width / 2;
     let dx = t.clientX - (rc.left + R), dy = t.clientY - (rc.top + R);
-    const d = Math.hypot(dx, dy), max = R * 0.62;
+    const d = Math.hypot(dx, dy), max = R * 0.8;
     const k = d > max ? max / d : 1;
     knob.style.transform = `translate(calc(-50% + ${dx * k}px), calc(-50% + ${dy * k}px))`;
     const m = Math.min(1, d / max);
@@ -2790,6 +2844,14 @@ function legendPassive(id) {
 }
 
 const LEGEND_MOVES = {
+  chronosedge: '<b>ATK</b> a wide cut in front of you, and its echo cuts the same spot again a second later · <b>SPECIAL</b>'
+             + ' REWIND: snap back to where you were 3s ago, with the health you had then, cutting everything on the way ·'
+             + ' <b>SUPER</b> TIME STOP: for 4s every enemy and every enemy shot is frozen while you move.'
+             + ' Only one mythic goes into a game, and a mythic never earns you another weapon.',
+  hydrafang: '<b>ATK</b> a serpent head darts out, hunts a foe and leaves venom in it · <b>SPECIAL</b> three hydra heads burst'
+           + ' from the ground round you and spit venom for 8s · <b>SUPER</b> NINE HEADS: the whole hydra rises round you'
+           + ' for 5s, every head biting at whatever comes close. Only one mythic goes into a game, and a mythic never earns'
+           + ' you another weapon.',
   ashfeather: '<b>ATK</b> a burning arrow that bursts into three more when it hits · <b>SPECIAL</b> a fan of nine of them ·'
             + ' <b>SUPER</b> PHOENIX FORM: 6s ablaze, much faster, leaving a trail of fire, burning everything you touch and'
             + ' healing as you go. Only one mythic goes into a game, and a mythic never earns you another weapon.',
@@ -3391,6 +3453,20 @@ function drawAbilityIcon(g, id, w, h) {
 // Icons for the second shelf of abilities (each drawn around the centre x, y
 // of a ~32px canvas, in the ability's colour).
 const ABILITY_ICONS = {
+  reflect(g, x, y, col) {
+    g.fillStyle = '#1a2a3a'; g.beginPath(); g.moveTo(x, y - 12); g.lineTo(x + 10, y - 7); g.lineTo(x + 8, y + 6); g.lineTo(x, y + 12); g.lineTo(x - 8, y + 6); g.lineTo(x - 10, y - 7); g.closePath(); g.fill();
+    g.strokeStyle = col; g.lineWidth = 2; g.stroke();
+    g.strokeStyle = '#ffffff'; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(x - 4, y - 4); g.lineTo(x + 4, y + 4); g.stroke();
+    g.beginPath(); g.moveTo(x + 4, y + 4); g.lineTo(x + 4, y); g.moveTo(x + 4, y + 4); g.lineTo(x, y + 4); g.stroke();
+  },
+  magnet(g, x, y, col) {
+    g.lineWidth = 6; g.strokeStyle = '#d83a3a';
+    g.beginPath(); g.arc(x, y - 1, 8, Math.PI, 0); g.stroke();
+    g.fillStyle = '#d83a3a'; g.fillRect(x - 11, y - 1, 6, 7); g.fillRect(x + 5, y - 1, 6, 7);
+    g.fillStyle = '#e8e8f0'; g.fillRect(x - 11, y + 6, 6, 4); g.fillRect(x + 5, y + 6, 6, 4);
+    g.fillStyle = col; g.beginPath(); g.arc(x, y + 9, 3, 0, Math.PI * 2); g.fill();
+  },
   perfectguard(g, x, y, col) {
     g.strokeStyle = col; g.lineWidth = 2;
     g.beginPath(); g.moveTo(x - 10, y + 10); g.lineTo(x + 10, y - 10); g.stroke();
@@ -3903,6 +3979,7 @@ function renderLoop(now) {
     netStats.frames = 0; netStats.bytes = 0; netStats.since = now;
   }
   tickSlashes(dt);
+  if (tapMove && moveTarget) tickTapMove();
   if (localAtkCd > 0) localAtkCd -= dt;
   if (currState && currState.gameState === 'GAMEPLAY') {
     updatePrediction(dt, now);
@@ -3929,6 +4006,7 @@ function draw(state) {
   drawTrapElements(state.traps || []);
   drawItems(state.items || []);
   drawCoins(state.coins || []);
+  drawMoveMarker();
   for (const sl of slashes) {
     const o = sl.owner && state.players[sl.owner];
     if (!o || o.dead) continue;
@@ -3939,6 +4017,8 @@ function draw(state) {
   drawFireRings(state.fires || []);
   if (state.rareShop) drawRareShop(state.rareShop);
   drawFissures(state.fissures || []);
+  drawEchoes(state.echoes || []);
+  drawHydras(state.hydras || []);
   drawConstellations(state.constels || []);
   drawStars(state.stars || []);
   drawChains(state.chains || []);
@@ -3947,6 +4027,7 @@ function draw(state) {
   drawAllies(state.allies || []);
   const names = state.playerNames || {};
   for (const k of KEYS) if (state.players[k]) drawPlayer(state.players[k], PAL[k], names[k] || k.toUpperCase(), k);
+  if (state.timeStop) drawTimeStop(state.timeStop);
   drawChatBubbles(state);
   drawFireHands(state.fires || []);
   const meP = state.players[myKeyOf()] || null;
@@ -4605,6 +4686,9 @@ function drawPlayerBody(p, baseColor, label, key) {
   if (p.souls && !p.dead) drawSouls(p, x, y);
   if (p.ddoor > 0 && !p.dead) drawDeathsDoor(p, x, y);
   if (p.phx > 0 && !p.dead) drawPhoenixForm(p, x, y);
+  if (p.mirror && !p.dead) drawMirrorShield(p, x, y);
+  if (p.venom && !p.dead) drawVenomDrip(p, x, y);
+  if (p.regrow && !p.dead) drawRegrow(p, x, y);
   drawStatusMarks(p, x, y);
   if (p.puppet) drawPuppetMark(x + p.w / 2, y - 6, null);
   if (p.shuffleIn != null && key === 'p' + myNum) drawShuffleCountdown(p, x, y);
@@ -4814,7 +4898,7 @@ function drawWeaponSprite(p, px, py, key) {
 // roughly how hard it hits — is readable at a glance, not just from its size.
 function drawMonster(m) {
   if (m.mage && m.hidden) return;   // gone into hiding behind his giants
-  if (m.abyss) { drawAbyss(m); return; }
+  if (m.abyss) { drawAbyss(m); drawEnemyBars(m, Math.round(m.x), Math.round(m.y)); return; }
   const type = m.type || 'grunt';
   const state = m.hitFlash > 0 ? 'flash' : monsterBodyState(m);
   const x = Math.round(m.x), y = Math.round(m.y);
@@ -4834,11 +4918,15 @@ function drawMonster(m) {
   if (m.frozen) drawFreezeFx(m, x, y); else if (m.slowed) drawSlowFx(m, x, y);
   if (m.curse) drawCurseFx(m, x, y);
   if (m.confused) drawConfusedMark(m, x, y);
+  if (m.aim) drawSniperLaser(m);
+  if (m.gwind) drawGolemWind(m, x, y);
+  if (m.venom) drawVenomDrip(m, x, y);
   if (m.ctl) drawPuppetMark(x + m.w / 2, y - 8, m);
   drawMonsterTells(m, x, y);
-  if (m.boss) { drawBossMarks(m, x, y); return; }
+  if (m.boss) { drawBossMarks(m, x, y); drawEnemyBars(m, x, y); return; }
 
   drawHpBar(x - 1, y - 5, m.w + 2, 2, m.hp / m.maxHp, '#44ff44', '#003300');
+  drawCdBars(m, x - 1, y - 5, m.w + 2);
   // Armoured types get a marker on the bar, since their health drains slowly.
   if (m.armor > 0) {
     ctx.fillStyle = '#c9d7ea';
@@ -5661,6 +5749,8 @@ const MONSTER_ARMS = {
   skeleton:    { art: 'm_shiv',      color: '#c8c0a8', size: 0.8,  rest:  0.3,  move: 'stab'   },
   light:       { art: 'm_scythe',    color: '#fff6a0', size: 0.8,  rest: -0.6,  move: 'chop'   },
   samurai:     { art: 'katana',      color: '#e8eef8', size: 0.72, rest: -0.35, move: 'chop'   },
+  sniper:      { art: 'blunderbuss',  color: '#8a6a4a', size: 0.62, rest: -0.15, move: 'stab'   },
+  golem:       { art: 'm_maul',       color: '#ff6a1a', size: 0.66, rest: -1.0,  move: 'slam'   },
   // Boss
   giant:    { art: 'm_tree',      color: '#4e8a3a', size: 0.62, rest: -0.95, move: 'giant'  },
   portalmage: { art: 'm_portalstaff', color: '#b07aff', size: 0.6, rest: -1.15, move: 'cast' },
@@ -5754,6 +5844,9 @@ function drawProjectiles(projs) {
     if (pr.weaponId === 'abyssbolt' || pr.weaponId === 'infinitybow') { drawVoidBolt(pr, ang); continue; }
     if (pr.weaponId === 'samwave') { drawSlashWave(pr, ang, now, pr.special ? '#ff5a5a' : (pr.owner === 'monster' ? '#ff4a5a' : '#ff8a8a')); continue; }
     if (pr.weaponId === 'samdashwave') { drawDashWave(pr, ang, now); continue; }
+    if (pr.weaponId === 'hydrabite' || pr.weaponId === 'hydrabolt') { drawVenomShot(pr, ang, now); continue; }
+    if (pr.weaponId === 'snipe') { drawSnipeShot(pr); continue; }
+    if (pr.weaponId === 'traparrow') { drawTrapArrow(pr, ang); continue; }
     if (pr.weaponId === 'phxarrow') { drawPhoenixArrow(pr, ang, now); continue; }
     if (pr.weaponId === 'soulwisp') { drawWisp(pr, ang, now); continue; }
     if (pr.weaponId && pr.weaponId.startsWith('saw_')) { drawSawShot(pr, now); continue; }
@@ -7125,6 +7218,180 @@ function drawPhoenixForm(p, x, y) {
       ctx.fill();
     }
     ctx.restore();
+  }
+  ctx.restore();
+}
+
+// ─── Enemy attack bars ───────────────────────────────────────────────────────
+// Over every enemy: its health, and a thin bar per attack that fills as the
+// attack recharges (bright when ready). Bosses get a wider health bar too.
+const CD_COLORS = ['#ffb040', '#c88aff', '#7ad8ff', '#ff7aa8'];
+function drawCdBars(m, x, y, w) {
+  const cds = m.cd || [];
+  for (let i = 0; i < cds.length; i++) {
+    const by = y - 3 - i * 3, k = cds[i], ready = k >= 1;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x, by, w, 2);
+    ctx.fillStyle = ready ? CD_COLORS[i % CD_COLORS.length] : 'rgba(150,150,170,0.75)';
+    ctx.fillRect(x, by, Math.round(w * Math.max(0, Math.min(1, k))), 2);
+  }
+}
+function drawEnemyBars(m, x, y) {
+  if (m.hidden) return;
+  const w = Math.max(40, m.w + 2), bx = Math.round(x + m.w / 2 - w / 2), by = y - 8;
+  drawHpBar(bx, by, w, 3, m.hp / m.maxHp, '#ff4a4a', '#330000');
+  drawCdBars(m, bx, by, w);
+}
+
+// ─── Sniper, golem, trap arrows, mirror shield ───────────────────────────────
+// The sniper's laser: thin while it tracks you, thick and flickering once locked.
+function drawSniperLaser(m) {
+  const a = m.aim.a, k = m.aim.k, x = m.x + m.w / 2, y = m.y + m.h / 2;
+  const locked = k > 0.3, len = 520;
+  ctx.save();
+  ctx.globalAlpha = locked ? 0.55 + 0.4 * (Math.floor(performance.now() / 60) % 2) : 0.35;
+  ctx.strokeStyle = '#ff2a2a'; ctx.lineWidth = locked ? 1.6 : 0.8;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len); ctx.stroke();
+  ctx.fillStyle = '#ff6a6a'; ctx.globalAlpha = 0.9;
+  ctx.beginPath(); ctx.arc(x + Math.cos(a) * 6, y + Math.sin(a) * 6, 1.6 + k * 1.4, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function drawSnipeShot(pr) {
+  const sp = Math.hypot(pr.dx, pr.dy) || 1;
+  ctx.save();
+  ctx.strokeStyle = '#ff4a3a'; ctx.globalAlpha = 0.5; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(pr.x, pr.y); ctx.lineTo(pr.x - pr.dx / sp * 26, pr.y - pr.dy / sp * 26); ctx.stroke();
+  ctx.strokeStyle = '#fff2c8'; ctx.globalAlpha = 1; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.moveTo(pr.x, pr.y); ctx.lineTo(pr.x - pr.dx / sp * 14, pr.y - pr.dy / sp * 14); ctx.stroke();
+  ctx.restore();
+}
+// The golem winding up its stamp: a molten glow welling up under it.
+function drawGolemWind(m, x, y) {
+  const k = 0.5 + 0.5 * Math.sin(performance.now() / 60);
+  ctx.save();
+  ctx.globalAlpha = 0.35 + 0.3 * k; ctx.fillStyle = '#ff6a1a';
+  ctx.beginPath(); ctx.ellipse(x + m.w / 2, y + m.h, m.w * 0.9, 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function drawTrapArrow(pr, ang) {
+  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+  ctx.fillStyle = '#6b4326'; ctx.fillRect(-9, -0.6, 9, 1.2);
+  ctx.fillStyle = '#e8e0c8'; ctx.fillRect(-10, -1.6, 2.5, 1); ctx.fillRect(-10, 0.6, 2.5, 1);
+  ctx.fillStyle = '#c4ccd8'; ctx.beginPath(); ctx.moveTo(3, 0); ctx.lineTo(-1, -2); ctx.lineTo(-1, 2); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+// MIRROR SHIELD: a turning hexagon of glass panes round you.
+function drawMirrorShield(p, x, y) {
+  const now = performance.now(), mx = x + p.w / 2, my = y + p.h / 2, r = Math.max(p.w, p.h) * 0.85;
+  ctx.save(); ctx.translate(mx, my); ctx.rotate(now / 900);
+  ctx.globalAlpha = 0.18; ctx.fillStyle = '#c8e8ff';
+  ctx.beginPath(); for (let i = 0; i < 6; i++) ctx.lineTo(Math.cos(i * Math.PI / 3) * r, Math.sin(i * Math.PI / 3) * r); ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 0.85; ctx.strokeStyle = '#e8f6ff'; ctx.lineWidth = 1.2; ctx.stroke();
+  ctx.globalAlpha = 0.9; ctx.fillStyle = '#ffffff';
+  const a = (now / 300) % (Math.PI * 2); ctx.fillRect(Math.cos(a) * r - 1, Math.sin(a) * r - 1, 2, 2);
+  ctx.restore();
+}
+
+// ─── Chronos Edge ────────────────────────────────────────────────────────────
+// The echo of a cut: a pale blue arc that brightens until it strikes again.
+function drawEchoes(list) {
+  for (const e of list) {
+    ctx.save();
+    ctx.globalAlpha = 0.25 + 0.55 * e.k; ctx.strokeStyle = '#7ac8ff'; ctx.lineWidth = 1 + 3 * e.k;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 0.85, e.a - 1.1, e.a + 1.1); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 0.15 + 0.25 * e.k; ctx.fillStyle = '#7ac8ff';
+    ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.arc(e.x, e.y, e.r * 0.85, e.a - 1.1, e.a + 1.1); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
+// Time stopped: the world drained to cold blue, a great clock over it, its hand
+// sweeping round as the seconds run out.
+function drawTimeStop(ts) {
+  const k = Math.max(0, Math.min(1, ts.t / 4000));
+  ctx.save();
+  ctx.fillStyle = 'rgba(40,70,120,0.28)'; ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  const x = CANVAS_W / 2, y = CANVAS_H / 2, r = Math.min(CANVAS_W, CANVAS_H) * 0.32;
+  ctx.globalAlpha = 0.35; ctx.strokeStyle = '#bfe4ff'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+  for (let i = 0; i < 12; i++) {
+    const a = i * Math.PI / 6;
+    ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * r * 0.88, y + Math.sin(a) * r * 0.88); ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); ctx.stroke();
+  }
+  const ha = -Math.PI / 2 + (1 - k) * Math.PI * 2;
+  ctx.globalAlpha = 0.55; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(ha) * r * 0.8, y + Math.sin(ha) * r * 0.8); ctx.stroke();
+  ctx.restore();
+}
+
+// ─── Hydra's Fang ────────────────────────────────────────────────────────────
+// A hydra head on its neck, rising out of a hole in the ground, turned to its prey.
+function drawHydraHead(x, y, a, scale, now, phase) {
+  const sway = Math.sin(now / 200 + phase) * 2;
+  ctx.save();
+  ctx.fillStyle = 'rgba(20,30,10,0.6)'; ctx.beginPath(); ctx.ellipse(x, y + 8 * scale, 7 * scale, 3 * scale, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#2a7a3a'; ctx.lineWidth = 4 * scale; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x, y + 8 * scale); ctx.quadraticCurveTo(x - 6 * scale + sway, y, x + sway * 0.5, y - 8 * scale); ctx.stroke();
+  ctx.strokeStyle = '#5ae87a'; ctx.lineWidth = 1.2 * scale;
+  ctx.beginPath(); ctx.moveTo(x - 1, y + 7 * scale); ctx.quadraticCurveTo(x - 7 * scale + sway, y, x + sway * 0.5 - 1, y - 8 * scale); ctx.stroke();
+  ctx.translate(x + sway * 0.5, y - 9 * scale); ctx.rotate(a); ctx.scale(scale, scale);
+  ctx.fillStyle = '#3aa84a';
+  ctx.beginPath(); ctx.moveTo(-3, -3.5); ctx.lineTo(5, -2); ctx.lineTo(8, 0); ctx.lineTo(5, 2); ctx.lineTo(-3, 3.5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#1e6a2a'; ctx.fillRect(-3, 0.5, 8, 1);
+  ctx.fillStyle = '#ffd84a'; ctx.fillRect(1, -2.5, 1.6, 1.2);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(5, 1, 0.8, 1.6); ctx.fillRect(6.4, 0.8, 0.8, 1.4);
+  ctx.restore();
+}
+function drawHydras(list) {
+  const now = performance.now();
+  list.forEach((h, i) => {
+    ctx.save(); ctx.globalAlpha = Math.min(1, h.k * 6);
+    drawHydraHead(h.x, h.y, h.a, h.sup ? 0.9 : 1.1, now, i);
+    ctx.restore();
+  });
+}
+// A serpent head darting through the air (the attack), or a glob of venom (the heads').
+function drawVenomShot(pr, ang, now) {
+  if (pr.weaponId === 'hydrabolt') {
+    const sp = Math.hypot(pr.dx, pr.dy) || 1;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(90,232,122,0.5)'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(pr.x, pr.y); ctx.lineTo(pr.x - pr.dx / sp * 10, pr.y - pr.dy / sp * 10); ctx.stroke();
+    ctx.fillStyle = '#5ae87a'; ctx.beginPath(); ctx.arc(pr.x, pr.y, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#d8ffc8'; ctx.fillRect(pr.x - 1, pr.y - 1.5, 1.5, 1.5);
+    ctx.restore();
+    return;
+  }
+  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+  ctx.strokeStyle = '#2a7a3a'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-3, 0);
+  for (let i = 1; i <= 4; i++) ctx.lineTo(-3 - i * 4, Math.sin(now / 50 + i) * 2.5);
+  ctx.stroke();
+  ctx.fillStyle = '#3aa84a';
+  ctx.beginPath(); ctx.moveTo(-4, -3.5); ctx.lineTo(4, -2); ctx.lineTo(7, 0); ctx.lineTo(4, 2); ctx.lineTo(-4, 3.5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ffd84a'; ctx.fillRect(0, -2.5, 1.6, 1.2);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(4.2, 1, 0.8, 1.6);
+  ctx.restore();
+}
+// Venom in the blood: green drops falling off.
+function drawVenomDrip(e, x, y) {
+  const now = performance.now();
+  ctx.save(); ctx.fillStyle = '#5ae87a';
+  for (let i = 0; i < 3; i++) {
+    const fall = (now / 18 + i * 9) % 14;
+    ctx.globalAlpha = 0.9 * (1 - fall / 14);
+    ctx.fillRect(Math.round(x + 2 + i * (e.w - 4) / 2), Math.round(y + e.h * 0.4 + fall), 1.5, 2);
+  }
+  ctx.restore();
+}
+// REGROWTH: green motes spiralling up round you.
+function drawRegrow(p, x, y) {
+  const now = performance.now(), mx = x + p.w / 2;
+  ctx.save(); ctx.fillStyle = '#9affb0';
+  for (let i = 0; i < 6; i++) {
+    const t = ((now / 900 + i / 6) % 1), a = t * Math.PI * 4 + i;
+    ctx.globalAlpha = 1 - t;
+    ctx.fillRect(Math.round(mx + Math.cos(a) * 10), Math.round(y + p.h - t * (p.h + 8)), 2, 2);
   }
   ctx.restore();
 }

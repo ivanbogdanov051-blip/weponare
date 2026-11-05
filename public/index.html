@@ -94,6 +94,8 @@
           <button class="map-btn" data-size="medium" onclick="pickMapSize('medium')">MEDIUM</button>
           <button class="map-btn" data-size="big" onclick="pickMapSize('big')">BIG</button>
         </span></div>
+      <div class="set-row" id="tapMoveRow"><span class="set-label">MOVE BY CLICKING</span>
+        <button class="set-btn" id="tapMoveBtn" onclick="toggleTapMove()">OFF</button></div>
       <div class="set-row"><span class="set-label">SHOW FPS &amp; PING</span>
         <button class="set-btn" id="fpsBtn" onclick="toggleNetOverlay()">OFF</button></div>
       <div class="set-row set-links">
@@ -387,14 +389,12 @@
         <button id="btn-ab1" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>Q</i></button><button id="btn-ab2" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>E</i></button><button id="btn-ab3" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>F</i></button><button id="btn-ab4" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>G</i></button><button id="btn-ab5" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>V</i></button><button id="btn-ab6" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>B</i></button>
       </div>
       <div class="action-row">
-        <button id="btn-prev" class="action-btn arrow-btn" aria-label="Previous weapon">&lt;</button>
-        <button id="btn-next" class="action-btn arrow-btn" aria-label="Next weapon">&gt;</button>
-        <button id="btn-parry" class="action-btn parry-btn">PARRY</button>
-        <button id="btn-special" class="action-btn special-btn">SPECIAL</button>
+        <button id="btn-parry" class="action-btn parry-btn round" aria-label="Parry">🛡️</button>
+        <button id="btn-special" class="action-btn special-btn round" aria-label="Special">✨</button>
       </div>
       <div class="action-row">
-        <button id="btn-super" class="action-btn super-btn hidden-btn">SUPER</button>
-        <button id="btn-attack" class="action-btn big-btn">ATK</button>
+        <button id="btn-super" class="action-btn super-btn round hidden-btn" aria-label="Super">💥</button>
+        <button id="btn-attack" class="action-btn big-btn round" aria-label="Attack">⚔️</button>
       </div>
     </div>
   </div>

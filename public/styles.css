@@ -1003,3 +1003,28 @@ body {
 /* The Saw Room */
 .mode-btn.btn-saw { border-color: #c81a1a; color: #ffb0b0; background: linear-gradient(180deg, #3a0606, #160202); box-shadow: 0 0 10px rgba(220, 20, 20, 0.45); }
 .mode-btn.btn-saw:hover { border-color: #ff3a3a; color: #fff; }
+
+/* ── Round emoji action buttons ── */
+#touchControls .action-btn.round {
+  border-radius: 50%; padding: 0; min-width: 0; letter-spacing: 0;
+  width: 54px; height: 54px; font-size: 24px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+#touchControls .action-btn.round.big-btn { width: 72px; height: 72px; font-size: 34px; }
+#touchControls .action-btn.round.hidden-btn { display: none; }
+#touchControls .action-btn.ability-btn { border-radius: 50%; }
+@media (max-height: 420px) {
+  #touchControls .action-btn.round { width: 46px; height: 46px; font-size: 20px; }
+  #touchControls .action-btn.round.big-btn { width: 60px; height: 60px; font-size: 28px; }
+}
+@media (max-height: 340px) {
+  #touchControls .action-btn.round { width: 40px; height: 40px; font-size: 18px; }
+  #touchControls .action-btn.round.big-btn { width: 52px; height: 52px; font-size: 24px; }
+}
+@media (max-width: 520px) {
+  #touchControls .action-btn.round { width: 46px; height: 46px; font-size: 20px; }
+  #touchControls .action-btn.round.big-btn { width: 62px; height: 62px; font-size: 28px; }
+}
+/* ── A much bigger joystick ── */
+.joystick { width: calc(var(--dpad-size, 52px) * 4.2); height: calc(var(--dpad-size, 52px) * 4.2); }
+.joy-knob { width: 38%; height: 38%; }

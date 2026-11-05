@@ -729,6 +729,8 @@ const MONSTER_SKIN = {
   skeleton:    { base: '#d8d0b8', eye: '#ff5a3a', eyes: 2 },
   light:       { base: '#f2ecc0', eye: '#3ad0ff', eyes: 2 },
   samurai:     { base: '#b8283a', eye: '#ffe08a', eyes: 2 },
+  sniper:      { base: '#4a6a3a', eye: '#ff3a3a', eyes: 1 },
+  golem:       { base: '#4a3428', eye: '#ff8a1a', eyes: 2 },
   // Boss
   giant:    { base: '#7a9a56', eye: '#ffe25a', eyes: 2 },
   portalmage: { base: '#5a2aa8', eye: '#ff9aff', eyes: 2 },
@@ -833,6 +835,16 @@ const MONSTER_SHAPE = {
     // A slim, sharp figure leaning into a sprint, with a swept-back crest.
     body: [[0.40,0.00],[0.66,0.04],[0.80,0.16],[0.84,0.34],[0.76,0.52],[0.70,0.74],[0.30,0.74],[0.22,0.52],[0.14,0.30],[0.00,0.10],[0.24,0.12]],
     legs: [[0.26,0.20],[0.54,0.20]], legTop: 0.72, headV: 0.24, lean: true,
+  },
+  sniper: {
+    // A hooded marksman in a ragged ghillie cloak.
+    body: [[0.36,0.00],[0.64,0.00],[0.78,0.14],[0.80,0.34],[0.90,0.72],[0.70,0.78],[0.30,0.78],[0.10,0.72],[0.20,0.34],[0.22,0.14]],
+    legs: [[0.28,0.22],[0.54,0.22]], legTop: 0.76, headV: 0.20,
+  },
+  golem: {
+    // A hunched heap of boulders with a tiny head sunk between huge shoulders.
+    body: [[0.38,0.06],[0.62,0.06],[0.70,0.16],[0.94,0.22],[1.00,0.50],[0.90,0.78],[0.10,0.78],[0.00,0.50],[0.06,0.22],[0.30,0.16]],
+    legs: [[0.18,0.30],[0.52,0.30]], legTop: 0.76, headV: 0.18,
   },
   infernal: {
     // A lean, horned demon.
@@ -1542,6 +1554,31 @@ function trapBuf(type, size, armed) {
     }
     poly(b, [[cx2, cy2 - s * 0.14], [cx2 + s * 0.12, cy2 + s * 0.08], [cx2 - s * 0.12, cy2 + s * 0.08]], pu[armed ? 4 : 3]);
     disc(b, cx2, cy2, 1.2, '#ffffff');
+  }
+  else if (type === 'arrow') {
+    // A stone plate with a ring of arrow slits.
+    const cx2 = o + s / 2, cy2 = o + s / 2, st = MAT5.stone;
+    rect(b, o, o, s, s, st[1]);
+    ditherRect(b, o + 1, o + 1, s - 2, s - 2, st[1], st[2], 'sparse');
+    rect(b, o + 1, o + 1, s - 2, 1, st[3]);
+    disc(b, cx2, cy2, s * 0.3, st[0]);
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      line(b, cx2 + Math.cos(a) * s * 0.2, cy2 + Math.sin(a) * s * 0.2, cx2 + Math.cos(a) * s * 0.36, cy2 + Math.sin(a) * s * 0.36, '#1a1410');
+      if (armed) setPx(b, cx2 + Math.cos(a) * s * 0.3, cy2 + Math.sin(a) * s * 0.3, '#e8d8b0');
+    }
+    disc(b, cx2, cy2, 2.2, armed ? '#ffd84a' : '#8a6a4a');
+  } else if (type === 'rod') {
+    // An iron plate with a copper rod wound in coil, crackling when armed.
+    const cx2 = o + s / 2, cy2 = o + s / 2;
+    rect(b, o, o, s, s, MAT5.iron[1]);
+    ditherRect(b, o + 1, o + 1, s - 2, s - 2, MAT5.iron[1], MAT5.iron[2], 'checker');
+    for (const [qx, qy] of [[o + 2, o + 2], [o + s - 4, o + 2], [o + 2, o + s - 4], [o + s - 4, o + s - 4]]) rect(b, qx, qy, 2, 2, MAT5.iron[4]);
+    rect(b, cx2 - 1, o + 3, 3, s - 6, '#b8642a');
+    rect(b, cx2 - 1, o + 3, 1, s - 6, '#e8945a');
+    for (let y = o + 6; y < o + s - 5; y += 3) rect(b, cx2 - 3, y, 7, 1, '#d8a040');
+    disc(b, cx2, o + 3, 2.4, armed ? '#fff6a0' : '#d8a040');
+    if (armed) { line(b, cx2 + 3, o + 3, cx2 + 7, o + 6, '#fff6a0'); line(b, cx2 - 3, o + 3, cx2 - 7, o + 7, '#fff6a0'); }
   }
 
   outline(b, EDGE);

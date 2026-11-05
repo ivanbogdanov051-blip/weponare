@@ -91,6 +91,10 @@ const TRAP_TYPES = {
   nullfield:{ mode: 'instant',              size: 34, radius: 60, effect: 'silence', dur: 3500, color: '#9a9ab8', name: 'NULL FIELD' },
   // The ground splits after a beat: hurts and staggers everyone around it.
   quake:  { mode: 'delayed', armTime: 1000, size: 36, radius: 100, damage: 26, effect: 'quake', dur: 900, color: '#c89a5a', name: 'FAULT LINE' },
+  // Clicks, then fires a ring of arrows out in every direction.
+  arrow:  { mode: 'delayed', armTime: 500, size: 32, radius: 40, damage: 18, effect: 'arrows', count: 10, color: '#c8a070', name: 'ARROW VOLLEY' },
+  // Hums and marks a wide circle; a long beat later lightning hits everything in it.
+  rod:    { mode: 'delayed', armTime: 1400, size: 30, radius: 85, damage: 42, effect: 'rod', color: '#ffe45a', name: 'LIGHTNING ROD' },
 };
 
 // Dev hook: limit which traps spawn (comma list). Unset in production.
@@ -318,10 +322,10 @@ const WEAPONS = [
     shopOnly: true, noRequirement: true, needSamurai: true, price: 30000, slashWave: true,
     special: { kind: 'dashwave', dmg: 240, range: 340, cd: 6500 },
     super:   { kind: 'katanaspin', dmg: 45, cd: 20000 } },
-  { id: 'lightblade', name: 'LIGHT BLADE', damage: 30, range: 56, atkSpd: 900, type: 'melee', unlockXp: 0,
+  { id: 'lightblade', name: 'LIGHT BLADE', damage: 22, range: 56, atkSpd: 1100, type: 'melee', unlockXp: 0,
     shopOnly: true, noRequirement: true, needLight: true, price: 0, lightDash: true,
-    special: { kind: 'lightdashes', dmg: 55, range: 260, cd: 9000 },
-    super:   { kind: 'lightspeed', dmg: 240, cd: 26000 } },
+    special: { kind: 'lightdashes', dmg: 40, range: 260, cd: 12000 },
+    super:   { kind: 'lightspeed', dmg: 170, cd: 32000 } },
   // ── MYTHIC ── Only sold in the rare shop that opens after a Giant wave
   // (WAVES, EXTREME), for a fortune, once you have maxed the weapons it
   // asks for and cut down enough enemies. Only one mythic goes into a game, and a
@@ -331,53 +335,75 @@ const WEAPONS = [
   // enemies and chains whoever it hits to the spot for 3s. SUPER: a dark and a
   // light kunai at blinding speed into one foe: parried, they shatter; if not,
   // the foe suffers every bad effect for 5s, and so does anyone who comes close.
-  { id: 'darklight', name: 'DARKLIGHT', damage: 46, range: 240, atkSpd: 380, type: 'ranged', unlockXp: 0,
+  { id: 'darklight', name: 'DARKLIGHT', damage: 58, range: 240, atkSpd: 380, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, mythic: true, price: 150000, kunaiOrbit: true,
     mythicKills: 100, mythicNeeds: ['lightblade'],
-    special: { kind: 'kunaistorm', dmg: 90, range: 400, cd: 7000 },
-    super:   { kind: 'darklightpair', dmg: 140, cd: 22000 } },
+    special: { kind: 'kunaistorm', dmg: 110, range: 400, cd: 7000 },
+    super:   { kind: 'darklightpair', dmg: 175, cd: 22000 } },
   // STARFALL: a staff with a crescent moon cradling a star. ATK: a star falls on
   // the nearest foe (a marker shows where first). SPECIAL: a constellation joins
   // up to 5 foes; a moment later they all take the hit, are dragged together and
   // dazed. SUPER: a 4s star shower on everything around. PASSIVE: every foe your
   // stars hit heals you.
-  { id: 'starfall', name: 'STARFALL', damage: 62, range: 320, atkSpd: 560, type: 'ranged', unlockXp: 0,
+  { id: 'starfall', name: 'STARFALL', damage: 78, range: 320, atkSpd: 560, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, mythic: true, price: 250000, starStaff: true,
     mythicKills: 150, mythicNeeds: ['sunbow'],
-    special: { kind: 'constellation', dmg: 120, range: 420, cd: 8000 },
-    super:   { kind: 'starrain', dmg: 80, cd: 24000 } },
+    special: { kind: 'constellation', dmg: 150, range: 420, cd: 8000 },
+    super:   { kind: 'starrain', dmg: 100, cd: 24000 } },
   // WORLDSPLITTER: an obsidian greatsword veined with magma. ATK: the swing
   // splits the ground ahead — the crack erupts, then burns for a while.
   // SPECIAL: six cracks tear out all round you, erupting one after another and
   // knocking foes off their feet. SUPER: leap into the sky (untouchable) and come
   // down on the nearest foe like a meteor, the ground shattering all around.
   // PASSIVE: every 3rd swing splits the ground three ways.
-  { id: 'worldsplitter', name: 'WORLDSPLITTER', damage: 72, range: 210, atkSpd: 700, type: 'ranged', unlockXp: 0,
+  { id: 'worldsplitter', name: 'WORLDSPLITTER', damage: 90, range: 210, atkSpd: 700, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, mythic: true, price: 350000, groundSplit: true,
     mythicKills: 200, mythicNeeds: ['stormhammer'],
-    special: { kind: 'tectonic', dmg: 110, range: 230, cd: 9000 },
-    super:   { kind: 'skyfall', dmg: 250, cd: 24000 } },
+    special: { kind: 'tectonic', dmg: 140, range: 230, cd: 9000 },
+    super:   { kind: 'skyfall', dmg: 320, cd: 24000 } },
   // SOUL LANTERN: a black iron lantern burning with a ghost-green flame. ATK: a
   // wisp that hunts the nearest foe. Every foe it kills leaves its soul in the
   // lantern (up to 12, circling you). SPECIAL: let every soul loose as hunting
   // wisps that heal you when they hit. SUPER: DEATH'S DOOR — three spirits rise
   // to fight for you, and for 8s everything you kill gets up again on your side.
   // PASSIVE: every soul you carry shields you from 2% of all damage.
-  { id: 'soullantern', name: 'SOUL LANTERN', damage: 44, range: 320, atkSpd: 420, type: 'ranged', unlockXp: 0,
+  { id: 'soullantern', name: 'SOUL LANTERN', damage: 55, range: 320, atkSpd: 420, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, mythic: true, price: 450000, soulWisp: true,
     mythicKills: 250, mythicNeeds: ['reaper'],
-    special: { kind: 'soulstorm', dmg: 65, range: 600, cd: 8000 },
-    super:   { kind: 'deathsdoor', dmg: 60, cd: 28000 } },
+    special: { kind: 'soulstorm', dmg: 80, range: 600, cd: 8000 },
+    super:   { kind: 'deathsdoor', dmg: 75, cd: 28000 } },
   // ASHFEATHER: a bow of living flame, its limbs made of phoenix feathers. ATK:
   // a burning arrow that bursts into three more when it hits. SPECIAL: a fan of
   // nine of them. SUPER: PHOENIX FORM — 6s ablaze: much faster, a trail of fire
   // behind you, burning everything you touch, healing as you go. PASSIVE: REBIRTH
   // — the first time you'd die in a game you rise again in an explosion of fire.
-  { id: 'ashfeather', name: 'ASHFEATHER', damage: 40, range: 340, atkSpd: 420, type: 'ranged', unlockXp: 0,
+  { id: 'ashfeather', name: 'ASHFEATHER', damage: 50, range: 340, atkSpd: 420, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, mythic: true, price: 300000, phoenixBow: true,
     mythicKills: 180, mythicNeeds: ['emberstaff'],
-    special: { kind: 'sunvolley', dmg: 45, range: 360, cd: 7500 },
-    super:   { kind: 'phoenixform', dmg: 30, cd: 24000 } },
+    special: { kind: 'sunvolley', dmg: 58, range: 360, cd: 7500 },
+    super:   { kind: 'phoenixform', dmg: 40, cd: 24000 } },
+  // CHRONOS EDGE: a gold-and-azure sword with a clock in its guard. ATK: a wide
+  // cut in front of you, and its echo cuts the same spot again a second later.
+  // SPECIAL: REWIND — snap back to where you were 3s ago with the health you had
+  // then, cutting everything on the way. SUPER: TIME STOP — for 4s every enemy
+  // and every enemy shot stands frozen while you move. PASSIVE: BORROWED TIME —
+  // your special and super recharge 30% faster.
+  { id: 'chronosedge', name: 'CHRONOS EDGE', damage: 60, range: 80, atkSpd: 480, type: 'ranged', unlockXp: 0,
+    shopOnly: true, noRequirement: true, mythic: true, price: 350000, timeBlade: true,
+    mythicKills: 220, mythicNeeds: ['chronostaff'],
+    special: { kind: 'rewind', dmg: 90, range: 300, cd: 9000 },
+    super:   { kind: 'timestop', dmg: 0, cd: 26000 } },
+  // HYDRA'S FANG: a trident whose three prongs are serpent heads. ATK: a
+  // serpent's head darts out and hunts a foe, leaving its venom in them.
+  // SPECIAL: three hydra heads burst from the ground round you and spit venom
+  // for 8s. SUPER: NINE HEADS — the whole hydra rises round you for 5s, every
+  // head biting at whatever comes close. PASSIVE: REGROWTH — drop below 30%
+  // health and you regrow 5% a second for 4s (every 15s).
+  { id: 'hydrafang', name: "HYDRA'S FANG", damage: 52, range: 260, atkSpd: 450, type: 'ranged', unlockXp: 0,
+    shopOnly: true, noRequirement: true, mythic: true, price: 400000, hydraBite: true,
+    mythicKills: 240, mythicNeeds: ['glaive'],
+    special: { kind: 'hydraheads', dmg: 34, range: 260, cd: 10000 },
+    super:   { kind: 'ninehead', dmg: 30, cd: 26000 } },
 ];
 
 // Melee reach: the swing is 50% longer and a slam special 30% wider. The shield
@@ -401,7 +427,7 @@ const WEAPON_COLORS = {
   glaive: '#b0d8c0', katana: '#eef0ff', chakram: '#66e0c0', cannon: '#9a90a8', reaper: '#cc66aa',
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
   shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
-  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff', samuraiblade: '#ff5a5a', endlessscythe: '#7a2aff', darklight: '#e8e8f4', starfall: '#ffe9a0', worldsplitter: '#ff6a1a', soullantern: '#6affc8', ashfeather: '#ff8a3a',
+  fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff', samuraiblade: '#ff5a5a', endlessscythe: '#7a2aff', darklight: '#e8e8f4', starfall: '#ffe9a0', worldsplitter: '#ff6a1a', soullantern: '#6affc8', ashfeather: '#ff8a3a', chronosedge: '#7ac8ff', hydrafang: '#5ae87a',
   ghostdagger: '#a8f0ff', stormhammer: '#7ac8ff', frostscythe: '#bfefff', sunbow: '#ffd24a',
 };
 
@@ -470,6 +496,8 @@ const WEAPON_UPGRADES = {
   worldsplitter: ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   soullantern: ['dmg', 'spd', 'crit', 'cdr'],
   ashfeather:  ['dmg', 'spd', 'crit', 'cdr', 'rng'],
+  chronosedge: ['dmg', 'spd', 'crit', 'cdr', 'rng'],
+  hydrafang:   ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   ghostdagger: ['dmg', 'spd', 'crit', 'cdr'],
   stormhammer: ['dmg', 'spd', 'crit', 'cdr', 'knock'],
   frostscythe: ['dmg', 'rng', 'chill', 'cdr', 'aoe'],
@@ -507,6 +535,8 @@ const PASSIVES = {
   windwand:    { name: 'GALE GUARD',     color: '#d8f4ff', desc: 'blows away an enemy shot that comes close, every 0.5s' },
   revolver:    { name: 'CHAIN REACTION', color: '#ffa040', desc: 'every hit explodes onto the foes around it, and everything you kill blows up even bigger' },
   worldsplitter: { name: 'AFTERSHOCK', color: '#ff6a1a', desc: 'every 3rd swing splits the ground three ways' },
+  chronosedge: { name: 'BORROWED TIME', color: '#7ac8ff', desc: 'your special and super recharge 30% faster' },
+  hydrafang:   { name: 'REGROWTH', color: '#5ae87a', desc: 'drop below 30% health and you regrow 5% of it a second for 4s (every 15s)' },
   ashfeather:  { name: 'REBIRTH', color: '#ff8a3a', desc: 'the first time you would die in a game, you rise again at half health in an explosion of fire' },
   soullantern: { name: 'SOUL BOND', color: '#6affc8', desc: 'every soul you carry shields you from 2% of all damage (up to 32%)' },
   starfall:    { name: 'STARLIGHT', color: '#ffe9a0', desc: 'every enemy your stars hit heals you 2' },
@@ -666,6 +696,10 @@ const ABILITIES = [
     desc: 'Hurl a huge fireball that explodes and sets everything around it alight' },
   { id: 'smite',     name: 'SMITE',       price: 8000,  cd: 12000, color: '#fff2a0',
     desc: 'A pillar of light crashes down on the toughest enemy near you' },
+  { id: 'reflect',   name: 'MIRROR SHIELD', price: 5500, cd: 16000, color: '#c8e8ff',
+    desc: 'For 3s every shot that touches you bounces straight back at whoever fired it' },
+  { id: 'magnet',    name: 'COIN MAGNET', price: 3000,  cd: 15000, color: '#ffd84a',
+    desc: 'Pull every coin and powerup on the floor straight to you' },
   { id: 'frostarmor', name: 'FROST ARMOR', price: 6500, cd: 22000, color: '#9fe8ff',
     desc: 'Ice armour for 6s: take 25% less damage and freeze whoever hits you' },
 ];
@@ -780,6 +814,18 @@ const MONSTER_TYPES = {
     name: 'SAMURAI', minWave: 3, weight: 7, hp: 1.1, dmg: 1.1, speed: 1.15, size: 1.0,
     color: '#c8303a', xp: 1.8, coins: 2.0, ai: 'samurai',
   },
+  // Keeps its distance, aims a red laser at you for a long moment, then fires
+  // one very fast, very hard shot along it (parry it and it flies back).
+  sniper: {
+    name: 'SNIPER', minWave: 5, weight: 3, hp: 0.8, dmg: 1.0, speed: 0.75, size: 0.95,
+    color: '#5a7a4a', xp: 1.4, coins: 1.5, ai: 'sniper', noMelee: true,
+  },
+  // A slow lump of molten rock: every few seconds it stamps and splits the
+  // ground toward you in three burning cracks.
+  golem: {
+    name: 'MAGMA GOLEM', minWave: 9, weight: 2, hp: 3.6, dmg: 1.5, speed: 0.55, size: 1.45,
+    color: '#5a3a2a', xp: 2.0, coins: 2.2, armor: 0.25, ai: 'golem',
+  },
   // Blindingly fast and rare (see maybeLightWave): sweeps through you and
   // blinks away, or chains curving dashes. Usually comes alone.
   light: {
@@ -836,7 +882,8 @@ const MONSTER_TYPES = {
 // EXTREME mode fields only the strongest monsters, starts as hard as a deep
 // normal run (EXTREME_LEVEL_OFFSET waves in) and pays far more.
 const EXTREME_ROSTER = { brute: 2, warden: 3, behemoth: 3, titan: 2, wraith: 4, infernal: 3,
-                         bomber: 2, shaman: 2, splitter: 2, charger: 3, necromancer: 2, samurai: 8 };
+                         bomber: 2, shaman: 2, splitter: 2, charger: 3, necromancer: 2, samurai: 8,
+                         sniper: 3, golem: 3 };
 const EXTREME_LEVEL_OFFSET = 9;
 const EXTREME_COIN_MULT = 3;        // on top of the normal kill payout
 const EXTREME_WAVE_BONUS = 120;     // coins per wave number, paid on every clear
@@ -1436,6 +1483,17 @@ function fireTrap(tr, trigger) {
     if (trigger && !trigger.dead) warpPlayer(trigger);
     return;
   }
+  if (tr.effect === 'arrows') {
+    const n = def.count || 10, off = Math.random() * Math.PI;
+    for (let i = 0; i < n; i++) {
+      const a = off + i * Math.PI * 2 / n;
+      room.projectiles.push({ id: nextId(), x: tx, y: ty, dx: Math.cos(a) * 6, dy: Math.sin(a) * 6, damage: tr.damage, owner: by,
+        traveled: 0, maxRange: 320, weaponId: 'traparrow', isAoe: false, aoeRadius: 0, pierce: false, grapple: false,
+        boomerang: false, returning: false, life: 0, hitTargets: null, hitR: 3 });
+    }
+    if (tr.element) for (const t of inRange) trapElement(t, tr, by);
+    return;
+  }
   if (def.linger) {
     // Poison, saws, gravity, the healing spring: they linger, and their ticks
     // come from the trap update.
@@ -1469,6 +1527,10 @@ function fireTrap(tr, trigger) {
     } else if (tr.effect === 'quake') {
       applyDamage(t, tr.damage, by);
       stagger(t, tr.dur, 'quake');
+    } else if (tr.effect === 'rod') {
+      room.particles.push({ type: 'bolt', x: cx(t) + (Math.random() - 0.5) * 10, y: ARENA_Y + 2, x2: cx(t), y2: cy(t), timer: 400, max: 400, color: tr.color });
+      applyDamage(t, tr.damage, by);
+      if (!t.dead) stagger(t, 700, 'shock');
     } else if (tr.effect === 'keg' || tr.effect === 'launch') {
       applyDamage(t, tr.damage, by);
       let dx = cx(t) - tx, dy = cy(t) - ty, d = Math.hypot(dx, dy);
@@ -2206,6 +2268,140 @@ function updateWorldsplitter(dt) {
   });
 }
 
+// CHRONOS EDGE
+const CHR_ARC = 1.1, CHR_ECHO_MS = 1000, CHR_ECHO_SHARE = 0.7, CHR_HIST_MS = 3000, CHR_HIST_GAP = 100, CHR_STOP_MS = 4000, CHR_CDR = 0.3;
+// Everyone in the cut: in reach and within the arc in front.
+function coneHit(owner, x, y, a, r, dmg) {
+  let hits = 0;
+  for (const t of enemyTargets(owner)) {
+    const dx = cx(t) - x, dy = cy(t) - y, d = Math.hypot(dx, dy);
+    if (d > r + t.w / 2) continue;
+    let da = Math.atan2(dy, dx) - a; while (da > Math.PI) da -= Math.PI * 2; while (da < -Math.PI) da += Math.PI * 2;
+    if (d > 10 && Math.abs(da) > CHR_ARC) continue;
+    if (!t.num) t.invincible = 0;
+    applyDamage(t, dmg, owner);
+    hits++;
+  }
+  return hits;
+}
+function timeAttack(p, pKey, w, dmgMult) {
+  const a = nearestTargetAngle(p, pKey), dmg = Math.round(w.damage * dmgMult);
+  p.facing = Math.cos(a) < 0 ? -1 : 1;
+  coneHit(pKey, cx(p), cy(p), a, w.range, dmg);
+  if (!room.echoes) room.echoes = [];
+  room.echoes.push({ owner: pKey, x: cx(p), y: cy(p), a, r: w.range, t: 0, life: CHR_ECHO_MS, dmg: Math.round(dmg * CHR_ECHO_SHARE) });
+}
+// REWIND: back to where (and how healthy) you were 3s ago, cutting the way through.
+function castRewind(p, pKey, dmg) {
+  const h = p.hist && p.hist[0];
+  if (!h) { p.specialCooldown = 0; return; }
+  const seg = { x1: cx(p), y1: cy(p), x2: h.x + p.w / 2, y2: h.y + p.h / 2 };
+  for (const t of enemyTargets(pKey)) {
+    if (segDist(cx(t), cy(t), seg) > 14 + t.w / 2) continue;
+    if (!t.num) t.invincible = 0;
+    applyDamage(t, dmg, pKey);
+  }
+  room.particles.push({ type: 'streak', x: seg.x1, y: seg.y1, x2: seg.x2, y2: seg.y2, timer: 500, max: 500, color: '#7ac8ff' });
+  room.particles.push({ type: 'teleport', x: seg.x1, y: seg.y1, timer: 400, max: 400, color: '#7ac8ff' });
+  p.x = h.x; p.y = h.y; clampToArena(p, 2);
+  p.hp = Math.max(p.hp, Math.min(p.maxHp, h.hp));
+  p.pull = null; p.hist = [];
+  if (p.effects) for (const k of BAD_EFFECTS) delete p.effects[k];   // whatever hit you since never happened
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 40, timer: 700, max: 700, color: '#7ac8ff', text: 'REWIND' });
+}
+// TIME STOP: every enemy (and every enemy shot) frozen for 4s.
+function stopTime(p, pKey) {
+  room.timeStop = { owner: pKey, t: CHR_STOP_MS };
+  for (const t of enemyTargets(pKey)) {
+    if (t.num) { applyEffect(t, 'root', CHR_STOP_MS); applyEffect(t, 'silence', CHR_STOP_MS); }
+    else { t.freeze = Math.max(t.freeze || 0, CHR_STOP_MS); t.freezeKind = 'timestop'; t.swing = 0; }
+  }
+  room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 300, timer: 900, max: 900, color: '#7ac8ff' });
+  room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26, text: 'TIME STOPS', color: '#7ac8ff', timer: 2200, max: 2200 });
+}
+function updateChronos(dt) {
+  if (!room.echoes) room.echoes = [];
+  const now = Date.now();
+  for (const key of KEYS) {
+    const p = room.players[key];
+    if (!p || p.dead || weapon(p).id !== 'chronosedge') { if (p) p.hist = null; continue; }
+    if (!p.hist) p.hist = [];
+    if (!p.hist.length || now - p.hist[p.hist.length - 1].at >= CHR_HIST_GAP) p.hist.push({ x: p.x, y: p.y, hp: p.hp, at: now });
+    while (p.hist.length && now - p.hist[0].at > CHR_HIST_MS) p.hist.shift();
+  }
+  room.echoes = room.echoes.filter(e => {
+    e.t += dt;
+    if (e.t < e.life) return true;
+    coneHit(e.owner, e.x, e.y, e.a, e.r, e.dmg);
+    room.particles.push({ type: 'shockwave', x: e.x + Math.cos(e.a) * e.r * 0.5, y: e.y + Math.sin(e.a) * e.r * 0.5, maxR: e.r * 0.6, timer: 300, max: 300, color: '#7ac8ff' });
+    return false;
+  });
+  if (room.timeStop) { room.timeStop.t -= dt; if (room.timeStop.t <= 0) room.timeStop = null; }
+}
+
+// HYDRA'S FANG
+const HY_LIFE = 8000, HY_GAP = 600, HY_RANGE = 260, HY_SUPER_MS = 5000, HY_SUPER_GAP = 350, HY_SUPER_N = 9, HY_SUPER_R = 34;
+const HY_VENOM_MS = 3000, HY_VENOM_TICK = 500, HY_REGROW = 0.05, HY_REGROW_MS = 4000, HY_REGROW_CD = 15000;
+function venomShot(pKey, x, y, a, dmg, kind, quarry) {
+  room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * 7, dy: Math.sin(a) * 7, damage: dmg, owner: pKey,
+    traveled: 0, maxRange: kind === 'hydrabite' ? 700 : 340, weaponId: kind, isAoe: false, aoeRadius: 0, pierce: false, grapple: false,
+    boomerang: false, returning: false, life: 0, hitTargets: null, hitR: 5, homing: true, turn: 9, seekR: 500, quarry: quarry || null,
+    noIframe: true, venom: Math.max(2, Math.round(dmg * 0.12)) });
+}
+function hydraAttack(p, pKey, w, dmgMult) {
+  const a = nearestTargetAngle(p, pKey);
+  p.facing = Math.cos(a) < 0 ? -1 : 1;
+  venomShot(pKey, cx(p), cy(p), a, Math.round(w.damage * dmgMult), 'hydrabite', nearestFoe(p, pKey));
+}
+// Heads rising from the ground: three that stay put (SPECIAL), or the whole
+// hydra of nine round you, moving with you (SUPER).
+function raiseHeads(p, pKey, dmg, nine) {
+  if (!room.hydras) room.hydras = [];
+  const n = nine ? HY_SUPER_N : 3;
+  for (let i = 0; i < n; i++) {
+    const a = i * Math.PI * 2 / n;
+    room.hydras.push({ owner: pKey, x: cx(p) + Math.cos(a) * (nine ? HY_SUPER_R : 40), y: cy(p) + Math.sin(a) * (nine ? HY_SUPER_R : 40),
+                       off: a, follow: nine, t: nine ? HY_SUPER_MS : HY_LIFE, life: nine ? HY_SUPER_MS : HY_LIFE,
+                       fire: i * 60, gap: nine ? HY_SUPER_GAP : HY_GAP, dmg, aim: a });
+  }
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 60, timer: 800, max: 800, color: '#5ae87a', text: nine ? 'NINE HEADS' : 'HYDRA' });
+}
+function updateHydra(dt) {
+  if (!room.hydras) room.hydras = [];
+  room.hydras = room.hydras.filter(h => {
+    const o = room.players[h.owner];
+    if (!o || o.dead) return false;
+    h.t -= dt;
+    if (h.follow) { h.off += dt * 0.0012; h.x = cx(o) + Math.cos(h.off) * HY_SUPER_R; h.y = cy(o) + Math.sin(h.off) * HY_SUPER_R; }
+    h.fire -= dt;
+    if (h.fire <= 0) {
+      let best = null, bd = HY_RANGE;
+      for (const t of enemyTargets(h.owner)) { const d = Math.hypot(cx(t) - h.x, cy(t) - h.y); if (d < bd) { bd = d; best = t; } }
+      if (best) {
+        h.aim = Math.atan2(cy(best) - h.y, cx(best) - h.x);
+        venomShot(h.owner, h.x, h.y - 6, h.aim, h.dmg, 'hydrabolt', best);
+        h.fire = h.gap;
+      } else h.fire = 150;
+    }
+    return h.t > 0;
+  });
+  // Venom works on whoever carries it; REGROWTH heals the wielder when low.
+  for (const e of [...allPlayers(), ...room.monsters, ...room.allies]) {
+    if (!e || e.dead) continue;
+    if (e.venomT > 0) {
+      e.venomT -= dt; e.venomAcc = (e.venomAcc || 0) + dt;
+      while (e.venomAcc >= HY_VENOM_TICK && !e.dead) { e.venomAcc -= HY_VENOM_TICK; dotDamage(e, e.venomDmg || 3); }
+    }
+    if (!e.num) continue;
+    if (e.regrowCd > 0) e.regrowCd -= dt;
+    if (e.regrowT > 0) { e.regrowT -= dt; e.hp = Math.min(e.maxHp, e.hp + e.maxHp * HY_REGROW * dt / 1000); }
+    else if (e.passive === 'hydrafang' && !(e.regrowCd > 0) && e.hp < e.maxHp * 0.3) {
+      e.regrowT = HY_REGROW_MS; e.regrowCd = HY_REGROW_CD;
+      room.particles.push({ type: 'trapburst', x: cx(e), y: cy(e), maxR: 36, timer: 700, max: 700, color: '#5ae87a', text: 'REGROWTH' });
+    }
+  }
+}
+
 // ASHFEATHER
 const PHX_SPEED = 9, PHX_SPLIT_ANG = 0.4, PHX_BURN = 2500, PHX_VOLLEY = 9, PHX_CONE = 1.1;
 const PHX_FORM_MS = 6000, PHX_SPEEDMULT = 1.8, PHX_TOUCH_R = 34, PHX_TOUCH_GAP = 300, PHX_HEAL = 0.03, PHX_REBIRTH_R = 90, PHX_REBIRTH_DMG = 80;
@@ -2230,9 +2426,11 @@ function castSunVolley(p, pKey, sp, dmg) {
   const a0 = nearestTargetAngle(p, pKey);
   for (let i = 0; i < PHX_VOLLEY; i++) phxArrow(pKey, cx(p), cy(p), a0 - PHX_CONE / 2 + PHX_CONE * i / (PHX_VOLLEY - 1), dmg, true);
 }
+const MIRROR_MS = 3000;
 function updatePhoenix(dt) {
   for (const key of KEYS) {
     const p = room.players[key];
+    if (p && p.mirrorT > 0) p.mirrorT -= dt;
     if (!p || !p.phoenix) continue;
     if (p.dead) { p.phoenix = null; continue; }
     const f = p.phoenix;
@@ -2769,7 +2967,48 @@ function monsterSearch(m, spd, factor, dt) {
   }
 }
 
-const MONSTER_AI = { bomber: aiBomber, shaman: aiShaman, charger: aiCharger, necro: aiNecro, light: aiLight, samurai: aiSamurai };
+const MONSTER_AI = { bomber: aiBomber, shaman: aiShaman, charger: aiCharger, necro: aiNecro, light: aiLight, samurai: aiSamurai,
+                     sniper: aiSniper, golem: aiGolem };
+// SNIPER: hold a firing line, aim a laser (tracking, then locked), fire.
+const SNIPE_AIM = 1300, SNIPE_LOCK = 0.7, SNIPE_CD = 3200, SNIPE_SPEED = 11, SNIPE_MULT = 2.4, SNIPE_RANGE = 440;
+function aiSniper(m, t, dist, dx, dy, spd, factor, dt) {
+  m.snipeCd = (m.snipeCd ?? 1600) - dt;
+  if (m.aim) {
+    m.aim.t -= dt;
+    if (m.aim.t > SNIPE_AIM * (1 - SNIPE_LOCK)) m.aim.a = Math.atan2(dy, dx);   // tracking; the last part is locked
+    m.face = Math.cos(m.aim.a) < 0 ? -1 : 1;
+    if (m.aim.t <= 0) {
+      const a = m.aim.a;
+      room.projectiles.push({ id: nextId(), x: cx(m), y: cy(m), dx: Math.cos(a) * SNIPE_SPEED, dy: Math.sin(a) * SNIPE_SPEED,
+        damage: Math.max(14, Math.round(m.atkDamage * SNIPE_MULT)), owner: 'monster', traveled: 0, maxRange: 900, weaponId: 'snipe',
+        isAoe: false, aoeRadius: 0, pierce: false, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: null, hitR: 4 });
+      m.aim = null; m.snipeCd = SNIPE_CD; m.swing = MONSTER_SWING_MS;
+    }
+    return true;
+  }
+  if (m.snipeCd <= 0 && dist < SNIPE_RANGE) { m.aim = { t: SNIPE_AIM, a: Math.atan2(dy, dx) }; return true; }
+  // Keep a firing distance: back off when crowded, close in when far.
+  if (dist < 190) { m.x -= dx / dist * spd * factor; m.y -= dy / dist * spd * factor; }
+  else if (dist > 320) { m.x += dx / dist * spd * factor; m.y += dy / dist * spd * factor; }
+  return true;
+}
+// MAGMA GOLEM: a stamp, then three burning cracks toward you.
+const GOLEM_WIND = 750, GOLEM_CD = 4500, GOLEM_RANGE = 260, GOLEM_LEN = 230;
+function aiGolem(m, t, dist, dx, dy, spd, factor, dt) {
+  m.quakeCd = (m.quakeCd ?? 2500) - dt;
+  if (m.gwind > 0) {
+    m.gwind -= dt;
+    if (m.gwind <= 0) {
+      const a = Math.atan2(dy, dx), dmg = Math.round(m.atkDamage * 1.4);
+      for (const off of [-0.35, 0, 0.35]) crackGround('monster', cx(m), cy(m), a + off, GOLEM_LEN, dmg, { erupt: 260, stun: 500, life: 2400 });
+      room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m) + m.h / 2, maxR: 40, timer: 400, max: 400, color: '#ff6a1a' });
+      m.quakeCd = GOLEM_CD; m.swing = MONSTER_SWING_MS;
+    }
+    return true;
+  }
+  if (m.quakeCd <= 0 && dist < GOLEM_RANGE) { m.gwind = GOLEM_WIND; return true; }
+  return false;   // otherwise it lumbers in and punches
+}
 
 // After a monster is killed (and paid for): bombers pop, splitters split,
 // a necromancer's skeletons crumble.
@@ -2852,6 +3091,9 @@ function clearField() {
   room.constels = [];
   room.fissures = [];
   room.saw = null;
+  room.echoes = [];
+  room.hydras = [];
+  room.timeStop = null;
   room.itemSpawnTimer = ITEM_SPAWN_MIN;
 }
 
@@ -3534,6 +3776,8 @@ function tickRoom(dt) {
   updateWorldsplitter(dt);
   updateLantern(dt);
   updatePhoenix(dt);
+  updateChronos(dt);
+  updateHydra(dt);
   if (room.gameMode === 'sawroom') updateSawRoom(dt);
   updateRareShop(dt);
 
@@ -3800,6 +4044,7 @@ function homeProjectile(proj, dt) {
 
 function updateProjectile(proj, factor, dt) {
   if (proj.dead) return false;   // shot down
+  if (room.timeStop && proj.owner !== room.timeStop.owner) return true;   // TIME STOP: frozen mid-air
   const stepLen = Math.hypot(proj.dx, proj.dy) * factor;
   const subs = Math.max(1, Math.ceil(stepLen / 5));
   for (let i = 0; i < subs; i++) {
@@ -3881,7 +4126,7 @@ function advanceProjectile(proj, factor, dt) {
       room.particles.push({ type: 'crit', x: cx(t), y: t.y - 8, text: 'SHATTERED', timer: 700, max: 700 });
       return false;
     }
-    if (tk && t.parryTimer > 0) {
+    if (tk && (t.parryTimer > 0 || t.mirrorT > 0)) {   // parried, or bounced off a MIRROR SHIELD
       // Parried: bounce the projectile back at its owner
       proj.dx = -proj.dx; proj.dy = -proj.dy;
       proj.owner = tk;
@@ -4012,6 +4257,7 @@ function distToSegment(px, py, ax, ay, bx, by) {
 
 // What a projectile does beyond its damage: frost slows, storm arcs onward.
 function onHitExtras(proj, t) {
+  if (proj.venom && !t.dead) { t.venomT = HY_VENOM_MS; t.venomDmg = Math.max(t.venomDmg && t.venomT > 0 ? t.venomDmg : 0, proj.venom); }
   if (proj.phxSplit) phoenixSplit(proj, t);
   if (proj.confuseMs && t.num) applyEffect(t, 'confuse', proj.confuseMs);
   if (proj.poisonMs && t.num) applyEffect(t, 'poison', proj.poisonMs);
@@ -4085,6 +4331,8 @@ function doAttack(p, pKey) {
   if (w.groundSplit) { splitAttack(p, pKey, w, dmgMult); return; }
   if (w.soulWisp) { soulAttack(p, pKey, w, dmgMult); return; }
   if (w.phoenixBow) { phoenixAttack(p, pKey, w, dmgMult); return; }
+  if (w.timeBlade) { timeAttack(p, pKey, w, dmgMult); return; }
+  if (w.hydraBite) { hydraAttack(p, pKey, w, dmgMult); return; }
   if (w.slashWave) {
     // A slash wave that seeks out the nearest foe.
     const aim = nearestTargetAngle(p, pKey);
@@ -4268,6 +4516,8 @@ function doSuper(p, pKey) {
   p.swingTimer = 300;
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
   if (su.kind === 'skyfall') { startSkyfall(p, pKey, Math.round(su.dmg * dmgMult)); return; }
+  if (su.kind === 'timestop') { stopTime(p, pKey); return; }
+  if (su.kind === 'ninehead') { raiseHeads(p, pKey, Math.round(su.dmg * dmgMult), true); return; }
   if (su.kind === 'phoenixform') {
     p.phoenix = { t: PHX_FORM_MS, lx: cx(p), ly: cy(p), touch: 0, dmg: Math.round(su.dmg * dmgMult) };
     room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 70, timer: 900, max: 900, color: '#ff8a3a', text: 'PHOENIX FORM' });
@@ -4566,6 +4816,10 @@ function passiveTick(p, key, dt) {
   if (p.passive === 'mindtome') {                                     // SHIFTING GROUND
     p.shuffleT = (p.shuffleT ?? MIND_SHUFFLE_MS) - dt;
     if (p.shuffleT <= 0) { p.shuffleT = MIND_SHUFFLE_MS; shuffleTraps(p, key); }
+  }
+  if (p.passive === 'chronosedge') {                                  // BORROWED TIME
+    if (p.specialCooldown > 0) p.specialCooldown -= dt * CHR_CDR;
+    if (p.superCooldown > 0) p.superCooldown -= dt * CHR_CDR;
   }
   if (p.passive === 'chronostaff') {                                  // TIME DILATION
     if (p.specialCooldown > 0) p.specialCooldown -= dt * CHRONO_DILATION;
@@ -6446,7 +6700,7 @@ function puppetAttack(m, pKey) {
 // ── Light Blade ──
 // Every dash is a short sprint: the player is carried along an angle (curving
 // toward a target for the special), hitting each foe once per leg.
-const BLADE_DASH_MAX = 240, BLADE_DASH_SPEED = 11, BLADE_PATH_SHARE = 0.5, BLADE_CLICK_MS = 400;
+const BLADE_DASH_MAX = 200, BLADE_DASH_SPEED = 9, BLADE_PATH_SHARE = 0.5, BLADE_CLICK_MS = 400;
 const BLADE_SP_DASHES = 5, BLADE_SP_SPEED = 10, BLADE_SP_TURN = 9, BLADE_SP_GAP = 110, BLADE_SP_STUN = 1500, BLADE_HURL_SPEED = 1.3;
 const LIGHTSPEED_MS = 8000, LIGHTSPEED_MULT = 3, LIGHTSPEED_AURA_R = 80, LIGHTSPEED_TICK = 200, LIGHTSPEED_AURA_DMG = 18;
 const LIGHT_CRASH_R = 140, LIGHT_CRASH_STUN = 2000, LIGHT_CRASH_CD = 1200, LIGHT_CRASH_KNOCK = 140, LIGHT_CRASH_PVP = 70;
@@ -6765,6 +7019,19 @@ function useItemEffect(p, key, def) {
 }
 
 const ABILITY_FNS = {
+  reflect(p, pKey, ab) {
+    p.mirrorT = MIRROR_MS;
+    abBurst(p, ab, 'MIRROR SHIELD');
+  },
+  magnet(p, pKey, ab) {
+    if (!room.coins.length && !room.items.length) return false;
+    for (const c of room.coins) {
+      room.particles.push({ type: 'bolt', x: c.x + c.w / 2, y: c.y + c.h / 2, x2: cx(p), y2: cy(p), timer: 250, max: 250, color: ab.color });
+      c.x = cx(p) - c.w / 2 + (Math.random() - 0.5) * 6; c.y = cy(p) - c.h / 2 + (Math.random() - 0.5) * 6; c.vx = 0; c.vy = 0;
+    }
+    for (const it of room.items) { it.x = cx(p) - it.w / 2; it.y = cy(p) - it.h / 2; }
+    abBurst(p, ab, 'COIN MAGNET');
+  },
   perfectguard(p, pKey, ab) {
     p.parryTimer = Math.max(p.parryTimer || 0, 2500);
     spawnParrySpark(cx(p), cy(p));
@@ -7266,6 +7533,8 @@ function doSpecial(p, pKey) {
   }
   if (sp.kind === 'kunaistorm') { darklightStorm(p, pKey, spDmg); return; }
   if (sp.kind === 'tectonic') { castTectonic(p, pKey, sp, spDmg); return; }
+  if (sp.kind === 'rewind') { castRewind(p, pKey, spDmg); return; }
+  if (sp.kind === 'hydraheads') { raiseHeads(p, pKey, spDmg, false); return; }
   if (sp.kind === 'sunvolley') { castSunVolley(p, pKey, sp, spDmg); return; }
   if (sp.kind === 'soulstorm') { castSoulStorm(p, pKey, spDmg); return; }
   if (sp.kind === 'constellation') { castConstellation(p, pKey, sp, spDmg); return; }
@@ -7510,6 +7779,26 @@ function doSpecial(p, pKey) {
 
 // Chains connect a live grapple/hook projectile — and anything currently being
 // dragged — back to the player holding the other end.
+// Every attack a monster has, and how ready it is (0 = just used, 1 = ready),
+// for the little bars over its head. Commons have one; the tricky ones and the
+// bosses have one per attack.
+const CD_FIELDS = ['atkCooldown', 'samCd', 'lightCd', 'chargeCd', 'pulseCd', 'raiseCd', 'swipeCd', 'slamCd', 'castCd', 'actCd', 'snipeCd', 'quakeCd'];
+const BOSS_CD = new Set(['swipeCd', 'slamCd', 'castCd', 'actCd']);
+function cdView(m) {
+  const out = [];
+  if (!m._cdMax) m._cdMax = {};
+  for (const f of CD_FIELDS) {
+    const v = m[f];
+    if (typeof v !== 'number' || (f === 'atkCooldown' && (m.boss || MONSTER_TYPES[m.type]?.noMelee))) continue;
+    // Every monster carries the Giant's timers; only the boss that uses each one shows it.
+    if (BOSS_CD.has(f) && !(m.abyss ? f === 'actCd' : m.mage ? f === 'castCd' : m.boss && (f === 'swipeCd' || f === 'slamCd'))) continue;
+    if (v > (m._cdMax[f] || 0)) m._cdMax[f] = v;
+    const mx = m._cdMax[f] || 1;
+    out.push(Math.round((1 - Math.max(0, v) / mx) * 10) / 10);
+  }
+  return out.length ? { cd: out } : {};
+}
+
 function buildChains() {
   const out = [];
   for (const pr of room.projectiles) {
@@ -7569,6 +7858,9 @@ function playerView(p) {
     ...(p.souls ? { souls: p.souls } : {}),
     ...(p.deathDoor > 0 ? { ddoor: Math.round(p.deathDoor) } : {}),
     ...(p.phoenix ? { phx: Math.round(p.phoenix.t) } : {}),
+    ...(p.mirrorT > 0 ? { mirror: true } : {}),
+    ...(p.venomT > 0 ? { venom: true } : {}),
+    ...(p.regrowT > 0 ? { regrow: true } : {}),
     ...(p.dlChain ? { dlc: [r1(p.dlChain.x), r1(p.dlChain.y)] } : {}),
     ...(p.passive === 'mindtome' ? { shuffleIn: Math.max(0, Math.round(p.shuffleT ?? MIND_SHUFFLE_MS)) } : {}),
     ...(p.passive === 'vortex' ? { aegis: !(p.aegisCd > 0) } : {}),
@@ -7607,6 +7899,10 @@ function buildStateMsg(playerNum) {
                   ...(m.dazed > 0 ? { dazed: true } : {}),
                   ...(m.dlCurse ? { curse: Math.round(m.dlCurse.ms) } : {}),
                   ...(m.confused > 0 ? { confused: true } : {}),
+                  ...cdView(m),
+                  ...(m.aim ? { aim: { a: Math.round(m.aim.a * 100) / 100, k: Math.round((1 - m.aim.t / SNIPE_AIM) * 100) / 100 } } : {}),
+                  ...(m.gwind > 0 ? { gwind: true } : {}),
+                  ...(m.venomT > 0 ? { venom: true } : {}),
                   ...(m.samWind > 0 ? { samWind: m.samNext === 'dash' ? 'dash' : 'wave' } : {}),
                   ...(m.samDash ? { samDash: Math.round(m.samDash.a * 100) / 100 } : {}),
                   ...(m.sweep ? { lsweep: { a: Math.round(m.sweep.a * 100) / 100, wind: m.sweep.wind > 0 } } : {}),
@@ -7651,6 +7947,10 @@ function buildStateMsg(playerNum) {
     fissures: (room.fissures || []).map(q => ({ x1: r1(q.x1), y1: r1(q.y1), x2: r1(q.x2), y2: r1(q.y2),
       k: Math.round(Math.min(1, q.t / q.erupt) * 100) / 100, l: Math.round(Math.max(0, 1 - q.t / q.life) * 100) / 100 })),
     ...(room.saw ? { saw: { t: Math.round(room.saw.t), next: Math.round(room.saw.payT), earned: room.saw.earned } } : {}),
+    echoes: (room.echoes || []).map(e => ({ x: r1(e.x), y: r1(e.y), a: Math.round(e.a * 100) / 100, r: e.r, k: Math.round(e.t / e.life * 100) / 100 })),
+    hydras: (room.hydras || []).map(h => ({ x: r1(h.x), y: r1(h.y), a: Math.round((h.aim || 0) * 100) / 100, sup: !!h.follow,
+                                           k: Math.round(Math.max(0, h.t / h.life) * 100) / 100 })),
+    ...(room.timeStop ? { timeStop: { t: Math.round(room.timeStop.t), o: room.timeStop.owner } } : {}),
     stars: (room.stars || []).map(s => ({ x: r1(s.x), y: r1(s.y), r: s.r, k: Math.round(s.t / s.life * 100) / 100 })),
     constels: (room.constels || []).map(c => ({ k: Math.round(c.t / c.life * 100) / 100,
       pts: c.targets.filter(t => !t.dead).map(t => [r1(cx(t)), r1(cy(t))]) })),
@@ -7885,7 +8185,7 @@ function setupBot() {
   const starters = getUnlockedWeaponIds(0);
   const all = WEAPONS.map(w => w.id);
   const weapons = gameLoadout(L.all ? sortWeaponIds(all) : sortWeaponIds([...new Set([...starters, ...rollOwned(all, L.own)])]),
-                              ['darklight', 'starfall'][Math.floor(Math.random() * 2)]);
+                              (() => { const m = WEAPONS.filter(w => w.mythic); return m[Math.floor(Math.random() * m.length)].id; })());
   const upgrades = {};
   for (const id of weapons) {
     upgrades[id] = {};
