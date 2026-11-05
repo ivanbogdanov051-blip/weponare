@@ -48,7 +48,7 @@ let WEAPON_COLOR = {
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
   fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff', samuraiblade:'#ff5a5a', darklight:'#e8e8f4', starfall:'#ffe9a0', worldsplitter:'#ff6a1a', soullantern:'#6affc8', ashfeather:'#ff8a3a', chronosedge:'#7ac8ff', hydrafang:'#5ae87a',
-  ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
+  greatestsword:'#ffe9a8', ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
   scimitar:'#e8e0c8', slingshot:'#b08a5a', mace:'#9aa4b0', javelin:'#d8c8a0', claws:'#e0e4ec',
   emberstaff:'#ff7a2a', halberd:'#c0c8d8', frostbow:'#9fe8ff', chronostaff:'#e8c87a', voidblade:'#9a5aff',
   mindtome:'#ff5ad8', lightblade:'#fff27a',
@@ -75,12 +75,13 @@ const WEAPON_DESC = {
   samuraiblade:"The samurai's own katana, deeply curved and razor bright",
   darklight:"MYTHIC. A kunai of dark and light, forged from the Light Blade",
   starfall:"MYTHIC. A staff crowned with a crescent moon and a captive star",
+  greatestsword:"MYTHIC. The biggest blade ever forged, and it hits harder than it looks",
   worldsplitter:"MYTHIC. An obsidian greatsword veined with magma, heavy enough to split the world",
   soullantern:"MYTHIC. A black iron lantern burning with the souls of the fallen",
   ashfeather:"MYTHIC. A bow of living flame, its limbs made of phoenix feathers",
   chronosedge:"MYTHIC. A sword of gold and azure with a clock beating in its guard",
   hydrafang:"MYTHIC. A trident whose three prongs are living serpent heads",
-  ghostdagger:'The rarest weapon of all: turn invisible, throw a deadly dagger, and make it rain knives',
+  ghostdagger:'The rarest weapon of all: turn invisible, throw a deadly dagger, and make it rain knives. Does half damage to bosses',
   stormhammer:'A war hammer full of lightning that comes back when you throw it',
   frostscythe:'A sweeping scythe of ice that freezes whatever it keeps cutting',
   sunbow:'Arrows of sunlight, a little sun that fights for you, and a beam that burns across the arena',
@@ -997,7 +998,7 @@ function updatePrediction(frameDt, now) {
   if (me.fgs) spd *= me.fgs;                  // forge: FLEET FOOTED, KITER
   if (me.effects && me.effects.slow  > 0) spd *= 0.4;
   if (me.effects && me.effects.root  > 0) spd = 0;            // ROOT VINES
-  if (me.sky) spd = 0;                                        // up in the air (Worldsplitter's leap)
+  if (me.sky || me.gstun) spd = 0;                                        // up in the air (Worldsplitter's leap)
 
   // Apply currently-held inputs immediately (instant response)
   let vx = 0, vy = 0;
@@ -1122,10 +1123,10 @@ const ATTACK_ANIM = {
   stormhammer: 'chop', frostscythe: 'spin', sunbow: 'draw',
   scimitar: 'slash', slingshot: 'draw', mace: 'chop', javelin: 'throw', claws: 'stab',
   emberstaff: 'cast', halberd: 'sweep', frostbow: 'draw', chronostaff: 'cast', voidblade: 'slash', mindtome: 'tome',
-  lightblade: 'slash', darklight: 'throw', starfall: 'cast', worldsplitter: 'heavy', soullantern: 'cast', ashfeather: 'draw', chronosedge: 'slash', hydrafang: 'stab',
+  lightblade: 'slash', darklight: 'throw', starfall: 'cast', worldsplitter: 'heavy', greatestsword: 'doublechop', soullantern: 'cast', ashfeather: 'draw', chronosedge: 'slash', hydrafang: 'stab',
 };
 const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
-                  heavy: 300, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
+                  heavy: 300, doublechop: 700, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
 
 function attackKind(wId) {
   if (ATTACK_ANIM[wId]) return ATTACK_ANIM[wId];
@@ -1169,6 +1170,12 @@ function weaponPose(kind, e) {
     case 'stab':   // small draw-back, then a straight thrust
       return e < 0.25 ? { rot: 0, dx: -(e / 0.25) * 3 }
                       : { rot: 0, dx: -3 + Math.sin(((e - 0.25) / 0.75) * Math.PI) * 14 };
+    case 'doublechop':   // raised overhead, down hard, a beat, then ripped back up
+      if (e < 0.25) return { rot: 0.12 - (e / 0.25) * 2.1 };
+      if (e < 0.4) return { rot: -1.98 + easeIn((e - 0.25) / 0.15) * 3.3 };
+      if (e < 0.6) return { rot: 1.32, dy: 1 };
+      if (e < 0.8) return { rot: 1.32 - easeOut((e - 0.6) / 0.2) * 2.95 };
+      return { rot: -1.63 + ((e - 0.8) / 0.2) * 1.75 };
     case 'spin':   return { rot: 0.12 + easeOut(e) * Math.PI * 2 };
     case 'draw':   // pull the string back, release with a snap
       return e < 0.6 ? { rot: -0.08, dx: -(e / 0.6) * 4 } : { rot: -0.08 + (e - 0.6) * 0.3, dx: -4 + ((e - 0.6) / 0.4) * 4 };
@@ -1197,7 +1204,7 @@ function pushSlash(cp, angle, key) {
   const tipR = cp.w + 12;
   if (key) startAttackAnim(key, cp);
   // The glove's ring of fire comes from the server; no swing arc to draw.
-  if (attackKind(cp.weaponId) === 'punch' || attackKind(cp.weaponId) === 'shieldup') return;
+  if (['punch', 'shieldup', 'doublechop'].includes(attackKind(cp.weaponId))) return;
   slashes.push({
     px: cp.x + cp.w / 2,
     py: cp.y + cp.h / 2,
@@ -1943,6 +1950,8 @@ function drawFireRings(fires) {
     if (f.kind === 'runecast') { if ((f.k || 0) >= 0) drawRuneCast(f, now); continue; }
     if (f.kind === 'blackhole') { drawBlackhole(f, now); continue; }
     if (f.kind === 'tsring') { drawTsRing(f); continue; }
+    if (f.kind === 'gswave') { drawGsWave(f); continue; }
+    if (f.kind === 'gsarc') { drawGsArc(f); continue; }
     if (f.kind === 'drain') { drawDrain(f, now); continue; }
     if (f.kind === 'barrier') { drawBarrier(f, now); continue; }
     if (f.kind === 'mine') { drawPlayerMine(f, now); continue; }
@@ -3212,6 +3221,11 @@ const LEGEND_MOVES = {
   ashfeather: '<b>ATK</b> a burning arrow that bursts into three more when it hits · <b>SPECIAL</b> a fan of nine of them ·'
             + ' <b>SUPER</b> PHOENIX FORM: 6s ablaze, much faster, leaving a trail of fire, burning everything you touch and'
             + ' healing as you go. Only one mythic goes into a game, and a mythic never earns you another weapon.',
+  greatestsword: '<b>ATK</b> two huge swings, down then up, each hurling enemies back, with a long wait after · <b>SPECIAL</b> leap at the nearest'
+             + ' enemy and slam down: land on them and they are stunned and an explosion wave blasts everyone nearby, but land on nothing and YOU'
+             + ' are stunned · <b>SUPER</b> one blow splits the arena with a massive crack that stands like a wall for 4s: enemies can not cross it and'
+             + ' touching it hurts, and anyone it opens under is thrown clear, stunned and badly hurt. Only one mythic goes into a game, and a mythic'
+             + ' never earns you another weapon.',
   worldsplitter: '<b>ATK</b> your swing splits the ground ahead: the crack erupts, then burns whoever stands in it · <b>SPECIAL</b>'
                + ' eight cracks tear out all round you, erupting one after another and knocking foes off their feet · <b>SUPER</b>'
                + ' leap into the sky (untouchable) and come down on the nearest enemy like a meteor, shattering the ground around'
@@ -4403,6 +4417,7 @@ function draw(state) {
   drawFireRings(state.fires || []);
   if (state.rareShop) drawRareShop(state.rareShop);
   drawFissures(state.fissures || []);
+  drawGreatCracks(state.gcracks || []);
   drawEchoes(state.echoes || []);
   drawHydras(state.hydras || []);
   drawConstellations(state.constels || []);
@@ -4826,6 +4841,7 @@ function drawPlayer(p, baseColor, label, key) {
   if (p.sky) p = skyfallPose(p);
   if (unseen) { ctx.save(); ctx.globalAlpha = 0.35 + 0.1 * Math.sin(performance.now() / 120); }
   drawPlayerBody(p, baseColor, label, key);
+  if (p.gstun) drawStunStars(p);
   if (unseen) ctx.restore();
 }
 // ── Weapon passives, made visible ──
@@ -7509,7 +7525,7 @@ function skyfallPose(p) {
   ctx.globalAlpha = 0.25 + 0.4 * k; ctx.fillStyle = '#000';
   ctx.beginPath(); ctx.ellipse(s.tx, s.ty + p.h / 2, 6 + 16 * k, 3 + 6 * k, 0, 0, Math.PI * 2); ctx.fill();
   ctx.globalAlpha = 0.5 * k; ctx.strokeStyle = '#ff6a1a'; ctx.setLineDash([4, 3]);
-  ctx.beginPath(); ctx.arc(s.tx, s.ty, 120 * (0.4 + 0.6 * k), 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  ctx.beginPath(); ctx.arc(s.tx, s.ty, (s.r || 120) * (0.4 + 0.6 * k), 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
   if (k > 0.5) {
     const g = ctx.createLinearGradient(x, ground - h, x - (s.tx - s.sx) * 0.15, ground - h - 50);
     g.addColorStop(0, 'rgba(255,140,40,0.9)'); g.addColorStop(1, 'rgba(255,60,0,0)');
@@ -7625,6 +7641,78 @@ function drawMythicAura(p, x, y) {
     const rise = (now / 28 + i * 13) % 26, a = i * 1.7 + now / 900;
     ctx.globalAlpha = 0.8 * (1 - rise / 26); ctx.fillStyle = i % 2 ? '#ffffff' : col;
     ctx.fillRect(Math.round(mx + Math.cos(a) * 13), Math.round(my - rise), 1.5, 1.5);
+  }
+  ctx.restore();
+}
+
+// ─── The Greatest Sword ─────────────────────────────────
+// The arc of each swing: down, then up.
+function drawGsArc(f) {
+  const k = Math.min(1, f.k || 0), dir = f.v === 2 ? -1 : 1, from = f.a - dir * 1.4, to = from + dir * 2.8 * Math.min(1, k * 2.2);
+  ctx.save();
+  ctx.globalAlpha = 0.85 * (1 - k * k); ctx.lineCap = 'round';
+  ctx.strokeStyle = '#ffe9a8'; ctx.lineWidth = 12;
+  ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 0.86, Math.min(from, to), Math.max(from, to)); ctx.stroke();
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 0.9, Math.min(from, to), Math.max(from, to)); ctx.stroke();
+  ctx.restore();
+}
+function drawGsWave(f) {
+  const fade = 1 - Math.min(1, f.k || 0);
+  ctx.save();
+  ctx.globalAlpha = 0.18 * fade; ctx.fillStyle = '#ffd24a';
+  ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.9 * fade; ctx.strokeStyle = '#ff9a2a'; ctx.lineWidth = 16;
+  ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = '#ffe9a8'; ctx.lineWidth = 7; ctx.stroke();
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+}
+// The crack stands up out of the floor: broken rock along both sides, light
+// pouring up through the middle. It races out, holds, and closes at the end.
+function drawGreatCracks(list) {
+  const now = performance.now();
+  for (const q of list) {
+    const dx = q.x2 - q.x1, dy = q.y2 - q.y1, len = Math.hypot(dx, dy) * Math.min(1, q.k * 14), w = q.w;
+    if (len < 2) continue;
+    const fade = Math.min(1, (1 - q.k) * 6);
+    ctx.save(); ctx.translate(q.x1, q.y1); ctx.rotate(Math.atan2(dy, dx));
+    ctx.globalAlpha = 0.3 * fade; ctx.fillStyle = '#ffd24a'; ctx.fillRect(0, -w - 8, len, (w + 8) * 2);
+    ctx.globalAlpha = fade;
+    for (const side of [-1, 1]) {
+      ctx.fillStyle = side < 0 ? '#5a5866' : '#34323e';
+      ctx.beginPath(); ctx.moveTo(0, 0);
+      for (let x = 0, i = 0; x < len; x += 16, i++) {
+        const peak = w + 3 + ((i * 37 + (side > 0 ? 11 : 0)) % 9);
+        ctx.lineTo(x + 8, side * peak); ctx.lineTo(x + 16, side * (w - 2 + (i % 3)));
+      }
+      ctx.lineTo(len, 0); ctx.closePath(); ctx.fill();
+    }
+    const path = () => {
+      ctx.beginPath(); ctx.moveTo(0, 0);
+      for (let x = 8; x < len; x += 8) ctx.lineTo(x, Math.sin(x * 0.31) * 3 + Math.sin(x * 0.11 + 1) * 2.5);
+      ctx.lineTo(len, 0);
+    };
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.strokeStyle = '#120a04'; ctx.lineWidth = 16; path(); ctx.stroke();
+    ctx.strokeStyle = '#ff8a1a'; ctx.lineWidth = 9; path(); ctx.stroke();
+    ctx.strokeStyle = '#ffe9a8'; ctx.lineWidth = 4; path(); ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    for (let i = 0; i < Math.floor(len / 30); i++) {
+      const ex = (i * 30 + 7) % len, rise = (now / 22 + i * 31) % 26;
+      ctx.globalAlpha = fade * (1 - rise / 26);
+      ctx.fillRect(ex, -rise - 2, 2, 2);
+    }
+    ctx.restore();
+  }
+}
+function drawStunStars(p) {
+  const now = performance.now(), x = p.x + p.w / 2, y = p.y - 5;
+  ctx.save(); ctx.fillStyle = '#ffd84a';
+  for (let i = 0; i < 3; i++) {
+    const a = now / 170 + i * Math.PI * 2 / 3;
+    const sx = Math.round(x + Math.cos(a) * 10), sy = Math.round(y + Math.sin(a) * 3);
+    ctx.fillRect(sx - 1, sy - 2, 2, 4); ctx.fillRect(sx - 2, sy - 1, 4, 2);
   }
   ctx.restore();
 }

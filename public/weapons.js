@@ -749,6 +749,26 @@ const WEAPON_ART = {
   }},
   // Worldsplitter: a colossal obsidian greatsword, its blade cracked open
   // with veins of magma, on a heavy iron hilt with a molten gem in the guard.
+  // The Greatest Sword: a colossal blade of white steel, gold down the fuller,
+  // a winged guard around a sapphire. Far longer than its wielder is tall.
+  greatestsword: { draw(k, wc) {
+    k.circ(-4, 0, 3.8, '#c8a040'); k.circ(-4, 0, 2, '#3a8aff'); k.r(-4.8, -0.9, 0.8, 0.8, '#ffffff');   // pommel
+    k.r(-1, -2.4, 14, 4.8, '#3a2414');                                                                  // grip
+    for (let i = 0; i < 5; i++) k.r(0 + i * 2.7, -2.4, 1, 4.8, '#c8a040');                              // gold wire
+    k.poly([[13, -5], [16, -16], [21, -19], [19, -9], [20, -5], [20, 5], [19, 9], [21, 19], [16, 16], [13, 5]], '#c8a040');   // winged guard
+    k.poly([[14, -5], [16.6, -14], [18.8, -9], [18.8, -5]], '#ffe9a8');
+    k.poly([[14, 5], [16.6, 14], [18.8, 9], [18.8, 5]], '#8a6a20');
+    k.circ(17, 0, 3.6, '#1a4ab8'); k.circ(17, 0, 2.4, '#3aa8ff'); k.r(16, -1.4, 1, 1, '#ffffff');       // sapphire
+    k.glow(52, 0, 11, '#ffe9a8', 0.28);
+    k.poly([[20, -9], [70, -8], [84, 0], [70, 8], [20, 9]], '#c8cfdc');                                 // the blade
+    k.poly([[20, -9], [70, -8], [84, 0], [70, -3], [20, -3]], '#eef2f8');                               // lit edge
+    k.poly([[20, 9], [70, 8], [84, 0], [70, 3], [20, 3]], '#8a94a8');                                   // shadowed edge
+    k.r(21, -1.8, 46, 3.6, '#5a6478'); k.r(21, -0.6, 46, 1.2, '#d8b860');                               // fuller, gilded
+    for (let x = 24; x < 66; x += 7) k.r(x, -2.8, 2.4, 5.6, '#c8a040');                                 // gold marks in it
+    k.poly([[20, -9], [27, -9], [24, -3], [20, -3]], '#c8a040'); k.poly([[20, 9], [27, 9], [24, 3], [20, 3]], '#8a6a20');   // gilded base
+    k.line(22, -8.6, 69, -7.6, 0.5, '#ffffff'); k.line(69, -7.6, 83, -0.2, 0.5, '#ffffff');             // honed edge
+    k.r(82.4, -0.5, 1.4, 1, '#ffffff');                                                                 // the point
+  }},
   worldsplitter: { draw(k, wc) {
     k.circ(-1.5, 0, 2.6, '#3a3a44'); k.circ(-1.5, 0, 1.3, '#ff6a1a');          // pommel with an ember
     k.r(0, -1.8, 9, 3.6, '#2a1a12');                                            // grip

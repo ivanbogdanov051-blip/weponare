@@ -356,6 +356,11 @@ const WEAPONS = [
   // knocking foes off their feet. SUPER: leap into the sky (untouchable) and come
   // down on the nearest foe like a meteor, the ground shattering all around.
   // PASSIVE: every 3rd swing splits the ground three ways.
+  { id: 'greatestsword', name: 'THE GREATEST SWORD', damage: 120, range: 110, atkSpd: 2400, type: 'melee', unlockXp: 0,
+    shopOnly: true, noRequirement: true, mythic: true, price: 500000, greatSword: true,
+    mythicKills: 300, mythicNeeds: ['greatsword'],
+    special: { kind: 'leapslam', dmg: 260, range: 380, cd: 10000 },
+    super:   { kind: 'greatcrack', dmg: 420, cd: 26000 } },
   { id: 'worldsplitter', name: 'WORLDSPLITTER', damage: 90, range: 210, atkSpd: 700, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, mythic: true, price: 350000, groundSplit: true,
     mythicKills: 200, mythicNeeds: ['stormhammer'],
@@ -428,7 +433,7 @@ const WEAPON_COLORS = {
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
   shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
   fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff', samuraiblade: '#ff5a5a', endlessscythe: '#7a2aff', darklight: '#e8e8f4', starfall: '#ffe9a0', worldsplitter: '#ff6a1a', soullantern: '#6affc8', ashfeather: '#ff8a3a', chronosedge: '#7ac8ff', hydrafang: '#5ae87a',
-  ghostdagger: '#a8f0ff', stormhammer: '#7ac8ff', frostscythe: '#bfefff', sunbow: '#ffd24a',
+  greatestsword: '#ffe9a8', ghostdagger: '#a8f0ff', stormhammer: '#7ac8ff', frostscythe: '#bfefff', sunbow: '#ffd24a',
 };
 
 // ── Weapon upgrades bought with coins from the menu ──
@@ -494,6 +499,7 @@ const WEAPON_UPGRADES = {
   darklight:   ['dmg', 'spd', 'crit', 'cdr'],
   starfall:    ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   worldsplitter: ['dmg', 'spd', 'crit', 'cdr', 'rng'],
+  greatestsword: ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   soullantern: ['dmg', 'spd', 'crit', 'cdr'],
   ashfeather:  ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   chronosedge: ['dmg', 'spd', 'crit', 'cdr', 'rng'],
@@ -534,6 +540,7 @@ const PASSIVES = {
   vortex:      { name: 'AEGIS',          color: '#7ad8ff', desc: 'blocks one hit completely every 4s' },
   windwand:    { name: 'GALE GUARD',     color: '#d8f4ff', desc: 'blows away an enemy shot that comes close, every 0.5s' },
   revolver:    { name: 'CHAIN REACTION', color: '#ffa040', desc: 'every hit explodes onto the foes around it, and everything you kill blows up even bigger' },
+  greatestsword: { name: 'IMMOVABLE', color: '#ffe9a8', desc: 'you take 20% less damage' },
   worldsplitter: { name: 'AFTERSHOCK', color: '#ff6a1a', desc: 'every 3rd swing splits the ground three ways' },
   chronosedge: { name: 'BORROWED TIME', color: '#7ac8ff', desc: 'your special and super recharge 30% faster' },
   hydrafang:   { name: 'REGROWTH', color: '#5ae87a', desc: 'drop below 30% health and you regrow 5% of it a second for 4s (every 15s)' },
@@ -2475,11 +2482,12 @@ function updateWorldsplitter(dt) {
     const k = p.sky;
     k.t += dt;
     p.invincible = Math.max(p.invincible || 0, 120);
-    if (k.quarry && !k.quarry.dead && k.t < k.life * 0.7) { k.tx = cx(k.quarry); k.ty = cy(k.quarry); }
+    if (k.quarry && !k.quarry.dead && k.t < k.life * (k.track || 0.7)) { k.tx = cx(k.quarry); k.ty = cy(k.quarry); }
     if (k.t < k.life) continue;
     p.x = k.tx - p.w / 2; p.y = k.ty - p.h / 2; clampToArena(p, 2);
     p.sky = null;
     p.invincible = 300;
+    if (k.slam) { landSlam(p, key, k); continue; }
     for (const t of enemyTargets(key)) {
       let dx = cx(t) - cx(p), dy = cy(t) - cy(p), d = Math.hypot(dx, dy);
       if (d > SKY_R + t.w / 2) continue;
@@ -2520,6 +2528,136 @@ function updateWorldsplitter(dt) {
         }
       }
     }
+    return q.t < q.life;
+  });
+}
+
+// THE GREATEST SWORD
+// ATK: two swings, down then up. SPECIAL: a leap at the nearest foe; land on them
+// and they're stunned and a wave blasts everything around, land on nothing and
+// you're the one stunned. SUPER: one blow splits the arena with a crack that
+// stands like a wall: nothing gets through it, touching it hurts, and whoever it
+// opens under is thrown clear, stunned and badly hurt.
+const GS_HIT1 = 240, GS_HIT2 = 525, GS_ARC = 1.4, GS_UP_MULT = 1.3, GS_PUSH1 = 90, GS_PUSH2 = 130;
+const GS_LEAP_MS = 850, GS_TRACK = 0.5, GS_SLAM_R = 56, GS_SLAM_STUN = 1800, GS_MISS_STUN = 1800;
+const GS_WAVE_MS = 650, GS_WAVE_R = 280, GS_WAVE_SHARE = 0.55, GS_WAVE_PUSH = 70;
+const GC_W = 18, GC_LIFE = 4000, GC_LEN = MAP_SIZES.medium[0], GC_PVP = 90, GC_STUN = 2500, GC_PUSH = 120, GC_TOUCH_MS = 700, GC_TOUCH_SHARE = 0.12;
+
+function stunTarget(t, ms) {
+  if (t.num) t.gsStun = Math.max(t.gsStun || 0, ms);   // a player can't move or act
+  else stagger(t, ms, 'quake');                        // bosses are only slowed
+}
+function gsPush(t, x, y, dist) {
+  if (t.boss || t.dead) return;
+  const dx = cx(t) - x, dy = cy(t) - y, d = Math.hypot(dx, dy) || 1;
+  t.pull = { vx: dx / d * dist / 260, vy: dy / d * dist / 260, timer: 260, from: null };
+}
+function greatSwing(p, key, s, up) {
+  const aim = s.aim, dmg = Math.round(s.dmg * (up ? GS_UP_MULT : 1));   // both swings go the same way
+  for (const t of enemyTargets(key)) {
+    const d = distBetween(t, p);
+    if (d > s.range) continue;
+    let diff = Math.abs(Math.atan2(cy(t) - cy(p), cx(t) - cx(p)) - aim) % (Math.PI * 2);
+    if (diff > Math.PI) diff = Math.PI * 2 - diff;
+    if (d > 24 && diff > GS_ARC + s.arc) continue;
+    if (!t.num) t.invincible = 0;
+    const parried = t.num && t.parryTimer > 0;
+    strikeTarget(t, dmg, key);
+    if (!parried) gsPush(t, cx(p), cy(p), up ? GS_PUSH2 : GS_PUSH1);
+  }
+  room.fires.push({ id: nextId(), kind: 'gsarc', owner: key, x: cx(p), y: cy(p), r: s.range, a: aim, v: up ? 2 : 1, t: 0, life: 240 });
+}
+function startLeapSlam(p, key, dmg) {
+  const f = nearestFoe(p, key);
+  if (!f) { p.specialCooldown = 0; p.swingTimer = 0; return; }
+  p.sky = { t: 0, life: GS_LEAP_MS, sx: cx(p), sy: cy(p), tx: cx(f), ty: cy(f), dmg, quarry: f, slam: true, track: GS_TRACK };
+  p.bladeDash = null; p.pull = null;
+}
+function landSlam(p, key, k) {
+  const hit = new Set();
+  for (const t of enemyTargets(key)) {
+    if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) > GS_SLAM_R + t.w / 2) continue;
+    const parried = t.num && t.parryTimer > 0;
+    if (!t.num) t.invincible = 0;
+    strikeTarget(t, k.dmg, key);
+    if (parried) continue;
+    hit.add(t);
+    if (!t.dead) stunTarget(t, GS_SLAM_STUN);
+  }
+  if (!hit.size) {                  // nothing there: the blow jars you instead
+    p.gsStun = GS_MISS_STUN;
+    room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 40, timer: 400, max: 400, color: '#8a8aa0' });
+    room.particles.push({ type: 'crit', x: cx(p), y: p.y - 14, text: 'MISSED!', timer: 1000, max: 1000 });
+    return;
+  }
+  room.fires.push({ id: nextId(), kind: 'gswave', owner: key, x: cx(p), y: cy(p), r: GS_SLAM_R, t: 0, life: GS_WAVE_MS,
+                    dmg: Math.round(k.dmg * GS_WAVE_SHARE), hit });
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 70, timer: 800, max: 800, color: '#ffe9a8', text: 'SLAM!' });
+}
+// The explosion wave: it sweeps out and hits everyone once.
+function updateGsWave(f) {
+  f.r = GS_SLAM_R + (GS_WAVE_R - GS_SLAM_R) * (f.t / f.life);
+  for (const t of enemyTargets(f.owner)) {
+    if (f.hit.has(t) || Math.hypot(cx(t) - f.x, cy(t) - f.y) > f.r + t.w / 2) continue;
+    f.hit.add(t);
+    const parried = t.num && t.parryTimer > 0;
+    if (!t.num) t.invincible = 0;
+    strikeTarget(t, f.dmg, f.owner);
+    if (!parried) gsPush(t, f.x, f.y, GS_WAVE_PUSH);
+  }
+  return true;
+}
+function castGreatCrack(p, key, dmg) {
+  const a = nearestTargetAngle(p, key), ux = Math.cos(a), uy = Math.sin(a);
+  p.facing = ux < 0 ? -1 : 1;
+  // From your feet, as far as a medium arena is wide (or to the wall).
+  const x1 = cx(p) + ux * 14, y1 = cy(p) + uy * 14;
+  const toX = ux > 0 ? (ARENA_X + ARENA_W - x1) / ux : ux < 0 ? (ARENA_X - x1) / ux : Infinity;
+  const toY = uy > 0 ? (ARENA_Y + ARENA_H - y1) / uy : uy < 0 ? (ARENA_Y - y1) / uy : Infinity;
+  const len = Math.max(40, Math.min(GC_LEN, toX, toY));
+  if (!room.gcracks) room.gcracks = [];
+  room.gcracks.push({ owner: key, x1, y1, x2: x1 + ux * len, y2: y1 + uy * len, ux, uy, len, t: 0, life: GC_LIFE, dmg,
+                      touchDmg: Math.max(1, Math.round(dmg * GC_TOUCH_SHARE)), struck: false, sides: new Map(), touch: new Map() });
+  room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 90, timer: 600, max: 600, color: '#ffe9a8' });
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 60, timer: 800, max: 800, color: '#ffd24a', text: 'THE GREAT DIVIDE' });
+}
+function updateGreatCracks(dt) {
+  if (!room.gcracks || !room.gcracks.length) return;
+  room.gcracks = room.gcracks.filter(q => {
+    q.t += dt;
+    const nx = -q.uy, ny = q.ux;
+    for (const t of enemyTargets(q.owner)) {
+      const px = cx(t), py = cy(t), rx = px - q.x1, ry = py - q.y1;
+      const along = Math.max(0, Math.min(q.len, rx * q.ux + ry * q.uy));
+      const qx = q.x1 + q.ux * along, qy = q.y1 + q.uy * along, reach = GC_W + t.w / 2;
+      const dx = px - qx, dy = py - qy, d = Math.hypot(dx, dy);
+      const sideNow = rx * nx + ry * ny >= 0 ? 1 : -1;
+      if (d >= reach) { q.sides.set(t, sideNow); continue; }
+      if (!q.struck) {                     // it opened right under them
+        if (!t.num) t.invincible = 0;
+        const parried = t.num && t.parryTimer > 0;
+        strikeTarget(t, t.num ? GC_PVP : abDmg(t, q.dmg, 0.25, 1), q.owner);
+        if (!parried && !t.dead) {
+          stunTarget(t, GC_STUN);
+          if (!t.boss) t.pull = { vx: nx * sideNow * GC_PUSH / 300, vy: ny * sideNow * GC_PUSH / 300, timer: 300, from: null };
+        }
+        q.touch.set(t, q.t + GC_TOUCH_MS);
+      } else if (q.t >= (q.touch.get(t) || 0)) {   // run into it and it bites
+        q.touch.set(t, q.t + GC_TOUCH_MS);
+        if (!t.num) t.invincible = 0;
+        applyDamage(t, q.touchDmg, q.owner);
+      }
+      // A wall: back out on the side you came from.
+      if (t.dead) continue;
+      const side = q.sides.get(t) ?? sideNow;
+      q.sides.set(t, side);
+      const inside = along > 0 && along < q.len;
+      const wx = inside ? qx + nx * side * reach : qx + (d ? dx / d : nx) * reach;
+      const wy = inside ? qy + ny * side * reach : qy + (d ? dy / d : ny) * reach;
+      t.x += wx - px; t.y += wy - py;
+      clampToArena(t);
+    }
+    q.struck = true;
     return q.t < q.life;
   });
 }
@@ -3346,6 +3484,7 @@ function clearField() {
   room.stars = [];
   room.constels = [];
   room.fissures = [];
+  room.gcracks = [];
   room.saw = null;
   room.echoes = [];
   room.hydras = [];
@@ -3397,6 +3536,7 @@ function resetToLobby() {
   clearField();
 }
 
+const GHOST_BOSS_MULT = 0.5;
 function applyDamage(target, dmg, attackerKey) {
   if (target.dead || target.dying || target.invincible > 0 || target.hidden || target.p3) return;
   if (target.num && hasEffect(target, 'shield')) {  // shield item: ignore all incoming damage
@@ -3420,10 +3560,12 @@ function applyDamage(target, dmg, attackerKey) {
     return;
   }
   if (afg) dmg *= forgeHitMult(afg, atk, target);
+  if (aw && aw.ghostCloak && target.boss) dmg *= GHOST_BOSS_MULT;                                  // the Dagger of Ghosts fades against bosses
   if (aw && atk.passive === 'axe') dmg *= 1 + PASSIVE_RAGE * Math.max(0, 1 - atk.hp / atk.maxHp);   // BERSERKER
   if (target.num && hasEffect(target, 'ironskin')) dmg *= 0.5;                                     // IRON SKIN
   if (target.num && hasEffect(target, 'frostarmor')) dmg *= 0.75;                                  // FROST ARMOR
   if (target.num && target.passive === 'soullantern') dmg *= 1 - SOUL_BOND * Math.min(SOUL_MAX, target.souls || 0);   // SOUL BOND
+  if (target.num && target.passive === 'greatestsword') dmg *= 0.8;                                // IMMOVABLE
   if (target.num && target.passive === 'sword') dmg *= PASSIVE_GUARD;                              // GUARDIAN
   if (aw && atk.passive === 'frostscythe' && ((target.freeze || 0) > 0 || (target.slowTimer || 0) > 0
       || (target.num && hasEffect(target, 'slow')))) dmg *= SHATTER_MULT;                          // SHATTERPOINT
@@ -3807,7 +3949,7 @@ function tickRoom(dt) {
   for (const key of KEYS) {
     const p = room.players[key];
     if (!p || p.dead) {
-      if (p) { p.bladeDash = null; p.lightspeed = 0; p.bladeClick = null; p.kspin = 0; }
+      if (p) { p.bladeDash = null; p.lightspeed = 0; p.bladeClick = null; p.kspin = 0; p.gsSwing = null; p.gsStun = 0; }
       if (p && p.respawnTimer > 0) {
         p.respawnTimer -= dt;
         if (p.respawnTimer <= 0) respawnPlayer(p);
@@ -3837,7 +3979,7 @@ function tickRoom(dt) {
         if ((ax * vx + ay * vy) / (al * vl) > SAM_TOWARD_DOT) { vx *= SAM_TOWARD_MULT; vy *= SAM_TOWARD_MULT; }
       }
     }
-    if (p.sky) { vx = 0; vy = 0; }   // up in the air: no steering
+    if (p.sky || p.gsStun > 0) { vx = 0; vy = 0; }   // up in the air, or stunned: no steering
     if (p.kspin > 0) {
       // Spinning: less grip — speed builds up and carries on after you let go.
       const g = Math.min(1, KSPIN_GLIDE * factor);
@@ -3906,6 +4048,7 @@ function tickRoom(dt) {
       continue;
     }
 
+    if (p.gsStun > 0) continue;   // stunned: nothing at all
     // The katana's spin (and the Worldsplitter's leap) is all you do while it lasts — only parry gets through.
     if (p.kspin > 0 || p.sky) {
       if (room.parryJustPressed[key] && p.parryCooldown <= 0) {
@@ -4063,6 +4206,7 @@ function tickRoom(dt) {
   updateDarklight(dt);
   updateStarfall(dt);
   updateWorldsplitter(dt);
+  updateGreatCracks(dt);
   updateLantern(dt);
   updatePhoenix(dt);
   updateChronos(dt);
@@ -4629,6 +4773,12 @@ function attackMove(p, pKey) {
   if (w.kunaiOrbit) { darklightAttack(p, pKey, w, dmgMult); return; }
   if (w.starStaff) { starAttack(p, pKey, w, dmgMult); return; }
   if (w.groundSplit) { splitAttack(p, pKey, w, dmgMult); return; }
+  if (w.greatSword) {
+    const aim = nearestTargetAngle(p, pKey);
+    p.facing = Math.cos(aim) < 0 ? -1 : 1;
+    p.gsSwing = { t: 0, n: 0, aim, dmg: Math.round(w.damage * dmgMult), range: w.range, arc: w.arc || 0 };
+    return;
+  }
   if (w.soulWisp) { soulAttack(p, pKey, w, dmgMult); return; }
   if (w.phoenixBow) { phoenixAttack(p, pKey, w, dmgMult); return; }
   if (w.timeBlade) { timeAttack(p, pKey, w, dmgMult); return; }
@@ -4816,6 +4966,7 @@ function doSuper(p, pKey) {
   p.swingTimer = 300;
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
   if (su.kind === 'skyfall') { startSkyfall(p, pKey, Math.round(su.dmg * dmgMult)); return; }
+  if (su.kind === 'greatcrack') { castGreatCrack(p, pKey, Math.round(su.dmg * dmgMult)); return; }
   if (su.kind === 'timestop') { stopTime(p, pKey); return; }
   if (su.kind === 'ninehead') { raiseHeads(p, pKey, Math.round(su.dmg * dmgMult), true); return; }
   if (su.kind === 'phoenixform') {
@@ -5499,6 +5650,8 @@ function updateFires(factor, dt) {
     if (f.kind === 'meteor' || f.kind === 'knife') return true;   // still falling: only the warning shows
     if (f.kind === 'portal') return updatePortal(f, dt);
     if (f.kind === 'tsring') return updateTsRing(f);
+    if (f.kind === 'gswave') return updateGsWave(f);
+    if (f.kind === 'gsarc') return true;
     if (f.kind === 'mine') return updatePlayerMine(f);
     if (f.kind === 'mindbeams') return updateMindBeams(f, dt);
     if (f.kind === 'barrier') return updateBarrier(f);
@@ -6912,6 +7065,13 @@ function forgeRicochet(proj, t) {
     fgRico: 0, quarry: null, hitTargets: proj.hitTargets ? new Set() : null });
 }
 function forgeTick(p, key, dt) {
+  if (p.gsStun > 0) p.gsStun -= dt;
+  if (p.gsSwing) {
+    const s = p.gsSwing;
+    s.t += dt;
+    if (s.n === 0 && s.t >= GS_HIT1) { s.n = 1; greatSwing(p, key, s, false); }
+    if (s.n === 1 && s.t >= GS_HIT2) { greatSwing(p, key, s, true); p.gsSwing = null; }
+  }
   if (p.wardCd > 0) p.wardCd -= dt;
   if (p.undyCd > 0) p.undyCd -= dt;
   if (p.fgVoid > 0) {               // VOID COLLAPSE: the blast comes as they arrive
@@ -8279,6 +8439,7 @@ function doSpecial(p, pKey) {
   }
   if (sp.kind === 'kunaistorm') { darklightStorm(p, pKey, spDmg); return; }
   if (sp.kind === 'tectonic') { castTectonic(p, pKey, sp, spDmg); return; }
+  if (sp.kind === 'leapslam') { startLeapSlam(p, pKey, spDmg); return; }
   if (sp.kind === 'rewind') { castRewind(p, pKey, spDmg); return; }
   if (sp.kind === 'hydraheads') { raiseHeads(p, pKey, spDmg, false); return; }
   if (sp.kind === 'sunvolley') { castSunVolley(p, pKey, sp, spDmg); return; }
@@ -8601,7 +8762,8 @@ function playerView(p) {
     ...(p.kunais && p.kunais.length ? { dk: p.kunais.map(k => (k.dark ? 1 : 0)).join(''), dkA: Math.round((p.dkA || 0) * 100) / 100 } : {}),
     ...(p.dlCurse ? { curse: Math.round(p.dlCurse.ms) } : {}),
     ...(p.starRain ? { srain: Math.round(p.starRain.t) } : {}),
-    ...(p.sky ? { sky: { k: Math.round(p.sky.t / p.sky.life * 100) / 100, sx: r1(p.sky.sx), sy: r1(p.sky.sy), tx: r1(p.sky.tx), ty: r1(p.sky.ty) } } : {}),
+    ...(p.sky ? { sky: { k: Math.round(p.sky.t / p.sky.life * 100) / 100, sx: r1(p.sky.sx), sy: r1(p.sky.sy), tx: r1(p.sky.tx), ty: r1(p.sky.ty), ...(p.sky.slam ? { r: GS_SLAM_R } : {}) } } : {}),
+    ...(p.gsStun > 0 ? { gstun: true } : {}),
     ...(p.souls ? { souls: p.souls } : {}),
     ...(p.deathDoor > 0 ? { ddoor: Math.round(p.deathDoor) } : {}),
     ...(p.phoenix ? { phx: Math.round(p.phoenix.t) } : {}),
@@ -8692,6 +8854,7 @@ function buildStateMsg(playerNum) {
     otherHasUnlocks: KEYS.some(k => k !== key && room.unlockQueues[k].length > 0),
     bossDrop: room.bossDrops?.[key] || null,
     noDrop: !!room.mythicNoDrop?.[key],
+    gcracks: (room.gcracks || []).map(q => ({ x1: r1(q.x1), y1: r1(q.y1), x2: r1(q.x2), y2: r1(q.y2), k: Math.round(q.t / q.life * 100) / 100, w: GC_W })),
     fissures: (room.fissures || []).map(q => ({ x1: r1(q.x1), y1: r1(q.y1), x2: r1(q.x2), y2: r1(q.y2),
       k: Math.round(Math.min(1, q.t / q.erupt) * 100) / 100, l: Math.round(Math.max(0, 1 - q.t / q.life) * 100) / 100 })),
     ...(room.saw ? { saw: { t: Math.round(room.saw.t), next: Math.round(room.saw.payT), earned: room.saw.earned } } : {}),
