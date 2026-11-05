@@ -1028,3 +1028,100 @@ body {
 /* ── A much bigger joystick ── */
 .joystick { width: calc(var(--dpad-size, 52px) * 4.2); height: calc(var(--dpad-size, 52px) * 4.2); }
 .joy-knob { width: 38%; height: 38%; }
+
+/* ── The forge ── */
+.mode-btn.btn-forge { border-color: #a8561a; color: #ffb066; }
+.mode-btn.btn-forge:hover { border-color: #ff8a3a; color: #fff; }
+.mode-btn.btn-trade { border-color: #1f7a5a; color: #7ae8b8; }
+.mode-btn.btn-trade:hover:not(:disabled) { border-color: #3ad89a; color: #fff; }
+.mode-btn.btn-trade:disabled { opacity: 0.5; cursor: default; }
+.title-text.forge-title { color: #ff9a3a; }
+.title-text.trade-title { color: #7ae8b8; }
+.shop-msg.fg-good-msg { color: #7affb0; }
+.shop-msg.fg-rare-msg { color: #ffd84a; font-weight: bold; text-shadow: 0 0 8px #ff9a3a; }
+.fg-weapons { display: flex; flex-wrap: wrap; gap: 4px; max-height: 118px; overflow-y: auto; justify-content: center; margin: 6px 0; }
+.fg-w { background: #14141f; border: 2px solid #33334a; padding: 2px; cursor: pointer; touch-action: manipulation; }
+.fg-w.on { border-color: #ff9a3a; background: #2a1a0e; }
+.fg-ic { width: 56px; height: 32px; display: block; image-rendering: pixelated; }
+.fg-pips { display: flex; gap: 2px; justify-content: center; margin-top: 2px; }
+.fg-pips i { width: 8px; height: 4px; background: #2a2a3a; }
+.fg-pips i.c { background: #ff9a3a; }
+.fg-pips i.r { background: #ffd84a; box-shadow: 0 0 4px #ffd84a; }
+.fg-bench { text-align: left; }
+.fg-bench.fg-hit { animation: fg-hit 0.28s ease-out; }
+@keyframes fg-hit { 0% { transform: translateY(3px); filter: brightness(1.6); } 100% { transform: none; filter: none; } }
+.fg-head { display: flex; align-items: center; gap: 10px; margin: 4px 0 6px; }
+.fg-big { width: 96px; height: 48px; image-rendering: pixelated; }
+.fg-name { font-weight: bold; font-size: 15px; }
+.fg-sub { font-size: 11px; color: #8a8aa0; }
+.fg-slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.fg-slot { border: 2px solid #4a3a2a; background: #1a140e; padding: 6px; font-size: 11px; min-height: 58px; color: #d8c8b0; }
+.fg-slot b { display: block; color: #ffb066; margin-bottom: 2px; }
+.fg-slot.empty { border-style: dashed; border-color: #33334a; background: none; color: #5a5a70; display: flex; align-items: center; justify-content: center; text-align: center; }
+.fg-slot.rare { border-color: #ffd84a; background: #2a2208; box-shadow: 0 0 8px rgba(255, 216, 74, 0.35); }
+.fg-slot.rare b { color: #ffd84a; }
+.fg-full { margin: 8px 0; font-size: 12px; color: #c8c8dc; text-align: center; }
+.fg-stake { margin-top: 8px; }
+.fg-stake input[type=range] { width: 100%; height: 28px; accent-color: #ff9a3a; }
+.fg-presets { display: flex; gap: 4px; justify-content: center; }
+.fg-presets button { background: #1a140e; color: #ffb066; border: 1px solid #6a4a2a; padding: 6px 12px; font: inherit; font-size: 12px; cursor: pointer; touch-action: manipulation; }
+.fg-odds { text-align: center; font-size: 12px; color: #c8c8dc; margin: 8px 0 6px; }
+.fg-odds b { color: #7affb0; }
+.fg-odds b.fg-r { color: #ffd84a; }
+.mode-btn.fg-strike { width: 100%; border-color: #ff8a3a; color: #ffd8a8; background: #3a1c08; font-size: 15px; }
+.mode-btn.fg-strike:disabled { opacity: 0.5; cursor: default; }
+.fg-reset { display: block; width: 100%; margin-top: 6px; background: none; border: 1px solid #6a3a3a; color: #e89a8a; padding: 8px; font: inherit; font-size: 11px; cursor: pointer; touch-action: manipulation; }
+.fg-all { margin-top: 8px; font-size: 12px; color: #a8a8c0; }
+.fg-all summary { cursor: pointer; padding: 6px 0; color: #c8c8dc; }
+.fg-list { max-height: 190px; overflow-y: auto; }
+.fg-row { padding: 3px 0; border-bottom: 1px solid #22222f; font-size: 11px; }
+.fg-row b { color: #ffb066; }
+.fg-row.rare b { color: #ffd84a; }
+.fg-row.have { opacity: 0.45; }
+.shop-forged { font-size: 11px; color: #ff9a3a; margin-top: 2px; }
+.lost-row { border-color: #6a3a3a; }
+.lost-row b { color: #ff8877; }
+@media (max-width: 520px) {
+  .fg-slots { grid-template-columns: 1fr; }
+  .fg-slot { min-height: 0; }
+  .fg-slot.empty { padding: 4px; }
+}
+/* ── Trade ── */
+.tr-start { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.tr-join { display: flex; gap: 6px; }
+.tr-join input { flex: 1; min-width: 0; background: #14141f; border: 2px solid #33334a; color: #fff; font: inherit; font-size: 18px; text-align: center; letter-spacing: 4px; text-transform: uppercase; padding: 6px; }
+.tr-rules { font-size: 12px; color: #a8a8c0; line-height: 1.5; margin: 10px 0 0; text-align: left; }
+.tr-code { font-size: 38px; font-weight: bold; letter-spacing: 8px; color: #7ae8b8; text-align: center; margin: 10px 0; }
+.tr-wait { text-align: center; font-size: 12px; color: #a8a8c0; margin: 4px 0; }
+.tr-wait b { color: #fff; }
+.tr-big { text-align: center; font-size: 22px; color: #7ae8b8; font-weight: bold; margin: 10px 0; }
+.tr-table { display: grid; grid-template-columns: 1.3fr 1fr; gap: 8px; text-align: left; margin-top: 6px; }
+.tr-table.hidden { display: none; }
+.tr-col { border: 2px solid #2a3a34; background: #10161a; padding: 6px; min-width: 0; }
+.tr-h { font-size: 12px; color: #7ae8b8; font-weight: bold; margin-bottom: 4px; }
+.tr-item, .tr-pick { display: flex; align-items: center; gap: 6px; padding: 3px; font-size: 12px; color: #e8e8f0; text-align: left; }
+.tr-item canvas, .tr-pick canvas { width: 56px; height: 32px; flex: none; image-rendering: pixelated; }
+.tr-coin { color: var(--c-gold); }
+.tr-sub { display: block; font-size: 10px; color: #8a8aa0; }
+.tr-none { font-size: 11px; color: #5a5a70; padding: 4px; }
+.tr-coins { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #a8a8c0; margin: 6px 0; }
+.tr-coins input { width: 96px; background: #14141f; border: 1px solid #33334a; color: var(--c-gold); font: inherit; font-size: 13px; padding: 4px; }
+.tr-tabs { display: flex; gap: 3px; }
+.tr-tabs button { flex: 1; background: #14141f; border: 1px solid #33334a; color: #a8a8c0; font: inherit; font-size: 10px; padding: 6px 2px; cursor: pointer; touch-action: manipulation; }
+.tr-tabs button.on { border-color: #3ad89a; color: #fff; }
+.tr-scroll { max-height: 210px; overflow-y: auto; margin-top: 4px; }
+.tr-pick { width: 100%; background: none; border: 1px solid transparent; font-family: inherit; cursor: pointer; touch-action: manipulation; }
+.tr-pick.on { border-color: #3ad89a; background: #123026; }
+.tr-pick:disabled { opacity: 0.4; cursor: default; }
+.tr-status { display: flex; justify-content: space-around; font-size: 12px; color: #a8a8c0; margin: 8px 0 6px; }
+.tr-status .ok { color: #7affb0; font-weight: bold; }
+.tr-foot .mode-btn { width: 100%; }
+@media (max-width: 520px) { .tr-table { grid-template-columns: 1fr; } }
+
+/* ── Weapons with a rare forge upgrade ── */
+@keyframes rare-glow {
+  0%, 100% { filter: drop-shadow(0 0 2px #ff2a2a) drop-shadow(0 0 5px #ff2a2a) brightness(1.05); }
+  50% { filter: drop-shadow(0 0 4px #ff6a5a) drop-shadow(0 0 11px #ff1a1a) brightness(1.4); }
+}
+canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
+.fg-myth { color: #ff6a5a; font-weight: bold; }

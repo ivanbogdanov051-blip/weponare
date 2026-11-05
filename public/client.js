@@ -990,17 +990,23 @@ function updatePrediction(frameDt, now) {
   if (me.passive === 'dagger') spd *= 1.45;   // SWIFTNESS
   if (me.kspin > 0) spd *= 1.9;               // the katana's spin
   if (me.phx > 0) spd *= 1.8;                 // Ashfeather's PHOENIX FORM
+  if (me.fgs) spd *= me.fgs;                  // forge: FLEET FOOTED, KITER
   if (me.effects && me.effects.slow  > 0) spd *= 0.4;
   if (me.effects && me.effects.root  > 0) spd = 0;            // ROOT VINES
   if (me.sky) spd = 0;                                        // up in the air (Worldsplitter's leap)
 
   // Apply currently-held inputs immediately (instant response)
   let vx = 0, vy = 0;
-  if (inp.left)  { vx = -spd; pred.facing = -1; }
-  if (inp.right) { vx =  spd; pred.facing =  1; }
-  if (inp.up)    vy = -spd;
-  if (inp.down)  vy =  spd;
-  if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
+  if (inp.ang != null) {
+    vx = Math.cos(inp.ang) * spd; vy = Math.sin(inp.ang) * spd;
+    if (Math.abs(Math.cos(inp.ang)) > 0.38) pred.facing = vx < 0 ? -1 : 1;
+  } else {
+    if (inp.left)  { vx = -spd; pred.facing = -1; }
+    if (inp.right) { vx =  spd; pred.facing =  1; }
+    if (inp.up)    vy = -spd;
+    if (inp.down)  vy =  spd;
+    if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
+  }
   if (me.effects && me.effects.confuse > 0) { vx = -vx; vy = -vy; if (vx) pred.facing = vx > 0 ? 1 : -1; }   // MIRROR RUNE
   const f = frameDt / 16.67;
   if (me.passive === 'samuraiblade' && (vx || vy)) {   // WAY OF THE BLADE (mirrors the server)
@@ -2131,9 +2137,10 @@ function fireHandShape(s, color, now) {
 // dimmed while cooling.
 const AB_KEYS = ['Q', 'E', 'F', 'G', 'V', 'B'];
 const AB_CODES = ['KeyQ', 'KeyE', 'KeyF', 'KeyG', 'KeyV', 'KeyB'];
-const abBtnState = AB_KEYS.map(() => ({ id: undefined, cooling: null }));
+const AB_BTN_KEYS = [...AB_KEYS, 'C'];   // the seventh is the rare forged ability
+const abBtnState = AB_BTN_KEYS.map(() => ({ id: undefined, cooling: null }));
 function syncAbilityButtons(me) {
-  for (let i = 0; i < AB_KEYS.length; i++) {
+  for (let i = 0; i < AB_BTN_KEYS.length; i++) {
     const el = document.getElementById('btn-ab' + (i + 1));
     if (!el) continue;
     const a = me && me.abil ? me.abil[i] : null;
@@ -2226,7 +2233,7 @@ canvas.addEventListener('pointermove', (e) => {
 canvas.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') mouseAim = null; });
 
 const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false,
-                    ab1: false, ab2: false, ab3: false, ab4: false, ab5: false, ab6: false };
+                    ab1: false, ab2: false, ab3: false, ab4: false, ab5: false, ab6: false, ab7: false, ang: null };
 
 window.addEventListener('keydown', (e) => {
   if (!keys[e.code]) { keys[e.code] = true; sendInput(); }
@@ -2270,6 +2277,9 @@ function currentInputs() {
     ab4:     !!keys['KeyG'] || touchKeys.ab4,
     ab5:     !!keys['KeyV'] || touchKeys.ab5,
     ab6:     !!keys['KeyB'] || touchKeys.ab6,
+    ab7:     !!keys['KeyC'] || touchKeys.ab7,   // the rare forged ability
+    // The joystick's exact direction (the keys stay 8-way).
+    ang:     anyKey || !Number.isFinite(touchKeys.ang) ? null : touchKeys.ang,
     // Mouse position in the world, for DASH (desktop only).
     aimX:    mouseAim ? Math.round(mouseAim.x) : null,
     aimY:    mouseAim ? Math.round(mouseAim.y) : null,
@@ -2355,7 +2365,7 @@ function buildSandboxPanel() {
     btn(`data-act="item" data-what="${t.id}"`, t.name, t.color)).join('');
   document.getElementById('sbTraps').innerHTML = SANDBOX_DEFS.traps.map(t =>
     btn(`data-act="trap" data-what="${t.id}"`, t.name, t.color)).join('');
-  const opts = '<option value="">- NONE -</option>' + ABILITY_DEFS.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+  const opts = '<option value="">- NONE -</option>' + ABILITY_DEFS.filter(a => !a.forged).map(a => `<option value="${a.id}">${a.name}</option>`).join('');
   for (let i = 0; i < AB_KEYS.length; i++) {
     const sel = document.getElementById('sbAb' + i);
     if (!sel) continue;
@@ -2475,7 +2485,7 @@ function setupTouchControls() {
     ['btn-up','up'], ['btn-down','down'], ['btn-left','left'],
     ['btn-right','right'], ['btn-attack','attack'], ['btn-next','swap'], ['btn-prev','swapPrev'],
     ['btn-special','special'], ['btn-parry','parry'], ['btn-super','super'],
-    ['btn-ab1','ab1'], ['btn-ab2','ab2'], ['btn-ab3','ab3'], ['btn-ab4','ab4'], ['btn-ab5','ab5'], ['btn-ab6','ab6'],
+    ['btn-ab1','ab1'], ['btn-ab2','ab2'], ['btn-ab3','ab3'], ['btn-ab4','ab4'], ['btn-ab5','ab5'], ['btn-ab6','ab6'], ['btn-ab7','ab7'],
   ];
   for (const [id, key] of btnMap) {
     const el = document.getElementById(id);
@@ -2498,17 +2508,17 @@ function setupTouchControls() {
     }, { passive: false });
   }
 }
-// Movement joystick: drag the knob; it moves you in 8 directions (the game's
-// movement is digital) and springs back when you let go. The finger may wander
-// outside the ring while dragging and it keeps working.
+// Movement joystick: drag the knob and you walk the exact way it points (the
+// server is told the angle, in 5 degree steps); it springs back when you let go.
+// The finger may wander outside the ring while dragging and it keeps working.
 function setupJoystick() {
   const base = document.getElementById('joystick'), knob = document.getElementById('joyKnob');
   if (!base || !knob) return;
   let id = null;
-  const DEAD = 0.18, AXIS = 0.38;
-  const set = (u, d, l, r) => {
-    if (touchKeys.up === u && touchKeys.down === d && touchKeys.left === l && touchKeys.right === r) return;
-    touchKeys.up = u; touchKeys.down = d; touchKeys.left = l; touchKeys.right = r;
+  const DEAD = 0.18, AXIS = 0.38, STEP = Math.PI / 36;
+  const set = (u, d, l, r, ang = null) => {
+    if (touchKeys.up === u && touchKeys.down === d && touchKeys.left === l && touchKeys.right === r && touchKeys.ang === ang) return;
+    touchKeys.up = u; touchKeys.down = d; touchKeys.left = l; touchKeys.right = r; touchKeys.ang = ang;
     sendInput();
   };
   const move = (t) => {
@@ -2521,7 +2531,8 @@ function setupJoystick() {
     const m = Math.min(1, d / max);
     if (m < DEAD) { set(false, false, false, false); return; }
     const nx = dx / d, ny = dy / d;
-    set(ny < -AXIS, ny > AXIS, nx < -AXIS, nx > AXIS);
+    const ang = Math.round(Math.atan2(dy, dx) / STEP) * STEP;
+    set(ny < -AXIS, ny > AXIS, nx < -AXIS, nx > AXIS, Math.round(ang * 1000) / 1000);
   };
   const end = () => {
     id = null; base.classList.remove('active');
@@ -2736,6 +2747,338 @@ function renderSkinPreview() {
 let shopData = null;
 let shopBusy = false;
 
+
+// ─── THE FORGE ────────────────────────────────────────────────────────────────
+// Pick one of your weapons, choose how many coins go in, and strike. The server
+// does the rolling; the odds shown here use the same numbers it sends.
+let forgeData = null, forgeSel = null, forgeStake = 5000, forgeBusy = false, forgeResetArmed = false;
+function setForgeMsg(text, kind) {
+  const el = document.getElementById('forgeMsg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'shop-msg' + (kind === 'bad' ? ' err' : kind === 'rare' ? ' fg-rare-msg' : kind === 'good' ? ' fg-good-msg' : '');
+}
+function forgeMod(id) {
+  const d = forgeData?.forgeDefs;
+  if (!d) return null;
+  const rare = d.rare.find(m => m.id === id) || d.mythicRare.find(m => m.id === id);
+  return rare ? { ...rare, rare: true } : d.melee.find(m => m.id === id) || d.ranged.find(m => m.id === id) || d.mythic.find(m => m.id === id) || null;
+}
+function forgeOddsFor(coins, hasRare) {
+  const d = forgeData.forgeDefs, O = d.odds;
+  const t = Math.max(0, Math.min(1, Math.log(coins / d.min) / Math.log(d.max / d.min)));
+  return { ok: O.okMin + (O.okMax - O.okMin) * t, rare: hasRare ? 0 : O.rareMin + (O.rareMax - O.rareMin) * t * t };
+}
+const forgeTop = () => Math.min(forgeData.coins, forgeData.forgeDefs.max);
+function stakeFromSlider(v) {
+  const d = forgeData.forgeDefs, top = Math.max(d.min, forgeTop());
+  const raw = d.min * Math.pow(top / d.min, v / 1000);
+  return v >= 1000 ? top : Math.min(top, Math.max(d.min, Math.round(raw / 100) * 100));
+}
+function sliderFromStake(c) {
+  const d = forgeData.forgeDefs, top = Math.max(d.min, forgeTop());
+  return top <= d.min ? 1000 : Math.round(1000 * Math.log(c / d.min) / Math.log(top / d.min));
+}
+async function openForge() {
+  readCredentials();
+  showScreen('forgeScreen');
+  document.getElementById('forgeWeapons').innerHTML = '';
+  document.getElementById('forgeBench').innerHTML = '';
+  document.getElementById('forgeCoins').innerHTML = '';
+  if (!pendingPass) { setForgeMsg('Enter a password on the title screen first. Forged upgrades are saved against it.', 'bad'); return; }
+  setForgeMsg('Heating the forge...');
+  try {
+    forgeData = await abilPost('/api/profile', {});
+    applyCatalog(forgeData.catalog, forgeData.colors);
+    if (!forgeData.weapons.includes(forgeSel)) forgeSel = forgeData.weapons[0] || null;
+    setForgeMsg('');
+    renderForge();
+  } catch (e) { setForgeMsg(e.message || 'Could not reach the server.', 'bad'); }
+}
+function closeForge() { showScreen('startScreen'); refreshSavedBanner(); }
+function pickForgeWeapon(id) { forgeSel = id; forgeResetArmed = false; setForgeMsg(''); renderForge(); }
+function renderForge() {
+  if (!forgeData) return;
+  document.getElementById('forgeCoins').innerHTML = `<span class="coin-ic">◆</span> ${forgeData.coins.toLocaleString()} COINS`;
+  const list = document.getElementById('forgeWeapons');
+  const top = list.scrollTop;
+  list.innerHTML = forgeData.weapons.map(id => {
+    const mods = forgeData.forge[id] || [];
+    return `<button class="fg-w${id === forgeSel ? ' on' : ''}" onclick="pickForgeWeapon('${id}')" title="${escapeHtml(WEAPON_META[id]?.name || id)}">
+      <canvas class="fg-ic${(forgeData.rareWeapons || []).includes(id) ? ' rare-glow' : ''}" data-weapon="${id}" width="56" height="32"></canvas>
+      <span class="fg-pips">${[0, 1, 2].map(i => `<i class="${mods[i] ? (forgeMod(mods[i])?.rare ? 'r' : 'c') : ''}"></i>`).join('')}</span></button>`;
+  }).join('');
+  list.scrollTop = top;
+  drawForgeIcons(list);
+  renderForgeBench();
+}
+function drawForgeIcons(host) {
+  for (const cv of host.querySelectorAll('canvas[data-weapon]')) {
+    const g = cv.getContext('2d'), id = cv.dataset.weapon;
+    g.clearRect(0, 0, cv.width, cv.height);
+    g.imageSmoothingEnabled = false;
+    drawWeaponPixelsFitted(g, id, cv.width / 2, cv.height / 2, cv.width - 8, cv.height - 8, WEAPON_COLOR[id] || '#ccc');
+  }
+}
+function renderForgeBench() {
+  const el = document.getElementById('forgeBench'), id = forgeSel, meta = WEAPON_META[id];
+  if (!id || !meta) { el.innerHTML = ''; return; }
+  const d = forgeData.forgeDefs, mods = forgeData.forge[id] || [], full = mods.length >= d.slots;
+  const hasRare = mods.some(m => forgeMod(m)?.rare);
+  const poor = forgeData.coins < d.min;
+  forgeStake = Math.max(d.min, Math.min(Math.max(d.min, forgeTop()), forgeStake));
+  const slots = [0, 1, 2].map(i => {
+    const m = mods[i] ? forgeMod(mods[i]) : null;
+    if (!m) return '<div class="fg-slot empty">EMPTY SLOT</div>';
+    return `<div class="fg-slot${m.rare ? ' rare' : ''}"><b>${m.rare ? m.emoji + ' ' : ''}${escapeHtml(m.name)}</b><span>${escapeHtml(m.desc)}${m.rare ? ' · press C · ' + Math.round(m.cd / 1000) + 's cooldown' : ''}</span></div>`;
+  }).join('');
+  const pool = meta.mythic ? d.mythic : (meta.forgeClass === 'melee' ? d.melee : d.ranged).filter(m => !m.needs || (meta.forgeCan || []).includes(m.needs));
+  const rares = meta.mythic ? d.mythicRare : d.rare;
+  const presets = [500, 5000, 50000, 500000].filter(v => v <= Math.max(d.min, forgeTop()));
+  el.innerHTML = `
+    <div class="fg-head">
+      <canvas class="fg-big${(forgeData.rareWeapons || []).includes(id) ? ' rare-glow' : ''}" data-weapon="${id}" width="96" height="48"></canvas>
+      <div><div class="fg-name" style="color:${WEAPON_COLOR[id] || '#ccc'}">${escapeHtml(meta.name)}</div>
+        <div class="fg-sub">${meta.mythic ? '<span class="fg-myth">MYTHIC FORGE</span>' : meta.forgeClass === 'melee' ? 'MELEE' : 'RANGED'} · ${mods.length}/${d.slots} UPGRADES${hasRare ? ' · RARE TAKEN' : ''}</div></div>
+    </div>
+    <div class="fg-slots">${slots}</div>
+    ${full ? '<div class="fg-full">All three slots are full. Reset this weapon to forge it again.</div>' : `
+    <div class="fg-stake">
+      <input id="forgeRange" type="range" min="0" max="1000" value="${sliderFromStake(forgeStake)}" oninput="forgeSlide(this.value)" ${poor ? 'disabled' : ''} aria-label="Coins to put in">
+      <div class="fg-presets">${presets.map(v => `<button onclick="forgeSet(${v})">${v >= 1000 ? v / 1000 + 'K' : v}</button>`).join('')}</div>
+    </div>
+    <div class="fg-odds" id="forgeOdds"></div>
+    <button class="mode-btn fg-strike" id="forgeStrike" onclick="strikeForge()" ${poor ? 'disabled' : ''}></button>`}
+    ${mods.length ? `<button class="fg-reset" onclick="resetForge()">${forgeResetArmed ? 'TAP AGAIN: REMOVE ALL ${mods.length} UPGRADES' : 'RESET THIS WEAPON (free, coins not returned)'}</button>` : ''}
+    <details class="fg-all"><summary>EVERY UPGRADE FOR THIS WEAPON (${pool.length} ${meta.mythic ? 'MYTHIC' : 'COMMON'}, ${rares.length} RARE)</summary>
+      <div class="fg-list">${rares.map(m => `<div class="fg-row rare"><b>${m.emoji} ${escapeHtml(m.name)}</b> ${escapeHtml(m.desc)}</div>`).join('')}
+      ${pool.map(m => `<div class="fg-row${mods.includes(m.id) ? ' have' : ''}"><b>${escapeHtml(m.name)}</b> ${escapeHtml(m.desc)}</div>`).join('')}</div>
+    </details>`;
+  drawForgeIcons(el);
+  syncForgeOdds();
+}
+function syncForgeOdds() {
+  const odds = document.getElementById('forgeOdds'), btn = document.getElementById('forgeStrike');
+  if (!odds || !btn) return;
+  const d = forgeData.forgeDefs, mods = forgeData.forge[forgeSel] || [], hasRare = mods.some(m => forgeMod(m)?.rare);
+  if (forgeData.coins < d.min) { odds.textContent = 'You need at least ' + d.min.toLocaleString() + ' coins.'; btn.textContent = 'NOT ENOUGH COINS'; return; }
+  const o = forgeOddsFor(forgeStake, hasRare);
+  odds.innerHTML = `UPGRADE CHANCE <b>${Math.round(o.ok * 100)}%</b> · RARE CHANCE <b class="fg-r">${hasRare ? 'NONE: THIS WEAPON HAS ONE' : (o.ok * o.rare * 100).toFixed(1) + '%'}</b>`;
+  btn.innerHTML = forgeBusy ? 'STRIKING...' : `🔨 FORGE FOR ◆ ${forgeStake.toLocaleString()}`;
+}
+function forgeSlide(v) { forgeStake = stakeFromSlider(Number(v)); syncForgeOdds(); }
+function forgeSet(v) {
+  forgeStake = v;
+  const r = document.getElementById('forgeRange');
+  if (r) r.value = sliderFromStake(v);
+  syncForgeOdds();
+}
+async function strikeForge() {
+  if (forgeBusy || !forgeSel) return;
+  forgeBusy = true; syncForgeOdds();
+  const box = document.getElementById('forgeBench');
+  box.classList.remove('fg-hit'); void box.offsetWidth; box.classList.add('fg-hit');
+  try {
+    const data = await abilPost('/api/forge', { weaponId: forgeSel, coins: forgeStake });
+    forgeData = { ...forgeData, ...data };
+    forgeResetArmed = false;
+    const r = data.result;
+    setForgeMsg(r ? (r.rare ? 'RARE! ' : 'FORGED: ') + r.name + ' - ' + r.desc : 'The metal cracked. No upgrade this time.', r ? (r.rare ? 'rare' : 'good') : 'bad');
+    if (window.GameAudio) try { GameAudio.init(); GameAudio.sfx(r ? 'unlock' : 'hit'); } catch {}
+  } catch (e) { setForgeMsg(e.message || 'Could not reach the server.', 'bad'); }
+  forgeBusy = false;
+  renderForge();
+}
+async function resetForge() {
+  if (forgeBusy || !forgeSel) return;
+  if (!forgeResetArmed) { forgeResetArmed = true; renderForgeBench(); return; }
+  forgeBusy = true;
+  try {
+    const data = await abilPost('/api/forge_reset', { weaponId: forgeSel });
+    forgeData = { ...forgeData, ...data };
+    setForgeMsg('Reset. All three slots are free again.', 'good');
+  } catch (e) { setForgeMsg(e.message || 'Could not reach the server.', 'bad'); }
+  forgeBusy = false; forgeResetArmed = false;
+  renderForge();
+}
+
+// ─── TRADE ────────────────────────────────────────────────────────────────────
+// One player starts a trade and reads out the code; the other types it in. Both
+// choose what they give. Any change clears both agreements, so nobody can agree
+// to one deal and get another. The screen asks the server every second.
+let tradeView = null, tradeCode = '', tradeTimer = null, tradeTab = 'weapons', tradeBusy = false, tradeMineKey = '', tradeThemKey = '';
+function setTradeMsg(text, bad) {
+  const el = document.getElementById('tradeMsg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'shop-msg' + (bad ? ' err' : '');
+}
+async function tradePost(path, body) {
+  const res = await fetch('/api/trade/' + path, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pendingPass, name: pendingName, code: tradeCode, backup: loadBackup(pendingPass), ...body }),
+  });
+  const data = await res.json();
+  if (!res.ok) { const e = new Error(data.error || 'Something went wrong.'); e.status = res.status; throw e; }
+  return data;
+}
+function takeTradeView(v) {
+  tradeView = v;
+  tradeCode = v.code;
+  if (v.save) storeBackup(pendingPass, v.save);
+  if (typeof v.coins === 'number') saveLocalCoins(pendingPass, v.coins);
+  if (v.done || v.cancelled) stopTradePoll();
+  renderTrade();
+}
+function stopTradePoll() { clearInterval(tradeTimer); tradeTimer = null; }
+function startTradePoll() {
+  stopTradePoll();
+  tradeTimer = setInterval(async () => {
+    if (tradeBusy || !tradeCode) return;
+    try { takeTradeView(await tradePost('state', {})); }
+    catch (e) { if (e.status === 404) { stopTradePoll(); tradeView = { ...(tradeView || {}), cancelled: true }; renderTrade(); } }
+  }, 1000);
+}
+function openTrade() {
+  readCredentials();
+  tradeView = null; tradeCode = ''; tradeMineKey = ''; tradeThemKey = '';
+  showScreen('tradeScreen');
+  setTradeMsg(pendingPass ? '' : 'Enter a password on the title screen first. Trades are saved against it.', !pendingPass);
+  renderTrade();
+}
+async function closeTrade() {
+  stopTradePoll();
+  if (tradeCode && tradeView && !tradeView.done && !tradeView.cancelled) { try { await tradePost('cancel', {}); } catch {} }
+  tradeView = null; tradeCode = '';
+  showScreen('startScreen'); refreshSavedBanner();
+}
+async function tradeStart() {
+  if (!pendingPass || tradeBusy) return;
+  tradeBusy = true;
+  try { tradeCode = ''; takeTradeView(await tradePost('open', {})); setTradeMsg(''); startTradePoll(); }
+  catch (e) { setTradeMsg(e.message, true); }
+  tradeBusy = false;
+}
+async function tradeJoin() {
+  if (!pendingPass || tradeBusy) return;
+  const code = (document.getElementById('tradeCodeIn')?.value || '').trim().toUpperCase();
+  if (!code) { setTradeMsg('Type the code your friend got.', true); return; }
+  tradeBusy = true;
+  try { takeTradeView(await tradePost('join', { code })); setTradeMsg(''); startTradePoll(); }
+  catch (e) { setTradeMsg(e.message, true); }
+  tradeBusy = false;
+}
+function tradeOfferIds() {
+  const m = tradeView.mine;
+  return { coins: m.coins, weapons: m.weapons.map(x => x.id), skins: m.skins.map(x => x.id), abilities: m.abilities.map(x => x.id) };
+}
+async function tradeSend(offer) {
+  tradeBusy = true;
+  try { takeTradeView(await tradePost('offer', { offer })); setTradeMsg(''); }
+  catch (e) { setTradeMsg(e.message, true); }
+  tradeBusy = false;
+}
+function tradeToggle(kind, id) {
+  if (tradeBusy || !tradeView) return;
+  const o = tradeOfferIds();
+  o[kind] = o[kind].includes(id) ? o[kind].filter(x => x !== id) : [...o[kind], id];
+  tradeSend(o);
+}
+function tradeCoins(v) {
+  if (!tradeView) return;
+  const o = tradeOfferIds();
+  o.coins = Math.max(0, Math.floor(Number(v) || 0));
+  if (o.coins !== tradeView.mine.coins) tradeSend(o);
+}
+function tradeSetTab(t) { tradeTab = t; tradeMineKey = ''; renderTrade(); }
+async function tradeAgree(yes) {
+  if (tradeBusy || !tradeView) return;
+  tradeBusy = true;
+  try { takeTradeView(await tradePost('agree', { agree: yes, rev: tradeView.rev })); setTradeMsg(''); }
+  catch (e) { setTradeMsg(e.message, true); }
+  tradeBusy = false;
+}
+function tradeLine(w) {
+  const bits = [];
+  if (w.levels) bits.push('LV ' + w.levels);
+  for (const m of w.mods || []) bits.push((m.rare ? '★' : '') + m.name);
+  return bits.length ? `<span class="tr-sub">${escapeHtml(bits.join(' · '))}</span>` : '';
+}
+function tradeList(o) {
+  if (!o) return '';
+  const rows = [];
+  if (o.coins) rows.push(`<div class="tr-item"><b class="tr-coin">◆ ${o.coins.toLocaleString()} COINS</b></div>`);
+  for (const w of o.weapons) rows.push(`<div class="tr-item"><canvas class="${w.rare ? 'rare-glow' : ''}" data-weapon="${w.id}" width="56" height="32"></canvas><div><b>${escapeHtml(w.name)}</b>${tradeLine(w)}</div></div>`);
+  for (const a of o.abilities) rows.push(`<div class="tr-item"><div><b>${escapeHtml(a.name)}</b><span class="tr-sub">ABILITY</span></div></div>`);
+  for (const k of o.skins) rows.push(`<div class="tr-item"><div><b>${escapeHtml(k.name)}</b><span class="tr-sub">SKIN</span></div></div>`);
+  return rows.join('') || '<div class="tr-none">Nothing yet</div>';
+}
+function renderTrade() {
+  const top = document.getElementById('tradeTop'), table = document.getElementById('tradeTable');
+  const foot = document.getElementById('tradeFoot'), v = tradeView;
+  if (!top) return;
+  if (!v) {
+    table.classList.add('hidden'); foot.innerHTML = '';
+    top.innerHTML = pendingPass ? `<div class="tr-start">
+      <button class="mode-btn btn-trade" onclick="tradeStart()">START A TRADE<small>get a code for your friend</small></button>
+      <div class="tr-join"><input id="tradeCodeIn" maxlength="5" placeholder="CODE" autocomplete="off" aria-label="Trade code">
+        <button class="mode-btn btn-trade" onclick="tradeJoin()">JOIN</button></div></div>
+      <p class="tr-rules">Both players must give something and both must agree. What you give is gone: to get a lost weapon back you have to earn the XP between it and the weapon before it (legendaries: 2,500 XP, then buy or win it again). Your other weapons stay yours. Weapons keep their upgrades and forge work.</p>` : '';
+    return;
+  }
+  if (v.cancelled) {
+    table.classList.add('hidden'); foot.innerHTML = '';
+    top.innerHTML = '<div class="tr-big">TRADE CLOSED</div><div class="tr-wait">Nothing changed hands.</div>';
+    return;
+  }
+  if (v.done) {
+    table.classList.add('hidden'); foot.innerHTML = '';
+    top.innerHTML = `<div class="tr-big">TRADE DONE</div><div class="tr-wait">YOU GOT</div><div class="tr-col">${tradeList(v.got)}</div>`;
+    drawForgeIcons(top);
+    return;
+  }
+  if (!v.partner) {
+    table.classList.add('hidden'); foot.innerHTML = '';
+    top.innerHTML = `<div class="tr-wait">TELL YOUR FRIEND THIS CODE</div><div class="tr-code">${escapeHtml(v.code)}</div><div class="tr-wait">Waiting for them to join...</div>`;
+    return;
+  }
+  top.innerHTML = `<div class="tr-wait">TRADING WITH <b>${escapeHtml(v.partner)}</b> · CODE ${escapeHtml(v.code)}</div>`;
+  table.classList.remove('hidden');
+  const mineKey = JSON.stringify([v.mine, v.items, v.coins, tradeTab]);
+  if (mineKey !== tradeMineKey) {
+    tradeMineKey = mineKey;
+    const ids = tradeOfferIds(), it = v.items || { weapons: [], skins: [], abilities: [] };
+    const tab = (k, label) => `<button class="${tradeTab === k ? 'on' : ''}" onclick="tradeSetTab('${k}')">${label}</button>`;
+    const rows = (it[tradeTab] || []).map(x => {
+      const on = ids[tradeTab].includes(x.id), off = !!x.why && !on;
+      const note = x.why ? x.why : tradeTab === 'weapons' ? 'win it back: ' + (x.back || 0).toLocaleString() + ' XP' : '';
+      return `<button class="tr-pick${on ? ' on' : ''}" ${off ? 'disabled' : ''} onclick="tradeToggle('${tradeTab}','${x.id}')">
+        ${tradeTab === 'weapons' ? `<canvas class="${x.rare ? 'rare-glow' : ''}" data-weapon="${x.id}" width="56" height="32"></canvas>` : ''}
+        <div><b>${escapeHtml(x.name)}</b>${tradeTab === 'weapons' ? tradeLine(x) : ''}<span class="tr-sub">${escapeHtml(note)}</span></div></button>`;
+    }).join('') || '<div class="tr-none">Nothing here</div>';
+    const mine = document.getElementById('tradeMine');
+    const scroll = mine.querySelector('.tr-scroll')?.scrollTop || 0;
+    mine.innerHTML = `<div class="tr-h">YOU GIVE</div>${tradeList(v.mine)}
+      <label class="tr-coins">COINS <input type="number" min="0" max="${v.coins}" value="${v.mine.coins}" onchange="tradeCoins(this.value)"> <span>of ${v.coins.toLocaleString()}</span></label>
+      <div class="tr-tabs">${tab('weapons', 'WEAPONS')}${tab('abilities', 'ABILITIES')}${tab('skins', 'SKINS')}</div>
+      <div class="tr-scroll">${rows}</div>`;
+    mine.querySelector('.tr-scroll').scrollTop = scroll;
+    drawForgeIcons(mine);
+  }
+  const themKey = JSON.stringify([v.theirs, v.partner]);
+  if (themKey !== tradeThemKey) {
+    tradeThemKey = themKey;
+    const them = document.getElementById('tradeThem');
+    them.innerHTML = `<div class="tr-h">${escapeHtml(v.partner)} GIVES</div>${tradeList(v.theirs)}`;
+    drawForgeIcons(them);
+  }
+  const ready = [v.mine, v.theirs].every(o => o && (o.coins || o.weapons.length || o.skins.length || o.abilities.length));
+  foot.innerHTML = `${v.note ? `<div class="shop-msg err">${escapeHtml(v.note)}</div>` : ''}
+    <div class="tr-status"><span class="${v.iAgreed ? 'ok' : ''}">YOU: ${v.iAgreed ? 'AGREED' : 'NOT YET'}</span><span class="${v.theyAgreed ? 'ok' : ''}">${escapeHtml(v.partner)}: ${v.theyAgreed ? 'AGREED' : 'NOT YET'}</span></div>
+    ${v.iAgreed ? '<button class="mode-btn" onclick="tradeAgree(false)">CHANGE MY MIND</button>'
+                : `<button class="mode-btn btn-trade" ${ready ? '' : 'disabled'} onclick="tradeAgree(true)">${ready ? '&#10003; I AGREE TO THIS TRADE' : 'BOTH PLAYERS MUST GIVE SOMETHING'}</button>`}`;
+}
+
 function setShopMsg(text, isError) {
   const el = document.getElementById('shopMsg');
   if (!el) return;
@@ -2795,7 +3138,7 @@ function renderShop() {
   const perkIds = Object.keys(shopData.perks || {});
   // Parry and character first, then legendary weapons for sale, then your weapons.
   list.innerHTML = [...perkIds, '__legend__', ...weapons].map(id => {
-    if (id === '__legend__') return mythicPicker(weapons) + legendaryCards(weapons, coins);
+    if (id === '__legend__') return lostRow() + mythicPicker(weapons) + legendaryCards(weapons, coins);
     const lv = upgrades[id] || {};
     const perk = PERK_ROWS[id];
     const name = perk ? perk.name : WEAPON_META[id]?.name || id.toUpperCase();
@@ -2816,11 +3159,12 @@ function renderShop() {
     const desc = stats.map(k => `<b>${upgradeDefs[k].short}</b> ${upgradeDefs[k].desc || ''}`).join(' · ');
     return `<div class="shop-row">
       <div class="shop-head">
-        <canvas class="shop-ic" data-weapon="${id}" width="56" height="32"></canvas>
+        <canvas class="shop-ic${(shopData.rareWeapons || []).includes(id) ? ' rare-glow' : ''}" data-weapon="${id}" width="56" height="32"></canvas>
         <span class="shop-name" style="color:${col}">${name}</span>
       </div>
       <div class="shop-stats">${rows}</div>
       <div class="shop-desc">${desc}</div>
+      ${shopData.forge?.[id]?.length ? `<div class="shop-forged">🔨 FORGED ${shopData.forge[id].length}/3 &middot; see THE FORGE</div>` : ''}
       ${WEAPON_META[id]?.passive ? `<div class="shop-passive" data-pw="${id}" style="--pc:${WEAPON_META[id].passive.color}"></div>` : ''}
     </div>`;
   }).join('');
@@ -2835,6 +3179,14 @@ function renderShop() {
                            WEAPON_COLOR[id] || '#ccc');
   }
   refreshShopButtons();
+}
+
+// Weapons given away in a trade, and the XP left before each comes back.
+function lostRow() {
+  const lost = Object.entries(shopData.lost || {});
+  if (!lost.length) return '';
+  return `<div class="shop-row lost-row"><div class="shop-desc"><b>LOST IN A TRADE</b> ${lost.map(([id, n]) =>
+    `${escapeHtml(WEAPON_META[id]?.name || id)}: ${n.toLocaleString()} XP to go${WEAPON_META[id]?.shopOnly ? ', then buy or win it again' : ''}`).join(' &middot; ')}</div></div>`;
 }
 
 // A legendary's passive, shown on its card before you own it.
@@ -3291,7 +3643,7 @@ function renderAbilities() {
         + `<span class="abil-key">+${AB_KEYS[abilitySlots.length]}</span>NEW SLOT ◆${nextSlotPrice.toLocaleString()}</button>`
       : '');
 
-  document.getElementById('abilList').innerHTML = ABILITY_DEFS.map(a => {
+  document.getElementById('abilList').innerHTML = ABILITY_DEFS.filter(a => !a.forged).map(a => {
     const owned = abilities.includes(a.id);
     const slot = abilitySlots.indexOf(a.id);
     const cd = (a.cd / 1000).toFixed(a.cd % 1000 ? 1 : 0) + 's';
@@ -3447,6 +3799,9 @@ function drawAbilityIcon(g, id, w, h) {
     g.fillStyle = '#ffffff'; g.fillRect(x + 11, y - 9, 2, 2); g.fillRect(x - 13, y + 8, 2, 2);
   } else if (ABILITY_ICONS[id]) {
     ABILITY_ICONS[id](g, x, y, col);
+  } else if (def && def.emoji) {
+    g.font = Math.round(h * 0.68) + 'px serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(def.emoji, x, y + 1);
   }
 }
 
@@ -3652,7 +4007,7 @@ const ABILITY_ICONS = {
   },
 };
 
-const SCREENS = ['settingsScreen', 'startScreen','lobbyScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen'];
+const SCREENS = ['settingsScreen', 'startScreen','lobbyScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen','forgeScreen','tradeScreen'];
 // The main menu is shrunk to whatever the screen allows (never below 45%), so the
 // name and password fields and the mode buttons are all in view on small phones
 // and short windows. Re-measured on resize / rotation / when it is shown.
@@ -4827,6 +5182,40 @@ function drawNametag(cx, bottomY, label, color) {
 const HELD_SCALE = 1.2;
 const SCYTHES = new Set(['reaper', 'frostscythe']);
 
+// A weapon with a rare forge upgrade: a pulsing red glow around it, a band of
+// light running up the metal, and sparks coming off it.
+const shineCv = document.createElement('canvas');
+function drawRareWeapon(g, id, scale, color) {
+  const sp = weaponSprite(id, scale, color);
+  if (!sp) return;
+  const now = performance.now(), W = sp.cv.width, H = sp.cv.height, k = 0.5 + 0.5 * Math.sin(now / 240);
+  g.save();
+  g.shadowColor = '#ff1a1a'; g.shadowBlur = 8 + 8 * k;
+  g.drawImage(sp.cv, -sp.ox, -sp.oy);
+  g.drawImage(sp.cv, -sp.ox, -sp.oy);        // twice: the shadow is the glow, and this thickens it
+  g.restore();
+  // The sweep is painted only where the weapon is.
+  if (shineCv.width !== W || shineCv.height !== H) { shineCv.width = W; shineCv.height = H; }
+  const c = shineCv.getContext('2d');
+  c.globalCompositeOperation = 'source-over';
+  c.clearRect(0, 0, W, H);
+  c.drawImage(sp.cv, 0, 0);
+  c.globalCompositeOperation = 'source-atop';
+  const at = ((now / 1300) % 1.3) * (W + 24) - 12;
+  const band = c.createLinearGradient(at - 10, 0, at + 10, 0);
+  band.addColorStop(0, 'rgba(255,80,60,0)'); band.addColorStop(0.5, 'rgba(255,240,230,0.95)'); band.addColorStop(1, 'rgba(255,80,60,0)');
+  c.fillStyle = band; c.fillRect(0, 0, W, H);
+  c.fillStyle = 'rgba(255,30,30,' + (0.14 + 0.14 * k) + ')'; c.fillRect(0, 0, W, H);
+  g.drawImage(shineCv, -sp.ox, -sp.oy);
+  // Sparks.
+  for (let i = 0; i < 3; i++) {
+    const t = ((now / 700) + i / 3) % 1, x = -sp.ox + W * ((i * 0.37 + 0.2) % 1), y = -sp.oy + H / 2 - t * 9;
+    g.globalAlpha = 1 - t; g.fillStyle = i % 2 ? '#ffffff' : '#ff4a3a';
+    g.fillRect(Math.round(x), Math.round(y), 1.5, 1.5);
+  }
+  g.globalAlpha = 1;
+}
+
 function drawWeaponSprite(p, px, py, key) {
   const wId = p.weaponId;
   if (!WEAPON_ART[wId]) return;
@@ -4882,7 +5271,8 @@ function drawWeaponSprite(p, px, py, key) {
     ctx.restore();
   }
 
-  drawWeaponPixels(ctx, wId, scale, wc);
+  if (p.fr?.includes(wId)) drawRareWeapon(ctx, wId, scale, wc, 0, 0);
+  else drawWeaponPixels(ctx, wId, scale, wc);
 
   // Range trim: a notch per level on the grip, a visible tally of the upgrade.
   if (u.rng) {
@@ -6558,7 +6948,7 @@ function drawHUD(state) {
       if (!a) return;
       const def = abilityDef(a.id);
       const ready = a.cd <= 0, col = def ? def.color : '#ccc';
-      const key = AB_KEYS[i] + ' ';
+      const key = AB_BTN_KEYS[i] + ' ';
       drawBar(by, ready ? 1 : Math.max(0, 1 - a.cd / (a.max || 1)), ready,
               key + (ready ? (def ? def.name : a.id.toUpperCase()) : Math.ceil(a.cd / 1000) + 's'), col, '#3a4450', '#0c1016');
       by += 7;
@@ -6704,6 +7094,15 @@ function drawWeaponPanel(state) {
       ctx.strokeRect(sx-0.5, sy-0.5, slotW+1, slotH+1); ctx.restore();
     }
     ctx.globalAlpha = (sel ? 1 : 0.5) * alpha;   // unselected slots dim, but still readable
+    if (mp.fr?.includes(wId)) {
+      const k = 0.55 + 0.45 * Math.sin(performance.now() / 260);
+      ctx.save(); ctx.strokeStyle = '#ff2a2a'; ctx.globalAlpha = (0.5 + 0.5 * k) * alpha; ctx.lineWidth = 1;
+      ctx.shadowColor = '#ff2a2a'; ctx.shadowBlur = 6 + 4 * k;
+      ctx.strokeRect(sx + 0.5, sy + 0.5, slotW - 1, slotH - 1); ctx.restore();
+      ctx.save(); ctx.shadowColor = '#ff2a2a'; ctx.shadowBlur = 5 + 4 * k;
+      drawWeaponPixelsFitted(ctx, wId, sx + slotW/2, sy + slotH/2, slotW - 3, slotH - 3, wc);
+      ctx.restore();
+    } else
     drawWeaponPixelsFitted(ctx, wId, sx + slotW/2, sy + slotH/2, slotW - 3, slotH - 3, wc);
     ctx.globalAlpha = alpha * 0.85;
   }
@@ -6764,7 +7163,7 @@ function drawControlHints() {
   ctx.textBaseline = 'bottom'; ctx.textAlign = 'center';
   const me = currState?.players?.[myKeyOf()];
   const abil = (me && me.abil) || [];
-  const abKeys = abil.map((a, i) => a ? AB_KEYS[i] : '').filter(Boolean).join('/');
+  const abKeys = abil.map((a, i) => a ? AB_BTN_KEYS[i] : '').filter(Boolean).join('/');
   const t = 'ARROWS MOVE · SPACE ATK · ENTER/Z SWAP · SHIFT SPECIAL · P PARRY · '
           + (me && me.superMax > 0 ? 'R SUPER · ' : '') + (abKeys ? abKeys + ' ABILITY · ' : '') + '1-4 ITEMS';
   const w = ctx.measureText(t).width;

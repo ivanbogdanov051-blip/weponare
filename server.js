@@ -704,6 +704,136 @@ const ABILITIES = [
     desc: 'Ice armour for 6s: take 25% less damage and freeze whoever hits you' },
 ];
 const ABILITY_BY_ID = Object.fromEntries(ABILITIES.map(a => [a.id, a]));
+
+// ─── THE FORGE ────────────────────────────────────────────────────────────────
+// Coins go in, an upgrade may come out. Each weapon holds up to FORGE_SLOTS forge
+// upgrades, at most one of them rare. Common upgrades are passives, live while
+// the weapon is in your hand; a rare one gives you an extra ability on C.
+// `needs`: only offered on weapons that can use it (see forgeCan).
+const FORGE_SLOTS = 3, FORGE_MIN = 500, FORGE_MAX = 500000;
+const FORGE_ODDS = { okMin: 0.35, okMax: 0.95, rareMin: 0.01, rareMax: 0.2 };
+const FORGE_MELEE = [
+  { id: 'keen',      name: 'KEEN EDGE',     desc: '+12% damage', fx: { dmg: 0.12 } },
+  { id: 'heavy',     name: 'HEAVY HEAD',    desc: '+24% damage, but 12% slower attacks', fx: { dmg: 0.24, spd: -0.12 } },
+  { id: 'swift',     name: 'LIGHT GRIP',    desc: '12% faster attacks', fx: { spd: 0.12 } },
+  { id: 'frenzy',    name: 'QUICKSILVER',   desc: '22% faster attacks, but 10% less damage', fx: { spd: 0.22, dmg: -0.1 } },
+  { id: 'reach',     name: 'LONG REACH',    desc: '+18% range', fx: { rng: 0.18 } },
+  { id: 'wide',      name: 'WIDE ARC',      desc: 'Your swing covers a much wider arc', needs: 'arc', fx: { arc: 0.5 } },
+  { id: 'razor',     name: 'RAZOR',         desc: '+8% critical chance', fx: { crit: 0.08 } },
+  { id: 'savage',    name: 'SAVAGE',        desc: '+4% critical chance, and crits hit for x3', fx: { crit: 0.04, critX: 1 } },
+  { id: 'execute',   name: 'EXECUTIONER',   desc: '+40% damage to foes under 30% health', fx: { execute: 0.4 } },
+  { id: 'firsthit',  name: 'FIRST STRIKE',  desc: '+35% damage to foes at full health', fx: { fresh: 0.35 } },
+  { id: 'giant',     name: 'GIANTSLAYER',   desc: '+30% damage to bosses', fx: { giant: 0.3 } },
+  { id: 'duelist',   name: 'DUELIST',       desc: '+25% damage to other players', fx: { duel: 0.25 } },
+  { id: 'desperate', name: 'DESPERATION',   desc: '+35% damage while under 40% health', fx: { desperate: 0.35 } },
+  { id: 'pristine',  name: 'PRISTINE',      desc: '+20% damage while at full health', fx: { pristine: 0.2 } },
+  { id: 'momentum',  name: 'MOMENTUM',      desc: 'Each hit in a row adds +3% damage, up to +21%', fx: { momentum: 0.03 } },
+  { id: 'sunder',    name: 'SUNDER',        desc: 'Ignore 60% of a foe\'s armour', fx: { sunder: 0.6 } },
+  { id: 'cinder',    name: 'CINDER',        desc: 'Hits set foes on fire for 1.5s', fx: { burn: 1500 } },
+  { id: 'rime',      name: 'RIME',          desc: 'Hits slow foes for 1.5s', fx: { chill: 1500 } },
+  { id: 'venom',     name: 'VENOMOUS',      desc: 'Hits poison foes for 3s', fx: { venom: 5 } },
+  { id: 'concuss',   name: 'CONCUSSIVE',    desc: '12% chance to stun for 0.7s', fx: { stunCh: 0.12 } },
+  { id: 'batter',    name: 'BATTERING',     desc: 'Hits knock foes 14px further back', fx: { knock: 14 } },
+  { id: 'cleave',    name: 'CLEAVE',        desc: '30% of each hit splashes onto foes close by', fx: { splash: 0.3 } },
+  { id: 'leech',     name: 'LEECHING',      desc: 'Heal 5% of the damage you deal', fx: { life: 0.05 } },
+  { id: 'bloodbath', name: 'BLOODBATH',     desc: 'Each kill heals 6% of your max health', fx: { killHeal: 0.06 } },
+  { id: 'guarded',   name: 'GUARDED',       desc: 'Take 10% less damage while held', fx: { armor: 0.1 } },
+  { id: 'thorned',   name: 'THORNED',       desc: 'Whoever hits you takes 25% of it back', fx: { thorns: 0.25 } },
+  { id: 'elusive',   name: 'ELUSIVE',       desc: '10% chance to dodge a hit completely', fx: { dodge: 0.1 } },
+  { id: 'fleet',     name: 'FLEET FOOTED',  desc: '+10% move speed while held', fx: { speed: 0.1 } },
+  { id: 'bloodrush', name: 'BLOODRUSH',     desc: 'Each kill gives 2s of speed', fx: { killSpeed: 2000 } },
+  { id: 'mending',   name: 'MENDING',       desc: 'Heal 1.5 health a second while held', fx: { regen: 1.5 } },
+  { id: 'focus',     name: 'FOCUSED',       desc: '15% shorter special cooldown', needs: 'special', fx: { spCd: 0.15 } },
+  { id: 'overcharge', name: 'OVERCHARGE',   desc: '15% shorter super cooldown', needs: 'super', fx: { suCd: 0.15 } },
+  { id: 'reaping',   name: 'REAPING',       desc: 'Each kill takes 1.5s off your special and super', fx: { killCd: 1500 } },
+  { id: 'steady',    name: 'STEADY HANDS',  desc: 'Parries last 30% longer while held', fx: { parryWin: 0.3 } },
+  { id: 'riposte',   name: 'COUNTERWEIGHT', desc: '25% shorter parry cooldown while held', fx: { parryCd: 0.25 } },
+  { id: 'gilded',    name: 'GILDED',        desc: 'Kills drop 25% more coins', fx: { killCoins: 0.25 } },
+  { id: 'scholar',   name: 'SCHOLAR',       desc: 'Kills give 20% more XP', fx: { killXp: 0.2 } },
+];
+const FORGE_RANGED = [
+  { id: 'hotload',   name: 'HOT LOAD',      desc: '+12% damage', fx: { dmg: 0.12 } },
+  { id: 'heavyshot', name: 'HEAVY SHOT',    desc: '+24% damage, but 14% slower attacks', fx: { dmg: 0.24, spd: -0.14 } },
+  { id: 'rapid',     name: 'RAPID FIRE',    desc: '14% faster attacks', fx: { spd: 0.14 } },
+  { id: 'longshot',  name: 'LONG SHOT',     desc: '+20% range', fx: { rng: 0.2 } },
+  { id: 'velocity',  name: 'VELOCITY',      desc: 'Shots fly 40% faster', needs: 'shots', fx: { pSpeed: 0.4 } },
+  { id: 'piercing',  name: 'PIERCING',      desc: 'Shots go straight through enemies', needs: 'solid', fx: { pierce: 1 } },
+  { id: 'twin',      name: 'TWIN SHOT',     desc: '+1 shot per attack', needs: 'multi', fx: { multi: 1 } },
+  { id: 'ricochet',  name: 'RICOCHET',      desc: 'Shots jump to a second enemy for 70% damage', needs: 'shots', fx: { rico: 1 } },
+  { id: 'seeker',    name: 'SEEKER',        desc: 'Shots curve toward enemies', needs: 'unguided', fx: { homing: 1 } },
+  { id: 'blast',     name: 'BLAST ROUNDS',  desc: 'Each hit bursts onto foes around it for 60% damage', needs: 'noblast', fx: { blast: 34 } },
+  { id: 'trick',     name: 'TRICK SHOT',    desc: 'Shots bounce off the walls twice', needs: 'wallbound', fx: { bounce: 2 } },
+  { id: 'incendiary', name: 'INCENDIARY',   desc: 'Hits set foes on fire for 1.5s', fx: { burn: 1500 } },
+  { id: 'cryo',      name: 'CRYO ROUNDS',   desc: 'Hits slow foes for 1.5s', fx: { chill: 1500 } },
+  { id: 'toxic',     name: 'TOXIC',         desc: 'Hits poison foes for 3s', fx: { venom: 5 } },
+  { id: 'shock',     name: 'SHOCK ROUNDS',  desc: '20% chance that lightning jumps to 2 more foes', fx: { shock: 0.2 } },
+  { id: 'sniper',    name: 'SNIPER',        desc: '+30% damage to far away foes', fx: { far: 0.3 } },
+  { id: 'pointblank', name: 'POINT BLANK',  desc: '+30% damage to foes close to you', fx: { near: 0.3 } },
+  { id: 'sights',    name: 'SHARP SIGHTS',  desc: '+8% critical chance', fx: { crit: 0.08 } },
+  { id: 'marked',    name: 'MARKED FOR DEATH', desc: '+35% damage to foes under 30% health', fx: { execute: 0.35 } },
+  { id: 'breaker',   name: 'BOSSBREAKER',   desc: '+30% damage to bosses', fx: { giant: 0.3 } },
+  { id: 'siphon',    name: 'SIPHON',        desc: 'Heal 4% of the damage you deal', fx: { life: 0.04 } },
+  { id: 'kiter',     name: 'KITER',         desc: '+10% move speed while held', fx: { speed: 0.1 } },
+  { id: 'lens',      name: 'FOCUS LENS',    desc: '15% shorter special cooldown', needs: 'special', fx: { spCd: 0.15 } },
+  { id: 'supercell', name: 'SUPERCELL',     desc: '15% shorter super cooldown', needs: 'super', fx: { suCd: 0.15 } },
+  { id: 'goldround', name: 'GOLD ROUNDS',   desc: 'Kills drop 25% more coins', fx: { killCoins: 0.25 } },
+  { id: 'hunter',    name: 'HUNTER',        desc: 'Each kill takes 1.2s off your special and super', fx: { killCd: 1200 } },
+  { id: 'bulwark',   name: 'BULWARK',       desc: 'Take 10% less damage while held', fx: { armor: 0.1 } },
+  { id: 'calm',      name: 'CALM BREATH',   desc: 'Parries last 30% longer while held', fx: { parryWin: 0.3 } },
+  { id: 'notes',     name: 'FIELD NOTES',   desc: 'Kills give 20% more XP', fx: { killXp: 0.2 } },
+];
+const FORGE_RARE = [
+  { id: 'f_meteor', name: 'CATACLYSM',      emoji: '☄️', color: '#ff7a2a', cd: 30000, desc: 'Call 8 huge meteors down on your enemies' },
+  { id: 'f_storm',  name: 'BLADESTORM',     emoji: '🌪️', color: '#9fe8ff', cd: 26000, desc: 'A whirlwind round you for 4s, shredding everything it touches' },
+  { id: 'f_blink',  name: 'PHANTOM STRIKE', emoji: '⚡', color: '#ffe066', cd: 20000, desc: 'Flash through up to 6 enemies, hitting each for 3x your damage' },
+  { id: 'f_aegis',  name: "KING'S AEGIS",   emoji: '👑', color: '#ffd84a', cd: 34000, desc: 'Take no damage for 4s and heal 40% of your max health' },
+  { id: 'f_nova',   name: 'SOUL NOVA',      emoji: '💀', color: '#c88aff', cd: 28000, desc: 'A wave that drains and slows everything nearby and heals you for each one hit' },
+].map(r => ({ ...r, rare: true, forged: true }));
+// Mythics have a forge list of their own: nothing here can land on any other
+// weapon, and none of the ordinary upgrades are offered on a mythic.
+const FORGE_MYTHIC = [
+  { id: 'godforged', name: 'GODFORGED',      desc: '+30% damage', fx: { dmg: 0.3 } },
+  { id: 'eternal',   name: 'ETERNAL EDGE',   desc: '25% faster attacks', fx: { spd: 0.25 } },
+  { id: 'sovereign', name: 'SOVEREIGN REACH', desc: '+35% range', fx: { rng: 0.35 } },
+  { id: 'deathmark', name: 'DEATHMARK',      desc: '+18% critical chance, and crits hit for x3', fx: { crit: 0.18, critX: 1 } },
+  { id: 'reap',      name: 'SOUL REAP',      desc: 'Hits instantly kill monsters under 12% health (not bosses)', fx: { reap: 0.12 } },
+  { id: 'titanbane', name: 'TITANBANE',      desc: '+60% damage to bosses', fx: { giant: 0.6 } },
+  { id: 'kingslayer', name: 'KINGSLAYER',    desc: '+45% damage to other players', fx: { duel: 0.45 } },
+  { id: 'overflow',  name: 'OVERFLOW',       desc: 'Overkill damage spills onto the nearest enemy', fx: { overkill: 1 } },
+  { id: 'twinfate',  name: 'TWIN FATE',      desc: '25% chance that a hit lands a second time', fx: { echo: 0.25 } },
+  { id: 'soulthirst', name: 'SOULTHIRST',    desc: 'Heal 12% of the damage you deal', fx: { life: 0.12 } },
+  { id: 'undying',   name: 'UNDYING',        desc: 'A killing blow leaves you at 25% health instead (once a minute)', fx: { undying: 1 } },
+  { id: 'ascendant', name: 'ASCENDANT SHELL', desc: 'Take 22% less damage while held', fx: { armor: 0.22 } },
+  { id: 'wardstone', name: 'WARDSTONE',      desc: 'Shrug off one hit completely every 8s', fx: { ward: 1 } },
+  { id: 'phasewalk', name: 'PHASEWALK',      desc: '20% chance to dodge, and +15% move speed', fx: { dodge: 0.2, speed: 0.15 } },
+  { id: 'stormborn', name: 'STORMBORN',      desc: '35% chance that lightning jumps to more foes', fx: { shock: 0.35 } },
+  { id: 'hellbrand', name: 'HELLBRAND',      desc: 'Hits burn, poison and slow all at once', fx: { burn: 2500, chill: 2000, venom: 10 } },
+  { id: 'gravewell', name: 'GRAVITY WELL',   desc: 'Hits drag nearby enemies in toward your target', fx: { grav: 1 } },
+  { id: 'eclipse',   name: 'ECLIPSE BURST',  desc: 'Every 6th hit explodes for 200% damage around the target', fx: { nth: 6 } },
+  { id: 'timebreak', name: 'TIMEBREAKER',    desc: 'Every hit takes 0.3s off your special and super', fx: { hitCd: 300 } },
+  { id: 'sovfocus',  name: 'SOVEREIGN FOCUS', desc: '30% shorter special and super cooldowns', fx: { spCd: 0.3, suCd: 0.3 } },
+  { id: 'crown',     name: 'CROWN OF GREED', desc: 'Kills drop 60% more coins and give 40% more XP', fx: { killCoins: 0.6, killXp: 0.4 } },
+  { id: 'warpath',   name: 'WARPATH',        desc: 'Each kill adds +6% damage until you die, up to +60%', fx: { warpath: 0.06 } },
+  { id: 'lastlight', name: 'LAST LIGHT',     desc: '+60% damage while under 40% health', fx: { desperate: 0.6 } },
+  { id: 'retribution', name: 'RETRIBUTION',  desc: 'Whoever hits you takes 60% of it back and is stunned', fx: { thorns: 0.6, retStun: 800 } },
+  { id: 'oath',      name: "HEADSMAN'S OATH", desc: '+80% damage to foes under 30% health', fx: { execute: 0.8 } },
+  { id: 'firstfall', name: 'FIRST FALL',     desc: '+70% damage to foes at full health', fx: { fresh: 0.7 } },
+  { id: 'razorwind', name: 'RAZORWIND',      desc: '50% of each hit splashes onto foes close by', fx: { splash: 0.5 } },
+  { id: 'unstoppable', name: 'UNSTOPPABLE',  desc: 'Each hit in a row adds +6% damage, up to +42%', fx: { momentum: 0.06 } },
+  { id: 'worldbreak', name: 'WORLDBREAKER',  desc: 'Ignore all of a foe\'s armour', fx: { sunder: 1 } },
+  { id: 'heartspring', name: 'HEARTSPRING',  desc: 'Heal 4 health a second while held', fx: { regen: 4 } },
+  { id: 'feast',     name: 'FEAST OF KINGS', desc: 'Each kill heals 12% of your max health and gives 3s of speed', fx: { killHeal: 0.12, killSpeed: 3000 } },
+  { id: 'perfectform', name: 'PERFECT FORM', desc: 'Parries last 60% longer and recharge 40% faster', fx: { parryWin: 0.6, parryCd: 0.4 } },
+];
+const FORGE_MYTHIC_RARE = [
+  { id: 'm_judgment', name: 'FINAL JUDGMENT', emoji: '⚖️', color: '#ff4a4a', cd: 40000, desc: 'Strike every enemy on the map for a huge hit' },
+  { id: 'm_eclipse',  name: 'TOTAL ECLIPSE',  emoji: '🌑', color: '#ff5a2a', cd: 36000, desc: 'Stun your enemies for 2s, then hit 80% harder and attack twice as fast for 8s' },
+  { id: 'm_ragnarok', name: 'RAGNAROK',       emoji: '🌋', color: '#ff7a1a', cd: 42000, desc: 'Rain 20 giant meteors down on your enemies' },
+  { id: 'm_ascend',   name: 'ASCENSION',      emoji: '✴️', color: '#ffd84a', cd: 45000, desc: 'Full health, 6s of total immunity and speed' },
+  { id: 'm_void',     name: 'VOID COLLAPSE',  emoji: '🕳️', color: '#c84aff', cd: 34000, desc: 'Drag everything close by into you, then blow it all apart' },
+].map(r => ({ ...r, rare: true, forged: true, mythic: true }));
+const FORGE_BY_ID = Object.fromEntries([...FORGE_MELEE, ...FORGE_RANGED, ...FORGE_RARE, ...FORGE_MYTHIC, ...FORGE_MYTHIC_RARE].map(m => [m.id, m]));
+const ABILITY_DEFS_ALL = [...ABILITIES, ...FORGE_RARE, ...FORGE_MYTHIC_RARE];
 // Everyone starts with two slots (Q, E); up to four more can be bought, each
 // for a fortune. Keys: Q E F G V B.
 const ABILITY_SLOTS = 2, MAX_ABILITY_SLOTS = 6;
@@ -973,6 +1103,9 @@ function progress() {
   if (!d.samuraiKills) d.samuraiKills = {};
   if (!d.mythicKills) d.mythicKills = {};
   if (!d.mythicPick) d.mythicPick = {};
+  if (!d.forge) d.forge = {};              // password -> { weaponId: [upgrade ids] }
+  if (!d.lostWeapons) d.lostWeapons = {};  // password -> { weaponId: XP total that gets it back }
+  if (!d.saveRev) d.saveRev = {};          // bumped whenever something is taken away (trade, forge reset)
   return d;
 }
 function markDirty() { progressDirty = true; }
@@ -1023,6 +1156,7 @@ function saveData(pw) {
     lightKills: d.lightKills[pw] || 0,
     samuraiKills: d.samuraiKills[pw] || 0,
     mythicKills: d.mythicKills[pw] || 0,
+    forge: d.forge[pw] || {}, lost: d.lostWeapons[pw] || {}, rev: d.saveRev[pw] || 0,
   });
 }
 function makeSave(pw) {
@@ -1071,25 +1205,37 @@ function restoreBackup(pw, backup) {
     d.lightKills[pw] = num(b.lightKills);
     d.samuraiKills[pw] = num(b.samuraiKills);
     d.mythicKills[pw] = num(b.mythicKills);
+    d.forge[pw] = cleanForge(b.forge);
+    d.lostWeapons[pw] = cleanLost(b.lost);
+    d.saveRev[pw] = num(b.rev);
     if (b.skin && typeof b.skin === 'object' && d.skins[pw] === undefined) d.skins[pw] = b.skin;
     markDirty();
     return;
   }
 
   // Both sides have a save (e.g. another device): merge what only goes up.
+  // A copy from before the last trade still lists what was traded away, so
+  // ownership is only merged from a copy that is up to date.
   let changed = false;
   if (num(b.xp) > (d.players[pw] || 0)) { d.players[pw] = num(b.xp); changed = true; }
+  const rev = d.saveRev[pw] || 0, staleCopy = num(b.rev) < rev;
+  if (num(b.rev) > rev) {
+    d.forge[pw] = cleanForge(b.forge);
+    d.lostWeapons[pw] = cleanLost(b.lost);
+    d.saveRev[pw] = num(b.rev);
+    changed = true;
+  }
   const have = d.weapons[pw] || [];
-  if (weapons.some(id => !have.includes(id))) { d.weapons[pw] = sortWeaponIds([...have, ...weapons]); changed = true; }
+  if (!staleCopy && weapons.some(id => !have.includes(id))) { d.weapons[pw] = sortWeaponIds([...have, ...weapons]); changed = true; }
   const owned = d.ownedSkins[pw] || [];
-  if (skins.some(id => !owned.includes(id))) { d.ownedSkins[pw] = [...new Set([...owned, ...skins])]; changed = true; }
+  if (!staleCopy && skins.some(id => !owned.includes(id))) { d.ownedSkins[pw] = [...new Set([...owned, ...skins])]; changed = true; }
   const haveAb = d.abilities[pw] || [];
-  if (abils.some(id => !haveAb.includes(id))) { d.abilities[pw] = [...new Set([...haveAb, ...abils])]; changed = true; }
+  if (!staleCopy && abils.some(id => !haveAb.includes(id))) { d.abilities[pw] = [...new Set([...haveAb, ...abils])]; changed = true; }
   if (clampSlots(b.slotCount) > (d.abilitySlotCount[pw] || ABILITY_SLOTS)) { d.abilitySlotCount[pw] = clampSlots(b.slotCount); changed = true; }
   if (num(b.lightKills) > (d.lightKills[pw] || 0)) { d.lightKills[pw] = num(b.lightKills); changed = true; }
   if (num(b.samuraiKills) > (d.samuraiKills[pw] || 0)) { d.samuraiKills[pw] = num(b.samuraiKills); changed = true; }
   if (num(b.mythicKills) > (d.mythicKills[pw] || 0)) { d.mythicKills[pw] = num(b.mythicKills); changed = true; }
-  for (const [wid, lv] of Object.entries(ups)) {
+  if (!staleCopy) for (const [wid, lv] of Object.entries(ups)) {
     const allowed = upgradesFor(wid);
     for (const [k, n] of Object.entries(lv)) {
       if (!allowed.includes(k) || !isUpgradeTarget(wid)) continue;
@@ -1129,9 +1275,12 @@ function sortWeaponIds(ids) {
   );
 }
 
-function checkNewUnlocks(oldXp, newXp) {
-  const was = getUnlockedWeaponIds(oldXp);
-  return getUnlockedWeaponIds(newXp).filter(id => !was.includes(id));
+// What XP gives this password: the same ladder, minus anything traded away
+// until they've earned their way back to it.
+function xpWeaponsFor(pw, xp) {
+  const lost = pw ? progress().lostWeapons[pw] : null;
+  const ids = getUnlockedWeaponIds(xp);
+  return lost ? ids.filter(id => !(lost[id] > xp)) : ids;
 }
 
 function sanitizeText(v, len) {
@@ -1209,10 +1358,109 @@ function refreshWeapon(p) {
   if (p.passive === 'bow')    p.w_ = { ...p.w_, range: Math.round(p.w_.range * 1.3), crit: (p.w_.crit || 0) + 0.18 };
   if (p.passive === 'katana') p.w_ = { ...p.w_, atkSpd: Math.max(70, Math.round(p.w_.atkSpd * 0.7)) };
   if (p.passive === 'staff' && p.w_.special) p.w_ = { ...p.w_, special: { ...p.w_.special, cd: Math.round(p.w_.special.cd * 0.5) } };
+  // Forge upgrades count while this weapon is in hand.
+  const mods = p.forge?.[base.id];
+  p.fg = mods?.length ? forgeFx(mods) : null;
+  p.fgAb = mods?.find(id => FORGE_BY_ID[id]?.rare) || null;
+  p.fr = rareWeaponIds(p.forge);
+  if (p.fg) p.w_ = applyForge(p.w_, p.fg);
   // Swapping off the Dagger of Ghosts drops its cloak.
   if (!base.ghostCloak && p.effects && p.effects.ghost) breakGhost(p);
 }
 function weapon(p) { return p.w_ || WEAPONS[0]; }
+
+// Add up what a weapon's forge upgrades do.
+function forgeFx(mods) {
+  const f = {};
+  for (const id of mods) for (const [k, v] of Object.entries(FORGE_BY_ID[id]?.fx || {})) f[k] = (f[k] || 0) + v;
+  return f;
+}
+function applyForge(w, f) {
+  const dmgM = 1 + (f.dmg || 0), sp = w.special, su = w.super;
+  return {
+    ...w,
+    damage: Math.max(1, Math.round(w.damage * dmgM)),
+    range: Math.round(w.range * (1 + (f.rng || 0))),
+    atkSpd: Math.max(70, Math.round(w.atkSpd * (1 - (f.spd || 0)))),
+    crit: (w.crit || 0) + (f.crit || 0),
+    lifesteal: (w.lifesteal || 0) + (f.life || 0),
+    knock: (w.knock || 0) + (f.knock || 0),
+    multi: (w.multi || 0) + (f.multi || 0),
+    arc: f.arc || 0,
+    special: sp ? { ...sp, dmg: Math.max(1, Math.round(sp.dmg * dmgM)), cd: Math.max(sp.minCd || 500, Math.round(sp.cd * (1 - (f.spCd || 0)))) } : sp,
+    super: su ? { ...su, dmg: Math.max(1, Math.round((su.dmg || 0) * dmgM)), cd: Math.round(su.cd * (1 - (f.suCd || 0))) } : su,
+  };
+}
+// Melee or ranged, by how the weapon actually fights.
+function forgeClass(w) { return w.type === 'melee' || w.timeBlade || w.groundSplit ? 'melee' : 'ranged'; }
+// Which upgrades would do something on this weapon.
+function forgeCan(w) {
+  const can = [];
+  if (w.super) can.push('super');
+  if (w.special && !(w.special.minCd >= w.special.cd)) can.push('special');   // the Fire Glove's is already at its limit
+  if (w.type === 'melee' && !w.swing360 && !w.fireRing && !w.vortexShield && !w.lightDash) can.push('arc');
+  const special = w.mindTrap || w.portalShot || w.kunaiOrbit || w.starStaff || w.groundSplit || w.timeBlade || w.fireRing
+    || w.vortexShield || w.lightDash || w.infinityShot || w.grapple;
+  if (forgeClass(w) === 'ranged' && !special) {
+    const hunts = w.soulWisp || w.phoenixBow || w.hydraBite || w.slashWave;   // these shots already find their target
+    can.push('shots');
+    if (!w.soulWisp && !w.phoenixBow && !w.hydraBite) can.push('multi');
+    if (!hunts) can.push('unguided');
+    if (!w.pierce && !w.boomerang && !w.aoeRadius && !w.slashWave) can.push('solid');
+    if (!w.boomerang) can.push('wallbound');
+    if (!w.aoeRadius) can.push('noblast');
+  }
+  return can;
+}
+function forgeRarePool(w) { return w.mythic ? FORGE_MYTHIC_RARE : FORGE_RARE; }
+function forgePool(w) {
+  if (w.mythic) return FORGE_MYTHIC;
+  const can = forgeCan(w);
+  return (forgeClass(w) === 'melee' ? FORGE_MELEE : FORGE_RANGED).filter(m => !m.needs || can.includes(m.needs));
+}
+// Stored forge upgrades, with anything that no longer exists or breaks the rules dropped.
+function cleanForge(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [wid, list] of Object.entries(raw)) {
+    if (!WEAPON_BY_ID[wid] || !Array.isArray(list)) continue;
+    const keep = [];
+    let rares = 0;
+    for (const id of list) {
+      const m = FORGE_BY_ID[id];
+      if (!m || keep.includes(id) || keep.length >= FORGE_SLOTS || (m.rare && rares)) continue;
+      if (m.rare) rares++;
+      keep.push(id);
+    }
+    if (keep.length) out[wid] = keep;
+  }
+  return out;
+}
+// Weapons carrying a rare upgrade: these glow red.
+function rareWeaponIds(forge) {
+  return Object.keys(forge || {}).filter(id => forge[id]?.some(m => FORGE_BY_ID[m]?.rare));
+}
+function cleanLost(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [id, n] of Object.entries(raw)) if (WEAPON_BY_ID[id]) out[id] = Math.max(0, Math.floor(Number(n) || 0));
+  return out;
+}
+function bumpRev(pw) { const d = progress(); d.saveRev[pw] = (d.saveRev[pw] || 0) + 1; markDirty(); }
+// More coins: a better chance it works, and a much better chance of a rare.
+function forgeOdds(coins, hasRare) {
+  const t = Math.max(0, Math.min(1, Math.log(coins / FORGE_MIN) / Math.log(FORGE_MAX / FORGE_MIN)));
+  const O = FORGE_ODDS;
+  return { ok: O.okMin + (O.okMax - O.okMin) * t, rare: hasRare ? 0 : O.rareMin + (O.rareMax - O.rareMin) * t * t };
+}
+
+function parryWinOf(p) { return Math.round((p.parryWindow || PARRY_WINDOW) * (1 + (p.fg?.parryWin || 0))); }
+function parryCdOf(p)  { return Math.round((p.parryCd || PARRY_COOLDOWN) * (1 - (p.fg?.parryCd || 0))); }
+function startParry(p) {
+  p.parryTimer = parryWinOf(p);
+  p.parryCooldown = parryCdOf(p);
+  spawnParrySpark(cx(p), cy(p));
+}
 
 // ─── Room State ───────────────────────────────────────────────────────────────
 
@@ -1291,6 +1539,7 @@ function makeRoom() { return {
   playerSkins: perKey(null),
   playerUnlocks: perKey(null),
   playerUpgrades: perKey(null),
+  playerForge: perKey(null),
   playerAbilities: perKey(null),
   p1Joined: false, p2Joined: false, p3Joined: false, p4Joined: false,
   players: perKey(null),
@@ -1415,6 +1664,7 @@ function effectiveSpeed(p) {
   if (p.lightspeed > 0) s *= LIGHTSPEED_MULT;          // the Light Blade's SUPER
   if (p.passive === 'dagger') s *= PASSIVE_SPEED;
   if (p.kspin > 0) s *= KSPIN_SPEED;
+  if (p.fg?.speed) s *= 1 + p.fg.speed;                 // forge: FLEET FOOTED, KITER
   if (p.phoenix) s *= PHX_SPEEDMULT;                    // Ashfeather's PHOENIX FORM                    // the katana's SUPER
   if (hasEffect(p, 'slow'))  s *= 0.4;
   if (hasEffect(p, 'root'))  s = 0;          // ROOT VINES
@@ -3109,6 +3359,7 @@ function startGame() {
     if (room.playerSkins[key])   p.skin = room.playerSkins[key];
     if (room.playerUnlocks[key]) p.unlockedWeapons = room.playerUnlocks[key];
     if (room.playerAbilities[key]) p.abilities = room.playerAbilities[key].slice();
+    p.forge = room.playerForge[key] || null;
     refreshWeapon(p);
     if (room.bot && key === 'p2') {
       const BL = BOT_LEVELS[room.bot.level];
@@ -3121,7 +3372,7 @@ function startGame() {
   room.wave = emptyWave();
   room.gameState = 'GAMEPLAY';
   room.victory = false;
-  room.bossDrops = null; room.mythicNoDrop = null;
+  room.bossDrops = null; room.mythicNoDrop = null; room.bossLocked = null;
   if (room.gameMode === 'portal') startMageFight();
   else if (room.gameMode === 'abyss') startAbyssFight();
   else if (room.gameMode === 'sandbox') startSandbox();
@@ -3149,6 +3400,19 @@ function applyDamage(target, dmg, attackerKey) {
   // Weapon upgrades on the attacking player: critical hits, lifesteal, knockback.
   const atk = isPKey(attackerKey) ? room.players[attackerKey] : null;
   const aw = atk && atk !== target ? weapon(atk) : null;
+  const afg = aw && !room.fgGuard ? atk.fg : null, tfg = target.num ? target.fg : null;
+  if (tfg?.dodge && Math.random() < tfg.dodge) {                                                   // forge: ELUSIVE
+    room.particles.push({ type: 'crit', x: cx(target), y: target.y - 8, text: 'DODGE', timer: 500, max: 500 });
+    return;
+  }
+  if (tfg?.ward && !(target.wardCd > 0)) {                                                         // forge: WARDSTONE
+    target.wardCd = 8000;
+    target.invincible = 300;
+    room.particles.push({ type: 'shockwave', x: cx(target), y: cy(target), maxR: target.w + 14, timer: 320, max: 320, color: '#ffd84a' });
+    room.particles.push({ type: 'crit', x: cx(target), y: target.y - 10, text: 'WARDED', timer: 600, max: 600 });
+    return;
+  }
+  if (afg) dmg *= forgeHitMult(afg, atk, target);
   if (aw && atk.passive === 'axe') dmg *= 1 + PASSIVE_RAGE * Math.max(0, 1 - atk.hp / atk.maxHp);   // BERSERKER
   if (target.num && hasEffect(target, 'ironskin')) dmg *= 0.5;                                     // IRON SKIN
   if (target.num && hasEffect(target, 'frostarmor')) dmg *= 0.75;                                  // FROST ARMOR
@@ -3177,13 +3441,14 @@ function applyDamage(target, dmg, attackerKey) {
   }
   dmg = Math.max(1, Math.round(dmg));
   if (aw && aw.crit && Math.random() < aw.crit) {
-    dmg *= 2;
+    dmg *= 2 + (afg?.critX || 0);
     room.particles.push({ type: 'crit', x: cx(target), y: target.y - 4, text: 'CRIT', timer: 600, max: 600 });
   }
   // Armoured monsters shrug off a share of every hit, but never all of it.
-  if (target.armor) dmg = Math.max(1, Math.round(dmg * (1 - target.armor)));
+  if (target.armor) dmg = Math.max(1, Math.round(dmg * (1 - target.armor * (1 - (afg?.sunder || 0)))));
   if (target.ward > 0) dmg = Math.max(1, Math.round(dmg * (1 - SHAMAN_WARD)));   // a shaman's ward
   if (target.num && target.defense) dmg = Math.max(1, Math.round(dmg * (1 - target.defense)));
+  if (tfg?.armor) dmg = Math.max(1, Math.round(dmg * (1 - tfg.armor)));                            // forge: GUARDED
   // The vortex shield blocks the hit outright, but still banks what it would have done.
   if (target.num && target.vortexShield > 0) {
     bankVortex(target, dmg);
@@ -3193,6 +3458,8 @@ function applyDamage(target, dmg, attackerKey) {
     return;
   }
   target.hp -= dmg;
+  if (afg) forgeProcs(afg, attackerKey, target, dmg);
+  if (tfg?.thorns && !room.fgGuard) forgeThorns(target, tfg, atk, dmg);
   if (atk && atk !== target && atk.passive === 'revolver') hitBlast(target, attackerKey, atk);
   // ESCAPE PORTAL: a hit that leaves the portal wand's holder low warps them out.
   if (target.num && target.passive === 'portalwand' && target.hp > 0 && target.hp < target.maxHp * ESCAPE_AT
@@ -3241,6 +3508,14 @@ function handleKill(target, attackerKey) {
   // chain reaction) could otherwise reach it again before it is marked dead.
   if (!target.num) { if (target.dying || target.dead) return; target.dying = true; }
   if (target.ally) { killAlly(target); return; }   // a summoned ally: no reward for anyone
+  // UNDYING (forge): the blow is survived, once a minute.
+  if (target.num && target.fg?.undying && !(target.undyCd > 0)) {
+    target.undyCd = 60000;
+    target.hp = Math.round(target.maxHp * 0.25);
+    target.invincible = 2000;
+    room.particles.push({ type: 'trapburst', x: cx(target), y: cy(target), maxR: 60, timer: 900, max: 900, color: '#ff4a4a', text: 'UNDYING' });
+    return;
+  }
   // REBIRTH (Ashfeather): once a game, death becomes an explosion of fire.
   if (target.num && target.passive === 'ashfeather' && !target.reborn) {
     target.reborn = true;
@@ -3275,6 +3550,7 @@ function handleKill(target, attackerKey) {
     room.particles.push({ type: 'bolt', x: cx(target), y: cy(target), x2: cx(reaper), y2: cy(reaper), timer: 300, max: 300, color: PASSIVES.reaper.color });
     room.particles.push({ type: 'xp', x: cx(reaper), y: reaper.y - 4, text: '+' + heal, timer: 800, color: PASSIVES.reaper.color });
   }
+  if (reaper && reaper !== target && !reaper.dead && reaper.fg) forgeKill(reaper, target);
   // VOID HUNGER: the void blade's holder feeds cooldowns on every kill.
   if (reaper && reaper !== target && !reaper.dead && reaper.passive === 'voidblade') {
     reaper.specialCooldown = Math.max(0, (reaper.specialCooldown || 0) - VOID_HUNGER_MS);
@@ -3288,7 +3564,8 @@ function handleKill(target, attackerKey) {
     const def = MONSTER_TYPES[target.type] || MONSTER_TYPES.grunt;
     baseGain = Math.round(baseGain * Math.max(1, (target.maxHp || 30) / 30) * (def.xp || 1));
   }
-  const xpGain = room.gameMode === 'extreme' ? baseGain * 3 : room.gameMode === 'waves' ? baseGain * 2 : baseGain;
+  const modeGain = room.gameMode === 'extreme' ? baseGain * 3 : room.gameMode === 'waves' ? baseGain * 2 : baseGain;
+  const xpGain = Math.round(modeGain * (1 + (reaper?.fg?.killXp || 0)));   // forge: SCHOLAR
 
   // Credit XP to attacking player
   if (isPKey(attackerKey)) creditXp(attackerKey, xpGain);
@@ -3307,7 +3584,7 @@ function handleKill(target, attackerKey) {
   const killedByRival = isPKey(attackerKey);
   if (!isPlayer || killedByRival) {
     const rich = room.players[attackerKey] && hasEffect(room.players[attackerKey], 'gold') ? 2 : 1;   // GOLD RUSH
-    dropCoins(cx(target), cy(target), coinsForKill(target, isPlayer) * rich);
+    dropCoins(cx(target), cy(target), Math.round(coinsForKill(target, isPlayer) * rich * (1 + (reaper?.fg?.killCoins || 0))));
   }
 
   if (isPlayer) {
@@ -3368,15 +3645,12 @@ function creditXp(key, xpGain) {
   const attacker = room.players[key];
   const pw = room.passwords[key];
   const admin = isAdminPw(pw);
-  const oldXp = room.playerXp[key];
   room.playerXp[key] += xpGain;
 
-  const newUnlocks = checkNewUnlocks(oldXp, room.playerXp[key]);
+  const had = attacker?.unlockedWeapons || room.playerUnlocks[key] || [];
+  const newUnlocks = xpWeaponsFor(pw, room.playerXp[key]).filter(id => !had.includes(id));
   room.unlockQueues[key].push(...newUnlocks);
-  const merged = sortWeaponIds([
-    ...(attacker?.unlockedWeapons || room.playerUnlocks[key] || []),
-    ...getUnlockedWeaponIds(room.playerXp[key]),
-  ]);
+  const merged = sortWeaponIds([...had, ...newUnlocks]);
   if (attacker) {
     // Keep holding the same weapon even though the sorted list shifted.
     const cur = attacker.unlockedWeapons[attacker.weaponIdx];
@@ -3389,7 +3663,8 @@ function creditXp(key, xpGain) {
   if (pw && !admin) {
     const d = progress();
     d.players[pw] = room.playerXp[key];
-    d.weapons[pw] = merged;
+    // The match only holds one mythic, so add to the save rather than replace it.
+    d.weapons[pw] = sortWeaponIds([...(d.weapons[pw] || []), ...merged]);
     markDirty();
   }
 }
@@ -3398,6 +3673,7 @@ function creditXp(key, xpGain) {
 // not on the fixed spawn point, which may be in the middle of the fight.
 function respawnPlayer(p) {
   if (p.controlling) endMindControl(p, playerKeyOf(p));
+  p.fgWar = 0;       // WARPATH ends with you
   const safe = safestSpot(p, playerKeyOf(p));
   const sp = safe ? { x: safe.x - p.w / 2, y: safe.y - p.h / 2 } : spawnPointFor(p.num);
   p.hp = p.maxHp;
@@ -3535,11 +3811,16 @@ function tickRoom(dt) {
     const inp = p.controlling ? {} : p.mindControlledBy ? room.inputs[p.mindControlledBy] : room.inputs[key];
     const spd = effectiveSpeed(p);
     let vx = 0, vy = 0;
-    if (inp.left)  { vx = -spd; p.facing = -1; }
-    if (inp.right) { vx =  spd; p.facing =  1; }
-    if (inp.up)    vy = -spd;
-    if (inp.down)  vy =  spd;
-    if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
+    if (inp.ang != null) {                       // the joystick: any direction at all
+      vx = Math.cos(inp.ang) * spd; vy = Math.sin(inp.ang) * spd;
+      if (Math.abs(Math.cos(inp.ang)) > 0.38) p.facing = vx < 0 ? -1 : 1;
+    } else {
+      if (inp.left)  { vx = -spd; p.facing = -1; }
+      if (inp.right) { vx =  spd; p.facing =  1; }
+      if (inp.up)    vy = -spd;
+      if (inp.down)  vy =  spd;
+      if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
+    }
     if (hasEffect(p, 'confuse')) { vx = -vx; vy = -vy; if (vx) p.facing = vx > 0 ? 1 : -1; }   // MIRROR RUNE
     if (p.passive === 'samuraiblade' && (vx || vy)) {                  // WAY OF THE BLADE
       const f = nearestFoe(p, key);
@@ -3590,6 +3871,7 @@ function tickRoom(dt) {
     if (p.hitFlash        > 0) p.hitFlash        -= dt;
     if (p.swingTimer      > 0) p.swingTimer      -= dt;
     for (const id in p.abCd) if (p.abCd[id] > 0) p.abCd[id] -= dt;
+    forgeTick(p, key, dt);
     if (hasEffect(p, 'thunder')) thunderTick(p, key, dt);
     if (p.lightspeed > 0) lightspeedTick(p, key, dt);
     if (p.passive && !p.dead) passiveTick(p, key, dt);
@@ -3619,8 +3901,7 @@ function tickRoom(dt) {
     // The katana's spin (and the Worldsplitter's leap) is all you do while it lasts — only parry gets through.
     if (p.kspin > 0 || p.sky) {
       if (room.parryJustPressed[key] && p.parryCooldown <= 0) {
-        p.parryTimer = p.parryWindow || PARRY_WINDOW; p.parryCooldown = p.parryCd || PARRY_COOLDOWN;
-        spawnParrySpark(cx(p), cy(p));
+        startParry(p);
       }
       continue;
     }
@@ -3648,10 +3929,9 @@ function tickRoom(dt) {
     for (let i = 0; i < p.abilities.length && i < MAX_ABILITY_SLOTS; i++) {
       if (room.inputs[key]['ab' + (i + 1)] && !p.dead) useAbility(p, key, i);
     }
+    if (room.inputs[key].ab7 && p.fgAb) useForgeAbility(p, key);
     if (room.parryJustPressed[key] && p.parryCooldown <= 0) {
-      p.parryTimer    = p.parryWindow || PARRY_WINDOW;
-      p.parryCooldown = p.parryCd || PARRY_COOLDOWN;
-      spawnParrySpark(cx(p), cy(p));
+      startParry(p);
     }
   }
 
@@ -4064,7 +4344,9 @@ function advanceProjectile(proj, factor, dt) {
   const outY = proj.y < ARENA_Y || proj.y > ARENA_Y + ARENA_H;
 
   if (outX || outY) {
-    if (proj.boomerang && !proj.returning) {
+    const trick = proj.fgBounce > 0 && !proj.boomerang;     // forge: TRICK SHOT
+    if (trick) { proj.fgBounce--; proj.maxRange += 140; if (proj.hitTargets) proj.hitTargets.clear(); }
+    if ((proj.boomerang && !proj.returning) || trick) {
       // Bounce off the walls instead of dying.
       if (outX) proj.dx = -proj.dx;
       if (outY) proj.dy = -proj.dy;
@@ -4149,6 +4431,7 @@ function advanceProjectile(proj, factor, dt) {
     }
     if (proj.isAoe) {
       detonateAoe(proj);
+      if (proj.fgRico > 0) forgeRicochet(proj, t);
       return false;
     }
     if (proj.grapple) {
@@ -4257,6 +4540,8 @@ function distToSegment(px, py, ax, ay, bx, by) {
 
 // What a projectile does beyond its damage: frost slows, storm arcs onward.
 function onHitExtras(proj, t) {
+  if (proj.fgRico > 0) forgeRicochet(proj, t);
+  if (proj.fgBlast) forgeBlast(proj, t);
   if (proj.venom && !t.dead) { t.venomT = HY_VENOM_MS; t.venomDmg = Math.max(t.venomDmg && t.venomT > 0 ? t.venomDmg : 0, proj.venom); }
   if (proj.phxSplit) phoenixSplit(proj, t);
   if (proj.confuseMs && t.num) applyEffect(t, 'confuse', proj.confuseMs);
@@ -4303,6 +4588,11 @@ function onHitExtras(proj, t) {
 const MELEE_HALF_ARC = Math.PI * 0.55;
 
 function doAttack(p, pKey) {
+  const shotsBefore = room.projectiles.length;
+  attackMove(p, pKey);
+  if (p.fg) forgeShots(p, pKey, shotsBefore);
+}
+function attackMove(p, pKey) {
   const w = weapon(p);
   // Any attack ends a ghost cloak; the Dagger of Ghosts' own strike out of it
   // hits twice as hard, and its attack from the open puts the cloak on.
@@ -4383,7 +4673,7 @@ function doAttack(p, pKey) {
       if (!w.swing360 && d > 14) {
         let diff = Math.abs(Math.atan2(cy(t) - cy(p), cx(t) - cx(p)) - aim) % (Math.PI * 2);
         if (diff > Math.PI) diff = Math.PI * 2 - diff;
-        if (diff > MELEE_HALF_ARC) continue;
+        if (diff > MELEE_HALF_ARC + (w.arc || 0)) continue;
       }
       const tk = playerKeyOf(t);
       if (tk && t.parryTimer > 0) {
@@ -6005,7 +6295,7 @@ function abyssDefeated(m) {
     const owned = p.unlockedWeapons || room.playerUnlocks[key] || [];
     const drop = owned.includes('infinitybow') ? 'endlessscythe' : 'infinitybow';
     grantBossWeapon(key, drop);
-    if (!room.mythicNoDrop?.[key]) room.bossDrops = { ...(room.bossDrops || {}), [key]: drop };
+    if (!room.mythicNoDrop?.[key] && !room.bossLocked?.[key]) room.bossDrops = { ...(room.bossDrops || {}), [key]: drop };
   }
   room.victory = true;
   room.gameState = 'ROUND_OVER';
@@ -6052,6 +6342,10 @@ function grantBossWeapon(key, wid) {
   }
   const cur = p?.unlockedWeapons || room.playerUnlocks[key] || [];
   if (cur.includes(wid)) return false;
+  if (progress().lostWeapons[room.passwords[key]]?.[wid] > (room.playerXp[key] || 0)) {   // traded away: XP first
+    room.bossLocked = { ...(room.bossLocked || {}), [key]: true };
+    return false;
+  }
   const weapons = sortWeaponIds([...cur, wid]);
   const pw = room.passwords[key];
   if (pw && !isAdminPw(pw)) {
@@ -6284,6 +6578,274 @@ function adminSkipWave() {
                         text: 'WAVE ' + num + ' SKIPPED', timer: 1800 });
 }
 
+// ─── Forge effects in a fight ─────────────────────────────────────────────────
+function forgeHitMult(f, atk, t) {
+  let m = 1;
+  const r = t.hp / (t.maxHp || 1);
+  if (f.execute && r < 0.3) m += f.execute;
+  if (f.fresh && r >= 1) m += f.fresh;
+  if (f.giant && t.boss) m += f.giant;
+  if (f.duel && t.num) m += f.duel;
+  if (f.desperate && atk.hp < atk.maxHp * 0.4) m += f.desperate;
+  if (f.warpath) m += (atk.fgWar || 0) * f.warpath;
+  if (f.pristine && atk.hp >= atk.maxHp) m += f.pristine;
+  if (f.momentum) {
+    m += Math.min(7, atk.fgStack || 0) * f.momentum;
+    atk.fgStack = (atk.fgStack || 0) + 1;
+    atk.fgStackT = 2500;
+  }
+  if (f.far || f.near) {
+    const d = Math.hypot(cx(t) - cx(atk), cy(t) - cy(atk));
+    if (f.far && d > 170) m += f.far;
+    if (f.near && d < 90) m += f.near;
+  }
+  return m;
+}
+function forgeProcs(f, key, t, dmg) {
+  const owner = room.players[key];
+  if (f.echo && t.hp > 0 && Math.random() < f.echo) {           // TWIN FATE
+    t.hp -= dmg;
+    room.particles.push({ type: 'crit', x: cx(t), y: t.y - 4, text: 'TWIN FATE', timer: 600, max: 600 });
+  }
+  if (f.reap && t.hp > 0 && !t.num && !t.boss && t.hp < (t.maxHp || 1) * f.reap) {   // SOUL REAP
+    t.hp = 0;
+    room.particles.push({ type: 'crit', x: cx(t), y: t.y - 4, text: 'REAPED', timer: 700, max: 700 });
+  }
+  if (f.hitCd && owner) {                                       // TIMEBREAKER
+    owner.specialCooldown = Math.max(0, (owner.specialCooldown || 0) - f.hitCd);
+    owner.superCooldown = Math.max(0, (owner.superCooldown || 0) - f.hitCd);
+  }
+  if (f.grav) for (const o of enemyTargets(key)) {              // GRAVITY WELL
+    const dx = cx(t) - cx(o), dy = cy(t) - cy(o), d = Math.hypot(dx, dy);
+    if (o === t || o.boss || d < 16 || d > 130) continue;
+    o.pull = { vx: dx / d * 40 / 260, vy: dy / d * 40 / 260, timer: 260, from: null };
+  }
+  if (f.nth && owner) {                                         // ECLIPSE BURST
+    owner.fgNth = (owner.fgNth || 0) + 1;
+    if (owner.fgNth >= f.nth) {
+      owner.fgNth = 0;
+      const boom = Math.max(1, Math.round(dmg * 2));
+      room.fgGuard = true;
+      try {
+        for (const o of enemyTargets(key)) {
+          if (o === t || Math.hypot(cx(o) - cx(t), cy(o) - cy(t)) > 90 + o.w / 2) continue;
+          if (!o.num) o.invincible = 0;
+          applyDamage(o, boom, key);
+        }
+      } finally { room.fgGuard = false; }
+      t.hp -= boom;
+      room.particles.push({ type: 'shockwave', x: cx(t), y: cy(t), maxR: 90, timer: 480, max: 480, color: '#ff4a4a' });
+    }
+  }
+  if (f.overkill && t.hp < 0) {                                 // OVERFLOW
+    let next = null, bd = 150;
+    for (const o of enemyTargets(key)) {
+      const d = Math.hypot(cx(o) - cx(t), cy(o) - cy(t));
+      if (o !== t && d < bd) { bd = d; next = o; }
+    }
+    if (next) {
+      room.fgGuard = true;
+      try { if (!next.num) next.invincible = 0; applyDamage(next, Math.max(1, Math.round(-t.hp * f.overkill)), key); }
+      finally { room.fgGuard = false; }
+      room.particles.push({ type: 'bolt', x: cx(t), y: cy(t), x2: cx(next), y2: cy(next), timer: 260, max: 260, color: '#ff4a4a' });
+    }
+  }
+  if (t.hp > 0) {
+    if (f.burn) ignite(t, f.burn);
+    if (f.chill) chillTarget(t, f.chill);
+    if (f.venom) { t.venomT = HY_VENOM_MS; t.venomDmg = Math.max(f.venom, Math.round(dmg * 0.15)); }
+    if (f.stunCh && Math.random() < f.stunCh) stagger(t, 700, 'stun');
+  }
+  if (!f.splash && !f.shock) return;
+  room.fgGuard = true;     // a splash doesn't set off more splashes
+  try {
+    if (f.splash) for (const o of enemyTargets(key)) {
+      if (o === t || Math.hypot(cx(o) - cx(t), cy(o) - cy(t)) > 44 + o.w / 2) continue;
+      if (!o.num) o.invincible = 0;
+      applyDamage(o, Math.max(1, Math.round(dmg * f.splash)), key);
+    }
+    if (f.shock && Math.random() < f.shock) arcLightning(t, Math.max(1, Math.round(dmg * 0.5)), 2, key);
+  } finally { room.fgGuard = false; }
+}
+function forgeThorns(target, f, atk, dmg) {
+  const key = playerKeyOf(target);
+  const foe = atk && atk !== target ? atk : nearestFoe(target, key, 70);   // monsters hit in melee, so it's the closest one
+  if (!foe || foe.dead) return;
+  room.fgGuard = true;
+  try {
+    if (!foe.num) foe.invincible = 0;
+    applyDamage(foe, Math.max(1, Math.round(dmg * f.thorns)), key);
+    if (f.retStun && !foe.dead) stagger(foe, f.retStun, 'stun');
+  } finally { room.fgGuard = false; }
+}
+function forgeKill(p, target) {
+  const f = p.fg;
+  if (f.killHeal) p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * f.killHeal));
+  if (f.killSpeed) applyEffect(p, 'speed', f.killSpeed);
+  if (f.warpath) p.fgWar = Math.min(10, (p.fgWar || 0) + 1);
+  if (f.killCd) {
+    p.specialCooldown = Math.max(0, (p.specialCooldown || 0) - f.killCd);
+    p.superCooldown = Math.max(0, (p.superCooldown || 0) - f.killCd);
+  }
+}
+// Whatever a forged weapon just fired picks up its shot upgrades.
+function forgeShots(p, key, from) {
+  const f = p.fg;
+  for (let i = from; i < room.projectiles.length; i++) {
+    const pr = room.projectiles[i];
+    if (pr.owner !== key) continue;
+    if (f.pSpeed) { pr.dx *= 1 + f.pSpeed; pr.dy *= 1 + f.pSpeed; }
+    if (f.pierce) { pr.pierce = true; if (!pr.hitTargets) pr.hitTargets = new Set(); }
+    if (f.homing) { pr.homing = true; pr.seekR = pr.seekR || 180; }
+    if (f.blast)  pr.fgBlast = f.blast;
+    if (f.bounce) pr.fgBounce = f.bounce;
+    if (f.rico)   pr.fgRico = f.rico;
+  }
+}
+function forgeBlast(proj, t) {
+  room.fgGuard = true;
+  try {
+    for (const o of enemyTargets(proj.owner)) {
+      if (o === t || Math.hypot(cx(o) - cx(t), cy(o) - cy(t)) > proj.fgBlast + o.w / 2) continue;
+      if (!o.num) o.invincible = 0;
+      applyDamage(o, Math.max(1, Math.round(proj.damage * 0.6)), proj.owner);
+    }
+  } finally { room.fgGuard = false; }
+  room.particles.push({ type: 'aoe', x: cx(t), y: cy(t), maxR: proj.fgBlast, radius: 2, timer: 300, max: 300, color: '#ffb066' });
+}
+function forgeRicochet(proj, t) {
+  proj.fgRico--;
+  if (!isPKey(proj.owner)) return;
+  let best = null, bd = 280;
+  for (const o of enemyTargets(proj.owner)) {
+    if (o === t) continue;
+    const d = Math.hypot(cx(o) - cx(t), cy(o) - cy(t));
+    if (d < bd) { bd = d; best = o; }
+  }
+  if (!best) return;
+  const a = Math.atan2(cy(best) - cy(t), cx(best) - cx(t)), sp = Math.hypot(proj.dx, proj.dy) || 4;
+  const off = (t.w || 16) / 2 + 8;
+  (room.spawnLater = room.spawnLater || []).push({ ...proj, id: nextId(), x: cx(t) + Math.cos(a) * off, y: cy(t) + Math.sin(a) * off,
+    dx: Math.cos(a) * sp, dy: Math.sin(a) * sp, damage: Math.max(1, Math.round(proj.damage * 0.7)), traveled: 0, maxRange: 300,
+    fgRico: 0, quarry: null, hitTargets: proj.hitTargets ? new Set() : null });
+}
+function forgeTick(p, key, dt) {
+  if (p.wardCd > 0) p.wardCd -= dt;
+  if (p.undyCd > 0) p.undyCd -= dt;
+  if (p.fgVoid > 0) {               // VOID COLLAPSE: the blast comes as they arrive
+    p.fgVoid -= dt;
+    if (p.fgVoid <= 0) {
+      for (const t of enemyTargets(key)) {
+        if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) > 150 + t.w / 2) continue;
+        if (!t.num) t.invincible = 0;
+        strikeTarget(t, abDmg(t, p.fgVoidBase * 5, 0.25, 1), key);
+      }
+      room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 150, timer: 600, max: 600, color: '#c84aff' });
+    }
+  }
+  if (p.fg?.regen && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + p.fg.regen * dt / 1000);
+  if (p.fgStackT > 0) { p.fgStackT -= dt; if (p.fgStackT <= 0) p.fgStack = 0; }
+  if (p.fgStorm > 0) {
+    p.fgStorm -= dt;
+    p.fgStormT = (p.fgStormT || 0) - dt;
+    if (p.fgStormT <= 0) {
+      p.fgStormT = 200;
+      for (const t of enemyTargets(key)) {
+        if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) > 100 + t.w / 2) continue;
+        if (!t.num) t.invincible = 0;
+        strikeTarget(t, p.fgStormDmg, key);
+      }
+      room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 100, timer: 260, max: 260, color: '#9fe8ff' });
+    }
+  }
+}
+function useForgeAbility(p, key) {
+  const id = p.fgAb, ab = FORGE_BY_ID[id];   // common list above; the mythics' own are further down
+  if (!ab || p.dead || (p.abCd[id] || 0) > 0 || hasEffect(p, 'silence')) return;
+  const w = weapon(p), mult = hasEffect(p, 'strength') ? 1.8 : 1, base = Math.max(30, w.damage);
+  let used = true;
+  if (id === 'f_meteor') {
+    for (let i = 0; i < 8; i++) {
+      room.fires.push({ id: nextId(), kind: 'meteor', owner: key, x: cx(p), y: cy(p), r: Math.round(METEOR_R * 1.5), t: -i * 180,
+                        life: METEOR_FALL_MS, dmgMult: mult, seek: true, placed: false, base: base * 2.5, pct: 0.18, pvp: 45 });
+    }
+    abBurst(p, ab, 'CATACLYSM', 50);
+  } else if (id === 'f_storm') {
+    p.fgStorm = 4000; p.fgStormT = 0;
+    p.fgStormDmg = Math.max(1, Math.round(base * 0.6 * mult));
+    abBurst(p, ab, 'BLADESTORM', 50);
+  } else if (id === 'f_blink') {
+    const foes = enemyTargets(key).map(t => [Math.hypot(cx(t) - cx(p), cy(t) - cy(p)), t]).filter(e => e[0] < 420)
+      .sort((a, b) => a[0] - b[0]).slice(0, 6).map(e => e[1]);
+    if (!foes.length) return;
+    let x = cx(p), y = cy(p);
+    for (const t of foes) {
+      room.particles.push({ type: 'streak', x, y, x2: cx(t), y2: cy(t), timer: 420, max: 420, color: ab.color });
+      x = cx(t); y = cy(t);
+      if (!t.num) t.invincible = 0;
+      strikeTarget(t, Math.round(base * 3 * mult), key);
+    }
+    p.x = x - p.w / 2; p.y = y - p.h / 2;
+    clampToArena(p);
+    p.invincible = Math.max(p.invincible, 500);
+    abBurst(p, ab, 'PHANTOM STRIKE', 44);
+  } else if (id === 'f_aegis') {
+    applyEffect(p, 'shield', 4000);
+    p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.4));
+    abBurst(p, ab, "KING'S AEGIS", 54);
+  } else if (id === 'f_nova') {
+    let hits = 0;
+    for (const t of enemyTargets(key)) {
+      if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) > 230 + t.w / 2) continue;
+      if (!t.num) t.invincible = 0;
+      strikeTarget(t, abDmg(t, base * 2.5, 0.15, mult), key);
+      if (!t.dead) chillTarget(t, 2000);
+      hits++;
+    }
+    if (!hits) return;
+    p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * Math.min(0.4, hits * 0.06)));
+    room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 230, timer: 650, max: 650, color: ab.color });
+    abBurst(p, ab, 'SOUL NOVA', 60);
+  } else if (id === 'm_judgment') {
+    const foes = enemyTargets(key);
+    if (!foes.length) return;
+    for (const t of foes) {
+      room.particles.push({ type: 'bolt', x: cx(t), y: ARENA_Y + 2, x2: cx(t), y2: cy(t), timer: 420, max: 420, color: ab.color });
+      if (!t.num) t.invincible = 0;
+      strikeTarget(t, abDmg(t, base * 6, 0.3, mult), key);
+    }
+    abBurst(p, ab, 'FINAL JUDGMENT', 64);
+  } else if (id === 'm_eclipse') {
+    for (const t of enemyTargets(key)) stagger(t, 2000, 'stun');
+    applyEffect(p, 'strength', 8000);
+    applyEffect(p, 'haste', 8000);
+    abBurst(p, ab, 'TOTAL ECLIPSE', 64);
+  } else if (id === 'm_ragnarok') {
+    for (let i = 0; i < 20; i++) {
+      room.fires.push({ id: nextId(), kind: 'meteor', owner: key, x: cx(p), y: cy(p), r: Math.round(METEOR_R * 1.6), t: -i * 140,
+                        life: METEOR_FALL_MS, dmgMult: mult, seek: true, placed: false, base: base * 3, pct: 0.25, pvp: 60 });
+    }
+    abBurst(p, ab, 'RAGNAROK', 64);
+  } else if (id === 'm_ascend') {
+    p.hp = p.maxHp;
+    applyEffect(p, 'shield', 6000);
+    applyEffect(p, 'speed', 6000);
+    abBurst(p, ab, 'ASCENSION', 64);
+  } else if (id === 'm_void') {
+    let n = 0;
+    for (const t of enemyTargets(key)) {
+      const dx = cx(p) - cx(t), dy = cy(p) - cy(t), d = Math.hypot(dx, dy);
+      if (d > 420) continue;
+      n++;
+      if (!t.boss && d > 20) t.pull = { vx: dx / d * (d - 20) / 400, vy: dy / d * (d - 20) / 400, timer: 400, from: null };
+    }
+    if (!n) return;
+    p.fgVoid = 420; p.fgVoidBase = Math.round(base * mult);
+    abBurst(p, ab, 'VOID COLLAPSE', 64);
+  }
+  if (used) { p.abCd[id] = ab.cd; if (hasEffect(p, 'ghost')) breakGhost(p); }
+}
+
 // ─── Abilities ────────────────────────────────────────────────────────────────
 // Each returns false when there was nothing to do (full HP, no target), so the
 // cooldown isn't spent on a wasted press.
@@ -6496,6 +7058,7 @@ function tickMindControl(p, key, dt, factor) {
     if (inp.left) vx = -1; if (inp.right) vx = 1;
     if (inp.up) vy = -1; if (inp.down) vy = 1;
     if (vx && vy) { vx *= 0.707; vy *= 0.707; }
+    if (inp.ang != null) { vx = Math.cos(inp.ang); vy = Math.sin(inp.ang); }
     if (vx) t.face = vx > 0 ? 1 : -1;
     t.x += vx * spd * factor; t.y += vy * spd * factor;
   }
@@ -7425,6 +7988,7 @@ function abilityDash(p, pKey) {
     if (dist < 4) return false;
   } else {
     dx = (inp.right ? 1 : 0) - (inp.left ? 1 : 0); dy = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
+    if (inp.ang != null) { dx = Math.cos(inp.ang); dy = Math.sin(inp.ang); }
     if (!dx && !dy) dx = p.facing || 1;
   }
   const d = Math.hypot(dx, dy);
@@ -7839,10 +8403,11 @@ function playerView(p) {
     unlockedWeapons: p.unlockedWeapons, skin: p.skin,
     specialCd: Math.max(0, p.specialCooldown), specialMax: w.special?.cd || 0,
     superCd: Math.max(0, p.superCooldown || 0), superMax: w.super?.cd || 0,
-    abil: (p.abilities || []).map(id => id && ABILITY_BY_ID[id]
-      ? { id, cd: Math.max(0, Math.round(p.abCd[id] || 0)), max: ABILITY_BY_ID[id].cd } : null),
+    abil: abilityView(p),
+    ...(p.fg?.speed ? { fgs: 1 + p.fg.speed } : {}),
+    ...(p.fr?.length ? { fr: p.fr } : {}),
     vShield: p.vortexShield > 0 ? Math.round(p.vortexShield) : 0, vStore: Math.round(p.vortexStore || 0),
-    parryCd: Math.max(0, p.parryCooldown), parryMax: p.parryCd || PARRY_COOLDOWN, parryActive: p.parryTimer > 0,
+    parryCd: Math.max(0, p.parryCooldown), parryMax: parryCdOf(p), parryActive: p.parryTimer > 0,
     speed: Math.round(p.speed * 1000) / 1000,
     passive: p.passive || null,
     ...(p.controlling ? { controlling: true, ctlLeft: Math.max(0, Math.round(p.controlling.left)),
@@ -8006,6 +8571,16 @@ function endWavesRun() {
 
 // ─── Weapon catalog for the client ────────────────────────────────────────────
 
+function abilityView(p) {
+  const out = (p.abilities || []).map(id => id && ABILITY_BY_ID[id]
+    ? { id, cd: Math.max(0, Math.round(p.abCd[id] || 0)), max: ABILITY_BY_ID[id].cd } : null);
+  if (p.fgAb) {            // the forged ability always sits in the seventh place, on C
+    while (out.length < MAX_ABILITY_SLOTS) out.push(null);
+    out[MAX_ABILITY_SLOTS] = { id: p.fgAb, cd: Math.max(0, Math.round(p.abCd[p.fgAb] || 0)), max: FORGE_BY_ID[p.fgAb].cd };
+  }
+  return out;
+}
+
 function weaponCatalog() {
   return WEAPONS.map(w => ({
     id: w.id, name: w.name, type: w.type, unlockXp: w.unlockXp,
@@ -8021,6 +8596,7 @@ function weaponCatalog() {
     super: w.super ? { kind: w.super.kind, dmg: w.super.dmg, cd: w.super.cd } : null,
     upgrades: upgradesFor(w.id),
     passive: PASSIVES[w.id] || null,
+    forgeClass: forgeClass(w), forgeCan: forgeCan(w),
   }));
 }
 
@@ -8045,7 +8621,7 @@ function profileFor(pw, opts = {}) {
     coins = d.coins[pw];
   }
 
-  const weapons = sortWeaponIds([...getUnlockedWeaponIds(xp), ...(d.weapons[pw] || []),
+  const weapons = sortWeaponIds([...xpWeaponsFor(pw, xp), ...(d.weapons[pw] || []),
                                  ...(admin ? SHOP_WEAPONS.map(w => w.id) : [])]);
   if (!admin) {
     const prev = sortWeaponIds(d.weapons[pw] || []);
@@ -8078,7 +8654,8 @@ function profileFor(pw, opts = {}) {
   const mythicKills = admin ? 999999 : (d.mythicKills[pw] || 0);
   const mythicPick = d.mythicPick[pw] || null;
   return { xp, coins, weapons, upgrades, ownedSkins, abilities, abilitySlots, slotCount, lightKills, samuraiKills, samuraiNeed: SAM_KILLS_NEED,
-           mythicKills, mythicPick,
+           mythicKills, mythicPick, forge: cleanForge(d.forge[pw]), rareWeapons: rareWeaponIds(cleanForge(d.forge[pw])),
+           lost: Object.fromEntries(Object.entries(d.lostWeapons[pw] || {}).filter(([id, n]) => n > xp && !weapons.includes(id)).map(([id, n]) => [id, n - xp])),
            lightMaxed: maxedWeaponCount(weapons, upgrades), lightMaxedNeed: lightMaxedNeed(),
            nextSlotPrice: slotCount < MAX_ABILITY_SLOTS ? SLOT_PRICES[slotCount - ABILITY_SLOTS] : 0,
            refunded, save: makeSave(pw) };
@@ -8354,14 +8931,14 @@ app.use(express.json({ limit: '64kb' }));
 app.get('/api/rooms', (_req, res) => { res.json({ rooms: openRoomList() }); });
 
 app.get('/api/catalog', (_req, res) => {
-  res.json({ catalog: weaponCatalog(), perks: PERK_UPGRADES, upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP, abilityDefs: ABILITIES });
+  res.json({ catalog: weaponCatalog(), perks: PERK_UPGRADES, upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP, abilityDefs: ABILITY_DEFS_ALL });
 });
 
 app.post('/api/profile', (req, res) => {
   const pw = sanitizeText(req.body?.password, 32);
   if (!pw) return res.status(400).json({ error: 'A password is required to save upgrades.' });
   const p = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });
-  res.json({ ...p, catalog: weaponCatalog(), perks: PERK_UPGRADES, upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP, abilityDefs: ABILITIES });
+  res.json({ ...p, forgeDefs: forgeDefs(), catalog: weaponCatalog(), perks: PERK_UPGRADES, upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP, abilityDefs: ABILITY_DEFS_ALL });
 });
 
 // Hand a player's equipped abilities to any match they're in right now.
@@ -8552,6 +9129,7 @@ app.post('/api/buy_weapon', (req, res) => {
   const admin = isAdminPw(pw);
   const prof = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });
   if (prof.weapons.includes(weaponId)) return res.status(400).json({ error: 'You already own that weapon.' });
+  if (prof.lost?.[weaponId]) return res.status(400).json({ error: `You traded this away: earn ${prof.lost[weaponId].toLocaleString()} more XP to get it back.` });
   const missing = def.noRequirement ? 0 : XP_WEAPON_IDS.filter(id => !prof.weapons.includes(id)).length;
   // Some legendaries are only for players who already own another one.
   if (def.needMind) {
@@ -8598,6 +9176,291 @@ app.post('/api/buy_weapon', (req, res) => {
   res.json({ ...next, spent: admin ? 0 : def.price });
 });
 
+// ─── Forge and trade: endpoints ───────────────────────────────────────────────
+// Hand a changed profile to whatever match this player is sitting in.
+function syncLive(pw) {
+  const prof = profileFor(pw, {}), admin = isAdminPw(pw), was = room;
+  for (const [r, key] of liveSeats(pw)) {
+    useRoom(r);
+    const weapons = gameLoadout(prof.weapons, prof.mythicPick);
+    r.playerUnlocks[key] = weapons;
+    r.playerUpgrades[key] = prof.upgrades;
+    r.playerForge[key] = prof.forge;
+    if (!admin) { r.playerCoins[key] = prof.coins; r.playerAbilities[key] = prof.abilitySlots; }
+    const p = r.players[key];
+    if (p) {
+      const cur = p.unlockedWeapons[p.weaponIdx];
+      p.unlockedWeapons = weapons;
+      p.weaponIdx = Math.max(0, weapons.indexOf(cur));
+      p.upgrades = prof.upgrades;
+      p.forge = prof.forge;
+      if (!admin) p.abilities = prof.abilitySlots.slice();
+      refreshWeapon(p);
+    }
+  }
+  if (was) useRoom(was);
+}
+function forgeDefs() {
+  const view = m => ({ id: m.id, name: m.name, desc: m.desc, needs: m.needs || null });
+  const rareView = r => ({ id: r.id, name: r.name, desc: r.desc, emoji: r.emoji, color: r.color, cd: r.cd });
+  return { slots: FORGE_SLOTS, min: FORGE_MIN, max: FORGE_MAX, odds: FORGE_ODDS,
+           melee: FORGE_MELEE.map(view), ranged: FORGE_RANGED.map(view),
+           mythic: FORGE_MYTHIC.map(view),
+           rare: FORGE_RARE.map(rareView), mythicRare: FORGE_MYTHIC_RARE.map(rareView) };
+}
+
+app.post('/api/forge', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'A password is required to use the forge.' });
+  const id = sanitizeText(req.body?.weaponId, 24), def = WEAPON_BY_ID[id];
+  const admin = isAdminPw(pw);
+  const prof = profileFor(pw, { backup: req.body?.backup });
+  if (!def || !prof.weapons.includes(id)) return res.status(400).json({ error: 'You do not own that weapon.' });
+  const coins = Math.floor(Number(req.body?.coins) || 0);
+  if (coins < FORGE_MIN) return res.status(400).json({ error: `The forge needs at least ${FORGE_MIN.toLocaleString()} coins.` });
+  if (coins > FORGE_MAX) return res.status(400).json({ error: `The forge takes ${FORGE_MAX.toLocaleString()} coins at most.` });
+  if (!admin && prof.coins < coins) return res.status(400).json({ error: 'Not enough coins.' });
+  const mods = prof.forge[id] || [];
+  if (mods.length >= FORGE_SLOTS) return res.status(400).json({ error: `This weapon already has ${FORGE_SLOTS} upgrades. Reset it to forge again.` });
+
+  const d = progress();
+  if (!admin) d.coins[pw] = prof.coins - coins;
+  const hasRare = mods.some(m => FORGE_BY_ID[m]?.rare);
+  const odds = forgeOdds(coins, hasRare);
+  let got = null;
+  if (Math.random() < odds.ok) {
+    const pool = Math.random() < odds.rare ? forgeRarePool(def) : forgePool(def);
+    const open = pool.filter(m => !mods.includes(m.id));
+    got = open[Math.floor(Math.random() * open.length)];
+    d.forge[pw] = { ...prof.forge, [id]: [...mods, got.id] };
+  }
+  markDirty();
+  syncLive(pw);
+  res.json({ ...profileFor(pw, {}), result: got ? { id: got.id, name: got.name, desc: got.desc, rare: !!got.rare } : null, spent: admin ? 0 : coins });
+});
+
+app.post('/api/forge_reset', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'A password is required to use the forge.' });
+  const id = sanitizeText(req.body?.weaponId, 24);
+  const prof = profileFor(pw, { backup: req.body?.backup });
+  if (!prof.weapons.includes(id)) return res.status(400).json({ error: 'You do not own that weapon.' });
+  const d = progress(), next = { ...prof.forge };
+  delete next[id];
+  d.forge[pw] = next;
+  bumpRev(pw);
+  syncLive(pw);
+  res.json(profileFor(pw, {}));
+});
+
+// TRADE: two players on one code, each choosing what they give. Nothing moves
+// until both have agreed to the offers as they stand; any change clears both
+// agreements, and an agreement is tied to the exact offers its player saw.
+const trades = new Map();
+const TRADE_IDLE_MS = 10 * 60000, TRADE_LIST_MAX = 12;
+// The XP between a weapon and the one before it on the ladder. Legendaries sit
+// beyond the ladder, so they take its widest step, and then have to be bought
+// or won again.
+const XP_LADDER = [...new Set(WEAPONS.filter(w => !w.shopOnly).map(w => w.unlockXp))].sort((a, b) => a - b);
+const LADDER_TOP_STEP = XP_LADDER.reduce((m, x, i) => (i ? Math.max(m, x - XP_LADDER[i - 1]) : m), 0);
+function regainXp(id) {
+  const w = WEAPON_BY_ID[id];
+  if (w.shopOnly) return LADDER_TOP_STEP;
+  const i = XP_LADDER.indexOf(w.unlockXp);
+  return i > 0 ? w.unlockXp - XP_LADDER[i - 1] : 0;
+}
+const blankOffer = () => ({ coins: 0, weapons: [], skins: [], abilities: [] });
+const offerEmpty = o => !o.coins && !o.weapons.length && !o.skins.length && !o.abilities.length;
+function tradeCode() {
+  const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  for (;;) {
+    let c = '';
+    for (let i = 0; i < 5; i++) c += A[crypto.randomInt(A.length)];
+    if (!trades.has(c)) return c;
+  }
+}
+// Why this thing can't go from one player to the other (null when it can).
+function tradeWhy(kind, id, prof, other) {
+  if (kind === 'weapons') {
+    const w = WEAPON_BY_ID[id];
+    if (!w || !prof.weapons.includes(id)) return 'not yours';
+    if (w.mythic) return 'mythics only come from the rare shop';
+    if (!w.shopOnly && !regainXp(id)) return 'starter weapon';
+    if (other && other.weapons.includes(id)) return 'they already own it';
+  } else if (kind === 'skins') {
+    if (!SKIN_BY_ID[id] || !prof.ownedSkins.includes(id)) return 'not yours';
+    if (other && other.ownedSkins.includes(id)) return 'they already own it';
+  } else {
+    if (!ABILITY_BY_ID[id] || !prof.abilities.includes(id)) return 'not yours';
+    if (other && other.abilities.includes(id)) return 'they already own it';
+  }
+  return null;
+}
+function tradeSeat(req, res) {
+  const pw = sanitizeText(req.body?.password, 32);
+  const s = trades.get(sanitizeText(req.body?.code, 8).toUpperCase());
+  const me = !s || !pw ? null : s.a.pw === pw ? 'a' : s.b?.pw === pw ? 'b' : null;
+  if (!me) { res.status(404).json({ error: 'That trade is not open.' }); return null; }
+  s.seen = Date.now();
+  return { s, me, other: me === 'a' ? 'b' : 'a' };
+}
+function weaponCard(pw, id, prof) {
+  const lv = prof.upgrades[id] || {};
+  return { id, name: WEAPON_BY_ID[id]?.name || id, levels: Object.values(lv).reduce((a, b) => a + b, 0), rare: !!prof.forge[id]?.some(m => FORGE_BY_ID[m]?.rare),
+           mods: (prof.forge[id] || []).map(m => ({ name: FORGE_BY_ID[m].name, rare: !!FORGE_BY_ID[m].rare })) };
+}
+function offerCard(o, pw, prof) {
+  return { coins: o.coins, weapons: o.weapons.map(id => weaponCard(pw, id, prof)),
+           skins: o.skins.map(id => ({ id, name: SKIN_BY_ID[id]?.name || id })),
+           abilities: o.abilities.map(id => ({ id, name: ABILITY_BY_ID[id]?.name || id })) };
+}
+function tradeView(t) {
+  const { s, me, other } = t;
+  const mine = s[me], them = s[other];
+  const prof = profileFor(mine.pw, {}), theirs = them ? profileFor(them.pw, {}) : null;
+  return {
+    code: s.code, rev: s.rev, done: !!s.done, cancelled: !!s.cancelled, note: s.note || '',
+    partner: them ? them.name : null, coins: prof.coins, xp: prof.xp, save: prof.save,
+    mine: offerCard(mine.offer, mine.pw, prof), iAgreed: mine.agreed,
+    theirs: them ? offerCard(them.offer, them.pw, theirs) : null, theyAgreed: !!them?.agreed,
+    got: s.done ? (s.got?.[me] || null) : null,
+    items: s.done || !them ? null : {
+      weapons: prof.weapons.map(id => ({ ...weaponCard(mine.pw, id, prof), why: tradeWhy('weapons', id, prof, theirs), back: regainXp(id) })),
+      skins: prof.ownedSkins.map(id => ({ id, name: SKIN_BY_ID[id].name, why: tradeWhy('skins', id, prof, theirs) })),
+      abilities: prof.abilities.map(id => ({ id, name: ABILITY_BY_ID[id].name, why: tradeWhy('abilities', id, prof, theirs) })),
+    },
+  };
+}
+function tradeProblem(s) {
+  const pa = profileFor(s.a.pw, {}), pb = profileFor(s.b.pw, {});
+  for (const [o, prof, other] of [[s.a.offer, pa, pb], [s.b.offer, pb, pa]]) {
+    if (o.coins > prof.coins) return 'Someone no longer has the coins they offered.';
+    for (const kind of ['weapons', 'skins', 'abilities']) {
+      for (const id of o[kind]) if (tradeWhy(kind, id, prof, other)) return 'Something on offer can no longer be traded.';
+    }
+  }
+  return null;
+}
+// One side's goods change hands. Upgrades and forge work go with a weapon, and
+// the giver's other weapons aren't touched.
+function moveGoods(from, to, o) {
+  const d = progress(), xp = d.players[from] || 0;
+  for (const id of o.weapons) {
+    d.weapons[from] = (d.weapons[from] || []).filter(x => x !== id);
+    d.weapons[to] = sortWeaponIds([...(d.weapons[to] || []), id]);
+    (d.lostWeapons[from] = d.lostWeapons[from] || {})[id] = xp + regainXp(id);
+    if (d.lostWeapons[to]) delete d.lostWeapons[to][id];
+    if (d.upgrades[to]?.[id]) delete d.upgrades[to][id];
+    if (d.upgrades[from]?.[id]) {
+      (d.upgrades[to] = d.upgrades[to] || {})[id] = d.upgrades[from][id];
+      delete d.upgrades[from][id];
+    }
+    if (d.forge[to]?.[id]) delete d.forge[to][id];
+    if (d.forge[from]?.[id]) {
+      (d.forge[to] = d.forge[to] || {})[id] = d.forge[from][id];
+      delete d.forge[from][id];
+    }
+  }
+  for (const id of o.skins) {
+    d.ownedSkins[from] = (d.ownedSkins[from] || []).filter(x => x !== id);
+    d.ownedSkins[to] = [...new Set([...(d.ownedSkins[to] || []), id])];
+  }
+  for (const id of o.abilities) {
+    d.abilities[from] = (d.abilities[from] || []).filter(x => x !== id);
+    d.abilities[to] = [...new Set([...(d.abilities[to] || []), id])];
+  }
+  if (o.abilities.length) {
+    d.abilitySlots[from] = cleanSlots(d.abilitySlots[from], d.abilities[from], clampSlots(d.abilitySlotCount[from]));
+  }
+  d.coins[from] = (d.coins[from] || 0) - o.coins;
+  d.coins[to] = (d.coins[to] || 0) + o.coins;
+}
+function executeTrade(s) {
+  const A = s.a.pw, B = s.b.pw;
+  const pa = profileFor(A, {}), pb = profileFor(B, {});
+  s.got = { a: offerCard(s.b.offer, B, pb), b: offerCard(s.a.offer, A, pa) };
+  moveGoods(A, B, s.a.offer);
+  moveGoods(B, A, s.b.offer);
+  bumpRev(A); bumpRev(B);
+  s.done = true;
+  markDirty();
+  flushProgress();
+  syncLive(A); syncLive(B);
+}
+
+app.post('/api/trade/open', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'A password is required to trade.' });
+  if (isAdminPw(pw)) return res.status(400).json({ error: 'The admin account owns everything, so it can not trade.' });
+  profileFor(pw, { backup: req.body?.backup });
+  const code = tradeCode();
+  trades.set(code, { code, rev: 0, seen: Date.now(), a: { pw, name: sanitizeText(req.body?.name, 12).toUpperCase() || 'PLAYER', offer: blankOffer(), agreed: false }, b: null });
+  res.json(tradeView({ s: trades.get(code), me: 'a', other: 'b' }));
+});
+app.post('/api/trade/join', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'A password is required to trade.' });
+  if (isAdminPw(pw)) return res.status(400).json({ error: 'The admin account owns everything, so it can not trade.' });
+  const s = trades.get(sanitizeText(req.body?.code, 8).toUpperCase());
+  if (!s || s.cancelled || s.done) return res.status(404).json({ error: 'No open trade with that code.' });
+  if (s.a.pw === pw) return res.status(400).json({ error: 'You can not trade with yourself.' });
+  if (s.b && s.b.pw !== pw) return res.status(400).json({ error: 'That trade is already full.' });
+  profileFor(pw, { backup: req.body?.backup });
+  if (!s.b) { s.b = { pw, name: sanitizeText(req.body?.name, 12).toUpperCase() || 'PLAYER', offer: blankOffer(), agreed: false }; s.rev++; }
+  s.seen = Date.now();
+  res.json(tradeView({ s, me: 'b', other: 'a' }));
+});
+app.post('/api/trade/state', (req, res) => {
+  const t = tradeSeat(req, res);
+  if (t) res.json(tradeView(t));
+});
+app.post('/api/trade/offer', (req, res) => {
+  const t = tradeSeat(req, res);
+  if (!t) return;
+  const { s, me, other } = t;
+  if (s.done || s.cancelled || !s[other]) return res.status(400).json({ error: 'That trade is not open.' });
+  const prof = profileFor(s[me].pw, {}), theirs = profileFor(s[other].pw, {}), raw = req.body?.offer || {};
+  const list = k => [...new Set(Array.isArray(raw[k]) ? raw[k].map(x => sanitizeText(x, 24)) : [])].slice(0, TRADE_LIST_MAX);
+  const offer = { coins: Math.max(0, Math.floor(Number(raw.coins) || 0)), weapons: list('weapons'), skins: list('skins'), abilities: list('abilities') };
+  if (offer.coins > prof.coins) return res.status(400).json({ error: 'You do not have that many coins.' });
+  for (const kind of ['weapons', 'skins', 'abilities']) {
+    for (const id of offer[kind]) {
+      const why = tradeWhy(kind, id, prof, theirs);
+      if (why) return res.status(400).json({ error: 'You can not offer that: ' + why + '.' });
+    }
+  }
+  s[me].offer = offer;
+  s.a.agreed = false; s.b.agreed = false;
+  s.rev++; s.note = '';
+  res.json(tradeView(t));
+});
+app.post('/api/trade/agree', (req, res) => {
+  const t = tradeSeat(req, res);
+  if (!t) return;
+  const { s, me, other } = t;
+  if (s.done || s.cancelled || !s[other]) return res.status(400).json({ error: 'That trade is not open.' });
+  if (!req.body?.agree) { s[me].agreed = false; return res.json(tradeView(t)); }
+  if (req.body?.rev !== s.rev) return res.status(409).json({ error: 'The offers just changed. Check them again.' });
+  if (offerEmpty(s.a.offer) || offerEmpty(s.b.offer)) return res.status(400).json({ error: 'Both players have to give something.' });
+  s[me].agreed = true;
+  if (s.a.agreed && s.b.agreed) {
+    const bad = tradeProblem(s);
+    if (bad) { s.a.agreed = false; s.b.agreed = false; s.note = bad; }
+    else executeTrade(s);
+  }
+  res.json(tradeView(t));
+});
+app.post('/api/trade/cancel', (req, res) => {
+  const t = tradeSeat(req, res);
+  if (!t) return;
+  if (!t.s.done) t.s.cancelled = true;
+  res.json({ ok: true });
+});
+setInterval(() => {
+  const now = Date.now();
+  for (const [code, s] of trades) if (now - s.seen > TRADE_IDLE_MS) trades.delete(code);
+}, 60000).unref?.();
+
 // ─── WebSocket Connections ────────────────────────────────────────────────────
 
 function clearSlot(key) {
@@ -8610,6 +9473,7 @@ function clearSlot(key) {
   room.playerSkins[key] = null;
   room.playerUnlocks[key] = null;
   room.playerUpgrades[key] = null;
+  room.playerForge[key] = null;
   room.playerAbilities[key] = null;
   room.unlockQueues[key] = [];
   room.players[key] = null;
@@ -8676,7 +9540,7 @@ wss.on('connection', (ws) => {
     world: { w: CANVAS_W, h: CANVAS_H, ax: ARENA_X, ay: ARENA_Y, aw: ARENA_W, ah: ARENA_H },
     playerSpeed: PLAYER_SPEED,
     catalog: weaponCatalog(),
-    abilityDefs: ABILITIES,
+    abilityDefs: ABILITY_DEFS_ALL,
     colors: WEAPON_COLORS,
     chatLines: CHAT_LINES,
     // What the sandbox panel can spawn.
@@ -8752,6 +9616,7 @@ wss.on('connection', (ws) => {
         room.playerCoins[myKey]    = prof.coins;
         room.playerUnlocks[myKey]  = gameLoadout(prof.weapons, prof.mythicPick);
         room.playerUpgrades[myKey] = prof.upgrades;
+        room.playerForge[myKey] = prof.forge || null;
         room.playerAbilities[myKey] = prof.abilitySlots || [null, null];
 
         // Skin: if the user explicitly changed it this session, save the new skin;
@@ -8792,7 +9657,9 @@ wss.on('connection', (ws) => {
         room.inputs[myKey] = {
           up: !!k.up, down: !!k.down, left: !!k.left, right: !!k.right,
           attack: !!k.attack, swap: !!k.swap, swapPrev: !!k.swapPrev, special: !!k.special, parry: !!k.parry, super: !!k.super,
-          ab1: !!k.ab1, ab2: !!k.ab2, ab3: !!k.ab3, ab4: !!k.ab4, ab5: !!k.ab5, ab6: !!k.ab6,
+          ab1: !!k.ab1, ab2: !!k.ab2, ab3: !!k.ab3, ab4: !!k.ab4, ab5: !!k.ab5, ab6: !!k.ab6, ab7: !!k.ab7,
+          // The joystick's exact direction, in radians.
+          ang: Number.isFinite(k.ang) ? k.ang : null,
           // Mouse position in world space (desktop only): where DASH goes.
           aimX: Number.isFinite(k.aimX) ? k.aimX : null, aimY: Number.isFinite(k.aimY) ? k.aimY : null,
         };

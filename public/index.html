@@ -76,6 +76,10 @@
         <button class="mode-btn btn-cust" onclick="openAbilities()">ABILITIES<small>powers</small></button>
         <button class="mode-btn btn-cust" onclick="openSkinsScreen()">SKINS<small>look</small></button>
       </div>
+      <div class="mode-row">
+        <button class="mode-btn btn-forge" onclick="openForge()">THE FORGE<small>coins for upgrades</small></button>
+        <button class="mode-btn btn-trade" onclick="openTrade()">TRADE<small>swap with a friend</small></button>
+      </div>
       <button id="installBtn" class="skin-btn" style="display:none" onclick="installApp()">&#11015; INSTALL APP</button>
     </div>
   </div>
@@ -115,6 +119,35 @@
       <div id="shopMsg" class="shop-msg"></div>
       <div id="shopList" class="shop-list"></div>
       <button class="mode-btn shop-back" onclick="closeShop()">&#10003; BACK</button>
+    </div>
+  </div>
+
+  <!-- The forge: coins go in, a random upgrade for one weapon may come out -->
+  <div id="forgeScreen" class="overlay hidden">
+    <div class="pixel-box shop-box">
+      <div class="title-text shop-title forge-title">THE FORGE</div>
+      <div class="subtitle">MORE COINS, BETTER ODDS &middot; 3 UPGRADES A WEAPON &middot; 1 RARE</div>
+      <div id="forgeCoins" class="shop-coins"></div>
+      <div id="forgeMsg" class="shop-msg"></div>
+      <div id="forgeWeapons" class="fg-weapons"></div>
+      <div id="forgeBench" class="fg-bench"></div>
+      <button class="mode-btn shop-back" onclick="closeForge()">&#10003; BACK</button>
+    </div>
+  </div>
+
+  <!-- Trade: two players on one code, each choosing what they give -->
+  <div id="tradeScreen" class="overlay hidden">
+    <div class="pixel-box shop-box">
+      <div class="title-text shop-title trade-title">TRADE</div>
+      <div class="subtitle">WEAPONS, COINS, ABILITIES AND SKINS &middot; BOTH MUST AGREE</div>
+      <div id="tradeMsg" class="shop-msg"></div>
+      <div id="tradeTop"></div>
+      <div id="tradeTable" class="tr-table hidden">
+        <div id="tradeMine" class="tr-col"></div>
+        <div id="tradeThem" class="tr-col"></div>
+      </div>
+      <div id="tradeFoot" class="tr-foot"></div>
+      <button class="mode-btn shop-back" onclick="closeTrade()">&#10003; BACK</button>
     </div>
   </div>
 
@@ -205,6 +238,10 @@
           <p><b>Extreme</b> &ndash; solo with the toughest monsters, a Giant every 5th wave and much bigger coin rewards.</p>
           <p><b>The Portal Mage</b> &ndash; the hardest boss: win 50,000 coins, 50,000 XP and the Portal Wand.</p>
           <p><b>Sandbox</b> &ndash; solo practice with every weapon. Spawn any monster, boss, item or trap and switch on cheats from the TOOLS button. Nothing you do there is saved.</p></div>
+        <div class="howto-sec"><h3>THE FORGE</h3>
+          <p>Pick a weapon you own and put coins in the fire (500 to 500,000). More coins give a better chance of an upgrade and a much better chance of a rare one; if the metal cracks the coins are gone. Each weapon holds <b>3 upgrades</b>. Melee weapons have over 30 possible upgrades and ranged weapons over 20. These are passives that work while the weapon is in your hand. The <b>5 rare upgrades</b> each give an extra ability on <b>C</b>, and a weapon can only hold one. Reset a weapon in the forge to free its slots; the coins do not come back. A weapon with a rare upgrade glows red. <b>Mythics</b> have a forge list of their own: 32 stronger upgrades and 5 rare abilities that no other weapon can get.</p></div>
+        <div class="howto-sec"><h3>TRADE</h3>
+          <p>One player presses START A TRADE and tells the other the code. Each chooses what to give: weapons, coins, abilities or skins. Both have to give something and both have to agree, and any change to an offer clears both agreements. A weapon keeps its upgrades and forge work when it changes hands, and you can receive a weapon you do not have the XP for. What you give is gone, but your other weapons stay yours. To get a lost weapon back, earn the XP between it and the weapon before it. Legendaries take 2,500 XP, then you buy or win them again. Mythics and the two starter weapons can not be traded.</p></div>
         <div class="howto-sec"><h3>WEAPONS &amp; XP</h3>
           <p>Kills give XP, and XP unlocks new weapons for good. Each weapon has its own attack and a <b>special</b> with a cooldown (the purple bar). Melee weapons hit what is in front of you; ranged ones auto-aim at the nearest enemy. Newer ones: the <b>Scimitar</b> (dash), <b>Slingshot</b> (stones knock foes back), <b>Mace</b> (stuns), <b>Javelin</b> (pierces), <b>Claws</b> (heal you as they cut), <b>Ember Staff</b> (burns), <b>Halberd</b> (huge reach) and <b>Frost Bow</b> (slows).</p>
           <p><b>Legendary</b> weapons are bought with coins in UPGRADE WEAPONS and are the only ones with a <b>SUPER</b> (R). The Fire Glove needs every other weapon first; the Vortex Shield needs nothing; the Wind Wand, Explosive Revolver, Stormbreaker, Winter's Edge, Sunfire Longbow, <b>Chrono Staff</b> (TIME STOP freezes every foe around you, REWIND undoes your wounds) and <b>Void Blade</b> (void waves, RIFT STEP, and a SINGULARITY that collapses in a huge blast) need another legendary; the <b>Mind Tome</b> (lays psychic traps under your enemies, spins beams that freeze them, and its SUPER takes over the strongest enemy on the map &ndash; you vanish and fight with its attacks, and SPECIAL uses its own ability (a charger charges, a bomber detonates, a necromancer raises skeletons for you, Light chains curving dashes, and so on); its passive moves every trap next to your enemies every 30s, with a countdown over your head) needs the Storm Tome fully maxed and three other legendaries; the Portal Wand can only be won from the Portal Mage; and the rarest of all, the <b>Dagger of Ghosts</b>, can only be claimed once you own every other weapon in the game. The <b>Light Blade</b> (dash wherever you click or tap and swipe as you land, chain five curving dashes that hurl foes into the walls, and go LIGHTSPEED for triple speed and lightning crashes) is claimed by beating Light 3 times, over any number of runs, with at least 75% of all weapons fully maxed.</p></div>
@@ -386,7 +423,7 @@
     </div>
     <div class="action-btns">
       <div class="ability-btns">
-        <button id="btn-ab1" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>Q</i></button><button id="btn-ab2" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>E</i></button><button id="btn-ab3" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>F</i></button><button id="btn-ab4" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>G</i></button><button id="btn-ab5" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>V</i></button><button id="btn-ab6" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>B</i></button>
+        <button id="btn-ab1" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>Q</i></button><button id="btn-ab2" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>E</i></button><button id="btn-ab3" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>F</i></button><button id="btn-ab4" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>G</i></button><button id="btn-ab5" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>V</i></button><button id="btn-ab6" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>B</i></button><button id="btn-ab7" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>C</i></button>
       </div>
       <div class="action-row">
         <button id="btn-parry" class="action-btn parry-btn round" aria-label="Parry">🛡️</button>
