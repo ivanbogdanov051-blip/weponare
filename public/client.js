@@ -644,7 +644,7 @@ function syncSettings() {
   const f = document.getElementById('fpsBtn');
   if (f) { f.textContent = netOverlay ? 'ON' : 'OFF'; f.classList.toggle('on', netOverlay); }
 }
-function openSettings() { syncSettings(); showScreen('settingsScreen'); }
+function openSettings() { syncSettings(); renderArenaPicker(); showScreen('settingsScreen'); }
 function closeSettings() { showScreen('startScreen'); }
 
 // ── Modes unlock with XP ──
@@ -4576,29 +4576,52 @@ function drawArena() {
   ctx.drawImage(arenaCache, 0, 0);
 }
 
-function paintArena(g) {
-  g.fillStyle = PAL.arena; g.fillRect(0,0,CANVAS_W,CANVAS_H);
-  // Floor tiles, slightly chequered so the bigger arena reads as a space.
-  const T = 24;
-  g.fillStyle = 'rgba(255,255,255,0.016)';
-  for (let ty = 0; ty * T < ARENA_H; ty++) {
-    for (let tx = (ty % 2); tx * T < ARENA_W; tx += 2) {
-      g.fillRect(ARENA_X + tx*T, ARENA_Y + ty*T,
-                   Math.min(T, ARENA_W - tx*T), Math.min(T, ARENA_H - ty*T));
+function paintArena(g) { paintArenaScene(g, CANVAS_W, CANVAS_H, ARENA_X, ARENA_Y, arenaPick); }
+
+// ── Arena look (Settings) ──
+// Saved on this device, like the map size. Only you see your choice.
+const ARENA_PICKS = { theme: ARENA_THEMES, floor: ARENA_FLOORS, wall: ARENA_WALLS };
+const ARENA_PICK_EL = { theme: 'arenaPickTheme', floor: 'arenaPickFloor', wall: 'arenaPickWall' };
+function loadArenaPick() {
+  let saved = null;
+  try { saved = JSON.parse(lsGetSafe('weponare_arena') || 'null'); } catch {}
+  const pick = { ...ARENA_DEFAULT };
+  for (const kind of Object.keys(ARENA_PICKS)) {
+    if (saved && ARENA_PICKS[kind].some(o => o.id === saved[kind])) pick[kind] = saved[kind];
+  }
+  return pick;
+}
+let arenaPick = loadArenaPick();
+function pickArena(kind, id) {
+  arenaPick = { ...arenaPick, [kind]: id };
+  try { localStorage.setItem('weponare_arena', JSON.stringify(arenaPick)); } catch {}
+  arenaCache = null;
+  renderArenaPicker();
+}
+// Each choice is a small real render of itself, so you see what you'd get.
+function renderArenaPicker() {
+  const prev = document.getElementById('arenaPreview');
+  if (prev) paintArenaScene(prev.getContext('2d'), prev.width, prev.height, ARENA_X, ARENA_Y, arenaPick);
+  for (const [kind, list] of Object.entries(ARENA_PICKS)) {
+    const box = document.getElementById(ARENA_PICK_EL[kind]);
+    if (!box) continue;
+    if (!box.children.length) {
+      for (const o of list) {
+        const b = document.createElement('button');
+        b.className = 'arena-opt'; b.dataset.id = o.id;
+        b.onclick = () => pickArena(kind, o.id);
+        b.innerHTML = '<canvas width="150" height="84"></canvas><span>' + o.name + '</span>';
+        box.appendChild(b);
+      }
+    }
+    for (const b of box.children) {
+      const on = arenaPick[kind] === b.dataset.id;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      const cv = b.querySelector('canvas');
+      paintArenaScene(cv.getContext('2d'), cv.width, cv.height, ARENA_X, ARENA_Y, { ...arenaPick, [kind]: b.dataset.id });
     }
   }
-  g.strokeStyle='rgba(255,255,255,0.028)'; g.lineWidth=1;
-  for(let x=ARENA_X;x<=ARENA_X+ARENA_W;x+=T){g.beginPath();g.moveTo(x+0.5,ARENA_Y);g.lineTo(x+0.5,ARENA_Y+ARENA_H);g.stroke();}
-  for(let y=ARENA_Y;y<=ARENA_Y+ARENA_H;y+=T){g.beginPath();g.moveTo(ARENA_X,y+0.5);g.lineTo(ARENA_X+ARENA_W,y+0.5);g.stroke();}
-  // Walls
-  g.fillStyle = PAL.wall;
-  g.fillRect(0,0,CANVAS_W,ARENA_Y); g.fillRect(0,CANVAS_H-ARENA_Y,CANVAS_W,ARENA_Y);
-  g.fillRect(0,0,ARENA_X,CANVAS_H); g.fillRect(CANVAS_W-ARENA_X,0,ARENA_X,CANVAS_H);
-  g.fillStyle = 'rgba(140,140,200,0.18)';
-  g.fillRect(ARENA_X-1,ARENA_Y-1,ARENA_W+2,1);
-  g.fillRect(ARENA_X-1,ARENA_Y+ARENA_H,ARENA_W+2,1);
-  g.fillRect(ARENA_X-1,ARENA_Y-1,1,ARENA_H+2);
-  g.fillRect(ARENA_X+ARENA_W,ARENA_Y-1,1,ARENA_H+2);
 }
 
 // ─── Traps & Items ──────────────────────────────────────────────────────────────

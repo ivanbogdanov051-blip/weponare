@@ -120,6 +120,16 @@
           <button class="map-btn" data-size="medium" onclick="pickMapSize('medium')">MEDIUM</button>
           <button class="map-btn" data-size="big" onclick="pickMapSize('big')">BIG</button>
         </span></div>
+      <div class="set-arena">
+        <div class="set-label">ARENA LOOK</div>
+        <canvas id="arenaPreview" width="720" height="405" aria-hidden="true"></canvas>
+        <div class="set-sub">COLOURS</div>
+        <div class="arena-grid" id="arenaPickTheme"></div>
+        <div class="set-sub">FLOOR PATTERN</div>
+        <div class="arena-grid" id="arenaPickFloor"></div>
+        <div class="set-sub">WALLS</div>
+        <div class="arena-grid" id="arenaPickWall"></div>
+      </div>
       <div class="set-row" id="tapMoveRow"><span class="set-label">MOVE BY CLICKING</span>
         <button class="set-btn" id="tapMoveBtn" onclick="toggleTapMove()">OFF</button></div>
       <div class="set-row"><span class="set-label">SHOW FPS &amp; PING</span>
@@ -472,6 +482,7 @@
   <script src="pixel.js"></script>
   <script src="sprites.js"></script>
   <script src="weapons.js"></script>
+  <script src="arena.js"></script>
   <script src="client.js"></script>
 </body>
 </html>

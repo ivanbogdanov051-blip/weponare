@@ -1339,3 +1339,20 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
   #startScreen::before, .menu-box .title-text, .menu-box .mode-btn { animation: none !important; }
 }
+
+/* ── Arena look, in Settings ── */
+.settings-box { max-width: min(520px, 96vw); }
+.set-arena { padding: 10px 0; border-bottom: 1px solid #24243c; text-align: left; }
+#arenaPreview { display: block; width: 100%; height: auto; margin: 8px 0 4px; border: 2px solid #3a3a5a; }
+.set-sub { margin: 10px 0 5px; font-size: 10px; letter-spacing: 2px; color: #9a9ac0; }
+.arena-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.arena-opt {
+  display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: 3px; min-width: 0; cursor: pointer;
+  background: #0a0a18; border: 2px solid #2a2a4a; color: #9a9ac0;
+  font-family: 'Courier New', monospace; font-size: 9px; letter-spacing: 1px;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.arena-opt canvas { display: block; width: 100%; height: auto; pointer-events: none; }
+.arena-opt span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+.arena-opt:hover { border-color: var(--c-accent); }
+.arena-opt.on { border-color: #ffe45a; color: #ffe45a; background: #1c1a08; }
