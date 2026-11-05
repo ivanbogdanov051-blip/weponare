@@ -649,17 +649,19 @@ function closeSettings() { showScreen('startScreen'); }
 // ── Modes unlock with XP ──
 // You start with every multiplayer mode, Waves, Bot Battle and Sandbox;
 // EXTREME and then the PORTAL MAGE open up as your saved XP grows.
-const MODE_XP = { extreme: 5000, portal: 15000, abyss: 30000 };
+const MODE_XP = { extreme: 5000, portal: 15000, abyss: 30000, tsunami: 40000 };
+const MODE_BLURB = { extreme: 'hardest waves', portal: 'boss fight', abyss: 'final boss', tsunami: '◆ 200,000' };
+const MODE_NAME = { extreme: 'EXTREME', portal: 'THE PORTAL MAGE', abyss: 'THE ABYSS', tsunami: 'TSUNAMI' };
 let menuXp = 0;
 function modeOpen(mode) { return menuXp >= (MODE_XP[mode] || 0); }
 function syncModeLocks() {
-  for (const [mode, id] of [['extreme', 'modeExtreme'], ['portal', 'modePortal'], ['abyss', 'modeAbyss']]) {
+  for (const [mode, id] of [['extreme', 'modeExtreme'], ['portal', 'modePortal'], ['abyss', 'modeAbyss'], ['tsunami', 'modeTsunami']]) {
     const b = document.getElementById(id);
     if (!b) continue;
     const open = modeOpen(mode);
     b.classList.toggle('locked', !open);
     const sm = b.querySelector('small');
-    if (sm) sm.innerHTML = open ? (mode === 'extreme' ? 'hardest waves' : mode === 'abyss' ? 'final boss' : 'boss fight')
+    if (sm) sm.innerHTML = open ? MODE_BLURB[mode]
                                 : '&#128274; ' + MODE_XP[mode].toLocaleString() + ' XP';
   }
 }
@@ -668,7 +670,7 @@ function playLocked(mode) {
   if (!modeOpen(mode)) {
     const pw = (document.getElementById('passInput')?.value || '').trim();
     if (msg) {
-      msg.textContent = (mode === 'extreme' ? 'EXTREME' : mode === 'abyss' ? 'THE ABYSS' : 'THE PORTAL MAGE') + ' UNLOCKS AT ' + MODE_XP[mode].toLocaleString()
+      msg.textContent = MODE_NAME[mode] + ' UNLOCKS AT ' + MODE_XP[mode].toLocaleString()
         + ' XP (YOU HAVE ' + Math.floor(menuXp).toLocaleString() + ')' + (pw ? '' : ' - SET A PASSWORD TO SAVE XP');
       msg.classList.remove('flash'); void msg.offsetWidth; msg.classList.add('flash');
     }
@@ -787,9 +789,11 @@ function connect() {
       } else if (mode === 'portal') {
         setLobbyMsg(PORTAL_LOBBY);
       } else if (mode === 'sawroom') {
-        setLobbyMsg(`<span style="color:#ff3a3a">THE SAW ROOM</span><br><span style="color:#888">NO MONSTERS · ONLY TRAPS · ◆ 50,000 EVERY 20s</span><br>Loading...`);
+        setLobbyMsg(`<span style="color:#ff3a3a">THE SAW ROOM</span><br><span style="color:#888">NO MONSTERS · ONLY TRAPS · ◆ 50,000 EVERY MINUTE</span><br>Loading...`);
       } else if (mode === 'abyss') {
         setLobbyMsg(ABYSS_LOBBY);
+      } else if (mode === 'tsunami') {
+        setLobbyMsg(TSUNAMI_LOBBY);
       } else if (mode === 'bot') {
         setLobbyMsg(BOT_LOBBY());
       } else {
@@ -821,7 +825,7 @@ function connect() {
       }
       // The server only sends a player's unlock list when it changes.
       applyWorld(msg.world);
-      const solo = ['waves', 'extreme', 'portal', 'abyss', 'sandbox', 'sawroom'].includes(msg.gameMode);   // nobody to talk to in the solo modes
+      const solo = ['waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom'].includes(msg.gameMode);   // nobody to talk to in the solo modes
       if (solo !== chatSolo) {
         chatSolo = solo;
         const chatBtn = document.getElementById('chatBtn');
@@ -1938,6 +1942,7 @@ function drawFireRings(fires) {
     if (f.kind === 'portal') { if ((f.k || 0) >= 0) drawPortal(f, now); continue; }
     if (f.kind === 'runecast') { if ((f.k || 0) >= 0) drawRuneCast(f, now); continue; }
     if (f.kind === 'blackhole') { drawBlackhole(f, now); continue; }
+    if (f.kind === 'tsring') { drawTsRing(f); continue; }
     if (f.kind === 'drain') { drawDrain(f, now); continue; }
     if (f.kind === 'barrier') { drawBarrier(f, now); continue; }
     if (f.kind === 'mine') { drawPlayerMine(f, now); continue; }
@@ -4011,13 +4016,27 @@ const SCREENS = ['settingsScreen', 'startScreen','lobbyScreen','unlockScreen','r
 // The main menu is shrunk to whatever the screen allows (never below 45%), so the
 // name and password fields and the mode buttons are all in view on small phones
 // and short windows. Re-measured on resize / rotation / when it is shown.
+// The panel along the bottom of the menu. The game always opens on WAVES.
+function pickMenuTab(tab) {
+  for (const b of document.querySelectorAll('#menuTabs button')) {
+    const on = b.dataset.tab === tab;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  }
+  for (const s of document.querySelectorAll('.menu-tab')) s.classList.toggle('hidden', s.dataset.tab !== tab);
+  const msg = document.getElementById('lockMsg');
+  if (msg) msg.textContent = '';
+  fitMenu();
+}
+
 function fitMenu() {
   const box = document.querySelector('#startScreen > .pixel-box');
   if (!box) return;
   box.style.zoom = '';
   const scr = document.getElementById('startScreen');
   if (!scr || scr.classList.contains('hidden')) return;
-  const vw = window.innerWidth - 24, vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight) - 24;
+  const nav = document.getElementById('menuTabs');
+  const vw = window.innerWidth - 24, vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight) - 24 - (nav ? nav.offsetHeight : 0);
   const w = box.offsetWidth, h = box.offsetHeight;
   if (!w || !h) return;
   const z = Math.max(0.45, Math.min(1, vw / w, vh / h));
@@ -4031,6 +4050,7 @@ window.addEventListener('load', fitMenu);
 function showScreen(id) { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay '+(s===id?'active':'hidden'); }); if (id === 'startScreen') fitMenu(); }
 function hideAllScreens() { SCREENS.forEach(s => { const el=document.getElementById(s); if(el && el.className!=='overlay hidden') el.className='overlay hidden'; }); }
 function setLobbyMsg(html) { showScreen('lobbyScreen'); document.getElementById('lobbyMsg').innerHTML = html; }
+const TSUNAMI_LOBBY = `<span style="color:#7ad8ff">TSUNAMI</span><br><span style="color:#888">BOSS FIGHT · ◆ 200,000 · HE HITS VERY HARD</span><br>Loading...`;
 const PORTAL_LOBBY = `<span style="color:#c8a0ff">THE PORTAL MAGE</span><br>`
   + `<span style="color:#888">SOLO BOSS FIGHT · WIN 50,000 COINS + 50,000 XP</span><br>Opening the portal...`;
 
@@ -4172,6 +4192,8 @@ function updateScreens(state) {
       setLobbyMsg(PORTAL_LOBBY);
     } else if (state.gameMode === 'abyss') {
       setLobbyMsg(ABYSS_LOBBY);
+    } else if (state.gameMode === 'tsunami') {
+      setLobbyMsg(TSUNAMI_LOBBY);
     } else if (state.gameMode === 'sandbox' && pendingTutorial) {
       setLobbyMsg(`<span style="color:#7affc8">TUTORIAL</span><br><span style="color:#888">LEARN THE BASICS</span><br>Loading...`);
     } else if (state.gameMode === 'sandbox') {
@@ -4233,6 +4255,15 @@ function updateScreens(state) {
           + (ab ? (ab.p3 ? `ONLY <span style="color:#ff7ad8">${ab.p3}s</span> LEFT TO SURVIVE<br>`
                  : `HE HAD <span style="color:#c8a0ff">${Math.ceil(ab.hp).toLocaleString()}</span> HP LEFT (PHASE ${ab.phase || 1})<br>`) : '')
           + `XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`;
+    } else if (state.gameMode === 'tsunami') {
+      lb.classList.add('hidden');
+      hint.textContent = 'RETURNING TO MENU...';
+      const ts = (state.monsters || []).find(m => m.tsunami);
+      document.getElementById('roundTitle').innerHTML = state.victory
+        ? '<span style="color:#7aff9a">VICTORY!</span>' : '<span style="color:#ff5a6a">DEFEATED</span>';
+      document.getElementById('roundStats').innerHTML = state.victory
+        ? `TSUNAMI HAS FALLEN<br><span style="color:${PAL.coin}">+200,000 COINS</span><br><span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`
+        : `THE WAVE TOOK YOU<br>${ts ? `HE HAD <span style="color:#7ad8ff">${Math.ceil(ts.hp).toLocaleString()}</span> HP LEFT<br>` : ''}<span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`;
     } else if (state.gameMode === 'portal') {
       lb.classList.add('hidden');
       hint.textContent = 'RETURNING TO MENU...';
@@ -5289,6 +5320,7 @@ function drawWeaponSprite(p, px, py, key) {
 function drawMonster(m) {
   if (m.mage && m.hidden) return;   // gone into hiding behind his giants
   if (m.abyss) { drawAbyss(m); drawEnemyBars(m, Math.round(m.x), Math.round(m.y)); return; }
+  if (m.tsunami) { drawTsunami(m); drawEnemyBars(m, Math.round(m.x), Math.round(m.y)); return; }
   const type = m.type || 'grunt';
   const state = m.hitFlash > 0 ? 'flash' : monsterBodyState(m);
   const x = Math.round(m.x), y = Math.round(m.y);
@@ -6088,9 +6120,11 @@ function drawBossBar(monsters) {
   // The Portal Mage's bar, or — while he hides — his giants'.
   const ab = ms.find(m => m.abyss);
   if (ab) { drawOneBossBar(ab, 0); return; }
+  const ts = ms.find(m => m.tsunami);
+  if (ts) { drawOneBossBar(ts, 0); return; }
   const mage = ms.find(m => m.mage);
   if (mage && !mage.hidden) { drawOneBossBar(mage, 0); return; }
-  const giants = ms.filter(m => m.boss && !m.mage);
+  const giants = ms.filter(m => m.boss && !m.mage && !m.tsunami);
   giants.slice(0, 2).forEach((g, i) => drawOneBossBar(g, i));
 }
 function drawOneBossBar(b, row) {
@@ -6108,10 +6142,10 @@ function drawOneBossBar(b, row) {
   ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.strokeRect(x, y, w, h);
   for (let i = 1; i < 10; i++) { ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(x + Math.round(w * i / 10), y, 1, h); }
   ctx.font = 'bold 8px "Courier New",monospace'; ctx.textBaseline = 'bottom';
-  const label = b.abyss ? 'THE ABYSS' + (b.p3 ? ' - SURVIVE!' : b.phase === 2 ? ' - PHASE 2' : '')
+  const label = b.tsunami ? 'TSUNAMI' + (b.phase === 2 ? ' - THE TIDE RISES' : '') : b.abyss ? 'THE ABYSS' + (b.p3 ? ' - SURVIVE!' : b.phase === 2 ? ' - PHASE 2' : '')
     : b.mage ? 'THE PORTAL MAGE' + (b.phase === 2 ? ' - PHASE 2' : '') : 'THE GIANT';
   ctx.textAlign = 'left';  ctx.fillStyle = '#000'; ctx.fillText(label, x + 1, y - 1);
-  ctx.fillStyle = b.abyss ? (b.p3 ? '#ff7ad8' : '#b07aff') : b.mage ? (b.phase === 2 ? '#ff7aaa' : '#c8a0ff') : '#c8e07a'; ctx.fillText(label, x, y - 2);
+  ctx.fillStyle = b.tsunami ? '#7ad8ff' : b.abyss ? (b.p3 ? '#ff7ad8' : '#b07aff') : b.mage ? (b.phase === 2 ? '#ff7aaa' : '#c8a0ff') : '#c8e07a'; ctx.fillText(label, x, y - 2);
   ctx.textAlign = 'right'; ctx.fillStyle = b.stun > 0 ? '#ffd84a' : '#ccc';
   ctx.fillText(b.p3 ? b.p3 + 's LEFT' : b.stun > 0 ? 'STUNNED!' : Math.ceil(b.hp).toLocaleString() + ' / ' + b.maxHp.toLocaleString(), x + w, y - 2);
   ctx.restore();
@@ -6232,6 +6266,8 @@ function drawProjectiles(projs) {
     const u = upgScale(pr.upg);
 
     if (pr.weaponId === 'abyssbolt' || pr.weaponId === 'infinitybow') { drawVoidBolt(pr, ang); continue; }
+    if (pr.weaponId === 'tswave' || pr.weaponId === 'tswide') { drawTsWave(pr, ang, now, pr.weaponId === 'tswide'); continue; }
+    if (pr.weaponId === 'tsorb') { drawTsOrb(pr, now); continue; }
     if (pr.weaponId === 'samwave') { drawSlashWave(pr, ang, now, pr.special ? '#ff5a5a' : (pr.owner === 'monster' ? '#ff4a5a' : '#ff8a8a')); continue; }
     if (pr.weaponId === 'samdashwave') { drawDashWave(pr, ang, now); continue; }
     if (pr.weaponId === 'hydrabite' || pr.weaponId === 'hydrabolt') { drawVenomShot(pr, ang, now); continue; }
@@ -6871,6 +6907,14 @@ function drawHUD(state) {
     ctx.font = '8px "Courier New",monospace';
     ctx.fillStyle = ab && ab.p3 ? '#ff7ad8' : ab && ab.phase === 2 ? '#e0a0ff' : '#999'; ctx.fillText(sub, HUD_W/2, 15);
     ctx.font = '10px "Courier New",monospace';
+  } else if (state.gameMode === 'tsunami') {
+    const ts = (state.monsters || []).find(m => m.tsunami);
+    const t = 'TSUNAMI', sub = !ts ? '' : ts.phase === 2 ? 'THE TIDE IS RISING' : '◆ 200,000';
+    ctx.fillStyle = '#000'; ctx.fillText(t, HUD_W/2 + 1, 3);
+    ctx.fillStyle = '#7ad8ff'; ctx.fillText(t, HUD_W/2, 2);
+    ctx.font = '8px "Courier New",monospace';
+    ctx.fillStyle = ts && ts.phase === 2 ? '#ff7a7a' : '#999'; ctx.fillText(sub, HUD_W/2, 15);
+    ctx.font = '10px "Courier New",monospace';
   } else if (state.gameMode === 'portal') {
     const mage = (state.monsters || []).find(m => m.mage);
     const t = 'THE PORTAL MAGE';
@@ -6885,7 +6929,7 @@ function drawHUD(state) {
     ctx.fillStyle = '#000'; ctx.fillText(t, HUD_W/2 + 1, 3);
     ctx.fillStyle = '#ff9a5a'; ctx.fillText(t, HUD_W/2, 2);
   } else if (state.gameMode === 'sawroom') {
-    const sw = state.saw || { t: 0, next: 20000, earned: 0 };
+    const sw = state.saw || { t: 0, next: 60000, earned: 0 };
     const sec = Math.floor(sw.t / 1000);
     const t = 'SAW ROOM · ' + Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
     const sub = '◆ ' + sw.earned.toLocaleString() + ' EARNED · NEXT ◆ 50,000 IN ' + Math.ceil(sw.next / 1000) + 's';
@@ -7582,6 +7626,106 @@ function drawMythicAura(p, x, y) {
     ctx.globalAlpha = 0.8 * (1 - rise / 26); ctx.fillStyle = i % 2 ? '#ffffff' : col;
     ctx.fillRect(Math.round(mx + Math.cos(a) * 13), Math.round(my - rise), 1.5, 1.5);
   }
+  ctx.restore();
+}
+
+// ─── Tsunami ──────────────────────────────────────────
+// His water runs from deep blue at the bottom to white foam at the top.
+function tsGradient(g, top, bottom) {
+  const gr = g.createLinearGradient(0, top, 0, bottom);
+  gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.35, '#bfe9ff'); gr.addColorStop(0.7, '#3a9aee'); gr.addColorStop(1, '#0a3aa8');
+  return gr;
+}
+function drawTsunami(m) {
+  const now = performance.now(), x = m.x, y = m.y + Math.sin(now / 320) * 2, w = m.w, h = m.h;
+  const cxx = x + w / 2, flash = m.hitFlash > 0;
+  ctx.save();
+  // A pool of water under him, and spray while he surges.
+  ctx.globalAlpha = 0.3; ctx.fillStyle = '#2a7ad8';
+  ctx.beginPath(); ctx.ellipse(cxx, m.y + h + 2, w * 0.56, 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  if (m.act === 'grow' || m.act === 'rush' || m.act === 'shrink') {
+    ctx.fillStyle = '#d8f4ff';
+    for (let i = 0; i < 8; i++) {
+      const t = ((now / 500) + i / 8) % 1, a = i * 2.4 + now / 700;
+      ctx.globalAlpha = 0.8 * (1 - t);
+      ctx.fillRect(Math.round(cxx + Math.cos(a) * w * (0.4 + t * 0.4)), Math.round(y + h - t * h * 0.9), 2, 2);
+    }
+    ctx.globalAlpha = 1;
+  }
+  // The ghost: a round head, straight sides, a rippling hem.
+  const r = w / 2, hem = y + h, n = 5, step = w / n;
+  ctx.beginPath();
+  ctx.arc(cxx, y + r, r, Math.PI, 0);
+  ctx.lineTo(x + w, hem - 5);
+  for (let i = 0; i < n; i++) {
+    const px = x + w - step * i, sway = Math.sin(now / 170 + i * 1.3) * 3;
+    ctx.quadraticCurveTo(px - step / 2, hem + 6 + sway, px - step, hem - 5);
+  }
+  ctx.closePath();
+  ctx.fillStyle = flash ? '#ffffff' : tsGradient(ctx, y, hem + 4);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(10,50,140,0.75)'; ctx.lineWidth = 1.5; ctx.stroke();
+  // Ripples running down him.
+  ctx.save(); ctx.clip();
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.5;
+  for (let i = 0; i < 3; i++) {
+    const yy = y + h * (0.42 + i * 0.18) + Math.sin(now / 260 + i) * 2;
+    ctx.beginPath(); ctx.moveTo(x, yy);
+    for (let k = 0; k <= 6; k++) ctx.lineTo(x + w * k / 6, yy + Math.sin(now / 200 + k + i) * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+  // Eyes and mouth; red-hot once the tide has risen.
+  const eye = w * 0.11, ey = y + h * 0.34, ex = w * 0.2 * (m.face || 1), mad = m.phase === 2;
+  ctx.fillStyle = '#0a1a4a';
+  for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(cxx + ex * 0.4 + s * w * 0.18, ey, eye, eye * 1.5, 0, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = mad ? '#ff4a4a' : '#ffffff';
+  for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(cxx + ex * 0.4 + s * w * 0.18 + (m.face || 1) * eye * 0.3, ey - eye * 0.3, eye * 0.45, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = '#0a1a4a';
+  ctx.beginPath(); ctx.ellipse(cxx + ex * 0.4, y + h * 0.54, w * (m.act ? 0.13 : 0.08), h * (m.act ? 0.08 : 0.04), 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+// A curling wave, its crest white and its base blue.
+function drawTsWave(pr, ang, now, big) {
+  const s = big ? 1.9 : 1, wob = Math.sin(now / 60 + pr.x * 0.1) * 1.2;
+  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+  ctx.globalAlpha = 0.28; ctx.fillStyle = '#7ad8ff';
+  ctx.beginPath(); ctx.ellipse(-12 * s, 0, 15 * s, 8 * s, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.beginPath();
+  ctx.moveTo(-4 * s, -13 * s - wob);
+  ctx.quadraticCurveTo(12 * s, -7 * s, 10 * s, 0);
+  ctx.quadraticCurveTo(12 * s, 7 * s, -4 * s, 13 * s + wob);
+  ctx.quadraticCurveTo(3 * s, 0, -4 * s, -13 * s - wob);
+  const g = ctx.createLinearGradient(10 * s, 0, -6 * s, 0);
+  g.addColorStop(0, '#ffffff'); g.addColorStop(0.45, '#8fdcff'); g.addColorStop(1, '#0a4ac8');
+  ctx.fillStyle = g; ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.restore();
+}
+function drawTsOrb(pr, now) {
+  const r = 22 + Math.sin(now / 90) * 1.5;
+  ctx.save();
+  ctx.globalAlpha = 0.25; ctx.fillStyle = '#7ad8ff';
+  ctx.beginPath(); ctx.arc(pr.x, pr.y, r + 7, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.beginPath(); ctx.arc(pr.x, pr.y, r, 0, Math.PI * 2);
+  ctx.fillStyle = tsGradient(ctx, pr.y - r, pr.y + r); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.globalAlpha = 0.8; ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.ellipse(pr.x - r * 0.3, pr.y - r * 0.45, r * 0.26, r * 0.14, -0.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function drawTsRing(f) {
+  const fade = 1 - Math.min(1, f.k || 0);
+  ctx.save();
+  ctx.globalAlpha = 0.25 + 0.5 * fade; ctx.strokeStyle = '#0a5ad8'; ctx.lineWidth = 22;
+  ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.stroke();
+  ctx.globalAlpha = 0.4 + 0.5 * fade; ctx.strokeStyle = '#7ad8ff'; ctx.lineWidth = 11;
+  ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 3, 0, Math.PI * 2); ctx.stroke();
+  ctx.globalAlpha = 0.5 + 0.5 * fade; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 8, 0, Math.PI * 2); ctx.stroke();
   ctx.restore();
 }
 

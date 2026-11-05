@@ -46,42 +46,63 @@
       <input type="password" id="passInput" class="name-input pass-input" placeholder="PASSWORD (saves progress)" maxlength="32" autocomplete="new-password" spellcheck="false">
       <div id="savedInfo" class="saved-info"></div>
 
-      <div class="menu-sec"><span>&#9876; MULTIPLAYER</span></div>
-      <div class="mode-row">
-        <button class="mode-btn btn-pvp" onclick="joinGame('pvp')">PvP<small>1 vs 1</small></button>
-        <button class="mode-btn btn-coop" onclick="joinGame('coop')">CO-OP<small>2 vs monsters</small></button>
-      </div>
-      <div class="mode-row">
-        <button class="mode-btn btn-room" onclick="openCreateRoom()">CREATE ROOM<small>2-4 friends</small></button>
-        <button class="mode-btn btn-room" onclick="openRoomBrowser()">JOIN ROOM<small>see open rooms</small></button>
+      <div class="menu-tab hidden" data-tab="pvp">
+        <div class="menu-sec"><span>ONLINE PVP</span></div>
+        <div class="mode-row">
+          <button class="mode-btn btn-pvp" onclick="joinGame('pvp')">PvP<small>1 vs 1</small></button>
+          <button class="mode-btn btn-coop" onclick="joinGame('coop')">CO-OP<small>2 vs monsters</small></button>
+        </div>
+        <div class="mode-row">
+          <button class="mode-btn btn-room" onclick="openCreateRoom()">CREATE ROOM<small>2-4 friends</small></button>
+          <button class="mode-btn btn-room" onclick="openRoomBrowser()">JOIN ROOM<small>see open rooms</small></button>
+        </div>
       </div>
 
-      <div class="menu-sec"><span>&#9673; SOLO</span></div>
-      <div class="mode-row">
-        <button class="mode-btn btn-waves" onclick="joinGame('waves')">WAVES<small>survive</small></button>
-        <button class="mode-btn btn-bot" onclick="openBotPicker()">BOT BATTLE<small>vs a bot</small></button>
-        <button class="mode-btn btn-sandbox" onclick="joinGame('sandbox')">SANDBOX<small>practice</small></button>
-        <button class="mode-btn btn-saw" onclick="joinGame('sawroom')">SAW ROOM<small>◆50,000 / 20s</small></button>
+      <div class="menu-tab" data-tab="waves">
+        <div class="menu-sec"><span>WAVES AND EXTREME</span></div>
+        <div class="mode-row">
+          <button class="mode-btn btn-waves" onclick="joinGame('waves')">WAVES<small>survive</small></button>
+          <button class="mode-btn btn-extreme" id="modeExtreme" onclick="playLocked('extreme')">EXTREME<small>hardest waves</small></button>
+        </div>
+        <div class="mode-row">
+          <button class="mode-btn btn-bot" onclick="openBotPicker()">BOT BATTLE<small>vs a bot</small></button>
+          <button class="mode-btn btn-sandbox" onclick="joinGame('sandbox')">SANDBOX<small>practice</small></button>
+          <button class="mode-btn btn-saw" onclick="joinGame('sawroom')">SAW ROOM<small>◆50,000 / minute</small></button>
+        </div>
       </div>
-      <div class="mode-row">
-        <button class="mode-btn btn-extreme" id="modeExtreme" onclick="playLocked('extreme')">EXTREME<small>hardest waves</small></button>
-        <button class="mode-btn btn-portal" id="modePortal" onclick="playLocked('portal')">PORTAL MAGE<small>boss fight</small></button>
-        <button class="mode-btn btn-abyss" id="modeAbyss" onclick="playLocked('abyss')">THE ABYSS<small>final boss</small></button>
+
+      <div class="menu-tab hidden" data-tab="bosses">
+        <div class="menu-sec"><span>BOSSES</span></div>
+        <div class="mode-row">
+          <button class="mode-btn btn-portal" id="modePortal" onclick="playLocked('portal')">PORTAL MAGE<small>boss fight</small></button>
+          <button class="mode-btn btn-abyss" id="modeAbyss" onclick="playLocked('abyss')">THE ABYSS<small>final boss</small></button>
+        </div>
+        <div class="mode-row">
+          <button class="mode-btn btn-tsunami" id="modeTsunami" onclick="playLocked('tsunami')">TSUNAMI<small>◆ 200,000</small></button>
+        </div>
+      </div>
+
+      <div class="menu-tab hidden" data-tab="custom">
+        <div class="menu-sec"><span>CUSTOMISE AND WEAPONS</span></div>
+        <div class="mode-row">
+          <button class="mode-btn btn-cust" onclick="openShop()">UPGRADES<small>weapons</small></button>
+          <button class="mode-btn btn-cust" onclick="openAbilities()">ABILITIES<small>powers</small></button>
+          <button class="mode-btn btn-cust" onclick="openSkinsScreen()">SKINS<small>look</small></button>
+        </div>
+        <div class="mode-row">
+          <button class="mode-btn btn-forge" onclick="openForge()">THE FORGE<small>coins for upgrades</small></button>
+          <button class="mode-btn btn-trade" onclick="openTrade()">TRADE<small>swap with a friend</small></button>
+        </div>
       </div>
       <div id="lockMsg" class="lock-msg"></div>
-
-      <div class="menu-sec"><span>&#10022; CUSTOMIZE</span></div>
-      <div class="mode-row">
-        <button class="mode-btn btn-cust" onclick="openShop()">UPGRADES<small>weapons</small></button>
-        <button class="mode-btn btn-cust" onclick="openAbilities()">ABILITIES<small>powers</small></button>
-        <button class="mode-btn btn-cust" onclick="openSkinsScreen()">SKINS<small>look</small></button>
-      </div>
-      <div class="mode-row">
-        <button class="mode-btn btn-forge" onclick="openForge()">THE FORGE<small>coins for upgrades</small></button>
-        <button class="mode-btn btn-trade" onclick="openTrade()">TRADE<small>swap with a friend</small></button>
-      </div>
       <button id="installBtn" class="skin-btn" style="display:none" onclick="installApp()">&#11015; INSTALL APP</button>
     </div>
+    <nav id="menuTabs" class="menu-tabs" role="tablist" aria-label="Game menu">
+      <button role="tab" data-tab="pvp" aria-selected="false" aria-label="Online PvP" title="Online PvP" onclick="pickMenuTab('pvp')">⚔️</button>
+      <button role="tab" data-tab="waves" class="on" aria-selected="true" aria-label="Waves and Extreme" title="Waves and Extreme" onclick="pickMenuTab('waves')">🌊</button>
+      <button role="tab" data-tab="bosses" aria-selected="false" aria-label="Bosses" title="Bosses" onclick="pickMenuTab('bosses')">👹</button>
+      <button role="tab" data-tab="custom" aria-selected="false" aria-label="Customise and weapons" title="Customise and weapons" onclick="pickMenuTab('custom')">🛠️</button>
+    </nav>
   </div>
 
   <!-- Settings (the gear on the menu) -->
@@ -237,6 +258,8 @@
           <p><b>Waves</b> &ndash; solo and endless; every wave is harder, a Giant comes every 20th wave, and your best wave goes on the leaderboard.</p>
           <p><b>Extreme</b> &ndash; solo with the toughest monsters, a Giant every 5th wave and much bigger coin rewards.</p>
           <p><b>The Portal Mage</b> &ndash; the hardest boss: win 50,000 coins, 50,000 XP and the Portal Wand.</p>
+          <p><b>Tsunami</b> &ndash; a ghost of living water. He swells up and rushes you, sends swift hunting waves, and throws a huge ball of water that bursts into a wave ring. Under 25% health he attacks far more often and gains a new attack. He hits very hard, but beating him pays 200,000 coins.</p>
+          <p><b>Saw Room</b> &ndash; no monsters, only traps that keep getting worse. You earn 50,000 coins for every minute you survive.</p>
           <p><b>Sandbox</b> &ndash; solo practice with every weapon. Spawn any monster, boss, item or trap and switch on cheats from the TOOLS button. Nothing you do there is saved.</p></div>
         <div class="howto-sec"><h3>THE FORGE</h3>
           <p>Pick a weapon you own and put coins in the fire (500 to 500,000). More coins give a better chance of an upgrade and a much better chance of a rare one; if the metal cracks the coins are gone. Each weapon holds <b>3 upgrades</b>. Melee weapons have over 30 possible upgrades and ranged weapons over 20. These are passives that work while the weapon is in your hand. The <b>5 rare upgrades</b> each give an extra ability on <b>C</b>, and a weapon can only hold one. Reset a weapon in the forge to free its slots; the coins do not come back. A weapon with a rare upgrade glows red. <b>Mythics</b> have a forge list of their own: 32 stronger upgrades and 5 rare abilities that no other weapon can get.</p></div>

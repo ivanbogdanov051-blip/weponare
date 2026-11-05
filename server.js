@@ -990,6 +990,12 @@ const MONSTER_TYPES = {
     name: 'THE ABYSS', minWave: 1, weight: 0, hp: 1, dmg: 1.6, speed: 1.35, size: 1.9,
     color: '#5a2aa8', xp: 0, coins: 0, armor: 0.2, boss: true, fixedW: 40, fixedH: 54,
   },
+  // Tsunami: a ghost of water, fought on his own (mode 'tsunami'). Health is
+  // TSUNAMI_HP — see startTsunamiFight.
+  tsunami: {
+    name: 'TSUNAMI', minWave: 1, weight: 0, hp: 1, dmg: 1.6, speed: 1.25, size: 1.9,
+    color: '#2a7ad8', xp: 0, coins: 0, armor: 0.2, boss: true, fixedW: 42, fixedH: 52,
+  },
   // ── EXTREME only (extremeOnly: never in normal waves) ──
   // A walking fortress: the most health and armour in the game.
   titan: {
@@ -1037,7 +1043,7 @@ function isBossWave(num) {
 // The Portal Mage's minions arrive as tough as a deep EXTREME wave.
 const PORTAL_LEVEL = 15;
 function modeLevel(num) {
-  if (room.gameMode === 'portal' || room.gameMode === 'abyss') return PORTAL_LEVEL;
+  if (room.gameMode === 'portal' || room.gameMode === 'abyss' || room.gameMode === 'tsunami') return PORTAL_LEVEL;
   if (room.gameMode === 'sandbox') return room.sandbox.level;
   return num + (room.gameMode === 'extreme' ? EXTREME_LEVEL_OFFSET : 0);
 }
@@ -1578,9 +1584,9 @@ const seatKeys = (r = room) => KEYS.slice(0, r.maxPlayers);
 const rooms = [];
 let room = makeRoom();   // the room being worked on right now
 
-const SOLO_MODES = ['waves', 'extreme', 'portal', 'abyss', 'sandbox', 'sawroom'];
+const SOLO_MODES = ['waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom'];
 // XP needed before a mode opens (kept in step with MODE_XP in client.js).
-const MODE_XP = { extreme: 5000, portal: 15000, abyss: 30000 };
+const MODE_XP = { extreme: 5000, portal: 15000, abyss: 30000, tsunami: 40000 };
 function isSolo() { return SOLO_MODES.includes(room.gameMode); }
 
 // Seats (room + slot) held by a password, for pushing shop changes into live games.
@@ -1875,7 +1881,7 @@ function spawnMonster(forceType) {
   const lvl = modeLevel(room.wave.num);
 
   // Call out a type the first time it appears in this run.
-  if (!def.boss && !def.minion && !room.seenTypes.has(type) && room.gameMode !== 'portal' && room.gameMode !== 'abyss') {
+  if (!def.boss && !def.minion && !room.seenTypes.has(type) && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'tsunami') {
     room.seenTypes.add(type);
     if (room.wave.num > 1 || room.gameMode === 'extreme') {
       room.particles.push({
@@ -2759,8 +2765,8 @@ function updateLantern(dt) {
 
 // ── SAW ROOM ── No monsters: traps, far stronger, of every size, some on the
 // move, each carrying an element, and a storm of shots from the walls. Pays
-// 50,000 coins for every 20 seconds you last. It gets worse the longer you stay.
-const SAW_PAY = 50000, SAW_PAY_MS = 20000, SAW_MAX_TRAPS = 22, SAW_DMG_MULT = 2.5, SAW_MOVE_CHANCE = 0.4;
+// 50,000 coins for every minute you last. It gets worse the longer you stay.
+const SAW_PAY = 50000, SAW_PAY_MS = 60000, SAW_MAX_TRAPS = 22, SAW_DMG_MULT = 2.5, SAW_MOVE_CHANCE = 0.4;
 const SAW_ELEMENTS = ['fire', 'ice', 'poison', 'shock', 'void'];
 const SAW_TRAP_TYPES = Object.keys(TRAP_TYPES).filter(t => t !== 'healspring' && t !== 'warp');
 function startSawRoom() {
@@ -3033,7 +3039,7 @@ function darklightPair(p, pKey, dmg) {
 }
 // Chained: held within reach of the spot it was hit, whatever it tries.
 function dlChainTarget(t, owner) {
-  if (t.dead || t.mage || t.abyss) return;
+  if (t.dead || t.mage || t.abyss || t.tsunami) return;
   if (t.num && t.passive === 'darklight' && !room.inSuper) { trickHit(t, 'chain'); return; }
   t.dlChain = { x: cx(t), y: cy(t), t: DL_CHAIN_MS };
 }
@@ -3375,6 +3381,7 @@ function startGame() {
   room.bossDrops = null; room.mythicNoDrop = null; room.bossLocked = null;
   if (room.gameMode === 'portal') startMageFight();
   else if (room.gameMode === 'abyss') startAbyssFight();
+  else if (room.gameMode === 'tsunami') startTsunamiFight();
   else if (room.gameMode === 'sandbox') startSandbox();
   else if (room.gameMode === 'sawroom') startSawRoom();
   else if (room.gameMode !== 'pvp') startWave(START_WAVE);
@@ -3504,6 +3511,7 @@ function handleKill(target, attackerKey) {
   }
   if (target.mage) { mageDefeated(target); return; }
   if (target.abyss) { abyssPhase3(target); return; }
+  if (target.tsunami) { tsunamiDefeated(target); return; }
   // A monster dies once. Blasts set off inside its own death (a bomber, a
   // chain reaction) could otherwise reach it again before it is marked dead.
   if (!target.num) { if (target.dying || target.dead) return; target.dying = true; }
@@ -3694,7 +3702,7 @@ function checkRoundEnd() {
   if (isSolo()) {
     if (p1 && p1.dead && p1.lives <= 0) {
       // The boss fight has no leaderboard: you win or you don't.
-      room.lastLeaderboard = room.gameMode === 'portal' || room.gameMode === 'abyss' || room.gameMode === 'sawroom' ? []
+      room.lastLeaderboard = room.gameMode === 'portal' || room.gameMode === 'abyss' || room.gameMode === 'tsunami' || room.gameMode === 'sawroom' ? []
         : addLeaderboardEntry(room.playerNames.p1, room.wave.num, room.gameMode);
       room.gameState      = 'ROUND_OVER';
       room.roundOverTimer = 6000;
@@ -3988,6 +3996,7 @@ function tickRoom(dt) {
       if (m.boss) {
         if (m.mage) updateMage(m, nearest, dist, dx, dy, spd, factor, dt);
         else if (m.abyss) updateAbyss(m, nearest, dist, dx, dy, spd, factor, dt);
+        else if (m.tsunami) updateTsunami(m, nearest, dist, dx, dy, spd, factor, dt);
         else updateGiant(m, nearest, dist, dx, dy, spd, factor, dt);
         applyPull(m, dt);
         clampToArena(m);
@@ -4063,7 +4072,7 @@ function tickRoom(dt) {
 
   // ── Wave spawner ── (the Portal Mage fight has no waves: he brings his own;
   // in the sandbox you spawn what you like)
-  if (room.gameMode !== 'pvp' && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'sandbox' && room.gameMode !== 'sawroom') {
+  if (room.gameMode !== 'pvp' && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'tsunami' && room.gameMode !== 'sandbox' && room.gameMode !== 'sawroom') {
     if (room.wave.betweenTimer > 0) {
       room.wave.betweenTimer -= dt;
       if (room.wave.betweenTimer <= 0) startWave(room.wave.num + 1);
@@ -4103,7 +4112,7 @@ function tickRoom(dt) {
 
   // ── Traps ── (in the Portal Mage fight only he lays them)
   if (!room.rareShop) room.trapSpawnTimer -= dt;   // nothing new appears while the rare shop is open
-  if (room.trapSpawnTimer <= 0 && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'sandbox' && room.gameMode !== 'sawroom') {
+  if (room.trapSpawnTimer <= 0 && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'tsunami' && room.gameMode !== 'sandbox' && room.gameMode !== 'sawroom') {
     if (room.traps.filter(t => !t.owner).length < MAX_TRAPS) spawnTrap();
     room.trapSpawnTimer = TRAP_SPAWN_MIN + Math.random() * (TRAP_SPAWN_MAX - TRAP_SPAWN_MIN);
   }
@@ -4472,6 +4481,7 @@ function doHookTeleport(proj, hitX, hitY) {
 }
 
 function detonateAoe(proj) {
+  if (proj.tsRing) tsRing(proj.x, proj.y);
   for (const t of enemyTargets(proj.owner)) {
     if (Math.hypot(cx(t) - proj.x, cy(t) - proj.y) < proj.aoeRadius) {
       applyDamage(t, proj.damage, proj.owner);
@@ -4481,7 +4491,7 @@ function detonateAoe(proj) {
   room.particles.push({
     type: 'aoe', x: proj.x, y: proj.y, maxR: proj.aoeRadius,
     radius: 2, timer: 320, max: 320,
-    color: proj.chill ? '#8fe0ff' : (WEAPON_COLORS[proj.weaponId] || '#aa44ff'),
+    color: proj.tsRing ? '#7ad8ff' : proj.chill ? '#8fe0ff' : (WEAPON_COLORS[proj.weaponId] || '#aa44ff'),
   });
 }
 
@@ -5488,6 +5498,7 @@ function updateFires(factor, dt) {
     if (f.kind === 'runecast') return true;   // the warning circle, still drawing itself
     if (f.kind === 'meteor' || f.kind === 'knife') return true;   // still falling: only the warning shows
     if (f.kind === 'portal') return updatePortal(f, dt);
+    if (f.kind === 'tsring') return updateTsRing(f);
     if (f.kind === 'mine') return updatePlayerMine(f);
     if (f.kind === 'mindbeams') return updateMindBeams(f, dt);
     if (f.kind === 'barrier') return updateBarrier(f);
@@ -6439,6 +6450,11 @@ function sandboxAction(key, msg) {
         startAbyssFight();
         break;
       }
+      if (type === 'tsunami') {
+        if (room.monsters.some(o => o.tsunami)) break;
+        startTsunamiFight();
+        break;
+      }
       spawnMonster(type);
     }
   } else if (act === 'item') {
@@ -6559,6 +6575,11 @@ function adminSkipWave() {
     if (m) abyssDefeated(m);
     return;
   }
+  if (room.gameMode === 'tsunami') {
+    const m = room.monsters.find(o => o.tsunami);
+    if (m) tsunamiDefeated(m);
+    return;
+  }
   for (const m of room.monsters) {
     room.particles.push({ type: 'aoe', x: cx(m), y: cy(m), maxR: Math.max(16, m.w), radius: 2, timer: 360, max: 360, color: '#ffd870' });
   }
@@ -6576,6 +6597,167 @@ function adminSkipWave() {
   startWave(num + 1);
   room.particles.push({ type: 'waveclear', x: CANVAS_W / 2, y: CANVAS_H / 2 - 10,
                         text: 'WAVE ' + num + ' SKIPPED', timer: 1800 });
+}
+
+// ─── TSUNAMI ──────────────────────────────────────────────────────────────────
+// A ghost of living water, fought on his own (mode 'tsunami'). He keeps his
+// distance between attacks:
+//   surge    swells up huge, rushes you (dragging you down as he nears), shrinks
+//   riptide  drifts back, then ten swift waves hunt you and break up quickly
+//   orb      a huge ball of water to where you stood; it bursts into a wave ring
+//   split    (under 25% health) three big waves fan apart, then close on you
+// Under 25% health he also attacks far more often.
+const TSUNAMI_HP = 52000, TS_PHASE2 = 0.25, TS_REWARD_COINS = 200000;
+const TS_GAP = 2600, TS_GAP2 = 750, TS_KEEP = 190;
+const TS_GROW_MS = 700, TS_SHRINK_MS = 500, TS_RUSH_MS = 1700, TS_RUSH_SPEED = 6.2, TS_RUSH_TURN = 2.6, TS_SCALE = 2.4;
+const TS_RUSH_DMG = 60, TS_RUSH_SLOW = 2200, TS_RUSH_DRAG = 80, TS_RUSH_PUSH = 40;
+const TS_BACK_MS = 1000, TS_BACK_SPEED = 1.1, TS_WAVES = 10, TS_WAVE_GAP = 70;
+const TS_WAVE_SPEED = 7.5, TS_WAVE_DMG = 24, TS_WAVE_RANGE = 430, TS_WAVE_PUSH = 34;
+const TS_ORB_CAST = 550, TS_ORB_SPEED = 4.6, TS_ORB_DMG = 50, TS_ORB_AOE = 70, TS_ORB_R = 22;
+const TS_RING_DMG = 34, TS_RING_MAX = 260, TS_RING_MS = 1000, TS_RING_BAND = 12, TS_RING_PUSH = 40;
+const TS_SPLIT_CAST = 450, TS_SPLIT_SPEED = 5.2, TS_SPLIT_DMG = 36, TS_SPLIT_RANGE = 800, TS_SPLIT_FAN = 1.0, TS_SPLIT_PUSH = 44;
+
+function startTsunamiFight() {
+  room.wave = { num: 1, monstersLeft: 1, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 };
+  room.waveHpMult = 1; room.waveSpeedMult = 1;
+  spawnMonster('tsunami');
+  const m = room.monsters[room.monsters.length - 1];
+  m.hp = m.maxHp = TSUNAMI_HP;
+  m.x = ARENA_X + ARENA_W * 0.72 - m.w / 2; m.y = ARENA_Y + ARENA_H * 0.45 - m.h / 2;
+  Object.assign(m, { tsunami: true, phase: 1, act: null, actT: 0, actCd: 1800, lastAct: null, orbit: 1, baseW: m.w, baseH: m.h, tsScale: 1, hitSet: null });
+  room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26, text: 'TSUNAMI RISES', color: '#7ad8ff', timer: 3200, max: 3200 });
+}
+function tsResize(m, k) {
+  const x = cx(m), y = cy(m);
+  m.tsScale = k;
+  m.w = Math.round(m.baseW * k); m.h = Math.round(m.baseH * k);
+  m.x = x - m.w / 2; m.y = y - m.h / 2;
+}
+function tsShot(m, a, speed, extra) {
+  room.projectiles.push({ id: nextId(), x: cx(m), y: cy(m), dx: Math.cos(a) * speed, dy: Math.sin(a) * speed, owner: 'monster', traveled: 0,
+    isAoe: false, aoeRadius: 0, pierce: false, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: null, ...extra });
+}
+// A ring of water running out from where the orb burst.
+function tsRing(x, y) {
+  room.fires.push({ id: nextId(), kind: 'tsring', owner: 'monster', x, y, r: 16, t: 0, life: TS_RING_MS, hit: new Set() });
+  room.particles.push({ type: 'shockwave', x, y, maxR: 60, timer: 400, max: 400, color: '#bfefff' });
+}
+function updateTsRing(f) {
+  f.r = 16 + (TS_RING_MAX - 16) * (f.t / f.life);
+  for (const t of enemyTargets('monster')) {
+    const d = Math.hypot(cx(t) - f.x, cy(t) - f.y);
+    if (f.hit.has(t) || Math.abs(d - f.r) > TS_RING_BAND + t.w / 2) continue;
+    f.hit.add(t);
+    const before = t.hp;
+    strikeTarget(t, TS_RING_DMG, 'monster');
+    if (t.hp < before && !t.dead) tsPush(t, f.x, f.y, TS_RING_PUSH);
+  }
+  return true;
+}
+function tsPush(t, x, y, dist) {
+  const dx = cx(t) - x, dy = cy(t) - y, d = Math.hypot(dx, dy) || 1;
+  t.pull = { vx: dx / d * dist / 240, vy: dy / d * dist / 240, timer: 240, from: null };
+}
+function updateTsunami(m, target, dist, dx, dy, spd, factor, dt) {
+  if (m.phase === 1 && m.hp <= m.maxHp * TS_PHASE2) {
+    m.phase = 2;
+    m.actCd = Math.min(m.actCd, 300);
+    room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26, text: 'THE TIDE RISES!', color: '#7ad8ff', timer: 2600, max: 2600 });
+    room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 150, timer: 700, max: 700, color: '#7ad8ff' });
+  }
+  const gap = m.phase === 2 ? TS_GAP2 : TS_GAP;
+  const aim = Math.atan2(dy, dx);
+  if (m.act) m.actT -= dt;
+
+  if (m.act === 'grow') {                     // 1: swelling up
+    tsResize(m, 1 + (TS_SCALE - 1) * (1 - Math.max(0, m.actT) / TS_GROW_MS));
+    if (m.actT <= 0) { m.act = 'rush'; m.actT = TS_RUSH_MS; m.rushA = aim; m.hitSet = new Set(); }
+  } else if (m.act === 'rush') {
+    m.rushA = turnToward(m.rushA, aim, TS_RUSH_TURN * dt / 1000);
+    const step = TS_RUSH_SPEED * factor;
+    m.x += Math.cos(m.rushA) * step; m.y += Math.sin(m.rushA) * step;
+    clampToArena(m);
+    for (const t of enemyTargets('monster')) {
+      const d = Math.hypot(cx(t) - cx(m), cy(t) - cy(m));
+      if (d < m.w / 2 + TS_RUSH_DRAG) chillTarget(t, 500);      // the water drags you down as he nears
+      if (m.hitSet.has(t) || d > (m.w + t.w) / 2) continue;
+      m.hitSet.add(t);
+      const tk = playerKeyOf(t);
+      if (tk && t.parryTimer > 0) {                             // parried: he takes it and the surge breaks
+        applyDamage(m, Math.round(TS_RUSH_DMG * reflectOf(t) * 3), tk);
+        spawnParrySpark(cx(t), cy(t));
+        m.actT = 0;
+        continue;
+      }
+      applyDamage(t, TS_RUSH_DMG, 'monster');
+      if (!t.dead) { chillTarget(t, TS_RUSH_SLOW); tsPush(t, cx(m), cy(m), TS_RUSH_PUSH); }
+    }
+    if (m.actT <= 0) { m.act = 'shrink'; m.actT = TS_SHRINK_MS; m.hitSet = null; }
+  } else if (m.act === 'shrink') {            // and back to normal
+    tsResize(m, 1 + (TS_SCALE - 1) * (Math.max(0, m.actT) / TS_SHRINK_MS));
+    if (m.actT <= 0) { tsResize(m, 1); m.act = null; m.actCd = gap; }
+  } else if (m.act === 'back') {              // 2: drifting back...
+    m.x -= Math.cos(aim) * TS_BACK_SPEED * factor; m.y -= Math.sin(aim) * TS_BACK_SPEED * factor;
+    if (m.actT <= 0) { m.act = 'waves'; m.waveN = 0; m.actT = 0; }
+  } else if (m.act === 'waves') {             // ...then ten waves, one after another
+    if (m.actT <= 0) {
+      const i = m.waveN++, a = aim + (i - (TS_WAVES - 1) / 2) * 0.3;
+      tsShot(m, a, TS_WAVE_SPEED, { damage: TS_WAVE_DMG, maxRange: TS_WAVE_RANGE, weaponId: 'tswave', hitR: 8, homing: true, turn: 6, seekR: 2000, quarry: target, gust: TS_WAVE_PUSH });
+      m.actT = TS_WAVE_GAP;
+      if (m.waveN >= TS_WAVES) { m.act = null; m.actCd = gap; }
+    }
+  } else if (m.act === 'orb') {               // 3: at where you stood when it was thrown
+    if (m.actT <= 0) {
+      const d = Math.max(40, Math.hypot(cx(target) - cx(m), cy(target) - cy(m)));
+      tsShot(m, aim, TS_ORB_SPEED, { damage: TS_ORB_DMG, maxRange: d, weaponId: 'tsorb', isAoe: true, aoeRadius: TS_ORB_AOE, hitR: TS_ORB_R, tsRing: true });
+      m.act = null; m.actCd = gap;
+    }
+  } else if (m.act === 'split') {             // 4: three big waves, wide apart, closing in
+    if (m.actT <= 0) {
+      for (const i of [-1, 0, 1]) {
+        tsShot(m, aim + i * TS_SPLIT_FAN, TS_SPLIT_SPEED, { damage: TS_SPLIT_DMG, maxRange: TS_SPLIT_RANGE, weaponId: 'tswide', hitR: 13, homing: true, turn: i ? 1.5 : 2, seekR: 2000, quarry: target, gust: TS_SPLIT_PUSH });
+      }
+      room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 46, timer: 340, max: 340, color: '#7ad8ff' });
+      m.act = null; m.actCd = gap;
+    }
+  } else {
+    // Between attacks he drifts, keeping his distance.
+    m.actCd -= dt;
+    const want = dist > TS_KEEP + 30 ? 1 : dist < TS_KEEP - 30 ? -1 : 0;
+    m.x += (Math.cos(aim) * want - Math.sin(aim) * 0.45 * m.orbit) * spd * factor;
+    m.y += (Math.sin(aim) * want + Math.cos(aim) * 0.45 * m.orbit) * spd * factor;
+    if (Math.random() < 0.004) m.orbit = -m.orbit;
+    if (m.actCd <= 0) {
+      const list = ['surge', 'riptide', 'orb'].concat(m.phase === 2 ? ['split'] : []).filter(a => a !== m.lastAct);
+      const pick = list[Math.floor(Math.random() * list.length)];
+      m.lastAct = pick;
+      if (pick === 'surge') { m.act = 'grow'; m.actT = TS_GROW_MS; }
+      else if (pick === 'riptide') { m.act = 'back'; m.actT = TS_BACK_MS; }
+      else if (pick === 'orb') { m.act = 'orb'; m.actT = TS_ORB_CAST; }
+      else { m.act = 'split'; m.actT = TS_SPLIT_CAST; }
+    }
+  }
+}
+// Victory: his water drains away and the reward is paid.
+function tsunamiDefeated(m) {
+  if (m.dead) return;
+  m.dead = true;
+  room.monsters = room.monsters.filter(o => o !== m);
+  room.wave.monstersLeft = 0;
+  room.projectiles = room.projectiles.filter(pr => pr.owner !== 'monster');
+  room.fires = room.fires.filter(f => f.kind !== 'tsring');
+  room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 240, timer: 900, max: 900, color: '#7ad8ff' });
+  room.particles.push({ type: 'waveclear', x: CANVAS_W / 2, y: CANVAS_H / 2 - 10, text: 'TSUNAMI HAS FALLEN!', timer: 4000 });
+  if (room.gameMode === 'sandbox') return;
+  for (const key of KEYS) {
+    const p = room.players[key];
+    if (!p) continue;
+    addCoins(key, TS_REWARD_COINS);
+    room.particles.push({ type: 'coin', x: cx(p), y: p.y - 10, text: '+' + TS_REWARD_COINS.toLocaleString() + ' COINS', timer: 3000, max: 3000 });
+  }
+  room.victory = true;
+  room.gameState = 'ROUND_OVER';
+  room.roundOverTimer = 8000;
 }
 
 // ─── Forge effects in a fight ─────────────────────────────────────────────────
@@ -6999,7 +7181,7 @@ function updateMindBeams(f, dt) {
 function startMindControl(p, pKey) {
   let best = null;
   for (const t of enemyTargets(pKey)) {
-    if (t.controlledBy || t.mindControlledBy || t.ally || t.abyss) continue;
+    if (t.controlledBy || t.mindControlledBy || t.ally || t.abyss || t.tsunami) continue;
     if (!best || t.hp > best.hp) best = t;
   }
   if (!best) return false;
@@ -8355,7 +8537,7 @@ function cdView(m) {
     const v = m[f];
     if (typeof v !== 'number' || (f === 'atkCooldown' && (m.boss || MONSTER_TYPES[m.type]?.noMelee))) continue;
     // Every monster carries the Giant's timers; only the boss that uses each one shows it.
-    if (BOSS_CD.has(f) && !(m.abyss ? f === 'actCd' : m.mage ? f === 'castCd' : m.boss && (f === 'swipeCd' || f === 'slamCd'))) continue;
+    if (BOSS_CD.has(f) && !(m.abyss || m.tsunami ? f === 'actCd' : m.mage ? f === 'castCd' : m.boss && (f === 'swipeCd' || f === 'slamCd'))) continue;
     if (v > (m._cdMax[f] || 0)) m._cdMax[f] = v;
     const mx = m._cdMax[f] || 1;
     out.push(Math.round((1 - Math.max(0, v) / mx) * 10) / 10);
@@ -8476,6 +8658,7 @@ function buildStateMsg(playerNum) {
                   ...(m.raiseT > 0 && m.raiseAt ? { raise: m.raiseAt.map(r => ({ x: r1(r.x), y: r1(r.y) })) } : {}),
                   ...(m.boss ? { boss: true, wind: m.windup > 0 ? m.wind : null, windup: Math.max(0, Math.round(m.windup)), stun: Math.max(0, Math.round(m.stun)) } : {}),
                   ...(m.mage ? { mage: true, hidden: !!m.hidden, phase: m.phase, cast: m.tpT > 0 ? 'teleport' : m.castT > 0 ? m.cast : null } : {}),
+                  ...(m.tsunami ? { tsunami: true, phase: m.phase, act: m.act || null } : {}),
                   ...(m.abyss ? { abyss: true, phase: m.phase, act: m.rapid > 0 ? 'rapid' : m.act, actT: Math.round(m.actT || 0),
                                   ...(m.act === 'slash' ? { sa: Math.round(m.slashA * 100) / 100 } : {}),
                                   ...(m.p3 ? { p3: Math.max(0, Math.ceil(m.p3T / 1000)) } : {}) } : {}) })),
@@ -9571,7 +9754,7 @@ wss.on('connection', (ws) => {
         return;
       }
       if (msg.type === 'join' && !ws.room) {
-        const mode = ['pvp', 'coop', 'waves', 'extreme', 'portal', 'abyss', 'sandbox', 'sawroom', 'bot', 'create', 'joinroom'].includes(msg.mode) ? msg.mode : 'pvp';
+        const mode = ['pvp', 'coop', 'waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom', 'bot', 'create', 'joinroom'].includes(msg.mode) ? msg.mode : 'pvp';
         const size = MAP_SIZES[msg.size] ? msg.size : 'medium';
         // EXTREME and the PORTAL MAGE open up with XP (admins skip the wait).
         if (MODE_XP[mode]) {

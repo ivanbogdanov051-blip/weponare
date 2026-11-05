@@ -1125,3 +1125,28 @@ body {
 }
 canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 .fg-myth { color: #ff6a5a; font-weight: bold; }
+
+/* ── The panel along the bottom of the menu ── */
+#startScreen { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+.menu-tab.hidden { display: none; }
+.menu-tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 11;
+  display: flex; justify-content: center; gap: 8px;
+  margin: 0; padding: 8px 10px; padding-bottom: max(8px, env(safe-area-inset-bottom));
+  background: #1a1030; border-top: 2px solid #6a4aa8;
+}
+.menu-tabs button {
+  flex: 1 1 0; max-width: 150px; height: 58px; padding: 0;
+  background: #c9a8ff; border: 2px solid #8a64d8; border-radius: 12px;
+  font-size: 30px; line-height: 1; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none;
+}
+.menu-tabs button:hover { background: #d8c0ff; }
+.menu-tabs button.on, .menu-tabs button.on:hover { background: #3a1a7a; border-color: #c9a8ff; }
+@media (max-height: 460px) {
+  #startScreen { padding-bottom: calc(62px + env(safe-area-inset-bottom)); }
+  .menu-tabs { padding-top: 5px; padding-bottom: max(5px, env(safe-area-inset-bottom)); }
+  .menu-tabs button { height: 44px; font-size: 24px; }
+}
+.mode-btn.btn-tsunami { border-color: #3a9aee; color: #cfefff; background: linear-gradient(180deg, #2a6ab8, #0a2a78); box-shadow: 0 0 8px rgba(122, 216, 255, 0.35); }
+.mode-btn.btn-tsunami:hover { border-color: #bfefff; color: #fff; }
