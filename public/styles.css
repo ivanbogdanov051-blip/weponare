@@ -855,21 +855,11 @@ body {
 
 /* ── Loading screen ── */
 #splash {
-  position: fixed; inset: 0; z-index: 100; background: #0a0a14;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  position: fixed; inset: 0; z-index: 100; background: #160838;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px;
   transition: opacity 0.45s ease;
 }
 #splash.gone { opacity: 0; pointer-events: none; }
-#splashScene {
-  width: min(560px, 88vw); aspect-ratio: 16 / 9; height: auto; image-rendering: pixelated;
-  border: 3px solid #2a2a4a; box-shadow: 0 0 0 1px #aa44ff, 4px 4px 0 #000;
-}
-.splash-brand { display: flex; align-items: center; gap: 10px; color: #ffcc00; font-weight: bold;
-  font-size: clamp(20px, 5vw, 30px); letter-spacing: 6px; text-shadow: 2px 2px 0 #000, 0 0 14px #ffcc00; }
-.splash-icon { width: 28px; height: 28px; image-rendering: pixelated; }
-.splash-bar { width: min(320px, 70vw); height: 10px; border: 2px solid #2a2a4a; background: #0a0a18; }
-#splashFill { height: 100%; width: 0; background: linear-gradient(90deg, #aa44ff, #ffcc00); transition: width 0.2s; }
-.splash-tip { color: #888; font-size: 11px; letter-spacing: 2px; text-align: center; padding: 0 16px; }
 
 /* ── Tutorial panel ── */
 #tutPanel {
@@ -1356,3 +1346,71 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 .arena-opt span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
 .arena-opt:hover { border-color: var(--c-accent); }
 .arena-opt.on { border-color: #ffe45a; color: #ffe45a; background: #1c1a08; }
+
+/* ── Loading: the splash and the versus card share one look ──
+   --load-a and --load-b are the colours of the mode being loaded. */
+#splash { --load-a: #7a2aff; --load-b: #ff3ad8; }
+#lobbyScreen { --load-a: #7a2aff; --load-b: #ff3ad8; background: #160838; }
+#splash::before, #lobbyScreen::before {
+  content: ''; position: fixed; inset: -45vmax; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(closest-side at 32% 34%, var(--load-a), transparent),
+    radial-gradient(closest-side at 68% 30%, var(--load-b), transparent),
+    radial-gradient(closest-side at 72% 68%, var(--load-a), transparent),
+    radial-gradient(closest-side at 30% 70%, var(--load-b), transparent),
+    radial-gradient(closest-side at 50% 50%, rgba(255, 255, 255, 0.12), transparent);
+  animation: menu-sky 40s linear infinite;
+}
+.load-wrap {
+  position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 12px;
+  width: min(620px, 100%); text-align: center;
+}
+.load-brand {
+  display: flex; align-items: center; gap: 10px; font-weight: bold;
+  font-size: clamp(22px, 6vw, 36px); letter-spacing: 7px; filter: drop-shadow(2px 2px 0 #000);
+}
+.load-brand span {
+  background: linear-gradient(90deg, #ff5a7a, #ffb02a, #ffe84a, #5aee9a, #4ac8ff, #b87aff, #ff5a7a) 0 0 / 200% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+  animation: menu-title 5s linear infinite;
+}
+.splash-icon { width: 30px; height: 30px; image-rendering: pixelated; }
+.load-scene {
+  display: block; width: min(100%, 86vh); aspect-ratio: 16 / 9; height: auto; image-rendering: pixelated;
+  border: 3px solid #fff; border-radius: 10px;
+  box-shadow: 0 0 26px var(--load-b), 0 6px 0 rgba(0, 0, 0, 0.4);
+}
+.load-msg { color: #fff; font-size: 12px; letter-spacing: 2px; line-height: 1.7; min-height: 3.4em; text-shadow: 0 1px 2px #000; }
+.load-msg > span:first-child { font-size: clamp(16px, 4.6vw, 22px); letter-spacing: 3px; font-weight: bold; text-shadow: 2px 2px 0 #000; }
+.load-msg span[style*="#888"] { color: #e8e0ff !important; font-size: 11px; }
+.load-msg span[style*="#555"] { color: #c8c0e8 !important; }
+/* The loading bar is a sword: gold guard and grip, and the blade fills up. */
+.blade-bar { position: relative; width: min(380px, 84%); height: 18px; padding-left: 40px; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
+.blade-bar::before { content: ''; position: absolute; left: 0; top: 6px; width: 30px; height: 6px; background: repeating-linear-gradient(90deg, #6a3a14 0 4px, #a8682a 4px 8px); }
+.blade-bar::after { content: ''; position: absolute; left: 28px; top: 0; width: 10px; height: 18px; border-radius: 2px; background: linear-gradient(180deg, #fff0a8, #d89a0a); }
+.blade { position: relative; height: 100%; overflow: hidden; background: rgba(10, 6, 40, 0.8); clip-path: polygon(0 12%, calc(100% - 20px) 12%, 100% 50%, calc(100% - 20px) 88%, 0 88%); }
+.blade-fill { width: 0; height: 100%; background: linear-gradient(90deg, #ff5a7a, #ffb02a, #ffe84a, #5aee9a, #4ac8ff, #b87aff); transition: width 0.2s; }
+/* While waiting on the network there's no honest percentage: light runs along it. */
+.blade-fill.sweep {
+  width: 100%; transition: none;
+  background: linear-gradient(90deg, transparent, var(--load-b) 30%, #fff 50%, var(--load-b) 70%, transparent) 0 0 / 50% 100% no-repeat;
+  animation: blade-sweep 1.3s ease-in-out infinite;
+}
+@keyframes blade-sweep { from { background-position: -80% 0; } to { background-position: 180% 0; } }
+.load-tip { color: #fff; font-size: 11px; letter-spacing: 2px; line-height: 1.5; min-height: 1.5em; text-shadow: 0 1px 2px #000; }
+#lobbyScreen .xp-text { margin-top: 0; color: #ffe84a; text-shadow: 0 1px 2px #000; }
+#lobbyScreen .xp-text:empty { display: none; }
+#lobbyScreen .invite-btn, #lobbyScreen .load-exit { flex: none; width: min(300px, 90%); background: rgba(10, 6, 40, 0.82); }
+#lobbyScreen .load-exit { margin-top: 0; }
+/* Short phones held sideways: the scene shrinks so the exit stays on screen. */
+@media (max-height: 460px) {
+  .load-wrap { gap: 5px; }
+  #lobbyScreen .load-brand { display: none; }
+  #lobbyScreen .load-scene { width: min(100%, 76vh); }
+  .load-msg { min-height: 0; line-height: 1.35; }
+  .load-tip { display: none; }
+  #lobbyScreen .load-exit { padding: 5px 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #splash::before, #lobbyScreen::before, .load-brand span, .blade-fill.sweep { animation: none !important; }
+}

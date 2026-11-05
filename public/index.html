@@ -17,10 +17,12 @@
 <body>
   <!-- Loading screen: a little battle scene drawn with the game's own sprites -->
   <div id="splash">
-    <canvas id="splashScene" width="240" height="135"></canvas>
-    <div class="splash-brand"><img src="icon-192.png" alt="" class="splash-icon"><span>WEPONARE</span></div>
-    <div class="splash-bar"><div id="splashFill"></div></div>
-    <div class="splash-tip" id="splashTip">LOADING...</div>
+    <div class="load-wrap">
+      <div class="load-brand"><img src="icon-192.png" alt="" class="splash-icon"><span>WEPONARE</span></div>
+      <canvas id="splashScene" class="load-scene" width="480" height="270"></canvas>
+      <div class="blade-bar"><div class="blade"><div id="splashFill" class="blade-fill"></div></div></div>
+      <div class="load-tip" id="splashTip">LOADING...</div>
+    </div>
   </div>
 
   <!-- First visit: offer the tutorial -->
@@ -344,14 +346,16 @@
 
   <!-- Lobby / waiting -->
   <div id="lobbyScreen" class="overlay hidden">
-    <div class="pixel-box">
-      <div class="title-text">WEPONARE</div>
-      <div class="subtitle">ONLINE BATTLE</div>
-      <div id="lobbyMsg" class="body-text">Connecting...</div>
+    <div class="load-wrap">
+      <div class="load-brand"><span>WEPONARE</span></div>
+      <canvas id="loadScene" class="load-scene" width="480" height="270"></canvas>
+      <div id="lobbyMsg" class="load-msg">Connecting...</div>
+      <div class="blade-bar"><div class="blade"><div class="blade-fill sweep"></div></div></div>
+      <div class="load-tip" id="loadTip"></div>
       <div id="xpDisplay" class="xp-text"></div>
       <button id="inviteBtn" class="mode-btn btn-room invite-btn" style="display:none" onclick="shareInvite()">&#9993; INVITE FRIENDS</button>
       <div id="inviteMsg" class="hint-text" style="display:none;animation:none"></div>
-      <button class="mode-btn exit-btn" onclick="exitToMenu()">&#10005; EXIT TO MENU</button>
+      <button class="mode-btn exit-btn load-exit" onclick="exitToMenu()">&#10005; EXIT TO MENU</button>
     </div>
   </div>
 

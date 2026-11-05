@@ -3,7 +3,7 @@
 const canvas = document.getElementById('gameCanvas');
 // Opaque (the floor fills every pixel) and low-latency: the browser can put frames on
 // screen without waiting for the page compositor, which shaves input lag on desktop.
-const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }) || canvas.getContext('2d');
+let ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }) || canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 // World size. The whole arena is always on screen — the canvas backing store is
@@ -298,8 +298,16 @@ function joinGame(mode) {
   readCredentials();
   pendingMode = mode;
   document.getElementById('startScreen').className = 'overlay hidden';
+  loadCard.mode = pendingTutorial && mode === 'sandbox' ? 'tutorial' : mode;
+  loadCard.foeName = null; loadCard.t0 = performance.now();
   setLobbyMsg('Connecting...');
   connect();
+  // A free server sleeps when nobody is playing, and takes a while to wake.
+  setTimeout(() => {
+    const msg = document.getElementById('lobbyMsg');
+    if (msg && msg.textContent === 'Connecting...' && document.getElementById('lobbyScreen').classList.contains('active'))
+      msg.textContent = 'Waking the server up. This can take up to a minute...';
+  }, 6000);
 }
 
 function toggleSound() {
@@ -520,28 +528,29 @@ function tutorialLeft() { if (pendingTutorial) { markTutorialDone(); pendingTuto
 // A short animated scene drawn with the game's own sprites: a hero cutting
 // through a line of monsters while coins fly. Shown for a moment on every
 // launch; on the very first visit it leads straight into the tutorial.
+const LOAD_TIPS = ['TIP: PARRY JUST BEFORE A HIT TO STUN THE ATTACKER', 'TIP: SET A PASSWORD TO SAVE YOUR PROGRESS',
+  'TIP: COINS FLY TO YOU ON THEIR OWN', 'TIP: EVERY WEAPON HAS A SPECIAL MOVE', 'TIP: CREATE A ROOM AND INVITE YOUR FRIENDS',
+  'TIP: THE FORGE CAN GIVE A WEAPON A NEW ABILITY', 'TIP: TRADE WEAPONS AND COINS WITH A FRIEND', 'TIP: CHANGE THE ARENA LOOK IN SETTINGS',
+  'TIP: THE SAW ROOM PAYS 50,000 EVERY MINUTE YOU LAST', 'TIP: A MISSED LEAP SLAM STUNS YOU, NOT THEM'];
 (function splash() {
   const el = document.getElementById('splash');
   if (!el) return;
   const cv = document.getElementById('splashScene'), g = cv.getContext('2d');
   g.imageSmoothingEnabled = false;
   const fill = document.getElementById('splashFill'), tipEl = document.getElementById('splashTip');
-  const TIPS = ['TIP: PARRY JUST BEFORE A HIT TO STUN THE ATTACKER', 'TIP: SET A PASSWORD TO SAVE YOUR PROGRESS',
-                'TIP: COINS FLY TO YOU ON THEIR OWN', 'TIP: EVERY WEAPON HAS A SPECIAL MOVE', 'TIP: CREATE A ROOM AND INVITE YOUR FRIENDS'];
-  tipEl.textContent = TIPS[Math.floor(Math.random() * TIPS.length)];
+  tipEl.textContent = LOAD_TIPS[Math.floor(Math.random() * LOAD_TIPS.length)];
   const t0 = performance.now(), MIN_MS = 1700;
   let loaded = document.readyState === 'complete';
   window.addEventListener('load', () => { loaded = true; });
   const mons = [{ t: 'grunt', x: 150, w: 23, h: 27 }, { t: 'brute', x: 185, w: 30, h: 34 }, { t: 'runner', x: 222, w: 20, h: 22 }];
   const coins = [];
   let hero = null;
-  try { hero = playerSprite('#4488ff', 1, 1, false, '', 7); } catch {}
+  try { hero = playerSprite(SKIN_COLORS[pendingSkin.colorIdx] || '#4488ff', pendingSkin.hatIdx || 0, 1, false, pendingSkin.outfit || '', pendingSkin.accIdx || 0); } catch {}
   function frame(now) {
     const t = (now - t0) / 1000;
-    g.fillStyle = '#1a1a2e'; g.fillRect(0, 0, 240, 135);
-    g.fillStyle = 'rgba(255,255,255,0.03)';
-    for (let y = 0; y < 135; y += 12) for (let x = (y / 12) % 2 ? 12 : 0; x < 240; x += 24) g.fillRect(x, y, 12, 12);
-    g.fillStyle = '#2a2a4a'; g.fillRect(0, 0, 240, 6); g.fillRect(0, 129, 240, 6);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.drawImage(loadFloor(), 0, 0);
+    g.setTransform(2, 0, 0, 2, 0, 0);     // the scene is laid out at 240×135
     // hero runs right on a loop, monsters scroll toward him
     const loop = t % 4, hx = 30 + Math.sin(t * 1.3) * 6, hy = 84 + Math.abs(Math.sin(t * 9)) * -3;
     for (const m of mons) {
@@ -753,16 +762,22 @@ function connect() {
       if (Array.isArray(msg.abilityDefs)) ABILITY_DEFS = msg.abilityDefs;
       if (msg.sandboxDefs) SANDBOX_DEFS = msg.sandboxDefs;
       if (Array.isArray(msg.chatLines)) { CHAT_LINES = msg.chatLines; buildChatPanel(); }
-      ws.send(JSON.stringify({
-        type: 'join', name: pendingName, mode: pendingMode, password: pendingPass, level: pendingBotLevel,
-        size: pendingMapSize, ...pendingRoom, tutorial: pendingTutorial,
-        skin: pendingSkin, skinModified,
-        localXp: loadLocalXp(pendingPass), localCoins: loadLocalCoins(pendingPass), backup: loadBackup(pendingPass),
-      }));
-      skinModified = false;
-      showGameControls(true);
-      setLobbyMsg('Finding a game...');
+      const sock = ws;
+      setLobbyMsg(soloLobbyMsg(loadCard.mode) || 'Finding a game...');
       document.getElementById('xpDisplay').textContent = '';
+      // The server starts the fight on this message, so waiting here (not hiding the
+      // game with a cover) is what makes sure nothing can hit you while the card is up.
+      setTimeout(() => {
+        if (sock !== ws || sock.readyState !== 1) return;    // left while it was showing
+        sock.send(JSON.stringify({
+          type: 'join', name: pendingName, mode: pendingMode, password: pendingPass, level: pendingBotLevel,
+          size: pendingMapSize, ...pendingRoom, tutorial: pendingTutorial,
+          skin: pendingSkin, skinModified,
+          localXp: loadLocalXp(pendingPass), localCoins: loadLocalCoins(pendingPass), backup: loadBackup(pendingPass),
+        }));
+        skinModified = false;
+        showGameControls(true);
+      }, Math.max(0, LOAD_MIN_MS - (performance.now() - loadCard.t0)));
     }
     // The server seats us once we've picked a mode: solo modes get a room of
     // their own; PvP / co-op pair us with someone who picked the same mode.
@@ -782,21 +797,11 @@ function connect() {
       myNum = msg.num;
       invite = null;
       const mode = msg.mode || pendingMode;
+      if (loadCard.mode !== 'tutorial') loadCard.mode = mode;
       const modeLabel = mode === 'coop' ? 'CO-OP' : (msg.maxPlayers || 2) > 2 ? 'LAST ONE STANDING' : 'PvP';
-      if (mode === 'waves') {
-        setLobbyMsg(`<span class="p1-color">WAVES MODE</span><br><span style="color:#888">SOLO ENDLESS</span><br>Loading...`);
-      } else if (mode === 'extreme') {
-        setLobbyMsg(`<span style="color:#ff5a3a">EXTREME MODE</span><br><span style="color:#888">SOLO · STRONGEST MONSTERS · HUGE REWARDS</span><br>Loading...`);
-      } else if (mode === 'portal') {
-        setLobbyMsg(PORTAL_LOBBY);
-      } else if (mode === 'sawroom') {
-        setLobbyMsg(`<span style="color:#ff3a3a">THE SAW ROOM</span><br><span style="color:#888">NO MONSTERS · ONLY TRAPS · ◆ 50,000 EVERY MINUTE</span><br>Loading...`);
-      } else if (mode === 'abyss') {
-        setLobbyMsg(ABYSS_LOBBY);
-      } else if (mode === 'tsunami') {
-        setLobbyMsg(TSUNAMI_LOBBY);
-      } else if (mode === 'bot') {
-        setLobbyMsg(BOT_LOBBY());
+      const soloMsg = soloLobbyMsg(loadCard.mode);
+      if (soloMsg) {
+        setLobbyMsg(soloMsg);
       } else {
         setLobbyMsg(myNum === 1
           ? `<span class="p1-color">YOU ARE PLAYER 1</span><br><span style="color:#888">${modeLabel} MODE</span><br>Waiting for opponent...`
@@ -4063,7 +4068,155 @@ window.addEventListener('load', fitMenu);
 
 function showScreen(id) { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay '+(s===id?'active':'hidden'); }); if (id === 'startScreen') { fitMenu(); startMenuBg(); } }
 function hideAllScreens() { SCREENS.forEach(s => { const el=document.getElementById(s); if(el && el.className!=='overlay hidden') el.className='overlay hidden'; }); }
-function setLobbyMsg(html) { showScreen('lobbyScreen'); document.getElementById('lobbyMsg').innerHTML = html; }
+function setLobbyMsg(html) { showScreen('lobbyScreen'); document.getElementById('lobbyMsg').innerHTML = html; startLoadCard(); }
+
+// ── The versus card, shown while a fight loads ──
+// You on the left, what you're about to fight on the right, on your own arena floor.
+// Boss art comes from the game's real painters, so it can never drift out of date.
+const LOAD_MIN_MS = 1600;
+const LOAD_MODES = {
+  waves:    { a: '#0a58d8', b: '#12c8e0', name: 'THE HORDE',    foes: [['grunt', 23, 27], ['brute', 30, 34], ['runner', 20, 22]] },
+  extreme:  { a: '#d81a0a', b: '#ff8a1a', name: 'THE WORST',    foes: [['wraith', 26, 32], ['behemoth', 40, 46], ['infernal', 28, 34]] },
+  portal:   { a: '#7a2aff', b: '#ff3ad8', name: 'PORTAL MAGE',  boss: 'mage' },
+  abyss:    { a: '#2a0a6a', b: '#7a3aff', name: 'THE ABYSS',    boss: 'abyss' },
+  tsunami:  { a: '#1a6ae8', b: '#8ad8ff', name: 'TSUNAMI',      boss: 'tsunami' },
+  sawroom:  { a: '#b0102a', b: '#ff5a2a', name: 'THE SAWS',     boss: 'saw' },
+  sandbox:  { a: '#1ab85a', b: '#4aee9a', name: 'PRACTICE',     foes: [['grunt', 23, 27]] },
+  tutorial: { a: '#14c88a', b: '#7affc8', name: 'FIRST FIGHT',  foes: [['grunt', 23, 27]] },
+  bot:      { a: '#e8701a', b: '#ffa53a', name: 'BOT',          rival: 'robot' },
+  pvp:      { a: '#ff2a4a', b: '#ff8a1a', name: '???',          rival: '' },
+  coop:     { a: '#2a5aff', b: '#1ac8e8', name: 'THE HORDE',    foes: [['grunt', 23, 27], ['brute', 30, 34]], ally: true },
+};
+const loadCard = { mode: 'pvp', foeName: null, t0: 0, raf: 0, floor: null, floorKey: '', tipAt: 0, weapons: null };
+
+// Your arena, painted once and kept until you change it.
+function loadFloor() {
+  const key = JSON.stringify(arenaPick);
+  if (!loadCard.floor || loadCard.floorKey !== key) {
+    const cv = loadCard.floor || document.createElement('canvas');
+    cv.width = 480; cv.height = 270;
+    paintArenaScene(cv.getContext('2d'), 480, 270, ARENA_X, ARENA_Y, arenaPick);
+    loadCard.floor = cv; loadCard.floorKey = key;
+  }
+  return loadCard.floor;
+}
+function loadBoss(g, kind, x, y, t) {
+  const main = ctx;
+  g.save();
+  try {
+    if (kind === 'saw') {
+      const cv = trapSprite('saw', 40, true);
+      g.translate(x, y - 58); g.rotate(t * 6); g.scale(2.6, 2.6);
+      g.beginPath(); g.arc(0, 0, 19, 0, Math.PI * 2); g.clip();
+      if (cv) g.drawImage(cv, -cv.width / 2, -cv.height / 2);
+    } else if (kind === 'mage') {
+      const cv = monsterSprite('portalmage', 30, 42, 'normal');
+      g.translate(x, y); g.scale(2.4, 2.4);
+      if (cv) g.drawImage(cv, -cv.width / 2, -cv.height);
+    } else {
+      ctx = g;     // the boss painters draw to ctx: lend them the card for this one call
+      g.translate(x, y); g.scale(1.45, 1.45);
+      const m = kind === 'abyss' ? { x: -28, y: -84, w: 56, h: 84, abyss: true, phase: 1, hitFlash: 0 }
+                                 : { x: -36, y: -86, w: 72, h: 86, tsunami: true, phase: 1, hitFlash: 0 };
+      if (kind === 'abyss') drawAbyss(m); else drawTsunami(m);
+    }
+  } catch {} finally { ctx = main; g.restore(); }
+}
+function drawLoadCard(g, now) {
+  const c = LOAD_MODES[loadCard.mode] || LOAD_MODES.pvp, t = now / 1000;
+  const k = Math.min(1, (now - loadCard.t0) / 350), slide = (1 - k) * (1 - k) * 170;   // the two sides crash together
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(loadFloor(), 0, 0);
+  // Your side and theirs, split by a jagged slash.
+  const jag = [[262, 0], [232, 90], [258, 118], [216, 192], [238, 210], [214, 270]];
+  const half = (rightSide, colour) => {
+    g.save();
+    g.beginPath(); g.moveTo(jag[0][0], 0);
+    for (const [x, y] of jag) g.lineTo(x, y);
+    g.lineTo(rightSide ? 480 : 0, 270); g.lineTo(rightSide ? 480 : 0, 0); g.closePath();
+    g.globalAlpha = 0.5; g.fillStyle = colour; g.fill();
+    g.restore();
+  };
+  half(false, '#10308a'); half(true, c.a);
+  g.save();
+  g.beginPath(); for (const [i, p] of jag.entries()) { if (i) g.lineTo(p[0], p[1]); else g.moveTo(p[0], p[1]); }
+  g.shadowColor = c.b; g.shadowBlur = 14 + 6 * Math.sin(t * 6); g.strokeStyle = '#fff'; g.lineWidth = 3; g.stroke();
+  g.restore();
+
+  // You, trying out every weapon in the game.
+  const skin = pendingSkin || {};
+  const bob = Math.abs(Math.sin(t * 5)) * -5;
+  const drawHero = (colour, x, y, scale, withWeapon) => {
+    const spr = playerSprite(colour, skin.hatIdx || 0, 1, false, skin.outfit || '', skin.accIdx || 0);
+    g.save(); g.translate(x, y); g.scale(scale, scale);
+    if (spr) g.drawImage(spr, 0, -7);
+    if (withWeapon) {
+      if (!loadCard.weapons) loadCard.weapons = Object.keys(WEAPON_ART).sort(() => Math.random() - 0.5);
+      const id = loadCard.weapons[Math.floor(t * 2.4) % loadCard.weapons.length];
+      const box = WEAPON_ART[id].box, sw = (t * 1.2) % 1;
+      g.translate(14, 15); g.rotate(sw < 0.3 ? -1.2 + sw / 0.3 * 1.5 : 0.3 - (sw - 0.3) * 0.3);
+      drawWeaponPixels(g, id, Math.min(1.2, 36 / box.w), WEAPON_COLOR[id] || '#ccddff');
+    }
+    g.restore();
+  };
+  const heroCol = SKIN_COLORS[skin.colorIdx] || '#4488ff';
+  if (c.ally) drawHero('#44dd66', 24 - slide, 118 + bob * 0.7, 2.4, false);
+  drawHero(heroCol, 74 - slide, 124 + bob, 3, true);
+
+  // What you're up against.
+  const fx = 362 + slide, fy = 226;
+  if (c.boss) loadBoss(g, c.boss, fx, fy + Math.sin(t * 2.2) * 3, t);
+  else if (c.rival !== undefined) {
+    const spr = playerSprite(c.rival ? '#a8b0c0' : '#ff6644', c.rival ? 0 : 1, 0, false, c.rival, 0);
+    g.save(); g.translate(fx - 34, 124 - bob); g.scale(3, 3);
+    if (spr) g.drawImage(spr, 0, -7);
+    g.restore();
+    if (c.name === '???' && !loadCard.foeName) {   // nobody yet: a dark shape with a question mark
+      g.save(); g.font = 'bold 54px "Courier New", monospace'; g.textAlign = 'center'; g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 6;
+      g.strokeText('?', fx - 6, 92); g.fillText('?', fx - 6, 92); g.restore();
+    }
+  } else {
+    const foes = c.foes, gap = 74;
+    foes.forEach(([type, w, h], i) => {
+      const cv = monsterSprite(type, w, h, 'normal'), S = foes.length > 1 ? 2.1 : 3;
+      if (!cv) return;
+      const x = fx + (i - (foes.length - 1) / 2) * gap - 8, hop = Math.abs(Math.sin(t * 5 + i * 1.4)) * 5;
+      g.drawImage(cv, x - cv.width * S / 2, fy - cv.height * S - hop - (i % 2 ? 14 : 0), cv.width * S, cv.height * S);
+    });
+  }
+
+  // VS, and who's who.
+  const pulse = 1 + 0.08 * Math.sin(t * 7);
+  g.save();
+  g.translate(238, 134); g.scale(pulse, pulse);
+  g.font = 'bold 50px "Courier New", monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineJoin = 'round'; g.strokeStyle = '#000'; g.lineWidth = 9; g.strokeText('VS', 0, 0);
+  g.shadowColor = c.b; g.shadowBlur = 16; g.fillStyle = '#ffe84a'; g.fillText('VS', 0, 0);
+  g.restore();
+  g.save();
+  g.font = 'bold 17px "Courier New", monospace'; g.lineJoin = 'round'; g.strokeStyle = '#000'; g.lineWidth = 4; g.fillStyle = '#fff';
+  g.textAlign = 'left'; g.strokeText(pendingName, 22, 250); g.fillText(pendingName, 22, 250);
+  const foeName = String(loadCard.foeName || c.name).toUpperCase();
+  g.textAlign = 'right'; g.strokeText(foeName, 458, 250); g.fillText(foeName, 458, 250);
+  g.restore();
+}
+function loadCardFrame(now) {
+  loadCard.raf = 0;
+  const scr = document.getElementById('lobbyScreen');
+  if (!scr || !scr.classList.contains('active')) return;
+  const c = LOAD_MODES[loadCard.mode] || LOAD_MODES.pvp;
+  scr.style.setProperty('--load-a', c.a); scr.style.setProperty('--load-b', c.b);
+  if (now >= loadCard.tipAt) {
+    loadCard.tipAt = now + 3500;
+    document.getElementById('loadTip').textContent = LOAD_TIPS[Math.floor(Math.random() * LOAD_TIPS.length)];
+  }
+  drawLoadCard(document.getElementById('loadScene').getContext('2d'), now);
+  loadCard.raf = requestAnimationFrame(loadCardFrame);
+}
+function startLoadCard() {
+  if (!loadCard.raf) { loadCard.tipAt = 0; loadCard.raf = requestAnimationFrame(loadCardFrame); }
+}
 // ── Behind the menu: every weapon in the game, flying around ──
 // Each weapon appears exactly once. Sprites are painted once and only spun after
 // that, and the loop stops the moment the menu is hidden, so a match pays nothing.
@@ -4169,6 +4322,22 @@ const PORTAL_LOBBY = `<span style="color:#c8a0ff">THE PORTAL MAGE</span><br>`
 const ABYSS_LOBBY = `<span style="color:#b07aff">THE ABYSS</span><br>`
   + `<span style="color:#888">FINAL BOSS · WIN 100,000 COINS + THE CROSSBOWS OF INFINITY</span><br>Something stirs below...`;
 const BOT_LOBBY = () => `<span style="color:#ff9a5a">BOT BATTLE</span><br><span style="color:#888">PvP VS A ${(pendingBotLevel || 'average').toUpperCase()} BOT</span><br>Loading...`;
+// What the card says for a mode you play alone; null for ones that wait on people.
+function soloLobbyMsg(mode) {
+  const line = (colour, title, sub) => `<span style="color:${colour}">${title}</span><br><span style="color:#888">${sub}</span><br>Loading...`;
+  switch (mode) {
+    case 'waves':    return line('#ffcc00', 'WAVES MODE', 'SOLO ENDLESS');
+    case 'extreme':  return line('#ff5a3a', 'EXTREME MODE', 'SOLO · STRONGEST MONSTERS · HUGE REWARDS');
+    case 'sawroom':  return line('#ff3a3a', 'THE SAW ROOM', 'NO MONSTERS · ONLY TRAPS · ◆ 50,000 EVERY MINUTE');
+    case 'sandbox':  return line('#9fffd0', 'SANDBOX', 'SOLO PRACTICE · NOTHING IS SAVED');
+    case 'tutorial': return line('#7affc8', 'TUTORIAL', 'LEARN THE BASICS');
+    case 'portal':   return PORTAL_LOBBY;
+    case 'abyss':    return ABYSS_LOBBY;
+    case 'tsunami':  return TSUNAMI_LOBBY;
+    case 'bot':      return BOT_LOBBY();
+    default:         return null;
+  }
+}
 
 // ── Map size (all modes) ──
 function pickMapSize(size) {
@@ -4294,27 +4463,17 @@ function sendRematch() { if (ws && ws.readyState === 1) ws.send(JSON.stringify({
 
 function updateScreens(state) {
   if (state.gameState === 'LOBBY') {
-    if (state.bot) {
-      setLobbyMsg(BOT_LOBBY());
-    } else if (state.gameMode === 'waves') {
-      setLobbyMsg(`<span style="color:#ffcc00">WAVES MODE</span><br><span style="color:#888">SOLO ENDLESS</span><br>Loading...`);
-    } else if (state.gameMode === 'extreme') {
-      setLobbyMsg(`<span style="color:#ff5a3a">EXTREME MODE</span><br><span style="color:#888">SOLO · STRONGEST MONSTERS</span><br>Loading...`);
-    } else if (state.gameMode === 'portal') {
-      setLobbyMsg(PORTAL_LOBBY);
-    } else if (state.gameMode === 'abyss') {
-      setLobbyMsg(ABYSS_LOBBY);
-    } else if (state.gameMode === 'tsunami') {
-      setLobbyMsg(TSUNAMI_LOBBY);
-    } else if (state.gameMode === 'sandbox' && pendingTutorial) {
-      setLobbyMsg(`<span style="color:#7affc8">TUTORIAL</span><br><span style="color:#888">LEARN THE BASICS</span><br>Loading...`);
-    } else if (state.gameMode === 'sandbox') {
-      setLobbyMsg(`<span style="color:#9fffd0">SANDBOX</span><br><span style="color:#888">SOLO PRACTICE · NOTHING IS SAVED</span><br>Loading...`);
+    const soloMsg = soloLobbyMsg(state.bot ? 'bot' : state.gameMode === 'sandbox' && pendingTutorial ? 'tutorial' : state.gameMode);
+    if (soloMsg) {
+      setLobbyMsg(soloMsg);
     } else {
       const modeStr = state.gameMode === 'coop' ? 'CO-OP MODE' : state.maxPlayers > 2 ? 'LAST ONE STANDING' : 'PvP MODE';
       const k = myKeyOf();
       if (state.roomId && state.gameState === 'LOBBY') invite = { id: state.roomId, name: state.roomName };
       const head = state.roomName ? `<span style="color:#ffe45a">${escapeHtml(state.roomName)}</span><br>` : '';
+      const foe = KEYS.find(q => q !== k && state.playerNames?.[q] && (state.seated || 0) > KEYS.indexOf(q));
+      loadCard.foeName = foe ? state.playerNames[foe] : null;
+      if (state.gameMode === 'coop' || state.gameMode === 'pvp') loadCard.mode = state.gameMode;
       const who = KEYS.slice(0, state.maxPlayers || 2).map(q => state.playerNames?.[q] && (state.seated || 0) > KEYS.indexOf(q)
         ? `<span class="${q}-color">${escapeHtml(state.playerNames[q])}</span>` : '<span style="color:#555">· empty ·</span>').join(' &nbsp; ');
       setLobbyMsg(myNum
