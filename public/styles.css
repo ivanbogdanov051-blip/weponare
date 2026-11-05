@@ -1150,3 +1150,192 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 }
 .mode-btn.btn-tsunami { border-color: #3a9aee; color: #cfefff; background: linear-gradient(180deg, #2a6ab8, #0a2a78); box-shadow: 0 0 8px rgba(122, 216, 255, 0.35); }
 .mode-btn.btn-tsunami:hover { border-color: #bfefff; color: #fff; }
+
+/* ── The colourful menu ──
+   Scoped to .menu-box: the same button classes appear on other screens, which
+   keep their plain look. Shapes made with clip-path lose their box-shadow, so
+   those glow with filter: drop-shadow instead. */
+#startScreen { background: #160838; }
+/* Slow-turning colour clouds. A transform, so the GPU does it without repainting. */
+#startScreen::before {
+  content: ''; position: fixed; inset: -45vmax; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(closest-side at 32% 34%, rgba(255, 40, 150, 0.75), transparent),
+    radial-gradient(closest-side at 68% 30%, rgba(40, 130, 255, 0.8), transparent),
+    radial-gradient(closest-side at 72% 68%, rgba(0, 220, 170, 0.6), transparent),
+    radial-gradient(closest-side at 30% 70%, rgba(255, 150, 20, 0.65), transparent),
+    radial-gradient(closest-side at 50% 50%, rgba(150, 50, 255, 0.8), transparent);
+  animation: menu-sky 80s linear infinite;
+}
+@keyframes menu-sky { to { transform: rotate(360deg); } }
+#menuBg { position: fixed; inset: 0; width: 100%; height: 100%; margin: 0; z-index: 0; pointer-events: none; }
+#startScreen .menu-box {
+  z-index: 1; border-color: transparent; border-radius: 14px;
+  width: min(440px, calc(100vw - 24px));   /* the same on every tab, so switching doesn't jump */
+  background: linear-gradient(160deg, rgba(38, 14, 92, 0.86), rgba(18, 8, 56, 0.9));
+  box-shadow: 0 0 34px rgba(190, 80, 255, 0.55), 0 8px 0 rgba(0, 0, 0, 0.35);
+}
+/* Rainbow rim, cut out with a mask so the see-through panel doesn't show it. */
+#startScreen .menu-box::before {
+  content: ''; position: absolute; inset: -3px; padding: 3px; border-radius: 14px; pointer-events: none;
+  background: linear-gradient(100deg, #ff4a6a, #ffb02a, #ffe84a, #4ae88a, #3ac8ff, #a86aff, #ff4ac8);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+}
+.menu-box .title-text {
+  background: linear-gradient(90deg, #ff5a7a, #ffb02a, #ffe84a, #5aee9a, #4ac8ff, #b87aff, #ff5a7a) 0 0 / 200% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+  text-shadow: none; filter: drop-shadow(2px 2px 0 #000);
+  animation: menu-title 7s linear infinite;
+}
+@keyframes menu-title { to { background-position: -200% 0; } }
+.menu-box .subtitle { color: #7ae8ff; text-shadow: 0 0 10px rgba(122, 232, 255, 0.7); }
+.menu-box .name-input { background: rgba(10, 6, 40, 0.85); border-color: #ff5ac8; border-radius: 8px; }
+.menu-box .pass-input { border-color: #4ac8ff; }
+.menu-box .pass-input::placeholder { letter-spacing: 1px; font-size: 12px; }
+.menu-box .name-input::placeholder { color: #9a90c8; }
+.menu-box .name-input:focus { border-color: #ffe84a; box-shadow: 0 0 10px rgba(255, 232, 74, 0.5); }
+.saved-info span[style*="#555"] { color: #b9aee8 !important; }
+.menu-box .gear-btn { color: #ffe84a; background: #4a1a9a; border-color: #ffe84a; border-radius: 8px; }
+.menu-box .gear-btn:hover { color: #fff; border-color: #fff; }
+
+/* Each tab's heading in its own colour. */
+.menu-tab .menu-sec { color: var(--sec); }
+.menu-tab .menu-sec::before, .menu-tab .menu-sec::after { background: linear-gradient(90deg, transparent, var(--sec)); }
+.menu-tab .menu-sec::after { background: linear-gradient(90deg, var(--sec), transparent); }
+.menu-tab[data-tab="pvp"]    { --sec: #ff8a5a; }
+.menu-tab[data-tab="waves"]  { --sec: #5ad0ff; }
+.menu-tab[data-tab="bosses"] { --sec: #ff6ae0; }
+.menu-tab[data-tab="custom"] { --sec: #ffd24a; }
+
+/* What every menu button shares. */
+.menu-box .mode-row { gap: 10px; margin-bottom: 10px; }
+.menu-box .mode-btn {
+  position: relative; min-height: 64px; font-size: 12px; font-weight: bold; color: #fff; border: none;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6), 0 0 6px rgba(0, 0, 0, 0.45);
+  transition: transform 0.12s, filter 0.12s, box-shadow 0.12s;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.menu-box .mode-btn::before { font-size: 20px; line-height: 1.1; text-shadow: none; }
+.menu-box .mode-btn small { font-size: 9px; opacity: 0.95; }
+.menu-box .mode-btn:hover { transform: translateY(-2px) scale(1.03); filter: brightness(1.18); }
+.menu-box .mode-btn:active { transform: translateY(2px) scale(0.98); filter: brightness(0.92); }
+/* A locked mode stays recognisable, just dimmed. Its 🔒 and XP are in the small text. */
+.menu-box .mode-btn.locked { filter: saturate(0.55) brightness(0.72); opacity: 1; border-style: solid; }
+.menu-box .mode-btn.locked small { color: #ffe08a; }
+
+/* Icons */
+.btn-pvp::before { content: '⚔️'; }      .btn-coop::before { content: '🤝'; }
+.btn-create::before { content: '🏰'; }   .btn-join::before { content: '🚪'; }
+.btn-waves::before { content: '🌊'; }    .btn-extreme::before { content: '🔥'; }
+.btn-bot::before { content: '🤖'; }      .btn-sandbox::before { content: '🧪'; }
+.btn-saw::before { content: '⚙️'; }      .btn-portal::before { content: '🌀'; }
+.btn-abyss::before { content: '🕳️'; }    .btn-tsunami::before { content: '👻'; }
+.btn-upg::before { content: '⚡'; }      .btn-abil::before { content: '✨'; }
+.btn-skin::before { content: '🎨'; }     .btn-forge::before { content: '🔨'; }
+.btn-trade::before { content: '🤑'; }
+/* Those rules are only for the menu's copies of the classes. */
+.mode-btn::before { display: none; }
+.menu-box .mode-btn::before { display: block; }
+
+/* Slanted blades */
+.menu-box .mode-btn.btn-pvp {
+  background: linear-gradient(120deg, #ff2a4a, #ff8a1a);
+  clip-path: polygon(7% 0, 100% 0, 93% 100%, 0 100%);
+}
+.menu-box .mode-btn.btn-coop {
+  background: linear-gradient(240deg, #2a5aff, #1ac8e8);
+  clip-path: polygon(0 0, 93% 0, 100% 100%, 7% 100%);
+}
+/* Neon pills: just a glowing outline */
+.menu-box .mode-btn.btn-create, .menu-box .mode-btn.btn-join { border-radius: 999px; background: rgba(8, 6, 30, 0.75); border: 3px solid; }
+.menu-box .mode-btn.btn-create { border-color: #3af0ff; color: #bff8ff; box-shadow: 0 0 12px #3af0ff, inset 0 0 10px rgba(58, 240, 255, 0.4); }
+.menu-box .mode-btn.btn-join   { border-color: #ff4ad8; color: #ffc8f4; box-shadow: 0 0 12px #ff4ad8, inset 0 0 10px rgba(255, 74, 216, 0.4); }
+/* Scalloped water rolling along the bottom */
+.menu-box .mode-btn.btn-waves {
+  border-radius: 10px; overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 100%, #bff0ff 0 7px, transparent 8px) 0 100% / 22px 10px repeat-x,
+    radial-gradient(circle at 50% 100%, #4ac0f0 0 9px, transparent 10px) 11px calc(100% - 5px) / 22px 13px repeat-x,
+    linear-gradient(180deg, #0a58d8, #0a8ae8);
+  box-shadow: 0 0 12px rgba(40, 150, 255, 0.7);
+  animation: menu-roll 3s linear infinite;
+}
+@keyframes menu-roll { to { background-position: 22px 100%, -11px calc(100% - 5px), 0 0; } }
+/* Hazard tape, and it throbs */
+.menu-box .mode-btn.btn-extreme {
+  letter-spacing: 5px; border: 3px solid #ffd22a; border-radius: 4px;
+  background: repeating-linear-gradient(-45deg, #d81a0a 0 16px, #1a0604 16px 32px);
+  animation: menu-throb 1.3s ease-in-out infinite;
+}
+@keyframes menu-throb { 0%, 100% { box-shadow: 0 0 8px #ff4a1a; } 50% { box-shadow: 0 0 24px #ff8a1a; } }
+/* Chunky 3D keys that press down */
+.menu-box .mode-btn.btn-bot, .menu-box .mode-btn.btn-sandbox { border-radius: 10px; margin-bottom: 6px; }
+.menu-box .mode-btn.btn-bot { background: linear-gradient(180deg, #ffa53a, #e8701a); box-shadow: 0 6px 0 #8a3a0a; }
+.menu-box .mode-btn.btn-sandbox { background: linear-gradient(180deg, #4aee7a, #1ab85a); box-shadow: 0 6px 0 #0a6a32; }
+.menu-box .mode-btn.btn-bot:active, .menu-box .mode-btn.btn-sandbox:active { transform: translateY(5px); box-shadow: 0 1px 0 #000; }
+/* Saw-toothed steel */
+.menu-box .mode-btn.btn-saw {
+  background: linear-gradient(180deg, #b0102a, #5a0416);
+  clip-path: polygon(0 8px, 5% 0, 10% 8px, 15% 0, 20% 8px, 25% 0, 30% 8px, 35% 0, 40% 8px, 45% 0, 50% 8px, 55% 0, 60% 8px, 65% 0, 70% 8px, 75% 0, 80% 8px, 85% 0, 90% 8px, 95% 0, 100% 8px,
+                     100% calc(100% - 8px), 95% 100%, 90% calc(100% - 8px), 85% 100%, 80% calc(100% - 8px), 75% 100%, 70% calc(100% - 8px), 65% 100%, 60% calc(100% - 8px), 55% 100%, 50% calc(100% - 8px), 45% 100%, 40% calc(100% - 8px), 35% 100%, 30% calc(100% - 8px), 25% 100%, 20% calc(100% - 8px), 15% 100%, 10% calc(100% - 8px), 5% 100%, 0 calc(100% - 8px));
+}
+/* A swirling portal */
+.menu-box .mode-btn.btn-portal {
+  border-radius: 18px; border: 2px solid #e8b0ff;
+  background: radial-gradient(ellipse at center, rgba(40, 0, 90, 0.2), rgba(40, 0, 90, 0.75)), conic-gradient(from 30deg, #ff3ad8, #7a3aff, #2ad8ff, #7a3aff, #ff3ad8);
+  box-shadow: 0 0 14px rgba(200, 90, 255, 0.8);
+}
+/* A pit: nearly black, lit from inside */
+.menu-box .mode-btn.btn-abyss {
+  border-radius: 50% / 22%; border: 2px solid #8a4aff; color: #e0c8ff;
+  background: radial-gradient(ellipse at center, #000 35%, #2a0a6a 100%);
+  animation: menu-pit 2.6s ease-in-out infinite;
+}
+@keyframes menu-pit { 0%, 100% { box-shadow: 0 0 8px #5a1aff, inset 0 0 8px #5a1aff; } 50% { box-shadow: 0 0 22px #9a5aff, inset 0 0 18px #9a5aff; } }
+/* The boss's own gradient: white on top, blue below */
+.menu-box .mode-btn.btn-tsunami {
+  border-radius: 50px 50px 10px 10px; border: 2px solid #e8f8ff;
+  background: linear-gradient(180deg, #fff, #8ad8ff 38%, #1a6ae8);
+  box-shadow: 0 0 14px rgba(122, 216, 255, 0.8);
+}
+.menu-box .mode-btn.btn-tsunami::before { filter: drop-shadow(0 1px 0 #1a4a9a); }
+/* Polished gold bar */
+.menu-box .mode-btn.btn-upg {
+  color: #4a2a00; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55); border-radius: 6px; border: 2px solid #fff0a8;
+  background: linear-gradient(115deg, #d89a0a, #ffd84a 30%, #fff6c0 50%, #ffd84a 70%, #d89a0a);
+  box-shadow: 0 0 10px rgba(255, 210, 60, 0.7);
+}
+/* Magic tag with a dotted inner edge */
+.menu-box .mode-btn.btn-abil {
+  border-radius: 16px 4px 16px 4px; outline: 2px dotted rgba(255, 255, 255, 0.75); outline-offset: -6px;
+  background: linear-gradient(135deg, #ff3aa8, #a83aff);
+  box-shadow: 0 0 12px rgba(255, 70, 190, 0.7);
+}
+/* All the paints at once */
+.menu-box .mode-btn.btn-skin {
+  border-radius: 10px; background: linear-gradient(90deg, #ff4a5a, #ffa52a, #e8d81a, #2ad86a, #2aa8ff, #a84aff) 0 0 / 200% 100%;
+  animation: menu-paint 6s linear infinite alternate;
+}
+@keyframes menu-paint { to { background-position: 100% 0; } }
+/* Cut-cornered anvil plate, glowing hot */
+.menu-box .mode-btn.btn-forge {
+  background: radial-gradient(ellipse at 50% 120%, #ffd24a, #ff6a1a 45%, #5a1a0a 95%);
+  clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 14px, 100% calc(100% - 14px), calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px), 0 14px);
+}
+/* A ticket stub, with bites out of the sides */
+.menu-box .mode-btn.btn-trade {
+  background:
+    radial-gradient(circle at 0 50%, transparent 10px, #14c88a 11px, #0a9ad0 100%);
+  -webkit-mask: radial-gradient(circle at 100% 50%, transparent 10px, #000 11px);
+  mask: radial-gradient(circle at 100% 50%, transparent 10px, #000 11px);
+}
+
+/* Short windows: the icons go, so the buttons still fit. */
+@media (max-height: 460px) {
+  .menu-box .mode-btn { min-height: 44px; }
+  .menu-box .mode-btn::before { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #startScreen::before, .menu-box .title-text, .menu-box .mode-btn { animation: none !important; }
+}

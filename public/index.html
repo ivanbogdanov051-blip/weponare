@@ -37,6 +37,7 @@
 
   <!-- Start / name + mode selection -->
   <div id="startScreen" class="overlay active">
+    <canvas id="menuBg" aria-hidden="true"></canvas>
     <div class="pixel-box menu-box">
       <button class="gear-btn" onclick="openSettings()" title="Settings" aria-label="Settings">&#9881;</button>
       <div class="title-text">WEPONARE</div>
@@ -53,8 +54,8 @@
           <button class="mode-btn btn-coop" onclick="joinGame('coop')">CO-OP<small>2 vs monsters</small></button>
         </div>
         <div class="mode-row">
-          <button class="mode-btn btn-room" onclick="openCreateRoom()">CREATE ROOM<small>2-4 friends</small></button>
-          <button class="mode-btn btn-room" onclick="openRoomBrowser()">JOIN ROOM<small>see open rooms</small></button>
+          <button class="mode-btn btn-room btn-create" onclick="openCreateRoom()">CREATE ROOM<small>2-4 friends</small></button>
+          <button class="mode-btn btn-room btn-join" onclick="openRoomBrowser()">JOIN ROOM<small>see open rooms</small></button>
         </div>
       </div>
 
@@ -85,9 +86,9 @@
       <div class="menu-tab hidden" data-tab="custom">
         <div class="menu-sec"><span>CUSTOMISE AND WEAPONS</span></div>
         <div class="mode-row">
-          <button class="mode-btn btn-cust" onclick="openShop()">UPGRADES<small>weapons</small></button>
-          <button class="mode-btn btn-cust" onclick="openAbilities()">ABILITIES<small>powers</small></button>
-          <button class="mode-btn btn-cust" onclick="openSkinsScreen()">SKINS<small>look</small></button>
+          <button class="mode-btn btn-cust btn-upg" onclick="openShop()">UPGRADES<small>weapons</small></button>
+          <button class="mode-btn btn-cust btn-abil" onclick="openAbilities()">ABILITIES<small>powers</small></button>
+          <button class="mode-btn btn-cust btn-skin" onclick="openSkinsScreen()">SKINS<small>look</small></button>
         </div>
         <div class="mode-row">
           <button class="mode-btn btn-forge" onclick="openForge()">THE FORGE<small>coins for upgrades</small></button>

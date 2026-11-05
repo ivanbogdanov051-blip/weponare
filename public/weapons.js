@@ -45,7 +45,13 @@ function artKit(g, silhouette) {
     glow(x, y, r, c, a) {
       if (silhouette) return;
       g.save(); g.globalAlpha = a === undefined ? 0.3 : a;
-      g.fillStyle = c; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); g.restore();
+      // Flat reads fine at game size. Blown up (the menu) it would look like a balloon.
+      if (g.softGlow) {
+        const f = g.createRadialGradient(x, y, 0, x, y, r * 1.4);
+        f.addColorStop(0, c); f.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = f; r *= 1.4;
+      } else g.fillStyle = c;
+      g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); g.restore();
     },
   };
 }

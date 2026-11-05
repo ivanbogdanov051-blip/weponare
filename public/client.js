@@ -702,7 +702,7 @@ function applyCatalog(catalog, colors) {
     WEAPON_META = {};
     for (const w of catalog) WEAPON_META[w.id] = w;
   }
-  if (colors && typeof colors === 'object') WEAPON_COLOR = { ...WEAPON_COLOR, ...colors };
+  if (colors && typeof colors === 'object') { WEAPON_COLOR = { ...WEAPON_COLOR, ...colors }; menuBgRepaint(); }
 }
 
 function connect() {
@@ -4061,9 +4061,107 @@ window.addEventListener('orientationchange', () => setTimeout(fitMenu, 200));
 if (window.visualViewport) window.visualViewport.addEventListener('resize', fitMenu);
 window.addEventListener('load', fitMenu);
 
-function showScreen(id) { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay '+(s===id?'active':'hidden'); }); if (id === 'startScreen') fitMenu(); }
+function showScreen(id) { SCREENS.forEach(s => { const el=document.getElementById(s); if(el) el.className='overlay '+(s===id?'active':'hidden'); }); if (id === 'startScreen') { fitMenu(); startMenuBg(); } }
 function hideAllScreens() { SCREENS.forEach(s => { const el=document.getElementById(s); if(el && el.className!=='overlay hidden') el.className='overlay hidden'; }); }
 function setLobbyMsg(html) { showScreen('lobbyScreen'); document.getElementById('lobbyMsg').innerHTML = html; }
+// ── Behind the menu: every weapon in the game, flying around ──
+// Each weapon appears exactly once. Sprites are painted once and only spun after
+// that, and the loop stops the moment the menu is hidden, so a match pays nothing.
+const menuBg = { cv: null, g: null, items: [], W: 0, H: 0, dpr: 1, raf: 0, last: 0, scale: 1 };
+const MENU_BG_RES = 2;       // sprite pixels per screen pixel, so a big one stays sharp
+function menuBgSprite(it) {
+  const art = WEAPON_ART[it.id], color = WEAPON_COLOR[it.id] || '#ccddff';
+  const b = art.box, L = Math.max(46, Math.min(170, b.w * 2.3)), H = L * b.h / b.w;
+  // Art bounds ignore glows, so leave room for the biggest one or its edge is cut off square.
+  const pad = 14 * L / b.w + 16, w = Math.ceil((L + pad * 2) * MENU_BG_RES), h = Math.ceil((H + pad * 2) * MENU_BG_RES);
+  const flat = document.createElement('canvas'); flat.width = w; flat.height = h;
+  const fg = flat.getContext('2d'); fg.softGlow = true;
+  drawWeaponFitted(fg, it.id, w / 2, h / 2, L * MENU_BG_RES, H * MENU_BG_RES, color, true);
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const g = cv.getContext('2d');
+  g.shadowColor = color; g.shadowBlur = 16;   // a soft halo in the weapon's own colour
+  g.drawImage(flat, 0, 0);
+  it.cv = cv; it.w = w / MENU_BG_RES; it.h = h / MENU_BG_RES;
+}
+function menuBgRepaint() { for (const it of menuBg.items) it.cv = null; }
+function menuBgResize() {
+  const cv = menuBg.cv, W = window.innerWidth, H = window.innerHeight;
+  const sx = menuBg.W ? W / menuBg.W : 1, sy = menuBg.H ? H / menuBg.H : 1;
+  for (const it of menuBg.items) { it.x *= sx; it.y *= sy; }
+  menuBg.W = W; menuBg.H = H; menuBg.dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = Math.round(W * menuBg.dpr); cv.height = Math.round(H * menuBg.dpr);
+  // Shrink them on a phone: the same 57 weapons share much less room.
+  menuBg.scale = Math.max(0.6, Math.min(1.1, Math.sqrt(W * H) / 850));
+}
+function menuBgSetup() {
+  const cv = document.getElementById('menuBg');
+  if (!cv || typeof WEAPON_ART === 'undefined') return false;
+  menuBg.cv = cv; menuBg.g = cv.getContext('2d');
+  const W = window.innerWidth, H = window.innerHeight;
+  const ids = Object.keys(WEAPON_ART);
+  for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+  // Dealt out on a grid so they start spread over the screen, not in clumps.
+  const cols = Math.max(1, Math.ceil(Math.sqrt(ids.length * W / H))), rows = Math.ceil(ids.length / cols);
+  menuBg.items = ids.map((id, i) => {
+    const z = 0.6 + Math.random() * 0.4;   // nearer ones are bigger, brighter, faster
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    return {
+      id, z, cv: null, w: 0, h: 0,
+      x: (i % cols + 0.2 + Math.random() * 0.6) * W / cols,
+      y: (Math.floor(i / cols) + 0.2 + Math.random() * 0.6) * H / rows,
+      a: Math.random() * Math.PI * 2,                 // heading
+      speed: (22 + Math.random() * 42) * z,
+      rot: Math.random() * Math.PI * 2,
+      spin: dir * (0.25 + Math.random() * 1.3),
+      curve: 0.25 + Math.random() * 0.5, curveHz: 0.1 + Math.random() * 0.25, phase: Math.random() * 6.28,
+    };
+  }).sort((a, b) => a.z - b.z);
+  menuBgResize();
+  return true;
+}
+function menuBgDraw() {
+  const { g, W, H, dpr, scale } = menuBg;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+  for (const it of menuBg.items) {
+    if (!it.cv) menuBgSprite(it);
+    const k = it.z * scale;
+    g.save();
+    g.translate(it.x, it.y); g.rotate(it.rot); g.scale(k, k);
+    g.globalAlpha = 0.55 + 0.45 * (it.z - 0.6) / 0.4;
+    g.drawImage(it.cv, -it.w / 2, -it.h / 2, it.w, it.h);
+    g.restore();
+  }
+}
+function menuBgFrame(now) {
+  menuBg.raf = 0;
+  const scr = document.getElementById('startScreen');
+  if (!scr || scr.classList.contains('hidden')) return;
+  const dt = menuBg.last ? Math.min(0.05, (now - menuBg.last) / 1000) : 0;
+  menuBg.last = now;
+  const t = now / 1000, { W, H } = menuBg;
+  for (const it of menuBg.items) {
+    it.a += Math.sin(t * it.curveHz * 6.28 + it.phase) * it.curve * dt;   // lazy curves, never a straight line
+    it.x += Math.cos(it.a) * it.speed * dt;
+    it.y += Math.sin(it.a) * it.speed * dt;
+    it.rot += it.spin * dt;
+    const m = it.w * 0.6;   // leave fully off one edge before coming back on the other
+    if (it.x < -m) it.x = W + m; else if (it.x > W + m) it.x = -m;
+    if (it.y < -m) it.y = H + m; else if (it.y > H + m) it.y = -m;
+  }
+  menuBgDraw();
+  menuBg.raf = requestAnimationFrame(menuBgFrame);
+}
+function startMenuBg() {
+  if (!menuBg.cv && !menuBgSetup()) return;
+  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) { menuBgDraw(); return; }
+  if (menuBg.raf) return;
+  menuBg.last = 0;
+  menuBg.raf = requestAnimationFrame(menuBgFrame);
+}
+window.addEventListener('resize', () => { if (menuBg.cv) { menuBgResize(); startMenuBg(); } });
+window.addEventListener('load', startMenuBg);
+
 const TSUNAMI_LOBBY = `<span style="color:#7ad8ff">TSUNAMI</span><br><span style="color:#888">BOSS FIGHT · ◆ 200,000 · HE HITS VERY HARD</span><br>Loading...`;
 const PORTAL_LOBBY = `<span style="color:#c8a0ff">THE PORTAL MAGE</span><br>`
   + `<span style="color:#888">SOLO BOSS FIGHT · WIN 50,000 COINS + 50,000 XP</span><br>Opening the portal...`;
