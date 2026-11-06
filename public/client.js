@@ -1003,7 +1003,7 @@ function updatePrediction(frameDt, now) {
   if (me.fgs) spd *= me.fgs;                  // forge: FLEET FOOTED, KITER
   if (me.effects && me.effects.slow  > 0) spd *= 0.4;
   if (me.effects && me.effects.root  > 0) spd = 0;            // ROOT VINES
-  if (me.sky || me.gstun) spd = 0;                                        // up in the air (Worldsplitter's leap)
+  if (me.sky || me.gstun || me.tspin) spd = 0;                                        // up in the air (Worldsplitter's leap)
 
   // Apply currently-held inputs immediately (instant response)
   let vx = 0, vy = 0;
@@ -1933,7 +1933,9 @@ function drawLightStreak(f, now) {
 function drawFireRings(fires) {
   if (!fires.length) return;
   const now = performance.now() / 1000;
+  drawTsPools(fires, now);
   for (const f of fires) {
+    if (f.kind === 'tspool' || f.kind === 'tsdrop' || f.kind === 'tscyclone') continue;
     if (f.kind === 'vortexfield') { drawVortexField(f, now); continue; }
     if (f.kind === 'ibburst') continue;
     if (f.kind === 'voidbeam') { drawVoidBeam(f, now); continue; }
@@ -4696,6 +4698,7 @@ function draw(state) {
   if (state.timeStop) drawTimeStop(state.timeStop);
   drawChatBubbles(state);
   drawFireHands(state.fires || []);
+  drawTsAbove(state.fires || [], performance.now() / 1000);
   const meP = state.players[myKeyOf()] || null;
   syncSuperButton(meP);
   syncAbilityButtons(meP);
@@ -8091,6 +8094,82 @@ function drawTsOrb(pr, now) {
   ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 1.5; ctx.stroke();
   ctx.globalAlpha = 0.8; ctx.fillStyle = '#ffffff';
   ctx.beginPath(); ctx.ellipse(pr.x - r * 0.3, pr.y - r * 0.45, r * 0.26, r * 0.14, -0.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+// The water he leaves: all the puddles traced into one path, so where they overlap
+// they merge into a single pool instead of stacking darker.
+// Ids are base-36 text, so they can't go into sums as they are: one with a letter in
+// it would turn the whole animation into NaN.
+const tsSeed = id => parseInt(id, 36) % 97 || 0;
+function drawTsPools(fires, now) {
+  const pools = fires.filter(f => f.kind === 'tspool');
+  if (!pools.length) return;
+  const size = f => { const k = f.k || 0; return f.r * Math.min(1, k * 12) * Math.min(1, (1 - k) * 6); };
+  const shape = (scale, wobble) => {
+    ctx.beginPath();
+    for (const f of pools) {
+      const r = size(f) * scale + (wobble ? Math.sin(now * 2.2 + tsSeed(f.id)) * wobble : 0);
+      if (r <= 0) continue;
+      ctx.moveTo(f.x + r, f.y); ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
+    }
+  };
+  ctx.save();
+  ctx.fillStyle = '#0a3aa8'; ctx.globalAlpha = 0.72; shape(1.04, 1.5); ctx.fill();
+  ctx.fillStyle = '#2a8ae8'; ctx.globalAlpha = 0.72; shape(0.8, 1.5); ctx.fill();
+  ctx.fillStyle = '#7ad8ff'; ctx.globalAlpha = 0.5; shape(0.48, 1); ctx.fill();
+  ctx.strokeStyle = '#e8f8ff'; ctx.lineWidth = 1;     // ripples
+  for (const f of pools) {
+    const p = (now * 0.7 + tsSeed(f.id) * 0.37) % 1, r = size(f) * (0.2 + 0.7 * p);
+    if (r <= 0) continue;
+    ctx.globalAlpha = 0.55 * (1 - p);
+    ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+}
+// The ball and the cyclone stand above the fighters.
+function drawTsAbove(fires, now) {
+  for (const f of fires) {
+    if (f.kind === 'tsdrop') drawTsDrop(f, now);
+    else if (f.kind === 'tscyclone') drawTsCyclone(f, now);
+  }
+}
+function drawTsDrop(f, now) {
+  const hop = Math.abs(Math.sin(now * 7 + tsSeed(f.id))) * 20, squash = 1 - 0.18 * Math.max(0, 1 - hop / 6);
+  ctx.save();
+  ctx.fillStyle = '#04184a'; ctx.globalAlpha = 0.45;
+  ctx.beginPath(); ctx.ellipse(f.x, f.y + 3, f.r * (1 - hop / 60), f.r * 0.42, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  const y = f.y - hop, top = y - f.r * squash, bottom = y + f.r * squash;
+  ctx.fillStyle = tsGradient(ctx, top, bottom);
+  ctx.beginPath(); ctx.ellipse(f.x, y, f.r * (2 - squash), f.r * squash, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(10,50,140,0.8)'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(f.x - f.r * 0.34, y - f.r * 0.4, f.r * 0.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function drawTsCyclone(f, now) {
+  const fade = Math.min(1, (f.k || 0) * 10) * Math.min(1, (1 - (f.k || 0)) * 10);
+  ctx.save();
+  ctx.globalAlpha = fade;
+  // The reach: a dashed ring on the floor, turning.
+  ctx.save();
+  ctx.translate(f.x, f.y); ctx.scale(1, 0.5); ctx.rotate(now * 2);
+  ctx.strokeStyle = '#bfefff'; ctx.lineWidth = 2; ctx.setLineDash([9, 8]); ctx.globalAlpha = 0.6 * fade;
+  ctx.beginPath(); ctx.arc(0, 0, f.v || 78, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = '#0a3aa8'; ctx.globalAlpha = 0.72 * fade;
+  ctx.beginPath(); ctx.ellipse(f.x, f.y, f.r, f.r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = fade;
+  // The funnel: narrow and deep blue at the floor, wide and white at the top.
+  const H = 74, BANDS = 11;
+  const fill = tsGradient(ctx, f.y - H, f.y + 2);
+  for (let i = 0; i < BANDS; i++) {
+    const k = i / (BANDS - 1), y = f.y - k * H, rx = 7 + (f.r + 12) * Math.pow(k, 1.3), lean = Math.sin(now * 5 + k * 5) * 5 * k;
+    ctx.strokeStyle = fill; ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.ellipse(f.x + lean, y, rx, rx * 0.26, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;          // streaks racing round it
+    const a = now * 13 + i * 1.1;
+    ctx.beginPath(); ctx.ellipse(f.x + lean, y, rx, rx * 0.26, 0, a, a + 1.3); ctx.stroke();
+  }
   ctx.restore();
 }
 function drawTsRing(f) {

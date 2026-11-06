@@ -3979,7 +3979,7 @@ function tickRoom(dt) {
         if ((ax * vx + ay * vy) / (al * vl) > SAM_TOWARD_DOT) { vx *= SAM_TOWARD_MULT; vy *= SAM_TOWARD_MULT; }
       }
     }
-    if (p.sky || p.gsStun > 0) { vx = 0; vy = 0; }   // up in the air, or stunned: no steering
+    if (p.sky || p.gsStun > 0 || p.tsHeld > 0) { vx = 0; vy = 0; }   // up in the air, stunned or in a cyclone: no steering
     if (p.kspin > 0) {
       // Spinning: less grip — speed builds up and carries on after you let go.
       const g = Math.min(1, KSPIN_GLIDE * factor);
@@ -5617,6 +5617,7 @@ function fizzleFire(x, y, text) {
 
 function updateFires(factor, dt) {
   if (!room.fires.length) return;
+  updateTsWater(dt);
   // Fires can spawn fires mid-pass (a meteor dropping the mage to his last
   // resort opens the giant portals), and a fire can end the fight and clear
   // the list. Keep what was added; honour a clear.
@@ -5650,6 +5651,9 @@ function updateFires(factor, dt) {
     if (f.kind === 'meteor' || f.kind === 'knife') return true;   // still falling: only the warning shows
     if (f.kind === 'portal') return updatePortal(f, dt);
     if (f.kind === 'tsring') return updateTsRing(f);
+    if (f.kind === 'tspool') return true;      // its effect is in updateTsWater
+    if (f.kind === 'tsdrop') return updateTsDrop(f, factor, dt);
+    if (f.kind === 'tscyclone') return updateTsCyclone(f, factor, dt);
     if (f.kind === 'gswave') return updateGsWave(f);
     if (f.kind === 'gsarc') return true;
     if (f.kind === 'mine') return updatePlayerMine(f);
@@ -6758,9 +6762,11 @@ function adminSkipWave() {
 //   surge    swells up huge, rushes you (dragging you down as he nears), shrinks
 //   riptide  drifts back, then ten swift waves hunt you and break up quickly
 //   orb      a huge ball of water to where you stood; it bursts into a wave ring
-//   split    (under 25% health) three big waves fan apart, then close on you
-// Under 25% health he also attacks far more often.
-const TSUNAMI_HP = 52000, TS_PHASE2 = 0.25, TS_REWARD_COINS = 200000;
+//   split    (phase 2) three big waves fan apart, then close on you
+//   drop     (phase 2) a ball that bounces round the arena, leaving water under it
+//   cyclone  (phase 2) a roaming cyclone that grabs you and carries you off
+// From half health (phase 2) he also attacks far more often.
+const TSUNAMI_HP = 52000, TS_PHASE2 = 0.5, TS_REWARD_COINS = 200000;
 const TS_GAP = 2600, TS_GAP2 = 750, TS_KEEP = 190;
 const TS_GROW_MS = 700, TS_SHRINK_MS = 500, TS_RUSH_MS = 1700, TS_RUSH_SPEED = 6.2, TS_RUSH_TURN = 2.6, TS_SCALE = 2.4;
 const TS_RUSH_DMG = 60, TS_RUSH_SLOW = 2200, TS_RUSH_DRAG = 80, TS_RUSH_PUSH = 40;
@@ -6769,6 +6775,10 @@ const TS_WAVE_SPEED = 7.5, TS_WAVE_DMG = 24, TS_WAVE_RANGE = 430, TS_WAVE_PUSH =
 const TS_ORB_CAST = 550, TS_ORB_SPEED = 4.6, TS_ORB_DMG = 50, TS_ORB_AOE = 70, TS_ORB_R = 22;
 const TS_RING_DMG = 34, TS_RING_MAX = 260, TS_RING_MS = 1000, TS_RING_BAND = 12, TS_RING_PUSH = 40;
 const TS_SPLIT_CAST = 450, TS_SPLIT_SPEED = 5.2, TS_SPLIT_DMG = 36, TS_SPLIT_RANGE = 800, TS_SPLIT_FAN = 1.0, TS_SPLIT_PUSH = 44;
+const TS_DROP_CAST = 500, TS_DROP_MS = 5500, TS_DROP_SPEED = 3.6, TS_DROP_R = 15, TS_DROP_PUSH = 80, TS_DROP_REHIT = 900, TS_DROP_STEP = 38;
+const TS_POOL_R = 26, TS_POOL_MS = 4500, TS_WET_DMG = 8, TS_WET_TICK = 400, TS_WET_SLOW = 300;
+const TS_CY_CAST = 700, TS_CY_MS = 6500, TS_CY_BODY = 30, TS_CY_GRAB = 78, TS_CY_SPEED = 2.5, TS_CY_CARRY = 3.8, TS_CY_TURN = 1.1;
+const TS_CY_HOLD = 1700, TS_CY_SPIN = 10, TS_CY_THROW = 110, TS_CY_FREE = 1600;
 
 function startTsunamiFight() {
   room.wave = { num: 1, monstersLeft: 1, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 };
@@ -6804,6 +6814,82 @@ function updateTsRing(f) {
     const before = t.hp;
     strikeTarget(t, TS_RING_DMG, 'monster');
     if (t.hp < before && !t.dead) tsPush(t, f.x, f.y, TS_RING_PUSH);
+  }
+  return true;
+}
+// Everything of his that counts as water. One pass over them all, so standing in
+// three overlapping puddles hurts exactly as much as standing in one.
+function updateTsWater(dt) {
+  const water = room.fires.filter(f => f.kind === 'tspool' || f.kind === 'tscyclone');
+  if (!water.length) return;
+  for (const t of enemyTargets('monster')) {
+    if (t.tsWetT > 0) t.tsWetT -= dt;
+    if (!water.some(f => Math.hypot(cx(t) - f.x, cy(t) - f.y) < f.r + t.w * 0.35)) continue;
+    chillTarget(t, TS_WET_SLOW);
+    if (!(t.tsWetT > 0)) { t.tsWetT = TS_WET_TICK; dotDamage(t, TS_WET_DMG); }
+  }
+}
+function tsPool(x, y) {
+  room.fires.push({ id: nextId(), kind: 'tspool', owner: 'monster', x, y, r: TS_POOL_R, t: 0, life: TS_POOL_MS });
+}
+// 5: the ball rebounds off the walls, leaving a trail of water along its way.
+function updateTsDrop(f, factor, dt) {
+  const step = TS_DROP_SPEED * factor;
+  f.x += Math.cos(f.a) * step; f.y += Math.sin(f.a) * step;
+  const minX = ARENA_X + f.r, maxX = ARENA_X + ARENA_W - f.r, minY = ARENA_Y + f.r, maxY = ARENA_Y + ARENA_H - f.r;
+  let bounced = false;
+  if (f.x < minX || f.x > maxX) { f.a = Math.PI - f.a; f.x = Math.max(minX, Math.min(maxX, f.x)); bounced = true; }
+  if (f.y < minY || f.y > maxY) { f.a = -f.a; f.y = Math.max(minY, Math.min(maxY, f.y)); bounced = true; }
+  if (bounced) room.particles.push({ type: 'shockwave', x: f.x, y: f.y, maxR: 26, timer: 260, max: 260, color: '#bfefff' });
+  f.trail -= step;
+  if (f.trail <= 0) { f.trail = TS_DROP_STEP; tsPool(f.x, f.y); }
+  for (const [t, left] of f.hit) { if (left <= dt) f.hit.delete(t); else f.hit.set(t, left - dt); }
+  for (const t of enemyTargets('monster')) {
+    if (f.hit.has(t) || Math.hypot(cx(t) - f.x, cy(t) - f.y) > f.r + t.w / 2) continue;
+    if (t.parryTimer > 0) {                      // parried: the ball bursts, the water stays
+      spawnParrySpark(cx(t), cy(t));
+      room.particles.push({ type: 'shockwave', x: f.x, y: f.y, maxR: 40, timer: 300, max: 300, color: '#7ad8ff' });
+      return false;
+    }
+    f.hit.set(t, TS_DROP_REHIT);
+    tsPush(t, f.x, f.y, TS_DROP_PUSH);
+  }
+  return true;
+}
+// 6: it hunts you slowly; anything it catches is carried along, spiralling in
+// towards the water at its heart, then flung out and left alone for a moment.
+function tsCyRelease(f, t) {
+  f.held.delete(t);
+  f.free.set(t, TS_CY_FREE);
+  tsPush(t, f.x, f.y, TS_CY_THROW);
+}
+function updateTsCyclone(f, factor, dt) {
+  const foes = enemyTargets('monster');
+  const prey = foes.filter(t => !f.held.has(t)).sort((a, b) => Math.hypot(cx(a) - f.x, cy(a) - f.y) - Math.hypot(cx(b) - f.x, cy(b) - f.y))[0];
+  if (f.held.size === 0 && prey) f.a = turnToward(f.a, Math.atan2(cy(prey) - f.y, cx(prey) - f.x), TS_CY_TURN * dt / 1000);
+  const step = (f.held.size ? TS_CY_CARRY : TS_CY_SPEED) * factor;
+  f.x += Math.cos(f.a) * step; f.y += Math.sin(f.a) * step;
+  const minX = ARENA_X + f.r, maxX = ARENA_X + ARENA_W - f.r, minY = ARENA_Y + f.r, maxY = ARENA_Y + ARENA_H - f.r;
+  if (f.x < minX || f.x > maxX) { f.a = Math.PI - f.a; f.x = Math.max(minX, Math.min(maxX, f.x)); }
+  if (f.y < minY || f.y > maxY) { f.a = -f.a; f.y = Math.max(minY, Math.min(maxY, f.y)); }
+  for (const [t, left] of f.free) { if (left <= dt) f.free.delete(t); else f.free.set(t, left - dt); }
+  for (const t of foes) {
+    if (f.held.has(t) || f.free.has(t) || t.boss || t.sky) continue;
+    const dx = cx(t) - f.x, dy = cy(t) - f.y, d = Math.hypot(dx, dy);
+    if (d < f.v) f.held.set(t, { t: TS_CY_HOLD, ang: Math.atan2(dy, dx), rad: d });
+  }
+  const ending = f.t + dt >= f.life;
+  for (const [t, h] of f.held) {
+    if (t.dead) { f.held.delete(t); continue; }
+    h.t -= dt;
+    if (h.t <= 0 || ending) { tsCyRelease(f, t); continue; }
+    h.ang += TS_CY_SPIN * dt / 1000;
+    h.rad = Math.max(TS_CY_BODY * 0.6, h.rad - (TS_CY_GRAB / TS_CY_HOLD) * dt * 1.3);   // reaching the water well before the throw
+    t.x = f.x + Math.cos(h.ang) * h.rad - t.w / 2;
+    t.y = f.y + Math.sin(h.ang) * h.rad - t.h / 2;
+    clampToArena(t);
+    t.pull = null;
+    t.tsHeld = 80;
   }
   return true;
 }
@@ -6873,6 +6959,17 @@ function updateTsunami(m, target, dist, dx, dy, spd, factor, dt) {
       room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 46, timer: 340, max: 340, color: '#7ad8ff' });
       m.act = null; m.actCd = gap;
     }
+  } else if (m.act === 'drop') {              // 5: the bouncing ball
+    if (m.actT <= 0) {
+      room.fires.push({ id: nextId(), kind: 'tsdrop', owner: 'monster', x: cx(m), y: cy(m), r: TS_DROP_R, a: aim, t: 0, life: TS_DROP_MS, trail: 0, hit: new Map() });
+      m.act = null; m.actCd = gap;
+    }
+  } else if (m.act === 'cyclone') {           // 6: the cyclone
+    if (m.actT <= 0) {
+      room.fires.push({ id: nextId(), kind: 'tscyclone', owner: 'monster', x: cx(m), y: cy(m), r: TS_CY_BODY, v: TS_CY_GRAB, a: aim, t: 0, life: TS_CY_MS, held: new Map(), free: new Map() });
+      room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: TS_CY_GRAB, timer: 420, max: 420, color: '#bfefff' });
+      m.act = null; m.actCd = gap;
+    }
   } else {
     // Between attacks he drifts, keeping his distance.
     m.actCd -= dt;
@@ -6881,12 +6978,17 @@ function updateTsunami(m, target, dist, dx, dy, spd, factor, dt) {
     m.y += (Math.sin(aim) * want + Math.cos(aim) * 0.45 * m.orbit) * spd * factor;
     if (Math.random() < 0.004) m.orbit = -m.orbit;
     if (m.actCd <= 0) {
-      const list = ['surge', 'riptide', 'orb'].concat(m.phase === 2 ? ['split'] : []).filter(a => a !== m.lastAct);
+      // One ball and one cyclone at a time, however fast he's attacking.
+      const out = kind => room.fires.some(f => f.kind === kind);
+      const extra = m.phase === 2 ? ['split', ...(out('tsdrop') ? [] : ['drop']), ...(out('tscyclone') ? [] : ['cyclone'])] : [];
+      const list = ['surge', 'riptide', 'orb', ...extra].filter(a => a !== m.lastAct);
       const pick = list[Math.floor(Math.random() * list.length)];
       m.lastAct = pick;
       if (pick === 'surge') { m.act = 'grow'; m.actT = TS_GROW_MS; }
       else if (pick === 'riptide') { m.act = 'back'; m.actT = TS_BACK_MS; }
       else if (pick === 'orb') { m.act = 'orb'; m.actT = TS_ORB_CAST; }
+      else if (pick === 'drop') { m.act = 'drop'; m.actT = TS_DROP_CAST; }
+      else if (pick === 'cyclone') { m.act = 'cyclone'; m.actT = TS_CY_CAST; }
       else { m.act = 'split'; m.actT = TS_SPLIT_CAST; }
     }
   }
@@ -6898,7 +7000,7 @@ function tsunamiDefeated(m) {
   room.monsters = room.monsters.filter(o => o !== m);
   room.wave.monstersLeft = 0;
   room.projectiles = room.projectiles.filter(pr => pr.owner !== 'monster');
-  room.fires = room.fires.filter(f => f.kind !== 'tsring');
+  room.fires = room.fires.filter(f => !['tsring', 'tsdrop', 'tspool', 'tscyclone'].includes(f.kind));
   room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 240, timer: 900, max: 900, color: '#7ad8ff' });
   room.particles.push({ type: 'waveclear', x: CANVAS_W / 2, y: CANVAS_H / 2 - 10, text: 'TSUNAMI HAS FALLEN!', timer: 4000 });
   if (room.gameMode === 'sandbox') return;
@@ -7066,6 +7168,7 @@ function forgeRicochet(proj, t) {
 }
 function forgeTick(p, key, dt) {
   if (p.gsStun > 0) p.gsStun -= dt;
+  if (p.tsHeld > 0) p.tsHeld -= dt;
   if (p.gsSwing) {
     const s = p.gsSwing;
     s.t += dt;
@@ -8774,7 +8877,8 @@ function playerView(p) {
     ...(p.passive === 'mindtome' ? { shuffleIn: Math.max(0, Math.round(p.shuffleT ?? MIND_SHUFFLE_MS)) } : {}),
     ...(p.passive === 'vortex' ? { aegis: !(p.aegisCd > 0) } : {}),
     effects: p.effects,
-    pulled: !!p.pull,
+    pulled: !!p.pull || p.tsHeld > 0,
+    ...(p.tsHeld > 0 ? { tspin: true } : {}),
   };
 }
 
