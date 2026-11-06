@@ -2610,7 +2610,8 @@ async function openSkinsScreen() {
     setSkinMsg('Enter a password on the title screen to buy skins — they are saved against it.', true);
     return;
   }
-  setSkinMsg('Loading...');
+  setSkinMsg('');
+  const loading = custLoadStart('skin');
   try {
     const res = await fetch('/api/profile', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2631,7 +2632,7 @@ async function openSkinsScreen() {
     renderSkinPreview();
   } catch {
     setSkinMsg('Could not reach the server.', true);
-  }
+  } finally { custLoadEnd(loading); }
 }
 function closeSkinsScreen() { showScreen('startScreen'); refreshSavedBanner(); }
 
@@ -2748,8 +2749,7 @@ function renderSkinPreview() {
   if (!uc) return;
   const ux = uc.getContext('2d');
   ux.imageSmoothingEnabled = false;
-  ux.clearRect(0, 0, uc.width, uc.height);
-  ux.fillStyle = '#1a1a2e'; ux.fillRect(0, 0, uc.width, uc.height);
+  ux.clearRect(0, 0, uc.width, uc.height);     // the stage behind it is drawn in the page
   const color = SKIN_COLORS[pendingSkin.colorIdx] || '#4488ff';
   const cv = playerSprite(color, pendingSkin.hatIdx, 1, false, pendingSkin.outfit || '', pendingSkin.accIdx);
   if (!cv) return;
@@ -2805,7 +2805,8 @@ async function openForge() {
   document.getElementById('forgeBench').innerHTML = '';
   document.getElementById('forgeCoins').innerHTML = '';
   if (!pendingPass) { setForgeMsg('Enter a password on the title screen first. Forged upgrades are saved against it.', 'bad'); return; }
-  setForgeMsg('Heating the forge...');
+  setForgeMsg('');
+  const loading = custLoadStart('forge');
   try {
     forgeData = await abilPost('/api/profile', {});
     applyCatalog(forgeData.catalog, forgeData.colors);
@@ -2813,6 +2814,7 @@ async function openForge() {
     setForgeMsg('');
     renderForge();
   } catch (e) { setForgeMsg(e.message || 'Could not reach the server.', 'bad'); }
+  finally { custLoadEnd(loading); }
 }
 function closeForge() { showScreen('startScreen'); refreshSavedBanner(); }
 function pickForgeWeapon(id) { forgeSel = id; forgeResetArmed = false; setForgeMsg(''); renderForge(); }
@@ -2974,8 +2976,10 @@ async function closeTrade() {
 async function tradeStart() {
   if (!pendingPass || tradeBusy) return;
   tradeBusy = true;
+  const loading = custLoadStart('trade');
   try { tradeCode = ''; takeTradeView(await tradePost('open', {})); setTradeMsg(''); startTradePoll(); }
   catch (e) { setTradeMsg(e.message, true); }
+  custLoadEnd(loading);
   tradeBusy = false;
 }
 async function tradeJoin() {
@@ -2983,8 +2987,10 @@ async function tradeJoin() {
   const code = (document.getElementById('tradeCodeIn')?.value || '').trim().toUpperCase();
   if (!code) { setTradeMsg('Type the code your friend got.', true); return; }
   tradeBusy = true;
+  const loading = custLoadStart('trade');
   try { takeTradeView(await tradePost('join', { code })); setTradeMsg(''); startTradePoll(); }
   catch (e) { setTradeMsg(e.message, true); }
+  custLoadEnd(loading);
   tradeBusy = false;
 }
 function tradeOfferIds() {
@@ -3114,7 +3120,8 @@ async function openShop() {
     setShopMsg('Enter a password on the title screen first — coins and upgrades are saved against it.', true);
     return;
   }
-  setShopMsg('Loading...');
+  setShopMsg('');
+  const loading = custLoadStart('shop');
   try {
     const res = await fetch('/api/profile', {
       method: 'POST',
@@ -3138,7 +3145,7 @@ async function openShop() {
     renderShop();
   } catch {
     setShopMsg('Could not reach the server.', true);
-  }
+  } finally { custLoadEnd(loading); }
 }
 function closeShop() { showScreen('startScreen'); refreshSavedBanner(); }
 
@@ -3176,7 +3183,7 @@ function renderShop() {
           title="Buy every ${def.name} level you can afford">MAX</button></span>`;
     }).join('');
     const desc = stats.map(k => `<b>${upgradeDefs[k].short}</b> ${upgradeDefs[k].desc || ''}`).join(' · ');
-    return `<div class="shop-row">
+    return `<div class="shop-row" style="--wc:${col}">
       <div class="shop-head">
         <canvas class="shop-ic${(shopData.rareWeapons || []).includes(id) ? ' rare-glow' : ''}" data-weapon="${id}" width="56" height="32"></canvas>
         <span class="shop-name" style="color:${col}">${name}</span>
@@ -3641,7 +3648,8 @@ async function openAbilities() {
     setAbilMsg('Enter a password on the title screen first — abilities are saved against it.', true);
     return;
   }
-  setAbilMsg('Loading...');
+  setAbilMsg('');
+  const loading = custLoadStart('abil');
   try {
     abilData = await abilPost('/api/profile', {});
     if (Array.isArray(abilData.abilityDefs)) ABILITY_DEFS = abilData.abilityDefs;
@@ -3649,7 +3657,7 @@ async function openAbilities() {
     renderAbilities();
   } catch (e) {
     setAbilMsg(e.message === 'Failed to fetch' ? 'Could not reach the server.' : e.message, true);
-  }
+  } finally { custLoadEnd(loading); }
 }
 function closeAbilities() { showScreen('startScreen'); refreshSavedBanner(); }
 

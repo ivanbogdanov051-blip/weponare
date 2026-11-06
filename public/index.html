@@ -108,6 +108,18 @@
     </nav>
   </div>
 
+  <!-- Loading card for Upgrades, Abilities, Skins, the Forge and Trade -->
+  <div id="custLoad" class="overlay hidden">
+    <div class="load-wrap">
+      <div class="load-brand"><span>WEPONARE</span></div>
+      <canvas id="custLoadScene" class="load-scene" width="480" height="270"></canvas>
+      <div id="custLoadTitle" class="load-title"></div>
+      <div class="blade-bar"><div class="blade"><div class="blade-fill sweep"></div></div></div>
+      <div class="load-tip" id="custLoadTip"></div>
+      <button id="custLoadBack" class="mode-btn exit-btn load-exit" onclick="custLoadBack()">&#10005; BACK</button>
+    </div>
+  </div>
+
   <!-- Settings (the gear on the menu) -->
   <div id="settingsScreen" class="overlay hidden">
     <div class="pixel-box settings-box">
@@ -147,7 +159,7 @@
   <!-- Weapon upgrades bought with coins -->
   <div id="shopScreen" class="overlay hidden">
     <div class="pixel-box shop-box">
-      <div class="title-text shop-title">UPGRADES</div>
+      <div class="title-text shop-title"><span class="t-em">⚡</span> UPGRADES</div>
       <div class="subtitle">SPEND COINS ON YOUR WEAPONS</div>
       <div id="shopCoins" class="shop-coins"></div>
       <div id="shopMsg" class="shop-msg"></div>
@@ -159,7 +171,7 @@
   <!-- The forge: coins go in, a random upgrade for one weapon may come out -->
   <div id="forgeScreen" class="overlay hidden">
     <div class="pixel-box shop-box">
-      <div class="title-text shop-title forge-title">THE FORGE</div>
+      <div class="title-text shop-title forge-title"><span class="t-em">🔨</span> THE FORGE</div>
       <div class="subtitle">MORE COINS, BETTER ODDS &middot; 3 UPGRADES A WEAPON &middot; 1 RARE</div>
       <div id="forgeCoins" class="shop-coins"></div>
       <div id="forgeMsg" class="shop-msg"></div>
@@ -172,7 +184,7 @@
   <!-- Trade: two players on one code, each choosing what they give -->
   <div id="tradeScreen" class="overlay hidden">
     <div class="pixel-box shop-box">
-      <div class="title-text shop-title trade-title">TRADE</div>
+      <div class="title-text shop-title trade-title"><span class="t-em">🤝</span> TRADE</div>
       <div class="subtitle">WEAPONS, COINS, ABILITIES AND SKINS &middot; BOTH MUST AGREE</div>
       <div id="tradeMsg" class="shop-msg"></div>
       <div id="tradeTop"></div>
@@ -188,7 +200,7 @@
   <!-- Abilities: bought once with coins, kept forever, used with Q / E in matches -->
   <div id="abilitiesScreen" class="overlay hidden">
     <div class="pixel-box shop-box">
-      <div class="title-text shop-title abil-title">ABILITIES</div>
+      <div class="title-text shop-title abil-title"><span class="t-em">✨</span> ABILITIES</div>
       <div class="subtitle">BUY ONCE, KEEP FOREVER &middot; USE WITH Q AND E &middot; MORE SLOTS FOR A FORTUNE</div>
       <div id="abilCoins" class="shop-coins"></div>
       <div id="abilSlots" class="abil-slots"></div>
@@ -328,7 +340,7 @@
   <!-- Skins / character customization -->
   <div id="skinsScreen" class="overlay hidden">
     <div class="pixel-box skins-box">
-      <div class="title-text" style="font-size:22px;margin-bottom:4px">CUSTOMIZE</div>
+      <div class="title-text shop-title skin-title"><span class="t-em">🎨</span> CUSTOMIZE</div>
       <div class="subtitle">CHARACTER SKIN</div>
       <canvas id="skinPreviewCanvas" width="72" height="80"></canvas>
       <div class="skin-section-title">COLOR</div>
@@ -340,7 +352,7 @@
       <div class="skin-section-title">SKINS <span id="skinCoins" class="skin-coins"></span></div>
       <div id="skinShopMsg" class="shop-msg"></div>
       <div id="outfitGrid" class="outfit-grid"></div>
-      <button class="mode-btn" style="margin-top:20px;width:100%" onclick="closeSkinsScreen()">&#10003; BACK</button>
+      <button class="mode-btn shop-back" onclick="closeSkinsScreen()">&#10003; BACK</button>
     </div>
   </div>
 
@@ -488,5 +500,6 @@
   <script src="weapons.js"></script>
   <script src="arena.js"></script>
   <script src="client.js"></script>
+  <script src="custload.js"></script>
 </body>
 </html>

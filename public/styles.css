@@ -1351,7 +1351,8 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
    --load-a and --load-b are the colours of the mode being loaded. */
 #splash { --load-a: #7a2aff; --load-b: #ff3ad8; }
 #lobbyScreen { --load-a: #7a2aff; --load-b: #ff3ad8; background: #160838; }
-#splash::before, #lobbyScreen::before {
+#custLoad { --load-a: #7a2aff; --load-b: #ff3ad8; background: #160838; z-index: 30; }
+#splash::before, #lobbyScreen::before, #custLoad::before {
   content: ''; position: fixed; inset: -45vmax; z-index: 0; pointer-events: none;
   background:
     radial-gradient(closest-side at 32% 34%, var(--load-a), transparent),
@@ -1400,17 +1401,225 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 .load-tip { color: #fff; font-size: 11px; letter-spacing: 2px; line-height: 1.5; min-height: 1.5em; text-shadow: 0 1px 2px #000; }
 #lobbyScreen .xp-text { margin-top: 0; color: #ffe84a; text-shadow: 0 1px 2px #000; }
 #lobbyScreen .xp-text:empty { display: none; }
-#lobbyScreen .invite-btn, #lobbyScreen .load-exit { flex: none; width: min(300px, 90%); background: rgba(10, 6, 40, 0.82); }
-#lobbyScreen .load-exit { margin-top: 0; }
+#custLoad .load-exit, #lobbyScreen .invite-btn, #lobbyScreen .load-exit { flex: none; width: min(300px, 90%); background: rgba(10, 6, 40, 0.82); }
+#lobbyScreen .load-exit, #custLoad .load-exit { margin-top: 0; }
 /* Short phones held sideways: the scene shrinks so the exit stays on screen. */
 @media (max-height: 460px) {
   .load-wrap { gap: 5px; }
-  #lobbyScreen .load-brand { display: none; }
+  #lobbyScreen .load-brand, #custLoad .load-brand { display: none; }
   #lobbyScreen .load-scene { width: min(100%, 76vh); }
+  #custLoad .load-scene { width: min(100%, 106vh); }
   .load-msg { min-height: 0; line-height: 1.35; }
   .load-tip { display: none; }
-  #lobbyScreen .load-exit { padding: 5px 6px; }
+  #lobbyScreen .load-exit, #custLoad .load-exit { padding: 5px 6px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  #splash::before, #lobbyScreen::before, .load-brand span, .blade-fill.sweep { animation: none !important; }
+  #splash::before, #lobbyScreen::before, #custLoad::before, .load-brand span, .blade-fill.sweep { animation: none !important; }
+}
+
+.load-title {
+  color: #fff; font-size: clamp(16px, 4.6vw, 22px); letter-spacing: 3px; font-weight: bold; text-shadow: 2px 2px 0 #000;
+}
+
+/* ── The customising screens ──
+   One shell, and each screen fills in --c1, --c2 and its panel colours, so they all
+   belong together while each keeps a character of its own. */
+#shopScreen     { --c1: #ffc83a; --c2: #2ae8c8; --sky1: #b87a08; --sky2: #0a9a8a; --ink: #2a1a04; --panel1: rgba(50, 30, 6, 0.9);   --panel2: rgba(6, 44, 44, 0.92); }
+#forgeScreen    { --c1: #ff9a2a; --c2: #ff5a2a; --sky1: #a82a06; --sky2: #5a1404; --ink: #2a0a02; --panel1: rgba(40, 14, 8, 0.93);  --panel2: rgba(18, 12, 14, 0.95); }
+#abilitiesScreen{ --c1: #ff6ae0; --c2: #9a7aff; --sky1: #a8188a; --sky2: #4a1ad8; --ink: #2a0a3a; --panel1: rgba(52, 10, 62, 0.9);  --panel2: rgba(26, 12, 84, 0.92); }
+#skinsScreen    { --c1: #ff6ab8; --c2: #4ad8ff; --sky1: #d82a7a; --sky2: #1a8ad8; --ink: #2a0a3a; --panel1: rgba(60, 12, 70, 0.9);  --panel2: rgba(12, 28, 84, 0.92); }
+#tradeScreen    { --c1: #4af0a8; --c2: #4ad0ff; --sky1: #0a8a5a; --sky2: #0a7aa8; --ink: #04281e; --panel1: rgba(6, 44, 36, 0.9);   --panel2: rgba(6, 30, 64, 0.92); }
+#settingsScreen { --c1: #7ad8ff; --c2: #c89aff; --sky1: #1a6ad8; --sky2: #7a2ad8; --ink: #0a1a3a; --panel1: rgba(10, 26, 66, 0.9);  --panel2: rgba(34, 14, 74, 0.92); }
+
+#shopScreen, #forgeScreen, #abilitiesScreen, #skinsScreen, #tradeScreen, #settingsScreen { background: #120626; }
+#shopScreen::before, #forgeScreen::before, #abilitiesScreen::before, #skinsScreen::before, #tradeScreen::before, #settingsScreen::before {
+  content: ''; position: fixed; inset: -45vmax; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(closest-side at 32% 34%, var(--sky1), transparent),
+    radial-gradient(closest-side at 68% 30%, var(--sky2), transparent),
+    radial-gradient(closest-side at 72% 68%, var(--sky1), transparent),
+    radial-gradient(closest-side at 30% 70%, var(--sky2), transparent);
+  animation: menu-sky 70s linear infinite;
+}
+/* Sparks rising through the forge: one tall layer sliding up, so nothing repaints. */
+#forgeScreen::after {
+  content: ''; position: fixed; left: 0; right: 0; top: 0; height: 200vh; z-index: 0; pointer-events: none;
+  background-image:
+    radial-gradient(circle, #ffd84a 0 1.5px, transparent 2.5px), radial-gradient(circle, #ff8a1a 0 2px, transparent 3px),
+    radial-gradient(circle, #fff0a8 0 1px, transparent 2px), radial-gradient(circle, #ff6a1a 0 1.5px, transparent 2.5px),
+    radial-gradient(circle, #ffb02a 0 2px, transparent 3px), radial-gradient(circle, #ffe88a 0 1px, transparent 2px);
+  /* Widths share no factors and heights divide 100vh, so it looks random yet loops cleanly. */
+  background-size: 131px 50vh, 223px 33.333vh, 97px 25vh, 179px 20vh, 277px 50vh, 311px 33.333vh;
+  background-position: 13px 7vh, 71px 19vh, 41px 3vh, 113px 11vh, 197px 31vh, 29px 23vh;
+  animation: forge-sparks 7s linear infinite;
+}
+@keyframes forge-sparks { to { transform: translateY(-100vh); } }
+
+#shopScreen .pixel-box, #forgeScreen .pixel-box, #abilitiesScreen .pixel-box, #skinsScreen .pixel-box, #tradeScreen .pixel-box, #settingsScreen .pixel-box {
+  position: relative; z-index: 1; border: 3px solid var(--c1); border-radius: 14px;
+  background: linear-gradient(160deg, var(--panel1), var(--panel2));
+  box-shadow: 0 0 30px color-mix(in srgb, var(--c1) 55%, transparent), 0 8px 0 rgba(0, 0, 0, 0.35);
+}
+/* Titles: a metal sheen in the screen's own colours. */
+#shopScreen .title-text, #forgeScreen .title-text, #abilitiesScreen .title-text, #skinsScreen .title-text, #tradeScreen .title-text, #settingsScreen .title-text {
+  font-size: 26px; text-shadow: none; filter: drop-shadow(2px 2px 0 #000);
+  background: linear-gradient(90deg, var(--c1), #fff, var(--c2), var(--c1)) 0 0 / 200% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+  animation: menu-title 7s linear infinite;
+}
+#shopScreen .subtitle, #forgeScreen .subtitle, #abilitiesScreen .subtitle, #skinsScreen .subtitle, #tradeScreen .subtitle { color: color-mix(in srgb, var(--c2) 60%, #fff); font-size: 10px; }
+/* An emoji inside clipped gradient text comes out as a blank shape: give it its own paint. */
+.title-text .t-em { -webkit-text-fill-color: #fff; color: #fff; }
+#shopScreen .shop-msg, #forgeScreen .shop-msg, #abilitiesScreen .shop-msg, #skinsScreen .shop-msg, #tradeScreen .shop-msg { color: #e8e0ff; }
+#shopScreen .shop-msg.err, #forgeScreen .shop-msg.err, #abilitiesScreen .shop-msg.err, #skinsScreen .shop-msg.err, #tradeScreen .shop-msg.err { color: #ffb0a0; }
+.shop-msg.fg-good-msg { color: #7affb0 !important; }
+.shop-msg.fg-rare-msg { color: #ffd84a !important; }
+
+/* The coin count: a little gold plate. */
+.shop-box .shop-coins {
+  display: inline-block; padding: 4px 14px; margin-bottom: 8px; border-radius: 999px; font-weight: bold;
+  color: #3a2200; background: linear-gradient(180deg, #ffe88a, #e8a81a); box-shadow: 0 2px 0 #7a4a0a;
+}
+.shop-box .shop-coins:empty { display: none; }
+.shop-box .shop-coins .coin-ic { text-shadow: none; }
+
+/* BACK, on every one of these screens */
+#shopScreen .shop-back, #forgeScreen .shop-back, #abilitiesScreen .shop-back, #skinsScreen .shop-back, #tradeScreen .shop-back, #settingsScreen .shop-back {
+  border: none; border-radius: 10px; color: var(--ink); font-size: 13px; font-weight: bold;
+  background: linear-gradient(90deg, var(--c1), var(--c2)); box-shadow: 0 4px 0 rgba(0, 0, 0, 0.4);
+  transition: transform 0.12s, filter 0.12s;
+}
+#shopScreen .shop-back:hover, #forgeScreen .shop-back:hover, #abilitiesScreen .shop-back:hover, #skinsScreen .shop-back:hover, #tradeScreen .shop-back:hover, #settingsScreen .shop-back:hover { filter: brightness(1.12); color: var(--ink); }
+#shopScreen .shop-back:active, #forgeScreen .shop-back:active, #abilitiesScreen .shop-back:active, #skinsScreen .shop-back:active, #tradeScreen .shop-back:active, #settingsScreen .shop-back:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4); }
+
+/* Lists: cards instead of ruled lines. */
+.shop-box .shop-list { border: none; padding: 2px; }
+.shop-box .shop-row { border-radius: 10px; margin-bottom: 6px; padding: 7px 8px; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(10, 6, 30, 0.45); }
+.shop-box .shop-row:last-child { border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+/* A weapon's card carries a wash of that weapon's own colour. */
+.shop-box .shop-row[style*="--wc"] {
+  border-color: color-mix(in srgb, var(--wc) 55%, transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--wc) 24%, transparent), rgba(10, 6, 30, 0.5) 62%);
+}
+.shop-box .shop-row.legendary, .shop-box .shop-row.mythic-row, .shop-box .shop-row.mind-row, .shop-box .shop-row.ghost-row, .shop-box .shop-row.light-row { background-color: rgba(10, 6, 30, 0.55); }
+.shop-box .shop-row.legendary:not(.mythic-row):not(.mind-row):not(.ghost-row):not(.light-row):not(.samurai-row) {
+  border-color: #ff9a3a; background: linear-gradient(90deg, rgba(200, 80, 10, 0.42), rgba(70, 10, 60, 0.45)); box-shadow: 0 0 8px rgba(255, 130, 40, 0.3);
+}
+.shop-box .shop-desc, .shop-box .shop-passive { color: #c0b8e0; font-size: 10px; }
+.shop-box .shop-desc b { color: #fff; }
+.shop-box .shop-passive .pv-state { color: #c0b8e0; }
+.shop-box .shop-name { font-weight: bold; font-size: 12px; text-shadow: 0 1px 0 #000; }
+.shop-box .legend-need { color: #ffd0a0; }
+
+/* Upgrade buttons: each weapon's three stats get three colours. */
+#shopScreen .up-btn, #shopScreen .up-max { border-radius: 6px; font-weight: bold; }
+#shopScreen .up-grp:nth-child(3n+1) .up-btn { --st: #ff5a6a; }
+#shopScreen .up-grp:nth-child(3n+2) .up-btn { --st: #4ab8ff; }
+#shopScreen .up-grp:nth-child(3n+3) .up-btn { --st: #4ae88a; }
+#shopScreen .up-btn { background: color-mix(in srgb, var(--st) 26%, #0a0620); border-color: var(--st); color: #fff; }
+#shopScreen .up-btn:hover:not(:disabled) { border-color: #fff; color: #fff; }
+#shopScreen .up-btn .up-cost { color: #ffe88a; }
+#shopScreen .up-pips i { background: rgba(255, 255, 255, 0.16); }
+#shopScreen .up-pips i.on { background: var(--st); }
+#shopScreen .up-btn.maxed { background: rgba(30, 110, 60, 0.5); border-color: #6affa0; }
+#shopScreen .up-btn.maxed .up-cost { color: #9affc0; }
+#shopScreen .up-max { background: linear-gradient(180deg, #ffe88a, #e8a81a); border: 1px solid #7a4a0a; color: #3a2200; }
+#shopScreen .up-max:hover:not(:disabled) { border-color: #fff; }
+.shop-box .buy-weapon { border-radius: 8px; border: none; font-weight: bold; color: #3a1200; background: linear-gradient(180deg, #ffd08a, #ff8a2a); box-shadow: 0 3px 0 #8a3a0a; }
+.shop-box .buy-weapon:hover:not(:disabled) { background: linear-gradient(180deg, #ffe0aa, #ffa04a); }
+
+/* ── Forge ── */
+#forgeScreen .pixel-box { border-color: #ff9a2a; border-style: ridge; box-shadow: 0 0 34px rgba(255, 110, 20, 0.75), inset 0 0 26px rgba(255, 90, 10, 0.2), 0 8px 0 rgba(0, 0, 0, 0.45); }
+#forgeScreen .fg-w { background: rgba(0, 0, 0, 0.4); border-color: #6a3a1a; border-radius: 8px; }
+#forgeScreen .fg-w.on { border-color: #ffd84a; background: rgba(160, 60, 10, 0.55); box-shadow: 0 0 10px #ff9a2a; }
+#forgeScreen .fg-pips i { background: rgba(255, 255, 255, 0.16); }
+#forgeScreen .fg-head { padding: 6px 8px; border-radius: 10px; background: rgba(0, 0, 0, 0.32); }
+#forgeScreen .fg-sub, #forgeScreen .fg-full, #forgeScreen .fg-odds { color: #f0d8c0; }
+#forgeScreen .fg-slot { border-radius: 8px; background: linear-gradient(180deg, #3a3e50, #1e202a); border-color: #6a6e82; color: #e8e0d8; }
+#forgeScreen .fg-slot b { color: #ffc070; }
+#forgeScreen .fg-slot.empty { border-style: dashed; background: rgba(0, 0, 0, 0.3); border-color: #8a5a3a; color: #c8a080; }
+#forgeScreen .fg-slot.rare { background: linear-gradient(180deg, #6a4a08, #2a1e04); border-color: #ffd84a; box-shadow: 0 0 12px rgba(255, 216, 74, 0.6); }
+#forgeScreen .fg-slot.rare b { color: #ffe88a; }
+#forgeScreen .fg-presets button { border-radius: 8px; background: rgba(90, 36, 8, 0.75); border-color: #ff9a2a; color: #ffd8a8; font-weight: bold; }
+#forgeScreen .mode-btn.fg-strike {
+  border: none; border-radius: 10px; color: #2a0a02; font-weight: bold;
+  background: radial-gradient(ellipse at 50% 110%, #fff0a8, #ffb02a 45%, #e84a0a 100%);
+  box-shadow: 0 4px 0 #6a1a04; animation: forge-hot 1.5s ease-in-out infinite;
+}
+#forgeScreen .mode-btn.fg-strike:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 #6a1a04; }
+#forgeScreen .mode-btn.fg-strike:disabled { animation: none; filter: saturate(0.4) brightness(0.7); opacity: 1; }
+@keyframes forge-hot { 0%, 100% { box-shadow: 0 4px 0 #6a1a04, 0 0 8px #ff6a1a; } 50% { box-shadow: 0 4px 0 #6a1a04, 0 0 22px #ffb02a; } }
+#forgeScreen .fg-reset { border-radius: 8px; border-color: #ff8a7a; color: #ffc0b0; }
+#forgeScreen .fg-all, #forgeScreen .fg-all summary { color: #f0d8c0; }
+#forgeScreen .fg-row { border-color: rgba(255, 255, 255, 0.1); color: #e0d0c0; }
+
+/* ── Abilities ── */
+#abilitiesScreen .abil-slot { border-radius: 12px; border: 2px solid var(--c1); background: rgba(90, 20, 110, 0.5); color: #fff; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.4), 0 0 10px rgba(255, 106, 224, 0.4); }
+#abilitiesScreen .abil-slot.empty { border-style: dashed; color: #d0c0e8; box-shadow: none; }
+#abilitiesScreen .abil-key { color: #ffe84a; }
+#abilitiesScreen .abil-buyslot { border-color: #ffd84a; color: #ffe88a; background: rgba(90, 60, 10, 0.55); }
+#abilitiesScreen .shop-row.abil-row { border-radius: 16px 6px 16px 6px; background: linear-gradient(90deg, rgba(120, 30, 130, 0.42), rgba(30, 14, 90, 0.5)); border-color: rgba(255, 106, 224, 0.4); }
+#abilitiesScreen .shop-row.abil-row.owned { border-color: #6affa0; }
+#abilitiesScreen .abil-tag { border-radius: 999px; padding: 1px 7px; color: #042a14; background: #7affb0; border: none; font-weight: bold; }
+#abilitiesScreen .abil-equip { border-radius: 999px; background: rgba(90, 40, 200, 0.45); border-color: #b09aff; color: #fff; }
+#abilitiesScreen .abil-equip:hover { border-color: #fff; }
+#abilitiesScreen .abil-equip.on { background: #1a9a5a; border-color: #9affc0; color: #fff; }
+#abilitiesScreen .shop-ic { width: 32px; border-radius: 50%; background: rgba(10, 4, 40, 0.7); box-shadow: 0 0 0 2px var(--c1); }
+
+/* ── Skins ── */
+#skinsScreen .skin-section-title { color: var(--c2); font-size: 10px; font-weight: bold; }
+#skinsScreen .skin-coins { color: #ffe88a; }
+#skinPreviewCanvas {
+  border: 3px solid #fff; border-radius: 12px;
+  background: radial-gradient(ellipse at 50% 95%, #ffe84a 0, #ff5ad8 42%, #5a1ad8 100%);
+  box-shadow: 0 0 18px rgba(255, 106, 184, 0.8);
+}
+#skinsScreen .skin-color { border-radius: 50%; border-color: rgba(255, 255, 255, 0.35); }
+#skinsScreen .skin-color.selected { border-color: #fff; box-shadow: 0 0 0 2px #120626, 0 0 0 4px #fff; }
+#skinsScreen .skin-hat { border-radius: 999px; background: rgba(10, 6, 40, 0.55); border-color: rgba(255, 255, 255, 0.28); color: #e8e0ff; }
+#skinsScreen .skin-hat:hover { border-color: var(--c2); color: #fff; }
+#skinsScreen .skin-hat.selected { border-color: transparent; color: #2a0a3a; font-weight: bold; background: linear-gradient(90deg, var(--c1), var(--c2)); }
+#skinsScreen .outfit-card { border-radius: 10px; background: rgba(10, 6, 40, 0.55); border-color: rgba(255, 255, 255, 0.22); color: #d8d0f0; }
+#skinsScreen .outfit-card:hover { border-color: var(--c2); color: #fff; }
+#skinsScreen .outfit-card.owned { border-color: #6affa0; color: #fff; }
+#skinsScreen .outfit-card.equipped { border-color: #ffe84a; color: #ffe84a; box-shadow: 0 0 12px rgba(255, 232, 74, 0.7); }
+#skinsScreen .outfit-tag { color: #ffe88a; }
+#skinsScreen .outfit-card.owned .outfit-tag { color: #9affc0; }
+#skinsScreen .outfit-card.equipped .outfit-tag { color: #ffe84a; }
+
+/* ── Trade ── */
+#tradeScreen .mode-btn.btn-trade { border: none; border-radius: 10px; color: var(--ink); font-weight: bold; min-height: 46px; background: linear-gradient(90deg, var(--c1), var(--c2)); box-shadow: 0 4px 0 rgba(0, 0, 0, 0.4); }
+#tradeScreen .mode-btn.btn-trade small { display: block; font-weight: normal; font-size: 9px; margin-top: 2px; }
+#tradeScreen .mode-btn.btn-trade:hover:not(:disabled) { filter: brightness(1.1); color: var(--ink); background: linear-gradient(90deg, var(--c1), var(--c2)); }
+#tradeScreen .mode-btn.btn-trade:disabled { filter: saturate(0.4) brightness(0.65); opacity: 1; }
+#tradeScreen .tr-join input { border-radius: 10px; background: rgba(4, 16, 30, 0.8); border-color: var(--c2); }
+#tradeScreen .tr-rules, #tradeScreen .tr-wait, #tradeScreen .tr-coins, #tradeScreen .tr-status { color: #d8f0ec; }
+#tradeScreen .tr-code { color: #043a2a; background: linear-gradient(90deg, var(--c1), var(--c2)); border-radius: 10px; padding: 6px 4px; letter-spacing: 10px; box-shadow: 0 4px 0 rgba(0, 0, 0, 0.4); }
+#tradeScreen .tr-big { color: var(--c1); }
+#tradeScreen .tr-col { border-radius: 10px; border-color: var(--c1); background: rgba(4, 40, 32, 0.6); }
+#tradeScreen #tradeThem { border-color: var(--c2); background: rgba(4, 28, 60, 0.6); }
+#tradeScreen #tradeThem .tr-h { color: var(--c2); }
+#tradeScreen .tr-sub { color: #b0d0cc; }
+#tradeScreen .tr-none { color: #a0c0bc; }
+#tradeScreen .tr-tabs button { border-radius: 8px 8px 0 0; background: rgba(0, 0, 0, 0.3); color: #d8f0ec; }
+#tradeScreen .tr-tabs button.on { background: linear-gradient(90deg, var(--c1), var(--c2)); color: var(--ink); font-weight: bold; border-color: transparent; }
+#tradeScreen .tr-pick { border-radius: 8px; }
+#tradeScreen .tr-pick.on { border-color: var(--c1); background: rgba(40, 180, 130, 0.3); }
+#tradeScreen .tr-coins input { border-radius: 6px; background: rgba(4, 16, 30, 0.8); }
+
+/* ── Settings ── */
+#settingsScreen .set-label { color: #e8f0ff; }
+#settingsScreen .set-row, #settingsScreen .set-arena { border-color: rgba(255, 255, 255, 0.14); }
+#settingsScreen .set-sub { color: var(--c1); }
+#settingsScreen .set-btn, #settingsScreen .map-btn { border-radius: 8px; background: rgba(6, 10, 40, 0.65); border-color: rgba(255, 255, 255, 0.28); color: #e8f0ff; }
+#settingsScreen .set-btn.on { border-color: #7aff9a; color: #7aff9a; }
+#settingsScreen .map-btn.on { border-color: #ffe45a; color: #ffe45a; background: rgba(70, 60, 8, 0.6); }
+#settingsScreen #arenaPreview { border: 2px solid var(--c1); border-radius: 10px; }
+#settingsScreen .arena-opt { border-radius: 8px; background: rgba(6, 10, 40, 0.65); border-color: rgba(255, 255, 255, 0.2); color: #d8e0f8; }
+#settingsScreen .arena-opt.on { border-color: #ffe45a; color: #ffe45a; background: rgba(70, 60, 8, 0.6); }
+
+@media (prefers-reduced-motion: reduce) {
+  #shopScreen::before, #forgeScreen::before, #forgeScreen::after, #abilitiesScreen::before, #skinsScreen::before, #tradeScreen::before, #settingsScreen::before,
+  #shopScreen .title-text, #forgeScreen .title-text, #abilitiesScreen .title-text, #skinsScreen .title-text, #tradeScreen .title-text, #settingsScreen .title-text,
+  #forgeScreen .mode-btn.fg-strike { animation: none !important; }
 }
