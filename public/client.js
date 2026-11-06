@@ -48,7 +48,7 @@ let WEAPON_COLOR = {
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
   fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff', samuraiblade:'#ff5a5a', darklight:'#e8e8f4', starfall:'#ffe9a0', worldsplitter:'#ff6a1a', soullantern:'#6affc8', ashfeather:'#ff8a3a', chronosedge:'#7ac8ff', hydrafang:'#5ae87a',
-  greatestsword:'#ffe9a8', ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
+  greatestsword:'#ffe9a8', wavestorm:'#4ac8ff', ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
   scimitar:'#e8e0c8', slingshot:'#b08a5a', mace:'#9aa4b0', javelin:'#d8c8a0', claws:'#e0e4ec',
   emberstaff:'#ff7a2a', halberd:'#c0c8d8', frostbow:'#9fe8ff', chronostaff:'#e8c87a', voidblade:'#9a5aff',
   mindtome:'#ff5ad8', lightblade:'#fff27a',
@@ -76,6 +76,7 @@ const WEAPON_DESC = {
   darklight:"MYTHIC. A kunai of dark and light, forged from the Light Blade",
   starfall:"MYTHIC. A staff crowned with a crescent moon and a captive star",
   greatestsword:"MYTHIC. The biggest blade ever forged, and it hits harder than it looks",
+  wavestorm:"MYTHIC. Tsunami's own power, held in a wand with a single drop of water",
   worldsplitter:"MYTHIC. An obsidian greatsword veined with magma, heavy enough to split the world",
   soullantern:"MYTHIC. A black iron lantern burning with the souls of the fallen",
   ashfeather:"MYTHIC. A bow of living flame, its limbs made of phoenix feathers",
@@ -998,6 +999,7 @@ function updatePrediction(frameDt, now) {
   if (ghostNow(me, now)) spd *= 1.75;
   if (me.lightspeed > 0) spd *= 3;            // LIGHTSPEED
   if (me.passive === 'dagger') spd *= 1.45;   // SWIFTNESS
+  if (me.passive === 'wavestorm') spd *= 1.25; // ENDLESS TIDE
   if (me.kspin > 0) spd *= 1.9;               // the katana's spin
   if (me.phx > 0) spd *= 1.8;                 // Ashfeather's PHOENIX FORM
   if (me.fgs) spd *= me.fgs;                  // forge: FLEET FOOTED, KITER
@@ -1128,7 +1130,7 @@ const ATTACK_ANIM = {
   stormhammer: 'chop', frostscythe: 'spin', sunbow: 'draw',
   scimitar: 'slash', slingshot: 'draw', mace: 'chop', javelin: 'throw', claws: 'stab',
   emberstaff: 'cast', halberd: 'sweep', frostbow: 'draw', chronostaff: 'cast', voidblade: 'slash', mindtome: 'tome',
-  lightblade: 'slash', darklight: 'throw', starfall: 'cast', worldsplitter: 'heavy', greatestsword: 'doublechop', soullantern: 'cast', ashfeather: 'draw', chronosedge: 'slash', hydrafang: 'stab',
+  lightblade: 'slash', darklight: 'throw', starfall: 'cast', worldsplitter: 'heavy', greatestsword: 'doublechop', wavestorm: 'cast', soullantern: 'cast', ashfeather: 'draw', chronosedge: 'slash', hydrafang: 'stab',
 };
 const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
                   heavy: 300, doublechop: 700, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
@@ -1933,9 +1935,8 @@ function drawLightStreak(f, now) {
 function drawFireRings(fires) {
   if (!fires.length) return;
   const now = performance.now() / 1000;
-  drawTsPools(fires, now);
   for (const f of fires) {
-    if (f.kind === 'tspool' || f.kind === 'tsdrop' || f.kind === 'tscyclone') continue;
+    if (f.kind === 'tsdrop' || f.kind === 'tscyclone') continue;
     if (f.kind === 'vortexfield') { drawVortexField(f, now); continue; }
     if (f.kind === 'ibburst') continue;
     if (f.kind === 'voidbeam') { drawVoidBeam(f, now); continue; }
@@ -3235,6 +3236,7 @@ const LEGEND_MOVES = {
   ashfeather: '<b>ATK</b> a burning arrow that bursts into three more when it hits · <b>SPECIAL</b> a fan of nine of them ·'
             + ' <b>SUPER</b> PHOENIX FORM: 6s ablaze, much faster, leaving a trail of fire, burning everything you touch and'
             + ' healing as you go. Only one mythic goes into a game, and a mythic never earns you another weapon.',
+  wavestorm: '<b>ATK</b> ten hunting waves in a rapid burst · <b>SPECIAL</b> swell up, turn to water and ram your enemies, untouchable unless you are parried · <b>SUPER</b> a huge cyclone that hunts them down, carries them away and throws them',
   greatestsword: '<b>ATK</b> two huge swings, down then up, each hurling enemies back, with a long wait after · <b>SPECIAL</b> leap at the nearest'
              + ' enemy and slam down: land on them and they are stunned and an explosion wave blasts everyone nearby, but land on nothing and YOU'
              + ' are stunned · <b>SUPER</b> one blow splits the arena with a massive crack that stands like a wall for 4s: enemies can not cross it and'
@@ -3337,7 +3339,9 @@ function legendaryCards(weapons, coins) {
       const maxed = id => weapons.includes(id) && (WEAPON_META[id]?.upgrades || []).filter(k => defs[k]).every(k => ((up[id] || {})[k] || 0) >= defs[k].max);
       const legendIds = Object.values(WEAPON_META).filter(o => o.shopOnly && !o.mythic).map(o => o.id), haveL = legendIds.filter(id => weapons.includes(id)).length;
       const legendNeed = `<span class="${haveL >= legendIds.length ? 'need-ok' : 'need-no'}">${haveL >= legendIds.length ? '✔' : '✘'} ALL LEGENDARIES ${haveL}/${legendIds.length}</span> `;
-      const needs = legendNeed + (w.mythicNeeds || []).map(id => `<span class="${maxed(id) ? 'need-ok' : 'need-no'}">${maxed(id) ? '✔' : '✘'} ${WEAPON_META[id]?.name || id} maxed</span>`).join(' ');
+      const beat = !!(shopData && shopData.tsunamiBeat);
+      const bossNeed = w.mythicBoss === 'tsunami' ? `<span class="${beat ? 'need-ok' : 'need-no'}">${beat ? '✔' : '✘'} BEAT TSUNAMI</span> ` : '';
+      const needs = legendNeed + bossNeed + (w.mythicNeeds || []).map(id => `<span class="${maxed(id) ? 'need-ok' : 'need-no'}">${maxed(id) ? '✔' : '✘'} ${WEAPON_META[id]?.name || id} maxed</span>`).join(' ');
       const kills = Math.min((shopData && shopData.mythicKills) || 0, w.mythicKills || 0);
       return `<div class="shop-row legendary mythic-row">
         <div class="shop-head">
@@ -4543,7 +4547,7 @@ function updateScreens(state) {
       document.getElementById('roundTitle').innerHTML = state.victory
         ? '<span style="color:#7aff9a">VICTORY!</span>' : '<span style="color:#ff5a6a">DEFEATED</span>';
       document.getElementById('roundStats').innerHTML = state.victory
-        ? `TSUNAMI HAS FALLEN<br><span style="color:${PAL.coin}">+200,000 COINS</span><br><span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`
+        ? `TSUNAMI HAS FALLEN<br><span style="color:${PAL.coin}">+200,000 COINS</span><br>${state.wsOpened ? '<span style="color:#4ac8ff">WAVESTORM CAN NOW BE EARNED</span><br>' : ''}<span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`
         : `THE WAVE TOOK YOU<br>${ts ? `HE HAD <span style="color:#7ad8ff">${Math.ceil(ts.hp).toLocaleString()}</span> HP LEFT<br>` : ''}<span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`;
     } else if (state.gameMode === 'portal') {
       lb.classList.add('hidden');
@@ -4681,6 +4685,7 @@ function draw(state) {
     sl.px += dx; sl.py += dy; sl.x += dx; sl.y += dy;
   }
   drawSlashes();
+  drawTsPools(state.pools || [], performance.now() / 1000);
   drawFireRings(state.fires || []);
   if (state.rareShop) drawRareShop(state.rareShop);
   drawFissures(state.fissures || []);
@@ -5131,9 +5136,31 @@ function drawPlayer(p, baseColor, label, key) {
   if (unseen && key !== 'p' + myNum) return;
   if (p.sky) p = skyfallPose(p);
   if (unseen) { ctx.save(); ctx.globalAlpha = 0.35 + 0.1 * Math.sin(performance.now() / 120); }
-  drawPlayerBody(p, baseColor, label, key);
+  if (p.wsk) drawWaterForm(p, baseColor, label, key);
+  else drawPlayerBody(p, baseColor, label, key);
   if (p.gstun) drawStunStars(p);
   if (unseen) ctx.restore();
+}
+// Wavestorm's ram: grown from the feet up, and fading into living water.
+function drawWaterForm(p, baseColor, label, key) {
+  const k = p.wsk, fade = Math.min(1, (k - 1) / 1.4), now = performance.now();
+  const mx = p.x + p.w / 2, feet = p.y + p.h;
+  ctx.save();
+  ctx.translate(mx, feet); ctx.scale(k, k); ctx.translate(-mx, -feet);
+  ctx.globalAlpha *= 1 - 0.5 * fade;
+  drawPlayerBody(p, baseColor, label, key);
+  ctx.globalAlpha = 0.68 * fade;
+  ctx.fillStyle = tsGradient(ctx, p.y - 8, feet + 3);
+  ctx.beginPath(); ctx.ellipse(mx, p.y + p.h * 0.42, p.w * 0.72, p.h * 0.72, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.fillStyle = '#d8f4ff';
+  for (let i = 0; i < 8; i++) {           // spray coming off you
+    const t = ((now / 500) + i / 8) % 1, a = i * 2.4 + now / 700, r = p.w * k * (0.5 + t * 0.4);
+    ctx.globalAlpha = 0.8 * (1 - t) * fade;
+    ctx.fillRect(Math.round(mx + Math.cos(a) * r), Math.round(feet - t * p.h * k), 2, 2);
+  }
+  ctx.restore();
 }
 // ── Weapon passives, made visible ──
 // Every active passive gets a pulsing aura in its colour, plus its own touch:
@@ -6573,7 +6600,7 @@ function drawProjectiles(projs) {
     const u = upgScale(pr.upg);
 
     if (pr.weaponId === 'abyssbolt' || pr.weaponId === 'infinitybow') { drawVoidBolt(pr, ang); continue; }
-    if (pr.weaponId === 'tswave' || pr.weaponId === 'tswide') { drawTsWave(pr, ang, now, pr.weaponId === 'tswide'); continue; }
+    if (pr.weaponId === 'tswave' || pr.weaponId === 'tswide' || pr.weaponId === 'wavestorm') { drawTsWave(pr, ang, now, pr.weaponId === 'tswide'); continue; }
     if (pr.weaponId === 'tsorb') { drawTsOrb(pr, now); continue; }
     if (pr.weaponId === 'samwave') { drawSlashWave(pr, ang, now, pr.special ? '#ff5a5a' : (pr.owner === 'monster' ? '#ff4a5a' : '#ff8a8a')); continue; }
     if (pr.weaponId === 'samdashwave') { drawDashWave(pr, ang, now); continue; }
@@ -8101,29 +8128,36 @@ function drawTsOrb(pr, now) {
 // Ids are base-36 text, so they can't go into sums as they are: one with a letter in
 // it would turn the whole animation into NaN.
 const tsSeed = id => parseInt(id, 36) % 97 || 0;
-function drawTsPools(fires, now) {
-  const pools = fires.filter(f => f.kind === 'tspool');
-  if (!pools.length) return;
-  const size = f => { const k = f.k || 0; return f.r * Math.min(1, k * 12) * Math.min(1, (1 - k) * 6); };
-  const shape = (scale, wobble) => {
+const TS_POOL_R = 26;
+// Hostile water is deep blue. Your own harmless water is teal, so you can always
+// tell at a glance what you're allowed to stand in.
+const POOL_INKS = { foe: ['#0a3aa8', '#2a8ae8', '#7ad8ff'], mine: ['#04786a', '#14b89a', '#7affe0'] };
+function drawTsPools(all, now) {
+  if (!all.length) return;
+  const size = k => TS_POOL_R * Math.min(1, k * 12) * Math.min(1, (1 - k) * 6);
+  const shape = (pools, scale, wobble) => {
     ctx.beginPath();
-    for (const f of pools) {
-      const r = size(f) * scale + (wobble ? Math.sin(now * 2.2 + tsSeed(f.id)) * wobble : 0);
-      if (r <= 0) continue;
-      ctx.moveTo(f.x + r, f.y); ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
-    }
+    pools.forEach(([x, y, k], i) => {
+      const r = size(k) * scale + (wobble ? Math.sin(now * 2.2 + (x + y + i) % 97) * wobble : 0);
+      if (r <= 0) return;
+      ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, Math.PI * 2);
+    });
   };
   ctx.save();
-  ctx.fillStyle = '#0a3aa8'; ctx.globalAlpha = 0.72; shape(1.04, 1.5); ctx.fill();
-  ctx.fillStyle = '#2a8ae8'; ctx.globalAlpha = 0.72; shape(0.8, 1.5); ctx.fill();
-  ctx.fillStyle = '#7ad8ff'; ctx.globalAlpha = 0.5; shape(0.48, 1); ctx.fill();
-  ctx.strokeStyle = '#e8f8ff'; ctx.lineWidth = 1;     // ripples
-  for (const f of pools) {
-    const p = (now * 0.7 + tsSeed(f.id) * 0.37) % 1, r = size(f) * (0.2 + 0.7 * p);
-    if (r <= 0) continue;
-    ctx.globalAlpha = 0.55 * (1 - p);
-    ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, Math.PI * 2); ctx.stroke();
+  for (const [own, inks] of Object.entries(POOL_INKS)) {
+    const pools = all.filter(p => (p[3] === myNum) === (own === 'mine'));
+    if (!pools.length) continue;
+    ctx.fillStyle = inks[0]; ctx.globalAlpha = 0.72; shape(pools, 1.04, 1.5); ctx.fill();
+    ctx.fillStyle = inks[1]; ctx.globalAlpha = 0.72; shape(pools, 0.8, 1.5); ctx.fill();
+    ctx.fillStyle = inks[2]; ctx.globalAlpha = 0.5; shape(pools, 0.48, 1); ctx.fill();
   }
+  ctx.strokeStyle = '#e8f8ff'; ctx.lineWidth = 1;     // ripples
+  all.forEach(([x, y, k], i) => {
+    const p = (now * 0.7 + i * 0.37) % 1, r = size(k) * (0.2 + 0.7 * p);
+    if (r <= 0) return;
+    ctx.globalAlpha = 0.55 * (1 - p);
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+  });
   ctx.restore();
 }
 // The ball and the cyclone stand above the fighters.
@@ -8160,11 +8194,11 @@ function drawTsCyclone(f, now) {
   ctx.beginPath(); ctx.ellipse(f.x, f.y, f.r, f.r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
   ctx.globalAlpha = fade;
   // The funnel: narrow and deep blue at the floor, wide and white at the top.
-  const H = 74, BANDS = 11;
+  const H = f.r * 2.5, BANDS = 11;
   const fill = tsGradient(ctx, f.y - H, f.y + 2);
   for (let i = 0; i < BANDS; i++) {
     const k = i / (BANDS - 1), y = f.y - k * H, rx = 7 + (f.r + 12) * Math.pow(k, 1.3), lean = Math.sin(now * 5 + k * 5) * 5 * k;
-    ctx.strokeStyle = fill; ctx.lineWidth = 7;
+    ctx.strokeStyle = fill; ctx.lineWidth = f.r * 0.24;
     ctx.beginPath(); ctx.ellipse(f.x + lean, y, rx, rx * 0.26, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;          // streaks racing round it
     const a = now * 13 + i * 1.1;

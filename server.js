@@ -409,6 +409,15 @@ const WEAPONS = [
     mythicKills: 240, mythicNeeds: ['glaive'],
     special: { kind: 'hydraheads', dmg: 34, range: 260, cd: 10000 },
     super:   { kind: 'ninehead', dmg: 30, cd: 26000 } },
+  // Wavestorm: Tsunami's power in a wand; only for sale once you've beaten him.
+  // ATK: ten hunting waves in a rapid burst. SPECIAL: swell up, turn to water and
+  // ram everything in your way. SUPER: his cyclone, far worse. PASSIVE: ENDLESS
+  // TIDE, water wherever you walk and a faster step while you hold it.
+  { id: 'wavestorm', name: 'WAVESTORM', damage: 26, range: 430, atkSpd: 1300, type: 'ranged', unlockXp: 0,
+    shopOnly: true, noRequirement: true, mythic: true, price: 600000, waveBurst: true,
+    mythicKills: 350, mythicNeeds: ['windwand'], mythicBoss: 'tsunami',
+    special: { kind: 'tidalram', dmg: 300, cd: 11000 },
+    super:   { kind: 'wavecyclone', dmg: 130, cd: 30000 } },
 ];
 
 // Melee reach: the swing is 50% longer and a slam special 30% wider. The shield
@@ -433,7 +442,7 @@ const WEAPON_COLORS = {
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
   shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
   fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff', samuraiblade: '#ff5a5a', endlessscythe: '#7a2aff', darklight: '#e8e8f4', starfall: '#ffe9a0', worldsplitter: '#ff6a1a', soullantern: '#6affc8', ashfeather: '#ff8a3a', chronosedge: '#7ac8ff', hydrafang: '#5ae87a',
-  greatestsword: '#ffe9a8', ghostdagger: '#a8f0ff', stormhammer: '#7ac8ff', frostscythe: '#bfefff', sunbow: '#ffd24a',
+  greatestsword: '#ffe9a8', wavestorm: '#4ac8ff', ghostdagger: '#a8f0ff', stormhammer: '#7ac8ff', frostscythe: '#bfefff', sunbow: '#ffd24a',
 };
 
 // ── Weapon upgrades bought with coins from the menu ──
@@ -500,6 +509,7 @@ const WEAPON_UPGRADES = {
   starfall:    ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   worldsplitter: ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   greatestsword: ['dmg', 'spd', 'crit', 'cdr', 'rng'],
+  wavestorm: ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   soullantern: ['dmg', 'spd', 'crit', 'cdr'],
   ashfeather:  ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   chronosedge: ['dmg', 'spd', 'crit', 'cdr', 'rng'],
@@ -541,6 +551,7 @@ const PASSIVES = {
   windwand:    { name: 'GALE GUARD',     color: '#d8f4ff', desc: 'blows away an enemy shot that comes close, every 0.5s' },
   revolver:    { name: 'CHAIN REACTION', color: '#ffa040', desc: 'every hit explodes onto the foes around it, and everything you kill blows up even bigger' },
   greatestsword: { name: 'IMMOVABLE', color: '#ffe9a8', desc: 'you take 20% less damage' },
+  wavestorm:   { name: 'ENDLESS TIDE', color: '#4ac8ff', desc: 'water pours out wherever you walk, slowing and draining enemies, and you move 25% faster' },
   worldsplitter: { name: 'AFTERSHOCK', color: '#ff6a1a', desc: 'every 3rd swing splits the ground three ways' },
   chronosedge: { name: 'BORROWED TIME', color: '#7ac8ff', desc: 'your special and super recharge 30% faster' },
   hydrafang:   { name: 'REGROWTH', color: '#5ae87a', desc: 'drop below 30% health and you regrow 5% of it a second for 4s (every 15s)' },
@@ -1115,6 +1126,7 @@ function progress() {
   if (!d.lightKills)  d.lightKills = {};
   if (!d.samuraiKills) d.samuraiKills = {};
   if (!d.mythicKills) d.mythicKills = {};
+  if (!d.tsunamiBeat) d.tsunamiBeat = {};
   if (!d.mythicPick) d.mythicPick = {};
   if (!d.forge) d.forge = {};              // password -> { weaponId: [upgrade ids] }
   if (!d.lostWeapons) d.lostWeapons = {};  // password -> { weaponId: XP total that gets it back }
@@ -1169,6 +1181,7 @@ function saveData(pw) {
     lightKills: d.lightKills[pw] || 0,
     samuraiKills: d.samuraiKills[pw] || 0,
     mythicKills: d.mythicKills[pw] || 0,
+    tsunamiBeat: !!d.tsunamiBeat[pw],
     forge: d.forge[pw] || {}, lost: d.lostWeapons[pw] || {}, rev: d.saveRev[pw] || 0,
   });
 }
@@ -1218,6 +1231,7 @@ function restoreBackup(pw, backup) {
     d.lightKills[pw] = num(b.lightKills);
     d.samuraiKills[pw] = num(b.samuraiKills);
     d.mythicKills[pw] = num(b.mythicKills);
+    if (b.tsunamiBeat) d.tsunamiBeat[pw] = true;
     d.forge[pw] = cleanForge(b.forge);
     d.lostWeapons[pw] = cleanLost(b.lost);
     d.saveRev[pw] = num(b.rev);
@@ -1248,6 +1262,7 @@ function restoreBackup(pw, backup) {
   if (num(b.lightKills) > (d.lightKills[pw] || 0)) { d.lightKills[pw] = num(b.lightKills); changed = true; }
   if (num(b.samuraiKills) > (d.samuraiKills[pw] || 0)) { d.samuraiKills[pw] = num(b.samuraiKills); changed = true; }
   if (num(b.mythicKills) > (d.mythicKills[pw] || 0)) { d.mythicKills[pw] = num(b.mythicKills); changed = true; }
+  if (b.tsunamiBeat && !d.tsunamiBeat[pw]) { d.tsunamiBeat[pw] = true; changed = true; }
   if (!staleCopy) for (const [wid, lv] of Object.entries(ups)) {
     const allowed = upgradesFor(wid);
     for (const [k, n] of Object.entries(lv)) {
@@ -1415,9 +1430,9 @@ function forgeCan(w) {
   const special = w.mindTrap || w.portalShot || w.kunaiOrbit || w.starStaff || w.groundSplit || w.timeBlade || w.fireRing
     || w.vortexShield || w.lightDash || w.infinityShot || w.grapple;
   if (forgeClass(w) === 'ranged' && !special) {
-    const hunts = w.soulWisp || w.phoenixBow || w.hydraBite || w.slashWave;   // these shots already find their target
+    const hunts = w.soulWisp || w.phoenixBow || w.hydraBite || w.slashWave || w.waveBurst;   // these shots already find their target
     can.push('shots');
-    if (!w.soulWisp && !w.phoenixBow && !w.hydraBite) can.push('multi');
+    if (!w.soulWisp && !w.phoenixBow && !w.hydraBite && !w.waveBurst) can.push('multi');
     if (!hunts) can.push('unguided');
     if (!w.pierce && !w.boomerang && !w.aoeRadius && !w.slashWave) can.push('solid');
     if (!w.boomerang) can.push('wallbound');
@@ -1676,6 +1691,7 @@ function effectiveSpeed(p) {
   if (hasEffect(p, 'ghost')) s *= 1.75;
   if (p.lightspeed > 0) s *= LIGHTSPEED_MULT;          // the Light Blade's SUPER
   if (p.passive === 'dagger') s *= PASSIVE_SPEED;
+  if (p.passive === 'wavestorm') s *= WS_SPEED;         // ENDLESS TIDE
   if (p.kspin > 0) s *= KSPIN_SPEED;
   if (p.fg?.speed) s *= 1 + p.fg.speed;                 // forge: FLEET FOOTED, KITER
   if (p.phoenix) s *= PHX_SPEEDMULT;                    // Ashfeather's PHOENIX FORM                    // the katana's SUPER
@@ -2351,6 +2367,7 @@ function mythicOffer(pw, def) {
   const legends = WEAPONS.filter(w => w.shopOnly && !w.mythic);
   const haveLegends = legends.filter(w => prof.weapons.includes(w.id)).length;
   const needs = [{ name: 'ALL LEGENDARIES ' + haveLegends + '/' + legends.length, plain: true, ok: admin || haveLegends >= legends.length },
+    ...(def.mythicBoss === 'tsunami' ? [{ name: 'BEAT TSUNAMI', plain: true, ok: admin || !!progress().tsunamiBeat[pw] }] : []),
     ...(def.mythicNeeds || []).map(id => ({ name: WEAPON_BY_ID[id]?.name || id, ok: admin || maxedOwned(prof, id) }))];
   const killsOk = admin || prof.mythicKills >= (def.mythicKills || 0);
   const coinsOk = admin || prof.coins >= def.price;
@@ -3538,7 +3555,7 @@ function resetToLobby() {
 
 const GHOST_BOSS_MULT = 0.5;
 function applyDamage(target, dmg, attackerKey) {
-  if (target.dead || target.dying || target.invincible > 0 || target.hidden || target.p3) return;
+  if (target.dead || target.dying || target.invincible > 0 || target.hidden || target.p3 || target.wsRam) return;
   if (target.num && hasEffect(target, 'shield')) {  // shield item: ignore all incoming damage
     target.hitFlash = 80;
     return;
@@ -3949,7 +3966,7 @@ function tickRoom(dt) {
   for (const key of KEYS) {
     const p = room.players[key];
     if (!p || p.dead) {
-      if (p) { p.bladeDash = null; p.lightspeed = 0; p.bladeClick = null; p.kspin = 0; p.gsSwing = null; p.gsStun = 0; }
+      if (p) { p.bladeDash = null; p.lightspeed = 0; p.bladeClick = null; p.kspin = 0; p.gsSwing = null; p.gsStun = 0; p.wsRam = null; p.wsK = 0; p.wsBurst = null; p.wsLastX = undefined; }
       if (p && p.respawnTimer > 0) {
         p.respawnTimer -= dt;
         if (p.respawnTimer <= 0) respawnPlayer(p);
@@ -3979,7 +3996,7 @@ function tickRoom(dt) {
         if ((ax * vx + ay * vy) / (al * vl) > SAM_TOWARD_DOT) { vx *= SAM_TOWARD_MULT; vy *= SAM_TOWARD_MULT; }
       }
     }
-    if (p.sky || p.gsStun > 0 || p.tsHeld > 0) { vx = 0; vy = 0; }   // up in the air, stunned or in a cyclone: no steering
+    if (p.sky || p.gsStun > 0 || p.tsHeld > 0 || p.wsRam) { vx = 0; vy = 0; }   // up in the air, stunned or in a cyclone: no steering
     if (p.kspin > 0) {
       // Spinning: less grip — speed builds up and carries on after you let go.
       const g = Math.min(1, KSPIN_GLIDE * factor);
@@ -4048,6 +4065,7 @@ function tickRoom(dt) {
       continue;
     }
 
+    if (p.wsRam) { wsRamTick(p, key, factor, dt); continue; }   // the ram is all you do while it lasts
     if (p.gsStun > 0) continue;   // stunned: nothing at all
     // The katana's spin (and the Worldsplitter's leap) is all you do while it lasts — only parry gets through.
     if (p.kspin > 0 || p.sky) {
@@ -4644,7 +4662,7 @@ function detonateAoe(proj) {
 // Damage over time (fire, poison): ignores the brief invulnerability after a
 // hit — otherwise ticks would simply bounce off — and credits nobody.
 function dotDamage(t, dmg) {
-  if (t.dead) return;
+  if (t.dead || t.wsRam) return;
   if (t.num && hasEffect(t, 'shield')) return;
   if (t.armor) dmg = Math.max(1, Math.round(dmg * (1 - t.armor)));
   if (t.num && t.defense) dmg = Math.max(1, Math.round(dmg * (1 - t.defense)));
@@ -4783,6 +4801,11 @@ function attackMove(p, pKey) {
   if (w.phoenixBow) { phoenixAttack(p, pKey, w, dmgMult); return; }
   if (w.timeBlade) { timeAttack(p, pKey, w, dmgMult); return; }
   if (w.hydraBite) { hydraAttack(p, pKey, w, dmgMult); return; }
+  if (w.waveBurst) {
+    p.wsBurst = { n: 0, t: 0, dmg: Math.round(w.damage * dmgMult), range: w.range };
+    wsFireWave(p, pKey, p.wsBurst);        // the first leaves on the press itself; doAttack gives it its forge upgrades
+    return;
+  }
   if (w.slashWave) {
     // A slash wave that seeks out the nearest foe.
     const aim = nearestTargetAngle(p, pKey);
@@ -4967,6 +4990,7 @@ function doSuper(p, pKey) {
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
   if (su.kind === 'skyfall') { startSkyfall(p, pKey, Math.round(su.dmg * dmgMult)); return; }
   if (su.kind === 'greatcrack') { castGreatCrack(p, pKey, Math.round(su.dmg * dmgMult)); return; }
+  if (su.kind === 'wavecyclone') { castWaveCyclone(p, pKey, Math.round(su.dmg * dmgMult)); return; }
   if (su.kind === 'timestop') { stopTime(p, pKey); return; }
   if (su.kind === 'ninehead') { raiseHeads(p, pKey, Math.round(su.dmg * dmgMult), true); return; }
   if (su.kind === 'phoenixform') {
@@ -5264,6 +5288,7 @@ const THROW_SHARE = 0.16, THROW_BACK_SHARE = 0.32, THROW_BOSS_SHARE = 0.04, THRO
 
 // The passives that act every tick rather than on a stat.
 function passiveTick(p, key, dt) {
+  if (p.passive === 'wavestorm') wsTrailTick(p, key);                 // ENDLESS TIDE
   if (p.passive === 'mindtome') {                                     // SHIFTING GROUND
     p.shuffleT = (p.shuffleT ?? MIND_SHUFFLE_MS) - dt;
     if (p.shuffleT <= 0) { p.shuffleT = MIND_SHUFFLE_MS; shuffleTraps(p, key); }
@@ -6781,6 +6806,7 @@ const TS_CY_CAST = 700, TS_CY_MS = 6500, TS_CY_BODY = 30, TS_CY_GRAB = 78, TS_CY
 const TS_CY_HOLD = 1700, TS_CY_SPIN = 10, TS_CY_THROW = 110, TS_CY_FREE = 1600;
 
 function startTsunamiFight() {
+  room.wsOpened = null;
   room.wave = { num: 1, monstersLeft: 1, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 };
   room.waveHpMult = 1; room.waveSpeedMult = 1;
   spawnMonster('tsunami');
@@ -6822,15 +6848,25 @@ function updateTsRing(f) {
 function updateTsWater(dt) {
   const water = room.fires.filter(f => f.kind === 'tspool' || f.kind === 'tscyclone');
   if (!water.length) return;
-  for (const t of enemyTargets('monster')) {
-    if (t.tsWetT > 0) t.tsWetT -= dt;
-    if (!water.some(f => Math.hypot(cx(t) - f.x, cy(t) - f.y) < f.r + t.w * 0.35)) continue;
-    chillTarget(t, TS_WET_SLOW);
-    if (!(t.tsWetT > 0)) { t.tsWetT = TS_WET_TICK; dotDamage(t, TS_WET_DMG); }
+  for (const owner of new Set(water.map(f => f.owner))) {
+    const mine = water.filter(f => f.owner === owner);
+    for (const t of enemyTargets(owner)) {
+      const wet = t.tsWet || (t.tsWet = {});     // each side's water keeps its own beat
+      if (wet[owner] > 0) wet[owner] -= dt;
+      const touching = mine.filter(f => Math.hypot(cx(t) - f.x, cy(t) - f.y) < f.r + t.w * 0.35);
+      if (!touching.length) continue;
+      chillTarget(t, TS_WET_SLOW);
+      if (wet[owner] > 0) continue;
+      wet[owner] = TS_WET_TICK;
+      const dmg = Math.max(...touching.map(f => f.wet || TS_WET_DMG));
+      if (owner === 'monster') { dotDamage(t, dmg); continue; }
+      if (!t.num) t.invincible = 0;
+      applyDamage(t, t.num ? Math.min(dmg, WS_PVP_WET) : dmg, owner);
+    }
   }
 }
-function tsPool(x, y) {
-  room.fires.push({ id: nextId(), kind: 'tspool', owner: 'monster', x, y, r: TS_POOL_R, t: 0, life: TS_POOL_MS });
+function tsPool(x, y, owner = 'monster', wet = TS_WET_DMG, life = TS_POOL_MS) {
+  room.fires.push({ id: nextId(), kind: 'tspool', owner, x, y, r: TS_POOL_R, t: 0, life, wet });
 }
 // 5: the ball rebounds off the walls, leaving a trail of water along its way.
 function updateTsDrop(f, factor, dt) {
@@ -6858,16 +6894,21 @@ function updateTsDrop(f, factor, dt) {
 }
 // 6: it hunts you slowly; anything it catches is carried along, spiralling in
 // towards the water at its heart, then flung out and left alone for a moment.
+const TS_CY = { speed: TS_CY_SPEED, carry: TS_CY_CARRY, turn: TS_CY_TURN, hold: TS_CY_HOLD, spin: TS_CY_SPIN, throw: TS_CY_THROW, free: TS_CY_FREE, throwDmg: 0 };
 function tsCyRelease(f, t) {
   f.held.delete(t);
-  f.free.set(t, TS_CY_FREE);
-  tsPush(t, f.x, f.y, TS_CY_THROW);
+  f.free.set(t, f.cfg.free);
+  if (f.cfg.throwDmg) {
+    if (!t.num) t.invincible = 0;
+    strikeTarget(t, t.num ? Math.min(f.cfg.throwDmg, WS_PVP_THROW) : f.cfg.throwDmg, f.owner);
+  }
+  if (!t.dead) tsPush(t, f.x, f.y, f.cfg.throw);
 }
 function updateTsCyclone(f, factor, dt) {
-  const foes = enemyTargets('monster');
-  const prey = foes.filter(t => !f.held.has(t)).sort((a, b) => Math.hypot(cx(a) - f.x, cy(a) - f.y) - Math.hypot(cx(b) - f.x, cy(b) - f.y))[0];
-  if (f.held.size === 0 && prey) f.a = turnToward(f.a, Math.atan2(cy(prey) - f.y, cx(prey) - f.x), TS_CY_TURN * dt / 1000);
-  const step = (f.held.size ? TS_CY_CARRY : TS_CY_SPEED) * factor;
+  const c = f.cfg, foes = enemyTargets(f.owner), alive = new Set(foes);
+  const prey = foes.filter(t => !f.held.has(t) && !t.boss).sort((a, b) => Math.hypot(cx(a) - f.x, cy(a) - f.y) - Math.hypot(cx(b) - f.x, cy(b) - f.y))[0];
+  if (f.held.size === 0 && prey) f.a = turnToward(f.a, Math.atan2(cy(prey) - f.y, cx(prey) - f.x), c.turn * dt / 1000);
+  const step = (f.held.size ? c.carry : c.speed) * factor;
   f.x += Math.cos(f.a) * step; f.y += Math.sin(f.a) * step;
   const minX = ARENA_X + f.r, maxX = ARENA_X + ARENA_W - f.r, minY = ARENA_Y + f.r, maxY = ARENA_Y + ARENA_H - f.r;
   if (f.x < minX || f.x > maxX) { f.a = Math.PI - f.a; f.x = Math.max(minX, Math.min(maxX, f.x)); }
@@ -6876,15 +6917,15 @@ function updateTsCyclone(f, factor, dt) {
   for (const t of foes) {
     if (f.held.has(t) || f.free.has(t) || t.boss || t.sky) continue;
     const dx = cx(t) - f.x, dy = cy(t) - f.y, d = Math.hypot(dx, dy);
-    if (d < f.v) f.held.set(t, { t: TS_CY_HOLD, ang: Math.atan2(dy, dx), rad: d });
+    if (d < f.v) f.held.set(t, { t: c.hold, ang: Math.atan2(dy, dx), rad: d });
   }
   const ending = f.t + dt >= f.life;
   for (const [t, h] of f.held) {
-    if (t.dead) { f.held.delete(t); continue; }
+    if (t.dead || !alive.has(t)) { f.held.delete(t); continue; }
     h.t -= dt;
     if (h.t <= 0 || ending) { tsCyRelease(f, t); continue; }
-    h.ang += TS_CY_SPIN * dt / 1000;
-    h.rad = Math.max(TS_CY_BODY * 0.6, h.rad - (TS_CY_GRAB / TS_CY_HOLD) * dt * 1.3);   // reaching the water well before the throw
+    h.ang += c.spin * dt / 1000;
+    h.rad = Math.max(f.r * 0.6, h.rad - (f.v / c.hold) * dt * 1.3);   // reaching the water well before the throw
     t.x = f.x + Math.cos(h.ang) * h.rad - t.w / 2;
     t.y = f.y + Math.sin(h.ang) * h.rad - t.h / 2;
     clampToArena(t);
@@ -6892,6 +6933,90 @@ function updateTsCyclone(f, factor, dt) {
     t.tsHeld = 80;
   }
   return true;
+}
+
+// ─── WAVESTORM ─────────────────────────────────────────────────────────────────
+const WS_WAVES = 10, WS_WAVE_GAP = 70, WS_WAVE_SPEED = 7.5;
+const WS_GROW_MS = 300, WS_RUSH_MS = 1400, WS_SHRINK_MS = 400, WS_RAM_SCALE = 2.4, WS_RAM_SPEED = 7.5, WS_RAM_TURN = 3, WS_RAM_PUSH = 150, WS_PARRY_SHARE = 0.25;
+const WS_CY_BODY = 56, WS_CY_GRAB = 140, WS_CY_MS = 11000;
+const WS_CY = { speed: 4.6, carry: 7, turn: 2.2, hold: 2400, spin: 13, throw: 240, free: 900, throwDmg: 0 };
+const WS_THROW_MULT = 3, WS_PVP_WET = 24, WS_PVP_THROW = 60;   // against a player it hurts, without being an instant kill
+const WS_SPEED = 1.25, WS_POOL_STEP = 34, WS_POOL_MS = 6000, WS_POOL_CAP = 60, WS_POOL_SHARE = 0.4;
+
+// ATK: ten waves, one after another, each finding its own way to you know who.
+function wsFireWave(p, key, b) {
+  const aim = nearestTargetAngle(p, key), i = b.n++, a = aim + (i - (WS_WAVES - 1) / 2) * 0.3;
+  p.facing = Math.cos(aim) < 0 ? -1 : 1;
+  tsShot(p, a, WS_WAVE_SPEED, { owner: key, damage: b.dmg, maxRange: b.range, weaponId: 'wavestorm', hitR: 8, homing: true, turn: 6, seekR: 2000, quarry: nearestFoe(p, key), gust: 6, noIframe: true });
+  b.t = WS_WAVE_GAP;
+  if (b.n >= WS_WAVES) p.wsBurst = null;
+}
+function wsBurstTick(p, key, dt) {
+  const b = p.wsBurst;
+  b.t -= dt;
+  if (b.t > 0) return;
+  wsFireWave(p, key, b);
+  if (p.fg) forgeShots(p, key, room.projectiles.length - 1);
+}
+// SPECIAL: nothing touches you while you're water, and nothing stands in your way,
+// except a well-timed parry, which breaks the ram and hurts.
+function startTidalRam(p, key, dmg) {
+  p.wsRam = { phase: 'grow', t: WS_GROW_MS, a: nearestTargetAngle(p, key), hit: new Set(), dmg };
+  p.wsK = 1;
+  room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 60, timer: 340, max: 340, color: '#7ad8ff' });
+}
+function wsRamTick(p, key, factor, dt) {
+  const r = p.wsRam;
+  r.t -= dt;
+  p.invincible = Math.max(p.invincible || 0, 60);
+  p.pull = null;
+  if (r.phase === 'grow') {
+    p.wsK = 1 + (WS_RAM_SCALE - 1) * (1 - Math.max(0, r.t) / WS_GROW_MS);
+    if (r.t <= 0) { r.phase = 'rush'; r.t = WS_RUSH_MS; p.wsK = WS_RAM_SCALE; }
+  } else if (r.phase === 'rush') {
+    const f = nearestFoe(p, key);
+    if (f) r.a = turnToward(r.a, Math.atan2(cy(f) - cy(p), cx(f) - cx(p)), WS_RAM_TURN * dt / 1000);
+    p.facing = Math.cos(r.a) < 0 ? -1 : 1;
+    p.x += Math.cos(r.a) * WS_RAM_SPEED * factor; p.y += Math.sin(r.a) * WS_RAM_SPEED * factor;
+    clampToArena(p);
+    for (const t of enemyTargets(key)) {
+      if (r.hit.has(t) || Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) > (p.w * p.wsK + t.w) / 2) continue;
+      r.hit.add(t);
+      if (t.num && t.parryTimer > 0) {                  // parried: the ram breaks on them
+        spawnParrySpark(cx(t), cy(t));
+        r.phase = 'shrink'; r.t = WS_SHRINK_MS;
+        p.invincible = 0;
+        p.wsRam = null;                                 // for the blow itself, you're just flesh
+        applyDamage(p, Math.round(r.dmg * WS_PARRY_SHARE * reflectOf(t)), playerKeyOf(t));
+        p.wsRam = r;
+        break;
+      }
+      if (!t.num) t.invincible = 0;
+      applyDamage(t, r.dmg, key);
+      gsPush(t, cx(p), cy(p), WS_RAM_PUSH);
+    }
+    if (r.phase === 'rush' && r.t <= 0) { r.phase = 'shrink'; r.t = WS_SHRINK_MS; }
+  } else {
+    p.wsK = 1 + (WS_RAM_SCALE - 1) * (Math.max(0, r.t) / WS_SHRINK_MS);
+    if (r.t <= 0) { p.wsRam = null; p.wsK = 0; }
+  }
+}
+// SUPER: his cyclone, bigger, longer, faster and far stronger.
+function castWaveCyclone(p, key, dmg) {
+  room.fires.push({ id: nextId(), kind: 'tscyclone', owner: key, x: cx(p), y: cy(p), r: WS_CY_BODY, v: WS_CY_GRAB, a: nearestTargetAngle(p, key), t: 0, life: WS_CY_MS,
+                    wet: dmg, cfg: { ...WS_CY, throwDmg: dmg * WS_THROW_MULT }, held: new Map(), free: new Map() });
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 90, timer: 800, max: 800, color: '#4ac8ff', text: 'WAVESTORM' });
+}
+// PASSIVE: every step leaves water, with no end to it. Each puddle dries up in the
+// end, or a long run would fill the arena and flood the connection.
+function wsTrailTick(p, key) {
+  if (p.wsLastX === undefined) { p.wsLastX = cx(p); p.wsLastY = cy(p); return; }
+  if (Math.hypot(cx(p) - p.wsLastX, cy(p) - p.wsLastY) < WS_POOL_STEP) return;
+  p.wsLastX = cx(p); p.wsLastY = cy(p);
+  const wet = Math.max(4, Math.round(weapon(p).damage * WS_POOL_SHARE));
+  tsPool(cx(p), cy(p) + p.h * 0.3, key, wet, WS_POOL_MS);
+  const mine = room.fires.filter(f => f.kind === 'tspool' && f.owner === key);
+  if (mine.length > WS_POOL_CAP) room.fires.splice(room.fires.indexOf(mine[0]), 1);
 }
 function tsPush(t, x, y, dist) {
   const dx = cx(t) - x, dy = cy(t) - y, d = Math.hypot(dx, dy) || 1;
@@ -6966,7 +7091,7 @@ function updateTsunami(m, target, dist, dx, dy, spd, factor, dt) {
     }
   } else if (m.act === 'cyclone') {           // 6: the cyclone
     if (m.actT <= 0) {
-      room.fires.push({ id: nextId(), kind: 'tscyclone', owner: 'monster', x: cx(m), y: cy(m), r: TS_CY_BODY, v: TS_CY_GRAB, a: aim, t: 0, life: TS_CY_MS, held: new Map(), free: new Map() });
+      room.fires.push({ id: nextId(), kind: 'tscyclone', owner: 'monster', x: cx(m), y: cy(m), r: TS_CY_BODY, v: TS_CY_GRAB, a: aim, t: 0, life: TS_CY_MS, cfg: TS_CY, held: new Map(), free: new Map() });
       room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: TS_CY_GRAB, timer: 420, max: 420, color: '#bfefff' });
       m.act = null; m.actCd = gap;
     }
@@ -6979,7 +7104,7 @@ function updateTsunami(m, target, dist, dx, dy, spd, factor, dt) {
     if (Math.random() < 0.004) m.orbit = -m.orbit;
     if (m.actCd <= 0) {
       // One ball and one cyclone at a time, however fast he's attacking.
-      const out = kind => room.fires.some(f => f.kind === kind);
+      const out = kind => room.fires.some(f => f.kind === kind && f.owner === 'monster');
       const extra = m.phase === 2 ? ['split', ...(out('tsdrop') ? [] : ['drop']), ...(out('tscyclone') ? [] : ['cyclone'])] : [];
       const list = ['surge', 'riptide', 'orb', ...extra].filter(a => a !== m.lastAct);
       const pick = list[Math.floor(Math.random() * list.length)];
@@ -7007,6 +7132,13 @@ function tsunamiDefeated(m) {
   for (const key of KEYS) {
     const p = room.players[key];
     if (!p) continue;
+    const pw = room.passwords[key];
+    if (pw && !isAdminPw(pw) && !progress().tsunamiBeat[pw]) {    // the way to Wavestorm opens
+      progress().tsunamiBeat[pw] = true;
+      markDirty();
+      if (!room.wsOpened) room.wsOpened = new Set();
+      room.wsOpened.add(key);
+    }
     addCoins(key, TS_REWARD_COINS);
     room.particles.push({ type: 'coin', x: cx(p), y: p.y - 10, text: '+' + TS_REWARD_COINS.toLocaleString() + ' COINS', timer: 3000, max: 3000 });
   }
@@ -7169,6 +7301,7 @@ function forgeRicochet(proj, t) {
 function forgeTick(p, key, dt) {
   if (p.gsStun > 0) p.gsStun -= dt;
   if (p.tsHeld > 0) p.tsHeld -= dt;
+  if (p.wsBurst) wsBurstTick(p, key, dt);
   if (p.gsSwing) {
     const s = p.gsSwing;
     s.t += dt;
@@ -8543,6 +8676,7 @@ function doSpecial(p, pKey) {
   if (sp.kind === 'kunaistorm') { darklightStorm(p, pKey, spDmg); return; }
   if (sp.kind === 'tectonic') { castTectonic(p, pKey, sp, spDmg); return; }
   if (sp.kind === 'leapslam') { startLeapSlam(p, pKey, spDmg); return; }
+  if (sp.kind === 'tidalram') { startTidalRam(p, pKey, spDmg); return; }
   if (sp.kind === 'rewind') { castRewind(p, pKey, spDmg); return; }
   if (sp.kind === 'hydraheads') { raiseHeads(p, pKey, spDmg, false); return; }
   if (sp.kind === 'sunvolley') { castSunVolley(p, pKey, sp, spDmg); return; }
@@ -8877,8 +9011,9 @@ function playerView(p) {
     ...(p.passive === 'mindtome' ? { shuffleIn: Math.max(0, Math.round(p.shuffleT ?? MIND_SHUFFLE_MS)) } : {}),
     ...(p.passive === 'vortex' ? { aegis: !(p.aegisCd > 0) } : {}),
     effects: p.effects,
-    pulled: !!p.pull || p.tsHeld > 0,
-    ...(p.tsHeld > 0 ? { tspin: true } : {}),
+    pulled: !!p.pull || p.tsHeld > 0 || !!p.wsRam,
+    ...(p.tsHeld > 0 || p.wsRam ? { tspin: true } : {}),
+    ...(p.wsRam ? { wsk: Math.round(p.wsK * 100) / 100 } : {}),
   };
 }
 
@@ -8934,7 +9069,8 @@ function buildStateMsg(playerNum) {
     projectiles: room.projectiles.map(pr => ({ id: pr.id, x: r1(pr.x), y: r1(pr.y), dx: r1(pr.dx), dy: r1(pr.dy), weaponId: pr.weaponId,
                   upg: pr.upg || null, isAoe: pr.isAoe, special: !!pr.special, grapple: !!pr.grapple,
                   hook: !!pr.hook, boomerang: !!pr.boomerang, ...(pr.owner === 'monster' ? { owner: 'monster' } : {}) })),
-    fires:       room.fires.map(f => ({ id: f.id, kind: f.kind, x: r1(f.x), y: r1(f.y), r: r1(f.r || 0),
+    pools:       room.fires.filter(f => f.kind === 'tspool').map(f => [Math.round(f.x), Math.round(f.y), Math.round(f.t / f.life * 100) / 100, f.owner === 'monster' ? 0 : +f.owner.slice(1)]),
+    fires:       room.fires.filter(f => f.kind !== 'tspool').map(f => ({ id: f.id, kind: f.kind, x: r1(f.x), y: r1(f.y), r: r1(f.r || 0),
                                     a: Math.round((f.a || 0) * 100) / 100, v: f.v ? r1(f.v) : 0, k: Math.round(f.t / f.life * 100) / 100,
                                     ...(f.color ? { c: f.color } : {}), ...(f.trapType ? { tt: f.trapType } : {}),
                                     ...(RIDES_OWNER.has(f.kind) ? { fo: f.owner } : {}) })),
@@ -8948,6 +9084,7 @@ function buildStateMsg(playerNum) {
     wave:        room.wave,
     xp:          room.playerXp[key],
     myCoins:     room.playerCoins[key],
+    ...(room.wsOpened?.has(key) ? { wsOpened: true } : {}),
     isAdmin:     isAdminPw(room.passwords[key]),
     inventory:   room.players[key] ? room.players[key].inventory : [],
     round:       room.round,
@@ -9036,7 +9173,7 @@ function weaponCatalog() {
     id: w.id, name: w.name, type: w.type, unlockXp: w.unlockXp,
     damage: w.damage, range: w.range, atkSpd: w.atkSpd, spin: !!w.swing360,
     shopOnly: !!w.shopOnly, noRequirement: !!w.noRequirement,
-    mythic: !!w.mythic, mythicKills: w.mythicKills || 0, mythicNeeds: w.mythicNeeds || null, needLegendary: !!w.needLegendary, price: w.price || 0,
+    mythic: !!w.mythic, mythicKills: w.mythicKills || 0, mythicNeeds: w.mythicNeeds || null, mythicBoss: w.mythicBoss || null, needLegendary: !!w.needLegendary, price: w.price || 0,
     needAll: !!w.needAll,
     needMind: !!w.needMind,
     needLight: !!w.needLight,
@@ -9104,7 +9241,7 @@ function profileFor(pw, opts = {}) {
   const mythicKills = admin ? 999999 : (d.mythicKills[pw] || 0);
   const mythicPick = d.mythicPick[pw] || null;
   return { xp, coins, weapons, upgrades, ownedSkins, abilities, abilitySlots, slotCount, lightKills, samuraiKills, samuraiNeed: SAM_KILLS_NEED,
-           mythicKills, mythicPick, forge: cleanForge(d.forge[pw]), rareWeapons: rareWeaponIds(cleanForge(d.forge[pw])),
+           mythicKills, mythicPick, tsunamiBeat: admin || !!d.tsunamiBeat[pw], forge: cleanForge(d.forge[pw]), rareWeapons: rareWeaponIds(cleanForge(d.forge[pw])),
            lost: Object.fromEntries(Object.entries(d.lostWeapons[pw] || {}).filter(([id, n]) => n > xp && !weapons.includes(id)).map(([id, n]) => [id, n - xp])),
            lightMaxed: maxedWeaponCount(weapons, upgrades), lightMaxedNeed: lightMaxedNeed(),
            nextSlotPrice: slotCount < MAX_ABILITY_SLOTS ? SLOT_PRICES[slotCount - ABILITY_SLOTS] : 0,

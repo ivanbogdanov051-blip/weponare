@@ -775,6 +775,23 @@ const WEAPON_ART = {
     k.line(22, -8.6, 69, -7.6, 0.5, '#ffffff'); k.line(69, -7.6, 83, -0.2, 0.5, '#ffffff');             // honed edge
     k.r(82.4, -0.5, 1.4, 1, '#ffffff');                                                                 // the point
   }},
+  // Wavestorm: a silver and sapphire wand, a single drop of water floating at its tip.
+  wavestorm: { draw(k, wc) {
+    k.circ(-2.5, 0, 2.2, '#c8d8e8'); k.circ(-2.5, 0, 1.1, '#2a7ad8');                 // pommel
+    k.r(-1, -1.3, 23, 2.6, '#123a78'); k.r(-1, -1.3, 23, 0.9, '#2a6ab8');              // shaft
+    for (let i = 0; i < 6; i++) k.line(1 + i * 3.4, 1.3, 3 + i * 3.4, -1.3, 0.6, '#c8d8e8');   // silver spiral
+    k.r(21, -2.4, 2.2, 4.8, '#c8d8e8');                                                // collar
+    k.poly([[23, -2.4], [26, -7], [27.4, -6.4], [24.8, -1.4]], '#c8d8e8');             // prongs cradling the drop
+    k.poly([[23, 2.4], [26, 7], [27.4, 6.4], [24.8, 1.4]], '#c8d8e8');
+    k.glow(33, 0, 7, wc, 0.3);
+    k.circ(32.5, 0, 5.2, '#0e5ec8');                                                    // the drop: a round belly...
+    k.poly([[33.2, -5.1], [41, 0], [33.2, 5.1]], '#0e5ec8');                            // ...drawn out to a soft point
+    k.circ(32.5, 0, 4, '#2a9af0');
+    k.poly([[33.4, -3.9], [38.8, 0], [33.4, 3.9]], '#2a9af0');
+    k.circ(31.6, 0.8, 2.2, '#7ad8ff');
+    k.circ(31.2, -1.9, 1.1, '#ffffff'); k.r(33.4, -2.2, 0.8, 0.8, '#ffffff');           // highlights
+    k.circ(29, 0, 0.7, '#7ad8ff');                                                      // a bead falling from it
+  }},
   worldsplitter: { draw(k, wc) {
     k.circ(-1.5, 0, 2.6, '#3a3a44'); k.circ(-1.5, 0, 1.3, '#ff6a1a');          // pommel with an ember
     k.r(0, -1.8, 9, 3.6, '#2a1a12');                                            // grip
