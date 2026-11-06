@@ -175,7 +175,7 @@ function toggleNetOverlay() {
 // Snapshots leave out what hasn't changed (slimState in server.js has the same
 // lists): everything past this point sees a complete one.
 const SLIM_TOP = ['gameMode', 'world', 'maxPlayers', 'playerNames', 'round', 'sandbox', 'finalWave', 'isAdmin', 'victory', 'botReward'];
-const SLIM_PLAYER = ['w', 'h', 'atkSpd', 'reach', 'wType', 'upg', 'unlockedWeapons', 'skin', 'specialMax', 'superMax', 'parryMax', 'speed'];
+const SLIM_PLAYER = ['w', 'h', 'atkSpd', 'reach', 'wType', 'upg', 'unlockedWeapons', 'skin', 'arm', 'specialMax', 'superMax', 'parryMax', 'speed'];
 const slimHad = { top: {}, pl: {} };
 function unslim(m) {
   for (const k of SLIM_TOP) { if (k in m) slimHad.top[k] = m[k]; else if (k in slimHad.top) m[k] = slimHad.top[k]; }
@@ -642,6 +642,13 @@ function tutAsk(yes) {
 // the HUD icons still do what they do. The arrow keys keep working too.
 let tapMove = false, moveTarget = null, moveDirs = '';
 try { tapMove = localStorage.getItem('weponare_tapmove') === '1'; } catch {}
+// Rare monsters: off until you ask for them.
+let rareMons = lsGet('weponare_rares') === '1';
+function toggleRareMons() {
+  rareMons = !rareMons;
+  lsSet('weponare_rares', rareMons ? '1' : '0');
+  syncSettings();
+}
 function toggleTapMove() {
   tapMove = !tapMove; moveTarget = null;
   try { localStorage.setItem('weponare_tapmove', tapMove ? '1' : '0'); } catch {}
@@ -675,6 +682,8 @@ function drawMoveMarker() {
 }
 
 function syncSettings() {
+  const rm = document.getElementById('rareMonsBtn');
+  if (rm) { rm.textContent = rareMons ? 'ON' : 'OFF'; rm.classList.toggle('on', rareMons); }
   const tm = document.getElementById('tapMoveBtn');
   if (tm) { tm.textContent = tapMove ? 'ON' : 'OFF'; tm.classList.toggle('on', tapMove); }
   const tmr = document.getElementById('tapMoveRow');
@@ -800,7 +809,7 @@ function connect() {
         if (sock !== ws || sock.readyState !== 1) return;    // left while it was showing
         sock.send(JSON.stringify({
           type: 'join', name: pendingName, mode: pendingMode, password: pendingPass, level: pendingBotLevel,
-          size: pendingMapSize, ...pendingRoom, tutorial: pendingTutorial,
+          size: pendingMapSize, ...pendingRoom, tutorial: pendingTutorial, rareMons,
           skin: pendingSkin, skinModified,
           localXp: loadLocalXp(pendingPass), localCoins: loadLocalCoins(pendingPass), backup: loadBackup(pendingPass),
         }));
@@ -2874,6 +2883,119 @@ function renderSkinPreview() {
 }
 
 
+// ─── THE ARMOURY ──────────────────────────────────────────────────────────────
+// Three tabs: what's on sale now, what you own, and every piece in the game. The
+// server deals the stock and keeps the clock; here it's only shown and asked for.
+const arm = { data: null, tab: 'shop', slot: 'all', busy: false, timer: 0, ends: 0 };
+function setArmMsg(text, bad) {
+  const el = document.getElementById('armMsg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'arm-msg' + (bad ? ' err' : '');
+}
+async function openArmory() {
+  readCredentials();
+  showScreen('armoryScreen');
+  arm.data = null;
+  document.getElementById('armList').innerHTML = '';
+  if (!pendingPass) { renderArmorySide(); setArmMsg('Enter a password on the title screen first. Armour is saved against it.', true); return; }
+  setArmMsg('');
+  const loading = custLoadStart('armory');
+  try { armoryTake(await abilPost('/api/armory', {})); } catch (e) { setArmMsg(e.message || 'Could not reach the server.', true); }
+  custLoadEnd(loading);
+  clearInterval(arm.timer);
+  arm.timer = setInterval(armoryClock, 1000);
+}
+function closeArmory() { clearInterval(arm.timer); showScreen('startScreen'); refreshSavedBanner(); }
+function armoryTake(d) {
+  arm.data = d;
+  arm.ends = performance.now() + d.nextIn;
+  renderArmory();
+}
+function armoryClock() {
+  if (document.getElementById('armoryScreen').classList.contains('hidden')) { clearInterval(arm.timer); return; }
+  const left = arm.ends - performance.now();
+  if (left <= 0 && !arm.busy) {          // a new stock: ask for it
+    arm.busy = true;
+    abilPost('/api/armory', {}).then(armoryTake).catch(() => {}).finally(() => { arm.busy = false; });
+    return;
+  }
+  const el = document.getElementById('armTimer');
+  if (el) { const s = Math.max(0, Math.ceil(left / 1000)); el.textContent = 'NEW STOCK IN ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+}
+function pickArmTab(t) { arm.tab = t; renderArmoryList(); renderArmoryTabs(); }
+function pickArmSlot(s) { arm.slot = s; renderArmoryList(); renderArmoryTabs(); }
+function renderArmoryTabs() {
+  for (const b of document.querySelectorAll('#armTabs button')) b.classList.toggle('on', b.dataset.tab === arm.tab);
+  for (const b of document.querySelectorAll('#armSlots button')) b.classList.toggle('on', b.dataset.slot === arm.slot);
+  document.getElementById('armSlots').classList.toggle('hidden', arm.tab === 'shop');
+  const own = document.getElementById('armOwnedN');
+  if (own) own.textContent = arm.data ? arm.data.owned.length : 0;
+}
+function armWornKey() { return Object.values(arm.data?.worn || {}).join(); }
+function renderArmorySide() {
+  const d = arm.data, side = document.getElementById('armSide');
+  if (!side) return;
+  const worn = d ? d.worn : {}, ids = Object.values(worn);
+  const lines = Armor.fxLines(Armor.fxOf(ids)), hp = Armor.hpOf(ids);
+  side.innerHTML = `<canvas id="armHero" width="88" height="112"></canvas>
+    <div class="arm-slots">${Object.entries(Armor.SLOTS).map(([s, label]) => {
+      const a = Armor.BY_ID[worn[s]], R = a && Armor.RARITIES[a.rarity];
+      return `<button class="arm-slot${a ? ' full' : ''}${a && a.rarity === 5 ? ' mythic' : ''}" style="--rc:${R ? R.color : '#6a6a8a'}" ${a ? `onclick="armoryOff('${s}')" title="Take off"` : 'disabled'}>
+        ${a ? `<canvas data-armor="${a.id}" width="34" height="34"></canvas>` : '<i>+</i>'}<span>${a ? escapeHtml(a.name) : label}</span></button>`;
+    }).join('')}</div>
+    <div class="arm-total"><b>+${hp} HEALTH</b>${lines.map(l => `<span>${escapeHtml(l)}</span>`).join('') || '<span>Nothing worn yet. Tap a piece you own to put it on.</span>'}</div>`;
+  drawForgeIcons(side);
+  const cv = document.getElementById('armHero'), g = cv.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  const spr = playerSprite(skinHex(pendingSkin), pendingSkin.hatIdx || 0, 1, false, pendingSkin.outfit || '', pendingSkin.accIdx || 0, armWornKey());
+  if (spr) { const z = Math.floor(Math.min(cv.width / spr.width, cv.height / spr.height)); g.drawImage(spr, Math.round((cv.width - spr.width * z) / 2), Math.round((cv.height - spr.height * z) / 2), spr.width * z, spr.height * z); }
+}
+function armoryCard(a, sale) {
+  const d = arm.data, R = Armor.RARITIES[a.rarity], owned = d.owned.includes(a.id), worn = d.worn[a.slot] === a.id, poor = d.coins < a.price;
+  const action = worn ? '<button class="arm-act on" disabled>WORN</button>'
+    : owned ? `<button class="arm-act wear" onclick="armoryWear('${a.id}')">WEAR</button>`
+    : sale ? `<button class="arm-act buy" ${poor ? 'disabled' : ''} onclick="armoryBuy('${a.id}')">◆ ${a.price.toLocaleString()}</button>`
+    : `<span class="arm-price">◆ ${a.price.toLocaleString()}</span>`;
+  return `<div class="arm-card${a.rarity === 5 ? ' mythic' : ''}" style="--rc:${R.color}">
+    <div class="arm-top"><canvas data-armor="${a.id}" width="68" height="68"></canvas>
+      <div class="arm-head"><b>${escapeHtml(a.name)}</b><span class="arm-rar">${R.name} ${Armor.SLOTS[a.slot]}</span><span class="arm-hp">+${a.hp} HEALTH</span></div></div>
+    ${Armor.fxLines(a.fx).map(l => `<div class="arm-fx">${escapeHtml(l)}</div>`).join('')}
+    <div class="arm-foot">${action}</div></div>`;
+}
+function renderArmoryList() {
+  const d = arm.data, list = document.getElementById('armList');
+  if (!d || !list) return;
+  const bySlot = a => arm.slot === 'all' || a.slot === arm.slot;
+  const strong = (a, b) => b.rarity - a.rarity || b.price - a.price;
+  const items = arm.tab === 'shop' ? d.stock.map(id => Armor.BY_ID[id]).filter(Boolean)
+    : arm.tab === 'mine' ? d.owned.map(id => Armor.BY_ID[id]).filter(a => a && bySlot(a)).sort(strong)
+    : Armor.PIECES.filter(bySlot).slice().sort(strong);
+  list.innerHTML = items.map(a => armoryCard(a, arm.tab === 'shop')).join('')
+    || '<div class="arm-none">Nothing here yet. Armour you buy or trade for lands here.</div>';
+  drawForgeIcons(list);
+}
+function renderArmory() {
+  const d = arm.data;
+  if (!d) return;
+  document.getElementById('armCoins').textContent = '◆ ' + d.coins.toLocaleString();
+  renderArmoryTabs(); renderArmorySide(); renderArmoryList(); armoryClock();
+}
+async function armoryDo(url, body, note) {
+  if (arm.busy) return;
+  arm.busy = true;
+  setArmMsg('');
+  try { armoryTake(await abilPost(url, body)); if (note) setArmMsg(note); }
+  catch (e) { setArmMsg(e.message || 'Could not reach the server.', true); }
+  arm.busy = false;
+}
+function armoryBuy(id) {
+  if (window.GameAudio) { GameAudio.init(); GameAudio.sfx.unlock(); }
+  armoryDo('/api/armory/buy', { id }, Armor.BY_ID[id].name + ' is yours!');
+}
+function armoryWear(id) { armoryDo('/api/armory/wear', { id }); }
+function armoryOff(slot) { armoryDo('/api/armory/wear', { slot }); }
+
 // ─── Upgrade Shop ─────────────────────────────────────────────────────────────
 
 let shopData = null;
@@ -2947,6 +3069,7 @@ function renderForge() {
   renderForgeBench();
 }
 function drawForgeIcons(host) {
+  for (const cv of host.querySelectorAll('canvas[data-armor]')) { const a = Armor.BY_ID[cv.dataset.armor]; if (a) Armor.drawIcon(cv, a); }
   for (const cv of host.querySelectorAll('canvas[data-weapon]')) {
     const g = cv.getContext('2d'), id = cv.dataset.weapon;
     g.clearRect(0, 0, cv.width, cv.height);
@@ -3108,7 +3231,7 @@ async function tradeJoin() {
 }
 function tradeOfferIds() {
   const m = tradeView.mine;
-  return { coins: m.coins, weapons: m.weapons.map(x => x.id), skins: m.skins.map(x => x.id), abilities: m.abilities.map(x => x.id) };
+  return { coins: m.coins, weapons: m.weapons.map(x => x.id), skins: m.skins.map(x => x.id), abilities: m.abilities.map(x => x.id), armor: m.armor.map(x => x.id) };
 }
 async function tradeSend(offer) {
   tradeBusy = true;
@@ -3148,6 +3271,7 @@ function tradeList(o) {
   if (o.coins) rows.push(`<div class="tr-item"><b class="tr-coin">◆ ${o.coins.toLocaleString()} COINS</b></div>`);
   for (const w of o.weapons) rows.push(`<div class="tr-item"><canvas class="${w.rare ? 'rare-glow' : ''}" data-weapon="${w.id}" width="56" height="32"></canvas><div><b>${escapeHtml(w.name)}</b>${tradeLine(w)}</div></div>`);
   for (const a of o.abilities) rows.push(`<div class="tr-item"><div><b>${escapeHtml(a.name)}</b><span class="tr-sub">ABILITY</span></div></div>`);
+  for (const a of o.armor || []) rows.push(`<div class="tr-item"><canvas data-armor="${a.id}" width="34" height="34"></canvas><div><b style="color:${Armor.RARITIES[a.rarity].color}">${escapeHtml(a.name)}</b><span class="tr-sub">${Armor.RARITIES[a.rarity].name} ARMOUR</span></div></div>`);
   for (const k of o.skins) rows.push(`<div class="tr-item"><div><b>${escapeHtml(k.name)}</b><span class="tr-sub">SKIN</span></div></div>`);
   return rows.join('') || '<div class="tr-none">Nothing yet</div>';
 }
@@ -3185,20 +3309,21 @@ function renderTrade() {
   const mineKey = JSON.stringify([v.mine, v.items, v.coins, tradeTab]);
   if (mineKey !== tradeMineKey) {
     tradeMineKey = mineKey;
-    const ids = tradeOfferIds(), it = v.items || { weapons: [], skins: [], abilities: [] };
+    const ids = tradeOfferIds(), it = v.items || { weapons: [], skins: [], abilities: [], armor: [] };
     const tab = (k, label) => `<button class="${tradeTab === k ? 'on' : ''}" onclick="tradeSetTab('${k}')">${label}</button>`;
     const rows = (it[tradeTab] || []).map(x => {
       const on = ids[tradeTab].includes(x.id), off = !!x.why && !on;
       const note = x.why ? x.why : tradeTab === 'weapons' ? 'win it back: ' + (x.back || 0).toLocaleString() + ' XP' : '';
       return `<button class="tr-pick${on ? ' on' : ''}" ${off ? 'disabled' : ''} onclick="tradeToggle('${tradeTab}','${x.id}')">
         ${tradeTab === 'weapons' ? `<canvas class="${x.rare ? 'rare-glow' : ''}" data-weapon="${x.id}" width="56" height="32"></canvas>` : ''}
-        <div><b>${escapeHtml(x.name)}</b>${tradeTab === 'weapons' ? tradeLine(x) : ''}<span class="tr-sub">${escapeHtml(note)}</span></div></button>`;
+        ${tradeTab === 'armor' ? `<canvas data-armor="${x.id}" width="34" height="34"></canvas>` : ''}
+        <div><b${tradeTab === 'armor' ? ` style="color:${Armor.RARITIES[x.rarity].color}"` : ''}>${escapeHtml(x.name)}</b>${tradeTab === 'weapons' ? tradeLine(x) : ''}<span class="tr-sub">${escapeHtml(note)}</span></div></button>`;
     }).join('') || '<div class="tr-none">Nothing here</div>';
     const mine = document.getElementById('tradeMine');
     const scroll = mine.querySelector('.tr-scroll')?.scrollTop || 0;
     mine.innerHTML = `<div class="tr-h">YOU GIVE</div>${tradeList(v.mine)}
       <label class="tr-coins">COINS <input type="number" min="0" max="${v.coins}" value="${v.mine.coins}" onchange="tradeCoins(this.value)"> <span>of ${v.coins.toLocaleString()}</span></label>
-      <div class="tr-tabs">${tab('weapons', 'WEAPONS')}${tab('abilities', 'ABILITIES')}${tab('skins', 'SKINS')}</div>
+      <div class="tr-tabs">${tab('weapons', 'WEAPONS')}${tab('armor', 'ARMOUR')}${tab('abilities', 'ABILITIES')}${tab('skins', 'SKINS')}</div>
       <div class="tr-scroll">${rows}</div>`;
     mine.querySelector('.tr-scroll').scrollTop = scroll;
     drawForgeIcons(mine);
@@ -3210,7 +3335,7 @@ function renderTrade() {
     them.innerHTML = `<div class="tr-h">${escapeHtml(v.partner)} GIVES</div>${tradeList(v.theirs)}`;
     drawForgeIcons(them);
   }
-  const ready = [v.mine, v.theirs].every(o => o && (o.coins || o.weapons.length || o.skins.length || o.abilities.length));
+  const ready = [v.mine, v.theirs].every(o => o && (o.coins || o.weapons.length || o.skins.length || o.abilities.length || o.armor.length));
   foot.innerHTML = `${v.note ? `<div class="shop-msg err">${escapeHtml(v.note)}</div>` : ''}
     <div class="tr-status"><span class="${v.iAgreed ? 'ok' : ''}">YOU: ${v.iAgreed ? 'AGREED' : 'NOT YET'}</span><span class="${v.theyAgreed ? 'ok' : ''}">${escapeHtml(v.partner)}: ${v.theyAgreed ? 'AGREED' : 'NOT YET'}</span></div>
     ${v.iAgreed ? '<button class="mode-btn" onclick="tradeAgree(false)">CHANGE MY MIND</button>'
@@ -4155,7 +4280,7 @@ const ABILITY_ICONS = {
   },
 };
 
-const SCREENS = ['settingsScreen', 'startScreen','lobbyScreen','pickScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen','forgeScreen','tradeScreen'];
+const SCREENS = ['settingsScreen', 'startScreen','lobbyScreen','pickScreen','armoryScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen','forgeScreen','tradeScreen'];
 // The main menu is shrunk to whatever the screen allows (never below 45%), so the
 // name and password fields and the mode buttons are all in view on small phones
 // and short windows. Re-measured on resize / rotation / when it is shown.
@@ -4889,6 +5014,7 @@ function draw(state) {
   drawFireRings(state.fires || []);
   if (state.rareShop) drawRareShop(state.rareShop);
   drawFissures(state.fissures || []);
+  drawDangers(state.dangers);
   drawGreatCracks(state.gcracks || []);
   drawEchoes(state.echoes || []);
   drawHydras(state.hydras || []);
@@ -5574,6 +5700,7 @@ function drawPlayerBody(p, baseColor, label, key) {
   const skinCol = Cosmetics.colorAt(fx.dyn, now) || getSkinColor(p, baseColor);
   const x = Math.round(p.x), y = Math.round(p.y);
   if (fx.glow) Cosmetics.drawGlow(ctx, fx.glow, x, y, p.w, p.h, skinCol, now);
+  if (p.aura) drawArmorAura(x + p.w / 2, y + p.h / 2, now);
   if (!p.dead && WEAPON_META[p.weaponId]?.mythic) drawMythicAura(p, x, y);
   drawPassiveFx(p, key, x, y);
 
@@ -5592,7 +5719,7 @@ function drawPlayerBody(p, baseColor, label, key) {
   ctx.fillStyle = 'rgba(0,0,0,0.32)';
   ctx.fillRect(x + 1, y + p.h, p.w - 2, 2);
 
-  const cv = playerSprite(skinCol, p.skin?.hatIdx || 0, p.facing, p.hitFlash > 0, p.skin?.outfit || '', p.skin?.accIdx || 0);
+  const cv = playerSprite(skinCol, p.skin?.hatIdx || 0, p.facing, p.hitFlash > 0, p.skin?.outfit || '', p.skin?.accIdx || 0, p.arm);
   if (cv) drawLightRunner(p, key, x, y, cv);
   if (fx.aacc) Cosmetics.drawAcc(ctx, fx.aacc, x, y, p.w, p.h, p.facing, now, false);
   if (cv) ctx.drawImage(cv, x, y - PLAYER_PAD);
@@ -5629,6 +5756,20 @@ function drawPlayerBody(p, baseColor, label, key) {
     ctx.beginPath(); ctx.arc(x + p.w/2, y + p.h/2, p.w + 1 + Math.sin(t)*1.5, 0, Math.PI*2); ctx.stroke();
     ctx.restore();
   }
+}
+
+// Armour's burning aura.
+const ARMOR_AURA_R = 74;   // mirrors the server
+function drawArmorAura(x, y, now) {
+  const k = 0.5 + 0.5 * Math.sin(now / 240);
+  ctx.save();
+  ctx.globalAlpha *= 0.3 + 0.2 * k; ctx.strokeStyle = '#ff7a2a'; ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 8]); ctx.lineDashOffset = -now / 60;
+  ctx.beginPath(); ctx.arc(x, y, ARMOR_AURA_R, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha *= 0.25; ctx.fillStyle = '#ff5a1a';
+  ctx.beginPath(); ctx.arc(x, y, ARMOR_AURA_R, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
 }
 
 // ── Light Blade ──
@@ -5852,7 +5993,9 @@ function drawMonster(m) {
   const type = m.type || 'grunt';
   const state = m.hitFlash > 0 ? 'flash' : monsterBodyState(m);
   const x = Math.round(m.x), y = Math.round(m.y);
+  if (m.under) { drawBurrowMound(m, x, y); return; }
   if (m.mage) drawMageAura(m, x, y);
+  if (m.shiny) drawShinyGlow(m, x, y);
 
   ctx.fillStyle = 'rgba(0,0,0,0.32)';
   ctx.fillRect(x + 1, y + m.h, m.w - 2, 2);
@@ -5862,8 +6005,12 @@ function drawMonster(m) {
   if (cv) {
     const pad = monsterPad(m.w, m.h);
     ctx.drawImage(cv, x - pad, y - pad);
+    if (m.shiny) drawShinySweep(cv, x - pad, y - pad);
   }
   drawMonsterArms(m, x, y);
+  if (m.mirror) drawMirrorGuard(m, x, y);
+  if (m.sguard) drawGoldGuard(m, x, y);
+  if (m.shiny) drawShinySparks(m, x, y);
   if (m.burning) drawFlames(x, y, m.w, m.h);
   if (m.frozen) drawFreezeFx(m, x, y); else if (m.slowed) drawSlowFx(m, x, y);
   if (m.curse) drawCurseFx(m, x, y);
@@ -5875,7 +6022,7 @@ function drawMonster(m) {
   drawMonsterTells(m, x, y);
   if (m.boss) { drawBossMarks(m, x, y); drawEnemyBars(m, x, y); return; }
 
-  drawHpBar(x - 1, y - 5, m.w + 2, 2, m.hp / m.maxHp, '#44ff44', '#003300');
+  drawHpBar(x - 1, y - 5, m.w + 2, 2, m.hp / m.maxHp, m.shiny ? '#ffd84a' : '#44ff44', m.shiny ? '#3a2a00' : '#003300');
   drawCdBars(m, x - 1, y - 5, m.w + 2);
   // Armoured types get a marker on the bar, since their health drains slowly.
   if (m.armor > 0) {
@@ -5884,6 +6031,103 @@ function drawMonster(m) {
   }
 }
 function drawMonsters(ms) { for(const m of ms) drawMonster(m); }
+
+// ── Rare monsters: a gold glow, gold shine across the body, sparks ──
+function drawShinyGlow(m, x, y) {
+  const k = 0.75 + 0.25 * Math.sin(performance.now() / 180), g = Math.max(m.w, m.h) * 0.9;
+  Cosmetics.softGlow(ctx, '#ffc82a', x - g, y - g, m.w + g * 2, m.h + g * 2, k);
+}
+const shinyCv = document.createElement('canvas');
+function drawShinySweep(cv, x, y) {
+  const W = cv.width, H = cv.height, now = performance.now();
+  if (shinyCv.width < W) shinyCv.width = W;
+  if (shinyCv.height < H) shinyCv.height = H;
+  const g = shinyCv.getContext('2d');
+  g.globalCompositeOperation = 'source-over';
+  g.clearRect(0, 0, W, H);
+  g.drawImage(cv, 0, 0);
+  g.globalCompositeOperation = 'source-atop';
+  g.fillStyle = 'rgba(255, 210, 60, 0.3)'; g.fillRect(0, 0, W, H);
+  const at = ((now / 1100) % 1) * (W + H * 2) - H, band = Math.max(4, W * 0.3);
+  g.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  g.beginPath(); g.moveTo(at, H); g.lineTo(at + band, H); g.lineTo(at + band + H, 0); g.lineTo(at + H, 0); g.closePath(); g.fill();
+  ctx.drawImage(shinyCv, 0, 0, W, H, x, y, W, H);
+}
+function drawShinySparks(m, x, y) {
+  const now = performance.now();
+  ctx.save();
+  for (let i = 0; i < 5; i++) {
+    const t = (now / 900 + i / 5) % 1, a = i * 1.26 + now / 1400, r = Math.max(m.w, m.h) * (0.5 + t * 0.35);
+    ctx.globalAlpha *= 1;
+    ctx.fillStyle = i % 2 ? '#ffffff' : '#ffe07a';
+    const sx = Math.round(x + m.w / 2 + Math.cos(a) * r), sy = Math.round(y + m.h / 2 + Math.sin(a) * r), s = t < 0.5 ? 1 : 0;
+    ctx.fillRect(sx - s, sy, 1 + s * 2, 1); ctx.fillRect(sx, sy - s, 1, 1 + s * 2);
+  }
+  ctx.restore();
+}
+function drawGoldGuard(m, x, y) {
+  const now = performance.now(), r = Math.max(m.w, m.h) * 0.8;
+  ctx.save();
+  ctx.globalAlpha = 0.25; ctx.fillStyle = '#ffd84a';
+  ctx.beginPath(); ctx.arc(x + m.w / 2, y + m.h / 2, r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.9; ctx.strokeStyle = '#fff4b0'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(x + m.w / 2, y + m.h / 2, r, now / 200, now / 200 + 4.6); ctx.stroke();
+  ctx.restore();
+}
+// The MIRROR KNIGHT's shield is up: shots will come back.
+function drawMirrorGuard(m, x, y) {
+  const d = m.face === -1 ? -1 : 1, now = performance.now(), cy = y + m.h / 2, cx = x + m.w / 2;
+  ctx.save();
+  ctx.globalAlpha = 0.28; ctx.fillStyle = '#bfe4ff';
+  ctx.beginPath(); ctx.arc(cx, cy, Math.max(m.w, m.h) * 0.85, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.95; ctx.strokeStyle = Math.floor(now / 90) % 2 ? '#ffffff' : '#7ac8ff'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(cx, cy, Math.max(m.w, m.h) * 0.85, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.9;
+  for (let i = 0; i < 3; i++) { const a = now / 260 + i * 2.1; ctx.fillRect(Math.round(cx + Math.cos(a) * m.w * 0.85), Math.round(cy + Math.sin(a) * m.h * 0.7), 2, 2); }
+  ctx.restore();
+}
+// A BURROWER under the floor: a line of churned earth moving toward you.
+function drawBurrowMound(m, x, y) {
+  const now = performance.now(), mx = x + m.w / 2, my = y + m.h - 2;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath(); ctx.ellipse(mx, my + 2, m.w * 0.7, 4, 0, 0, Math.PI * 2); ctx.fill();
+  for (let i = 0; i < 6; i++) {
+    const a = i * 1.05 + now / 130, r = (m.w * 0.5) * (0.5 + 0.5 * Math.abs(Math.sin(now / 110 + i)));
+    ctx.fillStyle = i % 2 ? '#8a6438' : '#c8964a';
+    ctx.fillRect(Math.round(mx + Math.cos(a) * r), Math.round(my + Math.sin(a) * r * 0.4 - Math.abs(Math.sin(now / 80 + i)) * 3), 3, 2);
+  }
+  ctx.restore();
+}
+// Danger rings on the floor: they fill up, and when full they go off.
+const DANGER_FILL = { hex: '#c84aff', gold: '#ffd84a', fire: '#ff7a1a', dirt: '#c8964a' };
+function drawDangers(list) {
+  if (!list) return;
+  const now = performance.now();
+  for (const [x, y, r, k, kind] of list) {
+    const c = DANGER_FILL[kind] || '#ff5a3a';
+    ctx.save();
+    ctx.globalAlpha = 0.12 + 0.14 * k; ctx.fillStyle = c;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.35 + 0.3 * k;
+    ctx.beginPath(); ctx.arc(x, y, r * k, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.9; ctx.strokeStyle = c; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+    if (kind === 'hex') {             // runes turning round the rim
+      ctx.fillStyle = '#f0c8ff';
+      for (let i = 0; i < 6; i++) { const a = now / 500 + i * Math.PI / 3; ctx.fillRect(Math.round(x + Math.cos(a) * (r - 5)) - 1, Math.round(y + Math.sin(a) * (r - 5)) - 1, 2, 2); }
+    }
+    ctx.restore();
+  }
+}
+function drawSentryBolt(pr) {
+  ctx.save();
+  ctx.fillStyle = '#ffb03a'; ctx.globalAlpha = 0.35;
+  ctx.beginPath(); ctx.arc(pr.x, pr.y, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1; ctx.fillStyle = '#fff0c0';
+  ctx.beginPath(); ctx.arc(pr.x, pr.y, 2.4, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
 
 // Light leaves fading afterimages wherever he has just been.
 const lightTrails = new Map();
@@ -6702,6 +6946,10 @@ const MONSTER_ARMS = {
   light:       { art: 'm_scythe',    color: '#fff6a0', size: 0.8,  rest: -0.6,  move: 'chop'   },
   samurai:     { art: 'katana',      color: '#e8eef8', size: 0.72, rest: -0.35, move: 'chop'   },
   sniper:      { art: 'blunderbuss',  color: '#8a6a4a', size: 0.62, rest: -0.15, move: 'stab'   },
+  elitesniper: { art: 'blunderbuss',  color: '#c81a2a', size: 0.68, rest: -0.15, move: 'stab'   },
+  mirrorknight: { art: 'm_shiv',      color: '#dff0ff', size: 0.86, rest:  0.2,  move: 'stab', shield: '#dff0ff' },
+  hexer:       { art: 'm_bonestaff',  color: '#e07aff', size: 0.66, rest: -1.1,  move: 'cast'   },
+  sentry:      { art: 'blunderbuss',  color: '#aab8c8', size: 0.6,  rest: -0.1,  move: 'stab'   },
   golem:       { art: 'm_maul',       color: '#ff6a1a', size: 0.66, rest: -1.0,  move: 'slam'   },
   // Boss
   giant:    { art: 'm_tree',      color: '#4e8a3a', size: 0.62, rest: -0.95, move: 'giant'  },
@@ -6800,6 +7048,7 @@ function drawProjectiles(projs) {
     if (pr.weaponId === 'samdashwave') { drawDashWave(pr, ang, now); continue; }
     if (pr.weaponId === 'hydrabite' || pr.weaponId === 'hydrabolt') { drawVenomShot(pr, ang, now); continue; }
     if (pr.weaponId === 'snipe') { drawSnipeShot(pr); continue; }
+    if (pr.weaponId === 'sentrybolt') { drawSentryBolt(pr); continue; }
     if (pr.weaponId === 'traparrow') { drawTrapArrow(pr, ang); continue; }
     if (pr.weaponId === 'phxarrow') { drawPhoenixArrow(pr, ang, now); continue; }
     if (pr.weaponId === 'soulwisp') { drawWisp(pr, ang, now); continue; }
@@ -7523,6 +7772,24 @@ function drawHUD(state) {
       const def = abilityDef(a.id);
       const ready = a.cd <= 0, col = def ? def.color : '#ccc';
       const key = AB_BTN_KEYS[i] + ' ';
+      if (i === 6) {         // the forged ability gets a plate of its own, with a big C
+        const H = 12, fill = ready ? 1 : Math.max(0, 1 - a.cd / (a.max || 1));
+        ctx.fillStyle = '#1e0e04'; ctx.fillRect(bx, by, barW, H);
+        ctx.fillStyle = ready ? col : '#6a4a22'; ctx.fillRect(bx, by, Math.round(barW * fill), H);
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.strokeRect(bx, by, barW, H);
+        ctx.strokeStyle = '#ffd84a'; ctx.strokeRect(bx + 1, by + 1, barW - 2, H - 2);
+        ctx.save();
+        ctx.font = 'bold 11px "Courier New",monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#000'; ctx.fillText('C', bx + barW / 2 + 1, by + H / 2 + 1);
+        ctx.fillStyle = '#fff'; ctx.fillText('C', bx + barW / 2, by + H / 2);
+        ctx.restore();
+        ctx.font = '7px "Courier New",monospace';
+        const name = ready ? (def ? def.name : a.id.toUpperCase()) : Math.ceil(a.cd / 1000) + 's';
+        ctx.fillStyle = '#000'; ctx.fillText(name, lx + 1, by + 3);
+        ctx.fillStyle = ready ? col : '#778'; ctx.fillText(name, lx, by + 2);
+        by += 14;
+        return;
+      }
       drawBar(by, ready ? 1 : Math.max(0, 1 - a.cd / (a.max || 1)), ready,
               key + (ready ? (def ? def.name : a.id.toUpperCase()) : Math.ceil(a.cd / 1000) + 's'), col, '#3a4450', '#0c1016');
       by += 7;
@@ -8518,8 +8785,17 @@ function drawEnemyBars(m, x, y) {
 // The sniper's laser: thin while it tracks you, thick and flickering once locked.
 function drawSniperLaser(m) {
   const a = m.aim.a, k = m.aim.k, x = m.x + m.w / 2, y = m.y + m.h / 2;
-  const locked = k > 0.3, len = 520;
+  const locked = k > 0.3, len = m.aim.elite ? 1600 : 520;
   ctx.save();
+  if (m.aim.elite) {                // the ELITE's beam: thick, and orange when the bullet is an explosive one
+    const col = m.aim.boom ? '#ff8a1a' : '#ff1a2a', ex = x + Math.cos(a) * len, ey = y + Math.sin(a) * len;
+    ctx.strokeStyle = col; ctx.globalAlpha = 0.28; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.globalAlpha = 0.95; ctx.lineWidth = 1.6; ctx.strokeStyle = m.aim.boom ? '#ffd8a0' : '#ff8a8a';
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.restore();
+    return;
+  }
   ctx.globalAlpha = locked ? 0.55 + 0.4 * (Math.floor(performance.now() / 60) % 2) : 0.35;
   ctx.strokeStyle = '#ff2a2a'; ctx.lineWidth = locked ? 1.6 : 0.8;
   ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len); ctx.stroke();
@@ -8530,6 +8806,12 @@ function drawSniperLaser(m) {
 function drawSnipeShot(pr) {
   const sp = Math.hypot(pr.dx, pr.dy) || 1;
   ctx.save();
+  if (pr.isAoe) {                   // explosive: fat, orange, with a burning head
+    ctx.fillStyle = '#ff7a1a'; ctx.globalAlpha = 0.5;
+    ctx.beginPath(); ctx.arc(pr.x, pr.y, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1; ctx.fillStyle = '#ffe07a';
+    ctx.beginPath(); ctx.arc(pr.x, pr.y, 3, 0, Math.PI * 2); ctx.fill();
+  }
   ctx.strokeStyle = '#ff4a3a'; ctx.globalAlpha = 0.5; ctx.lineWidth = 4;
   ctx.beginPath(); ctx.moveTo(pr.x, pr.y); ctx.lineTo(pr.x - pr.dx / sp * 26, pr.y - pr.dy / sp * 26); ctx.stroke();
   ctx.strokeStyle = '#fff2c8'; ctx.globalAlpha = 1; ctx.lineWidth = 1.6;

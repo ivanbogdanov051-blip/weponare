@@ -511,7 +511,53 @@ const HAT_NAMES = ['NONE', 'CAP', 'CROWN', 'HORNS', 'SPIKY', 'TOPHAT', 'PARTY', 
                    'COWBOY', 'BEANIE', 'ANTLERS', 'BUNNY', 'FLOWERS', 'HEADSET'];
 const ACC_NAMES = ['NONE', 'GLASSES', 'SHADES', 'MASK', 'SCARF', 'BOWTIE', 'MEDAL', 'CAPE', 'WINGS', 'BACKPACK'];
 
-function playerBuf(color, hatIdx, flash, outfitId, accIdx) {
+// Armour worn on the body. A helmet is the same art as its shop icon. Chest and legs
+// keep the shape of whatever is under them (any skin works) and take on the
+// piece's colours by how light each pixel was, so the shading survives.
+function recolorRows(b, from, to, pal) {
+  let lo = 255, hi = 0;
+  const lum = i => b.data[i] * 0.3 + b.data[i + 1] * 0.6 + b.data[i + 2] * 0.1;
+  for (let y = from; y <= to; y++) for (let x = 0; x < b.w; x++) {
+    const i = (y * b.w + x) * 4;
+    if (b.data[i + 3]) { const l = lum(i); lo = Math.min(lo, l); hi = Math.max(hi, l); }
+  }
+  for (let y = from; y <= to; y++) for (let x = 0; x < b.w; x++) {
+    const i = (y * b.w + x) * 4;
+    if (!b.data[i + 3]) continue;
+    const k = (lum(i) - lo) / Math.max(1, hi - lo);
+    setPx(b, x, y, k > 0.62 ? pal[2] : k > 0.28 ? pal[1] : pal[0]);
+  }
+}
+function paintArmor(b, pieces) {
+  const A = typeof window !== 'undefined' && window.Armor;
+  if (!A) return;
+  const T = PLAYER_PAD, BODY = T + BODY_Y, LEG = T + LEG_Y;
+  const chest = pieces.find(p => p.slot === 'chest'), legs = pieces.find(p => p.slot === 'legs'), head = pieces.find(p => p.slot === 'head');
+  if (legs) {
+    const pal = legs.pal;
+    recolorRows(b, LEG, b.h - 1, pal);
+    if (legs.legs === 'greaves' || legs.legs === 'spiked') for (const x of [6, 10]) setPx(b, x, LEG + 1, pal[3]);
+    if (legs.legs === 'tasset') rect(b, 4, LEG, 8, 1, pal[3]);
+    if (legs.legs === 'scale') for (const x of [5, 7, 10, 12]) setPx(b, x, LEG + 2, pal[2]);
+  }
+  if (chest) {
+    const pal = chest.pal;
+    recolorRows(b, BODY, BODY + 5, pal);
+    rect(b, 5, BODY + 5, 6, 1, pal[3]);                 // the belt
+    rect(b, 7, BODY + 2, 2, 2, pal[3]);                 // the set's emblem, as far as it shows at this size
+    if (chest.chest === 'plate') { setPx(b, 3, BODY, pal[2]); setPx(b, 12, BODY, pal[2]); rect(b, 5, BODY + 1, 2, 1, pal[2]); }
+    if (chest.chest === 'scale') for (const [x, y] of [[5, 1], [9, 1], [6, 3], [10, 3]]) setPx(b, x, BODY + y, pal[2]);
+    if (chest.chest === 'spiked') for (const x of [2, 13]) { setPx(b, x, BODY - 1, pal[3]); setPx(b, x, BODY - 2, pal[2]); }
+    if (chest.chest === 'robe') { recolorRows(b, LEG, LEG + 1, pal); }
+  }
+  if (head) {
+    const H = { a: head.pal[0], b: head.pal[1], c: head.pal[2], d: head.pal[3] }, top = T - 2;
+    A.HELMS[head.helm].forEach((row, ry) => { for (let rx = 0; rx < 16; rx++) if (row[rx] !== '.') setPx(b, rx, top + ry, H[row[rx]]); });
+    for (const [x, y, c] of A.CRESTS[head.crest] || []) if (top + y >= 0) setPx(b, x, top + y, H[c]);
+  }
+}
+
+function playerBuf(color, hatIdx, flash, outfitId, accIdx, armorKey) {
   const c = ramp(color);
   const fit = OUTFITS[outfitId] || null;
   const hair = ramp('#4a3322');
@@ -543,8 +589,10 @@ function playerBuf(color, hatIdx, flash, outfitId, accIdx) {
     setPx(b, 9, T + 3, hair[3]); setPx(b, 6, T + 2, hair[3]);   // hair shine
   }
   if (fit && fit.paint) fit.paint(b, T, c);
-  if (!fit || fit.hat) drawHatPixels(b, hatIdx, c);
+  const worn = armorKey && typeof window !== 'undefined' && window.Armor ? armorKey.split(',').map(id => window.Armor.BY_ID[id]).filter(Boolean) : [];
+  if ((!fit || fit.hat) && !worn.some(p => p.slot === 'head')) drawHatPixels(b, hatIdx, c);
   drawAccessory(b, accIdx, !(fit && fit.head));
+  if (worn.length) paintArmor(b, worn);
   outline(b, fit && fit.edge || EDGE);
   if (flash) tint(b, '#ffffff', 0.78);
   return b;
@@ -683,11 +731,11 @@ function drawAccessory(b, accIdx, faceOk) {
   }
 }
 
-function playerSprite(color, hatIdx, facing, flash, outfitId, accIdx) {
+function playerSprite(color, hatIdx, facing, flash, outfitId, accIdx, armorKey) {
   const fit = OUTFITS[outfitId] ? outfitId : '';
   const acc = accIdx | 0;
-  return sprite(`pl:${color}:${hatIdx}:${facing}:${flash ? 1 : 0}:${fit}:${acc}`, () => {
-    const b = playerBuf(color, hatIdx, flash, fit, acc);
+  return sprite(`pl:${color}:${hatIdx}:${facing}:${flash ? 1 : 0}:${fit}:${acc}:${armorKey || ''}`, () => {
+    const b = playerBuf(color, hatIdx, flash, fit, acc, armorKey);
     return facing === 1 ? b : mirror(b);
   });
 }
@@ -731,6 +779,11 @@ const MONSTER_SKIN = {
   samurai:     { base: '#b8283a', eye: '#ffe08a', eyes: 2 },
   sniper:      { base: '#4a6a3a', eye: '#ff3a3a', eyes: 1 },
   golem:       { base: '#4a3428', eye: '#ff8a1a', eyes: 2 },
+  elitesniper:  { base: '#3a1a24', eye: '#ff1a2a', eyes: 1 },
+  mirrorknight: { base: '#a8bcd4', eye: '#2a5aff', eyes: 2 },
+  hexer:        { base: '#6a2a9a', eye: '#ffe04a', eyes: 2 },
+  burrower:     { base: '#8a6438', eye: '#ffb03a', eyes: 2 },
+  sentry:       { base: '#5a6a7a', eye: '#ff3a3a', eyes: 1 },
   // Boss
   giant:    { base: '#7a9a56', eye: '#ffe25a', eyes: 2 },
   portalmage: { base: '#5a2aa8', eye: '#ff9aff', eyes: 2 },
@@ -840,6 +893,31 @@ const MONSTER_SHAPE = {
     // A hooded marksman in a ragged ghillie cloak.
     body: [[0.36,0.00],[0.64,0.00],[0.78,0.14],[0.80,0.34],[0.90,0.72],[0.70,0.78],[0.30,0.78],[0.10,0.72],[0.20,0.34],[0.22,0.14]],
     legs: [[0.28,0.22],[0.54,0.22]], legTop: 0.76, headV: 0.20,
+  },
+  elitesniper: {
+    // A tall hooded killer in a long split coat.
+    body: [[0.40,0.00],[0.60,0.00],[0.76,0.12],[0.82,0.36],[0.96,0.80],[0.72,0.86],[0.50,0.70],[0.28,0.86],[0.04,0.80],[0.18,0.36],[0.24,0.12]],
+    legs: [[0.30,0.18],[0.52,0.18]], legTop: 0.80, headV: 0.20,
+  },
+  mirrorknight: {
+    // Broad plate shoulders and a narrow waist.
+    body: [[0.32,0.00],[0.68,0.00],[0.82,0.14],[1.00,0.26],[0.92,0.56],[0.74,0.80],[0.26,0.80],[0.08,0.56],[0.00,0.26],[0.18,0.14]],
+    legs: [[0.22,0.24],[0.56,0.24]], legTop: 0.76, headV: 0.22,
+  },
+  hexer: {
+    // A witch's point of a hat over a wide robe.
+    body: [[0.50,0.00],[0.60,0.20],[0.88,0.32],[0.68,0.38],[0.82,0.78],[0.94,0.92],[0.06,0.92],[0.18,0.78],[0.32,0.38],[0.12,0.32],[0.40,0.20]],
+    legs: [[0.30,0.08],[0.52,0.08]], legTop: 0.90, headV: 0.44,
+  },
+  burrower: {
+    // A low, round digger with shoulders like shovels.
+    body: [[0.26,0.12],[0.74,0.12],[0.96,0.34],[1.00,0.66],[0.84,0.86],[0.16,0.86],[0.00,0.66],[0.04,0.34]],
+    legs: [[0.14,0.14],[0.66,0.14]], legTop: 0.84, headV: 0.38,
+  },
+  sentry: {
+    // A gun head on a tripod.
+    body: [[0.28,0.06],[0.72,0.06],[0.88,0.24],[0.88,0.54],[0.64,0.62],[0.72,0.98],[0.58,0.98],[0.50,0.70],[0.42,0.98],[0.28,0.98],[0.36,0.62],[0.12,0.54],[0.12,0.24]],
+    legs: [], legTop: 0.90, headV: 0.30,
   },
   golem: {
     // A hunched heap of boulders with a tiny head sunk between huge shoulders.

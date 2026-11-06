@@ -63,6 +63,16 @@
     blobs.set(color, cv);
     return cv;
   }
+  // A plain soft glow, for anything that isn't a character's bought one.
+  function softGlow(g, color, x, y, w, h, alpha) {
+    const a = g.globalAlpha;
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = a * alpha;
+    g.imageSmoothingEnabled = true;    // the game draws pixels crisp, but a glow has to stay soft
+    g.drawImage(blob(color), x, y, w, h);
+    g.restore();
+  }
   function drawGlow(g, id, x, y, w, h, own, now) {
     const d = GLOWS[id];
     if (!d || !d.c) return;
@@ -75,6 +85,7 @@
     g.save();
     g.globalCompositeOperation = 'lighter';
     g.globalAlpha = a * k;
+    g.imageSmoothingEnabled = true;    // the game draws pixels crisp, but a glow has to stay soft
     g.drawImage(blob(color), x - grow, y - grow - 3, w + grow * 2, h + grow * 2 + 3);
     if (d.rays) {
       g.fillStyle = color; g.globalAlpha = a * 0.4;
@@ -301,5 +312,5 @@
     g.restore();
   }
 
-  window.Cosmetics = { COLORS, GLOWS, ACCS, NAME_BGS, colorAt, swatch, drawGlow, drawAcc, nameTag };
+  window.Cosmetics = { COLORS, GLOWS, ACCS, NAME_BGS, colorAt, swatch, drawGlow, softGlow, drawAcc, nameTag };
 })();

@@ -11,7 +11,8 @@ const CUST_LOAD_FIRST_MS = 900, CUST_LOAD_AGAIN_MS = 450;
 const custLoad = { token: 0, t0: 0, minMs: 0, kind: null, raf: 0, last: 0, seen: {}, sparks: [], lastStrike: -1, weapons: null, icons: null, tipAt: 0 };
 
 const CUST_SCENES = {
-  shop:  { a: '#c88a0a', b: '#12b8a0', title: 'OPENING THE ARMOURY',  draw: custDrawShop,    back: () => closeShop() },
+  shop:  { a: '#c88a0a', b: '#12b8a0', title: 'OPENING THE WORKSHOP', draw: custDrawShop,    back: () => closeShop() },
+  armory: { a: '#d81a4a', b: '#ffb82a', title: 'OPENING THE ARMOURY', draw: custDrawShop,    back: () => closeArmory() },
   abil:  { a: '#c81a9a', b: '#6a2aff', title: 'CHARGING YOUR POWERS', draw: custDrawAbil,    back: () => closeAbilities() },
   skin:  { a: '#ff3a8a', b: '#2ab8ff', title: 'OPENING THE WARDROBE', draw: custDrawSkin,    back: () => closeSkinsScreen() },
   forge: { a: '#d8380a', b: '#ff9a1a', title: 'HEATING THE FORGE',    draw: custDrawForge,   back: () => closeForge() },
