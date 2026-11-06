@@ -4610,6 +4610,25 @@ function buildPick(me) {
   const last = ids.indexOf(lsGet('weponare_weapon'));
   if (last > 0 && !me.weaponIdx) selectWeaponIndex(last);
 }
+// Zoom out: pick the column count that gives each card the most room, so all of
+// them fit on the screen at once.
+function fitPickGrid() {
+  const grid = document.getElementById('pickGrid'), n = grid.children.length;
+  if (!n || !grid.clientWidth || !grid.clientHeight) return;
+  const W = grid.clientWidth, H = grid.clientHeight;
+  let best = 1, bestScore = -1;
+  for (let c = 1; c <= n; c++) {
+    const r = Math.ceil(n / c), w = W / c, h = H / r;
+    const score = Math.min(w, h * 1.9);   // cards read best a little wider than tall
+    if (score > bestScore) { bestScore = score; best = c; }
+  }
+  const rows = Math.ceil(n / best), ch = H / rows;
+  grid.style.setProperty('--cols', best); grid.style.setProperty('--rows', rows);
+  grid.style.setProperty('--fs', Math.max(5, Math.min(11, ch / 5.2, (W / best) / 13.5)).toFixed(1) + 'px');
+  grid.style.setProperty('--gap', Math.max(2, Math.min(8, ch / 16)).toFixed(1) + 'px');
+  grid.style.setProperty('--rad', Math.max(4, Math.min(10, ch / 8)).toFixed(1) + 'px');
+}
+window.addEventListener('resize', () => { if (currState?.gameState === 'WEAPON_PICK') fitPickGrid(); });
 function pickWeaponAt(i) {
   const id = currState?.players?.[myKeyOf()]?.unlockedWeapons?.[i];
   if (!id) return;
@@ -4627,7 +4646,7 @@ function renderPick(state) {
   const me = state.players?.[myKeyOf()];
   if (!me || !state.pick) return;
   const key = (me.unlockedWeapons || []).join();
-  if (pickUI.key !== key) { pickUI.key = key; pickUI.sel = ''; buildPick(me); }
+  if (pickUI.key !== key) { pickUI.key = key; pickUI.sel = ''; buildPick(me); fitPickGrid(); }
   const secs = Math.max(1, Math.ceil(state.pick.t / 1000));
   if (secs !== pickUI.secs) {
     pickUI.secs = secs;
@@ -4642,7 +4661,6 @@ function renderPick(state) {
     for (const b of document.getElementById('pickGrid').children) {
       const on = b.dataset.id === id;
       b.classList.toggle('on', on);
-      if (on) b.scrollIntoView({ block: 'nearest' });
     }
     document.getElementById('pickName').textContent = (WEAPON_META[id]?.name || id || '').toUpperCase();
     document.getElementById('pickDesc').textContent = WEAPON_DESC[id] || '';
