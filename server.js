@@ -3581,7 +3581,7 @@ function clearField() {
 
 // A new match opens with a countdown to choose your weapon; the sandbox, a place
 // for trying them all, doesn't need one. Everyone ready ends it early.
-const WEAPON_PICK_MS = 10000;
+const WEAPON_PICK_MS = 5000;
 function tickWeaponPick(dt) {
   room.pick.t -= dt;
   const here = KEYS.filter(k => room[k] && room[k].readyState === 1 && room.players[k]);
