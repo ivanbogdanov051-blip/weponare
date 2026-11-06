@@ -164,6 +164,21 @@ function toggleNetOverlay() {
   try { localStorage.setItem('weponare_fps', netOverlay ? '1' : '0'); } catch {}
   syncSettings();
 }
+// Snapshots leave out what hasn't changed (slimState in server.js has the same
+// lists): everything past this point sees a complete one.
+const SLIM_TOP = ['gameMode', 'world', 'maxPlayers', 'playerNames', 'round', 'sandbox', 'finalWave', 'isAdmin', 'victory', 'botReward'];
+const SLIM_PLAYER = ['w', 'h', 'atkSpd', 'reach', 'wType', 'upg', 'unlockedWeapons', 'skin', 'specialMax', 'superMax', 'parryMax', 'speed'];
+const slimHad = { top: {}, pl: {} };
+function unslim(m) {
+  for (const k of SLIM_TOP) { if (k in m) slimHad.top[k] = m[k]; else if (k in slimHad.top) m[k] = slimHad.top[k]; }
+  for (const pk of KEYS) {
+    const v = m.players?.[pk];
+    if (!v) continue;
+    const c = slimHad.pl[pk] || (slimHad.pl[pk] = {});
+    for (const k of SLIM_PLAYER) { if (k in v) c[k] = v[k]; else if (k in c) v[k] = c[k]; }
+  }
+}
+let ackCount = 0;
 function drainStates() {
   if (!stateInbox.length) return;
   // Behind? Keep only the newest two (enough to blend between).
@@ -175,7 +190,8 @@ function drainStates() {
   }
   // Tell the server how fresh our picture is, so it never queues more than the
   // link and this page can actually take.
-  if (currState && Number.isFinite(currState.st) && ws && ws.readyState === 1) {
+  // (Every third one is plenty, and each ack is a packet competing with your inputs.)
+  if (++ackCount % 3 === 0 && currState && Number.isFinite(currState.st) && ws && ws.readyState === 1) {
     ws.send('{"type":"ack","st":' + currState.st + '}');
   }
 }
@@ -196,7 +212,10 @@ function pushSnapshot(msg, nowT) {
   // Track the fastest arrival; creep up slowly so a clock or route change is followed.
   if (clockOffset === null || off < clockOffset) clockOffset = off; else clockOffset += 0.05;
   const late = Math.min(250, off - clockOffset);
-  lateMs = late > lateMs ? late : lateMs + (late - lateMs) * 0.03;
+  // A lone late packet (common on mobile data) only nudges the delay; a link that
+  // keeps being late still raises it within a few snapshots. It used to jump to
+  // the worst one seen and take seconds to come back down.
+  lateMs += (late - lateMs) * (late > lateMs ? 0.3 : 0.05);
   if (snaps.length && st <= snaps[snaps.length - 1].st) snaps.length = 0;   // server restarted / clock jumped
   snaps.push({ s: msg, st });
   while (snaps.length > 2 && snaps[1].st < st - 1000) snaps.shift();
@@ -333,6 +352,7 @@ function cycleMusic() {
   GameAudio.preview();   // from the menu: a few seconds of the new track (no-op mid-match)
 }
 
+let lastSavedXp, lastSavedCoins;
 let leaving = false, returningToMenu = false;
 function leaveGame() {
   leaving = true;
@@ -826,11 +846,13 @@ function connect() {
     }
     if (msg.type === 'state') {
       if (returningToMenu) return;
+      unslim(msg);
+      // Saved only when it changes: writing to storage is slow on a phone, and this
+      // runs for every snapshot.
       if (pendingPass) {
-        if (msg.xp !== undefined) saveLocalXp(pendingPass, msg.xp);
-        if (msg.myCoins !== undefined) saveLocalCoins(pendingPass, msg.myCoins);
+        if (msg.xp !== undefined && msg.xp !== lastSavedXp) { lastSavedXp = msg.xp; saveLocalXp(pendingPass, msg.xp); }
+        if (msg.myCoins !== undefined && msg.myCoins !== lastSavedCoins) { lastSavedCoins = msg.myCoins; saveLocalCoins(pendingPass, msg.myCoins); }
       }
-      // The server only sends a player's unlock list when it changes.
       applyWorld(msg.world);
       const solo = ['waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom'].includes(msg.gameMode);   // nobody to talk to in the solo modes
       if (solo !== chatSolo) {
@@ -2254,6 +2276,8 @@ canvas.addEventListener('pointermove', (e) => {
 });
 canvas.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') mouseAim = null; });
 
+const blankControls = { up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false,
+                        ab1: false, ab2: false, ab3: false, ab4: false, ab5: false, ab6: false, ab7: false, ang: null, aimX: null, aimY: null };
 const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false,
                     ab1: false, ab2: false, ab3: false, ab4: false, ab5: false, ab6: false, ab7: false, ang: null };
 
@@ -2264,7 +2288,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyM') toggleSound();
   if (e.code === 'F3') { e.preventDefault(); toggleNetOverlay(); }
   if (e.code === 'KeyT' && currState && currState.gameState === 'GAMEPLAY' && document.activeElement?.tagName !== 'INPUT') toggleChat();
-  if (e.code === 'Escape') toggleChat(false);
+  if (e.code === 'Escape') { toggleChat(false); closeRareShop(); }
   if (e.code.startsWith('Digit')) {
     const n = parseInt(e.code.slice(5));
     if (n >= 1 && n <= 4) useItem(n - 1);
@@ -2279,6 +2303,8 @@ window.addEventListener('blur', () => {
 });
 
 function currentInputs() {
+  // The mythic shop covers the fight: you stand still until you close it.
+  if (rareShopUp) return { ...blankControls };
   const anyKey = keys['ArrowUp'] || keys['ArrowDown'] || keys['ArrowLeft'] || keys['ArrowRight'] || keys['KeyW'] || keys['KeyS'] || keys['KeyA'] || keys['KeyD'];
   if (anyKey) moveTarget = null;   // the keys take over from a click
   const tm = tapMoveInput() || {};
@@ -4255,7 +4281,7 @@ function menuBgResize() {
   const cv = menuBg.cv, W = window.innerWidth, H = window.innerHeight;
   const sx = menuBg.W ? W / menuBg.W : 1, sy = menuBg.H ? H / menuBg.H : 1;
   for (const it of menuBg.items) { it.x *= sx; it.y *= sy; }
-  menuBg.W = W; menuBg.H = H; menuBg.dpr = Math.min(2, window.devicePixelRatio || 1);
+  menuBg.W = W; menuBg.H = H; menuBg.dpr = isTouchDevice ? 1 : Math.min(2, window.devicePixelRatio || 1);
   cv.width = Math.round(W * menuBg.dpr); cv.height = Math.round(H * menuBg.dpr);
   // Shrink them on a phone: the same 57 weapons share much less room.
   menuBg.scale = Math.max(0.6, Math.min(1.1, Math.sqrt(W * H) / 850));
@@ -4304,6 +4330,8 @@ function menuBgFrame(now) {
   menuBg.raf = 0;
   const scr = document.getElementById('startScreen');
   if (!scr || scr.classList.contains('hidden')) return;
+  // 30 frames a second on a phone: the menu shouldn't heat it up before a fight.
+  if (isTouchDevice && menuBg.last && now - menuBg.last < 30) { menuBg.raf = requestAnimationFrame(menuBgFrame); return; }
   const dt = menuBg.last ? Math.min(0.05, (now - menuBg.last) / 1000) : 0;
   menuBg.last = now;
   const t = now / 1000, { W, H } = menuBg;
@@ -5555,9 +5583,12 @@ function drawRareWeapon(g, id, scale, color) {
   if (!sp) return;
   const now = performance.now(), W = sp.cv.width, H = sp.cv.height, k = 0.5 + 0.5 * Math.sin(now / 240);
   g.save();
-  g.shadowColor = '#ff1a1a'; g.shadowBlur = 8 + 8 * k;
-  g.drawImage(sp.cv, -sp.ox, -sp.oy);
-  g.drawImage(sp.cv, -sp.ox, -sp.oy);        // twice: the shadow is the glow, and this thickens it
+  if (isTouchDevice) g.drawImage(sp.cv, -sp.ox, -sp.oy);   // no blur on a phone: it is far too slow there
+  else {
+    g.shadowColor = '#ff1a1a'; g.shadowBlur = 8 + 8 * k;
+    g.drawImage(sp.cv, -sp.ox, -sp.oy);
+    g.drawImage(sp.cv, -sp.ox, -sp.oy);      // twice: the shadow is the glow, and this thickens it
+  }
   g.restore();
   // The sweep is painted only where the weapon is.
   if (shineCv.width !== W || shineCv.height !== H) { shineCv.width = W; shineCv.height = H; }
@@ -7385,6 +7416,22 @@ function drawCoinIcon(x, y, r) {
 
 let weaponSlotRects = []; // HUD-space hit boxes for tap-to-select
 
+// The rack redraws up to a dozen icons, pixel by pixel, every frame; each one is
+// painted once and then stamped.
+const rackIcons = new Map();
+function drawRackIcon(id, x, y, w, h, color) {
+  const key = id + '|' + Math.round(w * 4) + '|' + Math.round(h * 4) + '|' + color;
+  let cv = rackIcons.get(key);
+  if (!cv) {
+    if (rackIcons.size > 150) rackIcons.clear();
+    cv = document.createElement('canvas');
+    cv.width = Math.ceil(w * 3); cv.height = Math.ceil(h * 3);
+    const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
+    drawWeaponPixelsFitted(g, id, cv.width / 2, cv.height / 2, cv.width, cv.height, color);
+    rackIcons.set(key, cv);
+  }
+  ctx.drawImage(cv, x, y, w, h);
+}
 function drawWeaponPanel(state) {
   weaponSlotRects = [];
   if (!myNum) return;
@@ -7475,13 +7522,13 @@ function drawWeaponPanel(state) {
     if (mp.fr?.includes(wId)) {
       const k = 0.55 + 0.45 * Math.sin(performance.now() / 260);
       ctx.save(); ctx.strokeStyle = '#ff2a2a'; ctx.globalAlpha = (0.5 + 0.5 * k) * alpha; ctx.lineWidth = 1;
-      ctx.shadowColor = '#ff2a2a'; ctx.shadowBlur = 6 + 4 * k;
+      if (!isTouchDevice) { ctx.shadowColor = '#ff2a2a'; ctx.shadowBlur = 6 + 4 * k; }
       ctx.strokeRect(sx + 0.5, sy + 0.5, slotW - 1, slotH - 1); ctx.restore();
-      ctx.save(); ctx.shadowColor = '#ff2a2a'; ctx.shadowBlur = 5 + 4 * k;
-      drawWeaponPixelsFitted(ctx, wId, sx + slotW/2, sy + slotH/2, slotW - 3, slotH - 3, wc);
+      ctx.save(); if (!isTouchDevice) { ctx.shadowColor = '#ff2a2a'; ctx.shadowBlur = 5 + 4 * k; }
+      drawRackIcon(wId, sx + 1.5, sy + 1.5, slotW - 3, slotH - 3, wc);
       ctx.restore();
     } else
-    drawWeaponPixelsFitted(ctx, wId, sx + slotW/2, sy + slotH/2, slotW - 3, slotH - 3, wc);
+    drawRackIcon(wId, sx + 1.5, sy + 1.5, slotW - 3, slotH - 3, wc);
     ctx.globalAlpha = alpha * 0.85;
   }
   // The held weapon's name, just under the rack.
@@ -7642,7 +7689,15 @@ function drawCurseFx(e, x, y) {
 
 // ─── The rare shop ───────────────────────────────────────────────────────────
 // A merchant's stall: a black and gold awning over a counter, a glowing sign.
+function syncRareShopTimer(ms) {
+  const secs = Math.ceil(ms / 1000);
+  if (secs === rareShopSecs) return;
+  rareShopSecs = secs;
+  const el = document.getElementById('rsTimer');
+  if (el) { el.textContent = 'LEAVES IN ' + secs + 's'; el.classList.toggle('soon', secs <= 5); }
+}
 function drawRareShop(s) {
+  if (rareShopUp) syncRareShopTimer(s.t);
   const now = performance.now(), x = Math.round(s.x), y = Math.round(s.y), w = s.w, h = s.h;
   ctx.save();
   ctx.globalAlpha = 0.18 + 0.08 * Math.sin(now / 300); ctx.fillStyle = '#ffd84a';
@@ -7669,26 +7724,46 @@ function drawRareShop(s) {
   }
   ctx.restore();
 }
-// The panel that opens when you walk up to it.
+// The mythic shop: takes over the whole screen when you walk up to the stall.
+// The cross (or Esc) closes it; walk away and back to open it again.
+let rareShopUp = false, rareShopSecs = -1;
+function closeRareShop() {
+  const el = document.getElementById('rareShopPanel');
+  if (!el || !rareShopUp) return;
+  rareShopUp = false;
+  el.classList.add('hidden');
+  sendInput();
+}
 function showRareShop(msg) {
   const el = document.getElementById('rareShopPanel');
   if (!el) return;
-  if (!msg.open) { el.classList.add('hidden'); return; }
+  if (!msg.open) { rareShopUp = false; el.classList.add('hidden'); return; }
+  const list = el.querySelector('.rs-scroll');
+  const keepScroll = rareShopUp && list ? list.scrollTop : 0;
   const rows = (msg.offers || []).map(o => {
     const needs = o.needs.map(n => `<span class="${n.ok ? 'need-ok' : 'need-no'}">${n.ok ? '✔' : '✘'} ${n.name}${n.plain ? '' : ' maxed'}</span>`).join('');
     const kills = `<span class="${o.kills >= o.killsNeed ? 'need-ok' : 'need-no'}">${o.kills >= o.killsNeed ? '✔' : '✘'} ${o.kills.toLocaleString()}/${o.killsNeed.toLocaleString()} enemies killed</span>`;
     const coins = `<span class="${o.coins >= o.price ? 'need-ok' : 'need-no'}">${o.coins >= o.price ? '✔' : '✘'} ◆ ${o.coins.toLocaleString()}/${o.price.toLocaleString()}</span>`;
-    const btn = o.owned ? '<button class="rs-buy" disabled>OWNED</button>'
+    const btn = o.owned ? '<button class="rs-buy owned" disabled>OWNED</button>'
       : `<button class="rs-buy${o.ok ? '' : ' poor'}" ${o.ok ? '' : 'disabled'} onclick="buyMythic('${o.id}')">BUY ◆ ${o.price.toLocaleString()}</button>`;
-    return `<div class="rs-row"><canvas class="rs-ic" data-weapon="${o.id}" width="64" height="34"></canvas>
-      <div class="rs-info"><div class="rs-name">${o.name} <span class="legend-tag mythic-tag">MYTHIC</span></div>
-      <div class="rs-needs">${needs}${kills}${coins}</div></div>${btn}</div>`;
+    return `<div class="rs-card${o.ok && !o.owned ? ' ready' : ''}" style="--wc:${WEAPON_COLOR[o.id] || '#c8a0ff'}"><canvas class="rs-ic" data-weapon="${o.id}" width="240" height="96"></canvas>
+      <div class="rs-name">${o.name}</div>
+      <div class="rs-needs">${needs}${kills}${coins}</div>${btn}</div>`;
   }).join('');
-  el.innerHTML = `<div class="rs-title">✦ RARE SHOP ✦</div>
-    ${msg.guest ? '<div class="rs-note bad">Play with a password to buy mythics.</div>' : ''}
-    ${rows || '<div class="rs-note">Nothing for sale.</div>'}
-    ${msg.note ? `<div class="rs-note${msg.bad ? ' bad' : ''}">${msg.note}</div>` : ''}
-    <div class="rs-hint">Only one mythic goes into a game · walk away to close</div>`;
+  el.innerHTML = `<div class="rs-top">
+      <div class="rs-heading"><div class="rs-title">✦ MYTHIC SHOP ✦</div><div class="rs-timer" id="rsTimer"></div></div>
+      <button class="rs-x" onclick="closeRareShop()" aria-label="Close the shop">&times;</button>
+    </div>
+    <div class="rs-scroll">
+      ${msg.guest ? '<div class="rs-note bad">Play with a password to buy mythics.</div>' : ''}
+      ${msg.note ? `<div class="rs-note${msg.bad ? ' bad' : ''}">${msg.note}</div>` : ''}
+      <div class="rs-grid">${rows || '<div class="rs-note">Nothing for sale.</div>'}</div>
+      <div class="rs-hint">Only one mythic goes into a game · close this and walk back to the stall to open it again</div>
+    </div>`;
+  rareShopUp = true; rareShopSecs = -1;
+  sendInput();   // stop walking right away
+  el.querySelector('.rs-scroll').scrollTop = keepScroll;
+  if (currState?.rareShop) syncRareShopTimer(currState.rareShop.t);
   for (const cv of el.querySelectorAll('canvas.rs-ic')) {
     const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
     drawWeaponPixelsFitted(g, cv.dataset.weapon, cv.width / 2, cv.height / 2, cv.width - 6, cv.height - 6, WEAPON_COLOR[cv.dataset.weapon] || '#ccc');

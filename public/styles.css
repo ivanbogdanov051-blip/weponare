@@ -778,19 +778,6 @@ body {
 .mode-row-2 { margin: 8px 0 10px; }
 .mode-btn.btn-bot { border-color: #b0602a; color: #ffb07a; }
 .mode-btn.btn-bot:hover { background: #2a160a; color: #fff; }
-.bot-box { max-width: min(520px, 96vw); }
-.bot-levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 6px 0 12px; }
-.bot-lv {
-  display: flex; flex-direction: column; gap: 4px; align-items: center;
-  background: #0a0a18; border: 2px solid var(--lv); color: var(--lv);
-  font-family: 'Courier New', monospace; font-size: 9px; letter-spacing: 1px; padding: 10px 6px; cursor: pointer;
-}
-.bot-lv b { font-size: 13px; letter-spacing: 3px; }
-.bot-lv span { color: #9a9ab8; }
-.bot-lv:hover { background: #151525; box-shadow: 0 0 8px var(--lv); }
-.lv-easy { --lv: #6aff8a; } .lv-common { --lv: #9adfff; } .lv-average { --lv: #ffe45a; }
-.lv-admin { --lv: #ff3a3a; grid-column: 1 / -1; background: linear-gradient(180deg, #2a0808, #100404); }
-.lv-strong { --lv: #ffa04a; } .lv-hard { --lv: #ff5a4a; } .lv-insane { --lv: #d05aff; }
 .mode-btn.btn-sandbox { border-color: #2a9a6a; color: #9fffd0; }
 .mode-btn.btn-sandbox:hover { background: #0e2a1e; color: #fff; }
 .mode-btn.btn-howto { border-color: #9a8a3a; color: #ffe89a; }
@@ -966,23 +953,6 @@ body {
 .mythic-name { color: #ffffff; text-shadow: 1px 1px 0 #15151c, 0 0 6px #b8a0ff; }
 .need-ok { color: #7aff9a; margin-right: 8px; white-space: nowrap; }
 .need-no { color: #ff7a7a; margin-right: 8px; white-space: nowrap; }
-
-/* The rare shop panel */
-.rare-shop { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); z-index: 60; width: min(560px, calc(100vw - 24px));
-  background: rgba(14, 12, 6, 0.95); border: 2px solid #d9a520; box-shadow: 0 0 18px rgba(255, 216, 74, 0.35);
-  padding: 10px 12px; font-family: 'Courier New', monospace; color: #e8e0c0; font-size: 11px; }
-.rare-shop.hidden { display: none; }
-.rs-title { text-align: center; color: #ffd84a; font-size: 14px; letter-spacing: 4px; margin-bottom: 8px; text-shadow: 0 0 6px #d9a520; }
-.rs-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid #3a3010; }
-.rs-ic { flex: none; image-rendering: pixelated; background: #0a0a12; border: 1px solid #3a3a4a; }
-.rs-info { flex: 1; min-width: 0; }
-.rs-name { color: #ffffff; font-weight: bold; letter-spacing: 2px; margin-bottom: 3px; }
-.rs-needs { display: flex; flex-wrap: wrap; font-size: 10px; row-gap: 2px; }
-.rs-buy { flex: none; font-family: inherit; font-size: 11px; padding: 6px 10px; background: #2a2208; color: #ffd84a; border: 1px solid #d9a520; cursor: pointer; }
-.rs-buy.poor, .rs-buy:disabled { opacity: 0.5; cursor: default; }
-.rs-note { text-align: center; margin-top: 6px; color: #7aff9a; }
-.rs-note.bad { color: #ff7a7a; }
-.rs-hint { text-align: center; margin-top: 6px; color: #8a8060; font-size: 9px; }
 
 /* Picking which mythic goes into games */
 .mp-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
@@ -1424,6 +1394,7 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 /* ── The customising screens ──
    One shell, and each screen fills in --c1, --c2 and its panel colours, so they all
    belong together while each keeps a character of its own. */
+#botScreen      { --c1: #ff5a7a; --c2: #ffc83a; --sky1: #d81a5a; --sky2: #1a6ad8; --ink: #2a0614; --panel1: rgba(60, 8, 44, 0.9);   --panel2: rgba(12, 22, 84, 0.92); }
 #shopScreen     { --c1: #ffc83a; --c2: #2ae8c8; --sky1: #b87a08; --sky2: #0a9a8a; --ink: #2a1a04; --panel1: rgba(50, 30, 6, 0.9);   --panel2: rgba(6, 44, 44, 0.92); }
 #forgeScreen    { --c1: #ff9a2a; --c2: #ff5a2a; --sky1: #a82a06; --sky2: #5a1404; --ink: #2a0a02; --panel1: rgba(40, 14, 8, 0.93);  --panel2: rgba(18, 12, 14, 0.95); }
 #abilitiesScreen{ --c1: #ff6ae0; --c2: #9a7aff; --sky1: #a8188a; --sky2: #4a1ad8; --ink: #2a0a3a; --panel1: rgba(52, 10, 62, 0.9);  --panel2: rgba(26, 12, 84, 0.92); }
@@ -1431,8 +1402,8 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 #tradeScreen    { --c1: #4af0a8; --c2: #4ad0ff; --sky1: #0a8a5a; --sky2: #0a7aa8; --ink: #04281e; --panel1: rgba(6, 44, 36, 0.9);   --panel2: rgba(6, 30, 64, 0.92); }
 #settingsScreen { --c1: #7ad8ff; --c2: #c89aff; --sky1: #1a6ad8; --sky2: #7a2ad8; --ink: #0a1a3a; --panel1: rgba(10, 26, 66, 0.9);  --panel2: rgba(34, 14, 74, 0.92); }
 
-#shopScreen, #forgeScreen, #abilitiesScreen, #skinsScreen, #tradeScreen, #settingsScreen { background: #120626; }
-#shopScreen::before, #forgeScreen::before, #abilitiesScreen::before, #skinsScreen::before, #tradeScreen::before, #settingsScreen::before {
+#shopScreen, #forgeScreen, #abilitiesScreen, #skinsScreen, #botScreen, #tradeScreen, #settingsScreen { background: #120626; }
+#shopScreen::before, #forgeScreen::before, #abilitiesScreen::before, #skinsScreen::before, #botScreen::before, #tradeScreen::before, #settingsScreen::before {
   content: ''; position: fixed; inset: -45vmax; z-index: 0; pointer-events: none;
   background:
     radial-gradient(closest-side at 32% 34%, var(--sky1), transparent),
@@ -1455,23 +1426,23 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 }
 @keyframes forge-sparks { to { transform: translateY(-100vh); } }
 
-#shopScreen .pixel-box, #forgeScreen .pixel-box, #abilitiesScreen .pixel-box, #skinsScreen .pixel-box, #tradeScreen .pixel-box, #settingsScreen .pixel-box {
+#shopScreen .pixel-box, #forgeScreen .pixel-box, #abilitiesScreen .pixel-box, #skinsScreen .pixel-box, #botScreen .pixel-box, #tradeScreen .pixel-box, #settingsScreen .pixel-box {
   position: relative; z-index: 1; border: 3px solid var(--c1); border-radius: 14px;
   background: linear-gradient(160deg, var(--panel1), var(--panel2));
   box-shadow: 0 0 30px color-mix(in srgb, var(--c1) 55%, transparent), 0 8px 0 rgba(0, 0, 0, 0.35);
 }
 /* Titles: a metal sheen in the screen's own colours. */
-#shopScreen .title-text, #forgeScreen .title-text, #abilitiesScreen .title-text, #skinsScreen .title-text, #tradeScreen .title-text, #settingsScreen .title-text {
+#shopScreen .title-text, #forgeScreen .title-text, #abilitiesScreen .title-text, #skinsScreen .title-text, #botScreen .title-text, #tradeScreen .title-text, #settingsScreen .title-text {
   font-size: 26px; text-shadow: none; filter: drop-shadow(2px 2px 0 #000);
   background: linear-gradient(90deg, var(--c1), #fff, var(--c2), var(--c1)) 0 0 / 200% 100%;
   -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
   animation: menu-title 7s linear infinite;
 }
-#shopScreen .subtitle, #forgeScreen .subtitle, #abilitiesScreen .subtitle, #skinsScreen .subtitle, #tradeScreen .subtitle { color: color-mix(in srgb, var(--c2) 60%, #fff); font-size: 10px; }
+#shopScreen .subtitle, #forgeScreen .subtitle, #abilitiesScreen .subtitle, #skinsScreen .subtitle, #botScreen .subtitle, #tradeScreen .subtitle { color: color-mix(in srgb, var(--c2) 60%, #fff); font-size: 10px; }
 /* An emoji inside clipped gradient text comes out as a blank shape: give it its own paint. */
 .title-text .t-em { -webkit-text-fill-color: #fff; color: #fff; }
-#shopScreen .shop-msg, #forgeScreen .shop-msg, #abilitiesScreen .shop-msg, #skinsScreen .shop-msg, #tradeScreen .shop-msg { color: #e8e0ff; }
-#shopScreen .shop-msg.err, #forgeScreen .shop-msg.err, #abilitiesScreen .shop-msg.err, #skinsScreen .shop-msg.err, #tradeScreen .shop-msg.err { color: #ffb0a0; }
+#shopScreen .shop-msg, #forgeScreen .shop-msg, #abilitiesScreen .shop-msg, #skinsScreen .shop-msg, #botScreen .shop-msg, #tradeScreen .shop-msg { color: #e8e0ff; }
+#shopScreen .shop-msg.err, #forgeScreen .shop-msg.err, #abilitiesScreen .shop-msg.err, #skinsScreen .shop-msg.err, #botScreen .shop-msg.err, #tradeScreen .shop-msg.err { color: #ffb0a0; }
 .shop-msg.fg-good-msg { color: #7affb0 !important; }
 .shop-msg.fg-rare-msg { color: #ffd84a !important; }
 
@@ -1484,13 +1455,13 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 .shop-box .shop-coins .coin-ic { text-shadow: none; }
 
 /* BACK, on every one of these screens */
-#shopScreen .shop-back, #forgeScreen .shop-back, #abilitiesScreen .shop-back, #skinsScreen .shop-back, #tradeScreen .shop-back, #settingsScreen .shop-back {
+#shopScreen .shop-back, #forgeScreen .shop-back, #abilitiesScreen .shop-back, #skinsScreen .shop-back, #botScreen .shop-back, #tradeScreen .shop-back, #settingsScreen .shop-back {
   border: none; border-radius: 10px; color: var(--ink); font-size: 13px; font-weight: bold;
   background: linear-gradient(90deg, var(--c1), var(--c2)); box-shadow: 0 4px 0 rgba(0, 0, 0, 0.4);
   transition: transform 0.12s, filter 0.12s;
 }
-#shopScreen .shop-back:hover, #forgeScreen .shop-back:hover, #abilitiesScreen .shop-back:hover, #skinsScreen .shop-back:hover, #tradeScreen .shop-back:hover, #settingsScreen .shop-back:hover { filter: brightness(1.12); color: var(--ink); }
-#shopScreen .shop-back:active, #forgeScreen .shop-back:active, #abilitiesScreen .shop-back:active, #skinsScreen .shop-back:active, #tradeScreen .shop-back:active, #settingsScreen .shop-back:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4); }
+#shopScreen .shop-back:hover, #forgeScreen .shop-back:hover, #abilitiesScreen .shop-back:hover, #skinsScreen .shop-back:hover, #botScreen .shop-back:hover, #tradeScreen .shop-back:hover, #settingsScreen .shop-back:hover { filter: brightness(1.12); color: var(--ink); }
+#shopScreen .shop-back:active, #forgeScreen .shop-back:active, #abilitiesScreen .shop-back:active, #skinsScreen .shop-back:active, #botScreen .shop-back:active, #tradeScreen .shop-back:active, #settingsScreen .shop-back:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4); }
 
 /* Lists: cards instead of ruled lines. */
 .shop-box .shop-list { border: none; padding: 2px; }
@@ -1622,4 +1593,103 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
   #shopScreen::before, #forgeScreen::before, #forgeScreen::after, #abilitiesScreen::before, #skinsScreen::before, #tradeScreen::before, #settingsScreen::before,
   #shopScreen .title-text, #forgeScreen .title-text, #abilitiesScreen .title-text, #skinsScreen .title-text, #tradeScreen .title-text, #settingsScreen .title-text,
   #forgeScreen .mode-btn.fg-strike { animation: none !important; }
+}
+
+/* ── Bot battle ── */
+.bot-box { max-width: min(640px, 96vw); }
+.bot-levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 8px 0 12px; }
+.bot-lv {
+  position: relative; display: flex; flex-direction: column; gap: 5px; align-items: center; justify-content: space-between; text-align: center;
+  background: linear-gradient(155deg, color-mix(in srgb, var(--lv) 78%, #1a0a30), color-mix(in srgb, var(--lv2) 58%, #0a0620));
+  border: 2px solid var(--lv); border-radius: 12px; color: #fff; cursor: pointer;
+  font-family: 'Courier New', monospace; font-size: 10px; letter-spacing: 0.5px; padding: 10px 8px;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.45); transition: transform 0.12s, filter 0.12s, box-shadow 0.12s;
+}
+.bot-lv b { font-size: 15px; letter-spacing: 3px; text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.6); }
+.bot-lv span { color: #f4ecff; line-height: 1.25; text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5); }
+.bot-lv em { font-style: normal; font-weight: bold; color: #2a1a04; background: linear-gradient(180deg, #ffe88a, #ffb82a); padding: 2px 8px; border-radius: 6px; font-size: 10px; letter-spacing: 1px; white-space: nowrap; }
+.bot-lv:hover { filter: brightness(1.15); transform: translateY(-2px); box-shadow: 0 6px 0 rgba(0, 0, 0, 0.45), 0 0 16px var(--lv); }
+.bot-lv:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.45); }
+/* How hard: one block for each step up. */
+.lv-pips { display: block; height: 7px; width: calc(var(--n) * 11px - 3px); background: repeating-linear-gradient(90deg, #fff 0 8px, transparent 8px 11px); opacity: 0.95; }
+.lv-easy    { --lv: #3ae87a; --lv2: #0ab8a8; }
+.lv-common  { --lv: #3ab8ff; --lv2: #2a6aff; }
+.lv-average { --lv: #f0c81a; --lv2: #e88a0a; }
+.lv-strong  { --lv: #ff8a2a; --lv2: #e8421a; }
+.lv-hard    { --lv: #ff4a5a; --lv2: #c81a6a; }
+.lv-insane  { --lv: #c84aff; --lv2: #6a2aff; }
+.lv-admin   { --lv: #ff2a2a; --lv2: #ffb82a; grid-column: 1 / -1; padding: 12px; border-width: 3px;
+  background: linear-gradient(100deg, #8a0612, #d81a1a 40%, #e8700a 75%, #c89a0a); }
+.lv-admin b { font-size: 19px; letter-spacing: 6px; }
+.bot-note { font-size: 10px; color: #e8e0ff; }
+@media (max-width: 520px) { .bot-levels { grid-template-columns: repeat(2, 1fr); } .bot-lv { font-size: 9px; padding: 8px 6px; } }
+@media (max-height: 460px) { .bot-levels { grid-template-columns: repeat(3, 1fr); gap: 6px; } .bot-lv { padding: 5px 6px; gap: 2px; } .bot-lv b { font-size: 12px; } .lv-admin b { font-size: 14px; } .bot-note { display: none; } }
+
+/* ── The mythic shop: the whole screen ── */
+.rare-shop {
+  position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; overflow: hidden;
+  font-family: 'Courier New', monospace; color: #fff; font-size: 12px;
+  background: linear-gradient(135deg, #2a0a8a 0%, #8a14c8 34%, #e01a8a 66%, #ff8a1a 100%);
+}
+.rare-shop.hidden { display: none; }
+.rare-shop::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    radial-gradient(circle, #fff 0 1.2px, transparent 2px), radial-gradient(circle, #ffe88a 0 1.5px, transparent 2.5px), radial-gradient(circle, #8ae8ff 0 1px, transparent 2px),
+    radial-gradient(closest-side at 18% 20%, rgba(64, 224, 255, 0.5), transparent), radial-gradient(closest-side at 85% 88%, rgba(255, 232, 90, 0.5), transparent);
+  background-size: 137px 113px, 211px 173px, 89px 149px, 100% 100%, 100% 100%;
+}
+.rs-top {
+  position: relative; flex: none; display: flex; align-items: center; justify-content: center; min-height: 58px;
+  padding: max(6px, env(safe-area-inset-top, 0px)) 64px 6px; background: rgba(16, 4, 44, 0.55); border-bottom: 2px solid #ffe88a;
+}
+.rs-heading { text-align: center; }
+.rs-title {
+  font-size: 22px; font-weight: bold; letter-spacing: 5px; filter: drop-shadow(2px 2px 0 #000);
+  background: linear-gradient(90deg, #ffe88a, #fff, #8ae8ff, #ffb8f0); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+}
+.rs-timer { font-size: 11px; letter-spacing: 2px; color: #ffe88a; margin-top: 2px; }
+.rs-timer.soon { color: #ff9a8a; font-weight: bold; }
+.rs-x {
+  position: absolute; top: max(7px, env(safe-area-inset-top, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); width: 44px; height: 44px; padding: 0;
+  display: flex; align-items: center; justify-content: center; font-family: Arial, sans-serif; font-size: 32px; font-weight: bold; line-height: 1; color: #fff; cursor: pointer;
+  background: linear-gradient(180deg, #ff5a5a, #c8122a); border: 2px solid #fff; border-radius: 10px; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.5);
+}
+.rs-x:hover { filter: brightness(1.15); }
+.rs-x:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
+.rs-scroll {
+  position: relative; flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  padding: 12px max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
+}
+.rs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); gap: 12px; max-width: 1180px; margin: 0 auto; }
+.rs-card {
+  display: flex; flex-direction: column; gap: 7px; min-width: 0; padding: 10px; border-radius: 12px; border: 2px solid var(--wc);
+  background: linear-gradient(170deg, color-mix(in srgb, var(--wc) 34%, #120630), rgba(14, 6, 40, 0.94) 62%);
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.4);
+}
+.rs-card.ready { box-shadow: 0 5px 0 rgba(0, 0, 0, 0.4), 0 0 18px #ffe88a; border-color: #ffe88a; }
+.rs-ic { display: block; width: 100%; height: auto; aspect-ratio: 5 / 2; object-fit: contain; image-rendering: pixelated; border-radius: 8px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--wc) 42%, transparent), rgba(6, 2, 20, 0.75)); }
+.rs-name { text-align: center; font-size: 14px; font-weight: bold; letter-spacing: 2px; color: var(--wc); text-shadow: 1px 1px 0 #000; overflow-wrap: anywhere; }
+.rs-needs { display: flex; flex-direction: column; gap: 3px; flex: 1; font-size: 11px; }
+.rs-needs span { margin: 0; white-space: normal; padding: 2px 6px; border-radius: 5px; background: rgba(0, 0, 0, 0.32); }
+.rs-buy {
+  font-family: inherit; font-size: 13px; font-weight: bold; letter-spacing: 1px; padding: 10px 8px; min-height: 42px; color: #2a1a04; cursor: pointer;
+  background: linear-gradient(180deg, #ffe88a, #ffae1a); border: none; border-radius: 8px; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.5);
+}
+.rs-buy:hover:not(:disabled) { filter: brightness(1.1); }
+.rs-buy:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
+.rs-buy.poor { background: rgba(255, 255, 255, 0.14); color: #d8d0e8; box-shadow: none; cursor: default; }
+.rs-buy.owned { background: linear-gradient(180deg, #7affa8, #2ab86a); color: #04240f; box-shadow: none; cursor: default; }
+.rs-note { text-align: center; margin: 0 auto 10px; max-width: 640px; padding: 6px 10px; border-radius: 8px; background: rgba(10, 40, 24, 0.85); color: #9affc0; font-weight: bold; }
+.rs-note.bad { background: rgba(60, 8, 16, 0.88); color: #ffb0a0; }
+.rs-hint { text-align: center; margin-top: 12px; color: #fff; font-size: 11px; text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6); }
+@media (max-width: 520px) { .rs-title { font-size: 16px; letter-spacing: 2px; white-space: nowrap; } .rs-ic { aspect-ratio: 7 / 2; } .rs-card { padding: 8px; gap: 5px; } .rs-needs { font-size: 10px; } }
+@media (max-height: 460px) { .rs-top { min-height: 50px; padding-top: 3px; padding-bottom: 3px; } .rs-title { font-size: 17px; } .rs-timer { font-size: 10px; } .rs-x { top: 3px; } .rs-ic { aspect-ratio: 4 / 1; } }
+
+/* Phones: the big turning colour layers are several times the size of the screen,
+   which is a huge texture to keep on the GPU. They stay, standing still. */
+@media (pointer: coarse) {
+  #startScreen::before, #splash::before, #lobbyScreen::before, #custLoad::before,
+  #shopScreen::before, #forgeScreen::before, #abilitiesScreen::before, #skinsScreen::before, #tradeScreen::before, #settingsScreen::before, #botScreen::before { animation: none; }
 }

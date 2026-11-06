@@ -11,14 +11,14 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Weponare">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="icon" href="icon-192.png">
-  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" href="icon-192.png?v=2">
+  <link rel="apple-touch-icon" href="icon-192.png?v=2">
 </head>
 <body>
   <!-- Loading screen: a little battle scene drawn with the game's own sprites -->
   <div id="splash">
     <div class="load-wrap">
-      <div class="load-brand"><img src="icon-192.png" alt="" class="splash-icon"><span>WEPONARE</span></div>
+      <div class="load-brand"><img src="icon-192.png?v=2" alt="" class="splash-icon"><span>WEPONARE</span></div>
       <canvas id="splashScene" class="load-scene" width="480" height="270"></canvas>
       <div class="blade-bar"><div class="blade"><div id="splashFill" class="blade-fill"></div></div></div>
       <div class="load-tip" id="splashTip">LOADING...</div>
@@ -247,18 +247,18 @@
   <!-- Bot Battle: pick the bot's level -->
   <div id="botScreen" class="overlay hidden">
     <div class="pixel-box bot-box">
-      <div class="title-text" style="font-size:22px;margin-bottom:4px">BOT BATTLE</div>
+      <div class="title-text">BOT BATTLE</div>
       <div class="subtitle">A PvP MATCH AGAINST A BOT &middot; PICK ITS LEVEL</div>
       <div class="bot-levels">
-        <button class="bot-lv lv-easy"    onclick="pickBotLevel('easy')"><b>EASY</b><span>slow, 20% chance to own each thing &middot; win ◆ 500</span></button>
-        <button class="bot-lv lv-common"  onclick="pickBotLevel('common')"><b>COMMON</b><span>30% chance to own each thing &middot; win ◆ 1,500</span></button>
-        <button class="bot-lv lv-average" onclick="pickBotLevel('average')"><b>AVERAGE</b><span>42% chance, parries and dodges &middot; win ◆ 4,000</span></button>
-        <button class="bot-lv lv-strong"  onclick="pickBotLevel('strong')"><b>STRONG</b><span>55% chance, hits harder, tougher &middot; win ◆ 10,000</span></button>
-        <button class="bot-lv lv-hard"    onclick="pickBotLevel('hard')"><b>HARD</b><span>68% chance, quick, sharp and tough &middot; win ◆ 25,000</span></button>
-        <button class="bot-lv lv-insane"  onclick="pickBotLevel('insane')"><b>INSANE</b><span>80% chance, hits very hard, takes little damage &middot; win ◆ 60,000</span></button>
-        <button class="bot-lv lv-admin"   onclick="pickBotLevel('admin')"><b>ADMIN</b><span>owns every weapon, all maxed, 2.5x damage and health, near impossible &middot; win ◆ 200,000</span></button>
+        <button class="bot-lv lv-easy"    onclick="pickBotLevel('easy')"><b>EASY</b><i class="lv-pips" style="--n:1"></i><span>slow, 20% chance to own each thing</span><em>WIN ◆ 500</em></button>
+        <button class="bot-lv lv-common"  onclick="pickBotLevel('common')"><b>COMMON</b><i class="lv-pips" style="--n:2"></i><span>30% chance to own each thing</span><em>WIN ◆ 1,500</em></button>
+        <button class="bot-lv lv-average" onclick="pickBotLevel('average')"><b>AVERAGE</b><i class="lv-pips" style="--n:3"></i><span>42% chance, parries and dodges</span><em>WIN ◆ 4,000</em></button>
+        <button class="bot-lv lv-strong"  onclick="pickBotLevel('strong')"><b>STRONG</b><i class="lv-pips" style="--n:4"></i><span>55% chance, hits harder, tougher</span><em>WIN ◆ 10,000</em></button>
+        <button class="bot-lv lv-hard"    onclick="pickBotLevel('hard')"><b>HARD</b><i class="lv-pips" style="--n:5"></i><span>68% chance, quick, sharp and tough</span><em>WIN ◆ 25,000</em></button>
+        <button class="bot-lv lv-insane"  onclick="pickBotLevel('insane')"><b>INSANE</b><i class="lv-pips" style="--n:6"></i><span>80% chance, hits very hard, takes little damage</span><em>WIN ◆ 60,000</em></button>
+        <button class="bot-lv lv-admin"   onclick="pickBotLevel('admin')"><b>ADMIN</b><i class="lv-pips" style="--n:7"></i><span>owns every weapon, well upgraded, hits hardest &middot; the toughest bot, but it can be beaten</span><em>WIN ◆ 350,000</em></button>
       </div>
-      <div class="body-text" style="font-size:10px">The bot fights like a player: random weapons from what it owns (upgraded to its level), abilities, items, specials and supers. Same rules as PvP: 3 lives a round, first to 3 rounds. The ADMIN bot is a very hard fight.</div>
+      <div class="body-text bot-note">The bot fights like a player: random weapons from what it owns (upgraded to its level), abilities, items, specials and supers. Same rules as PvP: 3 lives a round, first to 3 rounds.</div>
       <button class="mode-btn shop-back" onclick="closeBotPicker()">&#10003; BACK</button>
     </div>
   </div>

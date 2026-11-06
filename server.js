@@ -1392,6 +1392,14 @@ function refreshWeapon(p) {
   p.fgAb = mods?.find(id => FORGE_BY_ID[id]?.rare) || null;
   p.fr = rareWeaponIds(p.forge);
   if (p.fg) p.w_ = applyForge(p.w_, p.fg);
+  // A bot level can be set to swing and cast slower than its upgrades would allow.
+  const botCd = room?.bot && p === room.players?.p2 ? BOT_LEVELS[room.bot.level].cdMul : 0;
+  if (botCd) {
+    const w = p.w_;
+    p.w_ = { ...w, atkSpd: Math.round(w.atkSpd * botCd),
+             ...(w.special ? { special: { ...w.special, cd: Math.round(w.special.cd * botCd) } } : {}),
+             ...(w.super ? { super: { ...w.super, cd: Math.round(w.super.cd * botCd) } } : {}) };
+  }
   // Swapping off the Dagger of Ghosts drops its cloak.
   if (!base.ghostCloak && p.effects && p.effects.ghost) breakGhost(p);
 }
@@ -3900,7 +3908,7 @@ function checkRoundEnd() {
   }
 }
 const MATCH_WAIT_MAX = 120000;   // ms a finished match waits for RESTART before restarting by itself
-const BOT_REWARDS = { easy: 500, common: 1500, average: 4000, strong: 10000, hard: 25000, insane: 60000, admin: 200000 };
+const BOT_REWARDS = { easy: 500, common: 1500, average: 4000, strong: 10000, hard: 25000, insane: 60000, admin: 350000 };
 
 // ─── Game Loop ────────────────────────────────────────────────────────────────
 
@@ -9121,7 +9129,34 @@ const STATE_MIN_GAP_MS = 26;
 // it more only makes its picture older and older, so it skips frames instead
 // and always gets the freshest state once it catches up.
 const MAX_BUFFERED = 40 * 1024;
-const ACK_SLACK_MS = 250;
+const ACK_SLACK_MS = 300;
+// Most of a snapshot is what moves; the rest (names, map, round, every weapon you
+// own, your skin...) hardly ever changes but went out on every message. Those are
+// now only sent when they change, the client fills them back in (unslim in
+// client.js, which has the same two lists), and a complete snapshot still goes
+// out every second so a dropped one heals itself.
+const SLIM_TOP = ['gameMode', 'world', 'maxPlayers', 'playerNames', 'round', 'sandbox', 'finalWave', 'isAdmin', 'victory', 'botReward'];
+const SLIM_PLAYER = ['w', 'h', 'atkSpd', 'reach', 'wType', 'upg', 'unlockedWeapons', 'skin', 'specialMax', 'superMax', 'parryMax', 'speed'];
+const SLIM_FULL_MS = 1000;
+function slimState(ws, m) {
+  const had = ws.slim || (ws.slim = { at: 0, top: {}, pl: {} });
+  const full = m.st - had.at >= SLIM_FULL_MS;
+  if (full) had.at = m.st;
+  for (const k of SLIM_TOP) {
+    const s = JSON.stringify(m[k] ?? null);
+    if (!full && had.top[k] === s) delete m[k]; else had.top[k] = s;
+  }
+  for (const pk of KEYS) {
+    const v = m.players[pk];
+    if (!v) continue;
+    const c = had.pl[pk] || (had.pl[pk] = {});
+    for (const k of SLIM_PLAYER) {
+      const s = JSON.stringify(v[k] ?? null);
+      if (!full && c[k] === s) delete v[k]; else c[k] = s;
+    }
+  }
+  return m;
+}
 function broadcastTick() {
   const now = Date.now();
   if (now - (room.lastStateAt || 0) < STATE_MIN_GAP_MS) return;
@@ -9141,7 +9176,7 @@ function broadcastState() {
     const now = Date.now();
     if (ws.ackSt && now - ws.ackSt > ws.minAckAge + ACK_SLACK_MS && now - (ws.lastProbe || 0) < 500) return;
     ws.lastProbe = now;
-    ws.send(JSON.stringify(buildStateMsg(i + 1)));
+    ws.send(JSON.stringify(slimState(ws, buildStateMsg(i + 1))));
   });
 }
 
@@ -9316,11 +9351,15 @@ const BOT_LEVELS = {
   strong:  { name: 'STRONG',  own: 0.55, think: 150, aggro: 0.92, parry: 0.45, dodge: 0.60, skill: 0.82, slots: 4, dmg: 1.30, armor: 0.88, hp: 1.2 },
   hard:    { name: 'HARD',    own: 0.68, think: 110, aggro: 1.00, parry: 0.60, dodge: 0.75, skill: 0.95, slots: 5, dmg: 1.50, armor: 0.80, hp: 1.35 },
   insane:  { name: 'INSANE',  own: 0.80, think: 75,  aggro: 1.00, parry: 0.78, dodge: 0.90, skill: 1.00, slots: 6, dmg: 1.80, armor: 0.68, hp: 1.6 },
-  // ...and on top of that it hits 2.5x as hard, takes less than half the damage
-  // and has 2.5x the health, reacting in a blink.
-  admin:   { name: 'ADMIN',   own: 1.00, think: 28,  aggro: 1.00, parry: 0.98, dodge: 1.00, skill: 1.00, slots: 6, all: true, favor: 0.85, dmg: 2.5, armor: 0.4, hp: 2.5 },
+  // The ADMIN owns everything and plays best, but like a person: `react` is how
+  // long it takes to notice a blow or a shot, and it makes up its mind once for
+  // each (the others re-roll on every decision). `under` keeps its upgrades that
+  // many levels short of max, so it has no passives, and `cdMul` slows its
+  // attacks, specials and supers.
+  admin:   { name: 'ADMIN',   own: 1.00, think: 60,  aggro: 1.00, parry: 0.55, dodge: 0.65, skill: 0.90, slots: 6, all: true, favor: 0.60, dmg: 1.9, armor: 0.72, hp: 1.7,
+             react: 190, under: 2, cdMul: 1.2 },
 };
-const BOT_BEST_ABILITIES = ['execute', 'meteor', 'blackhole', 'perfectguard', 'phoenix', 'airstrike'];
+const BOT_BEST_ABILITIES = ['execute', 'meteor', 'blackhole', 'airstrike', 'dash', 'heal'];
 const BOT_HEALS = ['heal', 'rejuvenate', 'haven', 'vampirism', 'phoenix'];
 const BOT_GUARDS = ['aegis', 'barrier', 'perfectguard', 'vanish', 'shadowstep', 'warp'];
 const BOT_SWAP_MIN = 10000, BOT_SWAP_VAR = 12000;
@@ -9354,7 +9393,7 @@ function setupBot() {
   for (const id of weapons) {
     upgrades[id] = {};
     for (const k of upgradesFor(id)) {
-      if (L.all) { upgrades[id][k] = UPGRADE_STATS[k].max; continue; }          // admin: everything maxed
+      if (L.all) { upgrades[id][k] = Math.max(0, UPGRADE_STATS[k].max - (L.under || 0)); continue; }   // admin: all well upgraded
       const lv = Math.round(UPGRADE_STATS[k].max * L.own + (Math.random() - 0.5) * 2);
       upgrades[id][k] = Math.max(0, Math.min(UPGRADE_STATS[k].max - 1, lv));   // never fully maxed: no passives
     }
@@ -9376,6 +9415,7 @@ function setupBot() {
   };
   room.p2Joined = true;
   room.bot.thinkT = 0; room.bot.swapT = 0; room.bot.strafe = 1; room.bot.wasDead = true;
+  room.bot.clock = 0; room.bot.parryAt = 0; room.bot.foeSwung = false; room.bot.shots = new WeakMap();
 }
 
 // Hold a random weapon from what it owns.
@@ -9392,6 +9432,9 @@ function botPickWeapon(p) {
   refreshWeapon(p);
 }
 
+function botPlanParry(b, L) {
+  if (!b.parryAt && Math.random() < L.parry) b.parryAt = b.clock + L.react * (0.8 + Math.random() * 0.5);
+}
 function botTick(dt) {
   const b = room.bot, L = BOT_LEVELS[b.level];
   const p = room.players.p2, foe = room.players.p1;
@@ -9410,6 +9453,16 @@ function botTick(dt) {
     if (b.wasDead || Math.random() < 0.8) botPickWeapon(p);
     b.wasDead = false;
     b.swapT = BOT_SWAP_MIN + Math.random() * BOT_SWAP_VAR;
+  }
+  // A reacting bot: it sees a swing start, decides once whether to answer it, and
+  // the parry comes out a human moment later (even if the swing is over by then).
+  if (L.react) {
+    b.clock += dt;
+    const near = foe && !foe.dead && !unseen(foe) && !foe.hidden && Math.hypot(cx(foe) - cx(p), cy(foe) - cy(p)) < weapon(foe).range + 24;
+    const swung = !!(near && foe.swingTimer > 0);
+    if (swung && !b.foeSwung) botPlanParry(b, L);
+    b.foeSwung = swung;
+    if (b.parryAt && b.clock >= b.parryAt) { b.parryAt = 0; if (p.parryCooldown <= 0) inp.parry = true; }
   }
   b.thinkT -= dt;
   if (b.thinkT > 0) return;
@@ -9469,11 +9522,20 @@ function botTick(dt) {
     if (rd > 160 || (rx * pr.dx + ry * pr.dy) <= 0) continue;          // heading away
     const miss = Math.abs(rx * pr.dy - ry * pr.dx) / sp;               // how close it will pass
     if (miss > 22) continue;
+    if (L.react) {
+      // One look at each shot: it either reads it or it doesn't.
+      let read = b.shots.get(pr);
+      if (read === undefined) { read = Math.random() < L.dodge; b.shots.set(pr, read); botPlanParry(b, L); }
+      if (read) { const s = (rx * pr.dy - ry * pr.dx) >= 0 ? 1 : -1; mx += (pr.dy / sp) * s * 1.6; my += (-pr.dx / sp) * s * 1.6; }
+      continue;
+    }
     if (rd < 55) threat = true;
     if (Math.random() < L.dodge) { const s = (rx * pr.dy - ry * pr.dx) >= 0 ? 1 : -1; mx += (pr.dy / sp) * s * 1.6; my += (-pr.dx / sp) * s * 1.6; }
   }
-  if (see && foe.swingTimer > 0 && d < weapon(foe).range + 24) threat = true;
-  if (threat && p.parryCooldown <= 0 && Math.random() < L.parry) inp.parry = true;
+  if (!L.react) {
+    if (see && foe.swingTimer > 0 && d < weapon(foe).range + 24) threat = true;
+    if (threat && p.parryCooldown <= 0 && Math.random() < L.parry) inp.parry = true;
+  }
   // Walls: steer back toward the middle when hugging one.
   if (!chasing) {
     if (p.x < ARENA_X + 20) mx += 0.8; if (p.x > ARENA_X + ARENA_W - p.w - 20) mx -= 0.8;
