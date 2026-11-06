@@ -423,10 +423,10 @@ const WEAPONS = [
   // ATK: ten hunting waves in a rapid burst. SPECIAL: swell up, turn to water and
   // ram everything in your way. SUPER: his cyclone, far worse. PASSIVE: ENDLESS
   // TIDE, water wherever you walk and a faster step while you hold it.
-  { id: 'wavestorm', name: 'WAVESTORM', damage: 26, range: 430, atkSpd: 1300, type: 'ranged', unlockXp: 0,
+  { id: 'wavestorm', name: 'WAVESTORM', damage: 26, range: 430, atkSpd: 2200, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, mythic: true, price: 600000, waveBurst: true,
     mythicKills: 350, mythicNeeds: ['windwand'], mythicBoss: 'tsunami',
-    special: { kind: 'tidalram', dmg: 300, cd: 11000 },
+    special: { kind: 'tidalram', dmg: 450, cd: 11000 },
     super:   { kind: 'wavecyclone', dmg: 130, cd: 30000 } },
 ];
 
@@ -4221,7 +4221,7 @@ function tickRoom(dt) {
     if (m.swing       > 0) m.swing       -= dt;
     if (m.ward        > 0) m.ward        -= dt;
     // Frozen solid by a frost nova: no moving, no attacking.
-    if (m.freeze > 0) { m.freeze -= dt; continue; }
+    if (m.freeze > 0) { m.freeze -= dt; if (m.pull) { applyPull(m, dt); clampToArena(m); } continue; }   // a stunned foe still slides back when it is hit hard
     if (m.confused > 0) {
       m.confused -= dt;
       if (!m.confA || Math.random() < dt / 400) m.confA = Math.random() * Math.PI * 2;
@@ -4603,6 +4603,7 @@ function advanceProjectile(proj, factor, dt) {
   proj.x += proj.dx * factor;
   proj.y += proj.dy * factor;
   proj.traveled += step;
+  if (proj.ttl !== undefined && (proj.ttl -= dt) <= 0) return false;   // runs out after its time, wherever it is
 
   const outX = proj.x < ARENA_X || proj.x > ARENA_X + ARENA_W;
   const outY = proj.y < ARENA_Y || proj.y > ARENA_Y + ARENA_H;
@@ -7029,7 +7030,7 @@ function updateTsCyclone(f, factor, dt) {
 }
 
 // ─── WAVESTORM ─────────────────────────────────────────────────────────────────
-const WS_WAVES = 10, WS_WAVE_GAP = 70, WS_WAVE_SPEED = 7.5;
+const WS_WAVES = 10, WS_WAVE_GAP = 70, WS_WAVE_SPEED = 7.5, WS_WAVE_LIFE_MS = 1000, WS_RAM_STUN_MS = 1200;
 const WS_GROW_MS = 300, WS_RUSH_MS = 1400, WS_SHRINK_MS = 400, WS_RAM_SCALE = 2.4, WS_RAM_SPEED = 7.5, WS_RAM_TURN = 3, WS_RAM_PUSH = 150, WS_PARRY_SHARE = 0.25;
 const WS_CY_BODY = 56, WS_CY_GRAB = 140, WS_CY_MS = 11000;
 const WS_CY = { speed: 4.6, carry: 7, turn: 2.2, hold: 2400, spin: 13, throw: 240, free: 900, throwDmg: 0 };
@@ -7040,7 +7041,7 @@ const WS_SPEED = 1.25, WS_POOL_STEP = 34, WS_POOL_MS = 6000, WS_POOL_CAP = 60, W
 function wsFireWave(p, key, b) {
   const aim = nearestTargetAngle(p, key), i = b.n++, a = aim + (i - (WS_WAVES - 1) / 2) * 0.3;
   p.facing = Math.cos(aim) < 0 ? -1 : 1;
-  tsShot(p, a, WS_WAVE_SPEED, { owner: key, damage: b.dmg, maxRange: b.range, weaponId: 'wavestorm', hitR: 8, homing: true, turn: 6, seekR: 2000, quarry: nearestFoe(p, key), gust: 6, noIframe: true });
+  tsShot(p, a, WS_WAVE_SPEED, { owner: key, damage: b.dmg, maxRange: b.range, weaponId: 'wavestorm', hitR: 8, homing: true, turn: 6, seekR: 2000, quarry: nearestFoe(p, key), gust: 6, noIframe: true, ttl: WS_WAVE_LIFE_MS });
   b.t = WS_WAVE_GAP;
   if (b.n >= WS_WAVES) p.wsBurst = null;
 }
@@ -7086,6 +7087,7 @@ function wsRamTick(p, key, factor, dt) {
       }
       if (!t.num) t.invincible = 0;
       applyDamage(t, r.dmg, key);
+      if (!t.dead) stunTarget(t, WS_RAM_STUN_MS);
       gsPush(t, cx(p), cy(p), WS_RAM_PUSH);
     }
     if (r.phase === 'rush' && r.t <= 0) { r.phase = 'shrink'; r.t = WS_SHRINK_MS; }

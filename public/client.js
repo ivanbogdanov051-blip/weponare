@@ -3346,7 +3346,7 @@ const LEGEND_MOVES = {
   ashfeather: '<b>ATK</b> a burning arrow that bursts into three more when it hits · <b>SPECIAL</b> a fan of nine of them ·'
             + ' <b>SUPER</b> PHOENIX FORM: 6s ablaze, much faster, leaving a trail of fire, burning everything you touch and'
             + ' healing as you go. Only one mythic goes into a game, and a mythic never earns you another weapon.',
-  wavestorm: '<b>ATK</b> ten hunting waves in a rapid burst · <b>SPECIAL</b> swell up, turn to water and ram your enemies, untouchable unless you are parried · <b>SUPER</b> a huge cyclone that hunts them down, carries them away and throws them',
+  wavestorm: '<b>ATK</b> ten hunting waves in a rapid burst that fade after 1 second, then a long wait · <b>SPECIAL</b> swell up, turn to water and ram your enemies for big damage and a stun, untouchable unless you are parried · <b>SUPER</b> a huge cyclone that hunts them down, carries them away and throws them',
   greatestsword: '<b>ATK</b> two huge swings, down then up, each hurling enemies back, with a long wait after · <b>SPECIAL</b> leap at the nearest'
              + ' enemy and slam down: land on them and they are stunned and an explosion wave blasts everyone nearby, but land on nothing and YOU'
              + ' are stunned · <b>SUPER</b> one blow splits the arena with a massive crack that stands like a wall for 4s: enemies can not cross it and'
