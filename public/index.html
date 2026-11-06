@@ -70,7 +70,7 @@
         <div class="mode-row">
           <button class="mode-btn btn-bot" onclick="openBotPicker()">BOT BATTLE<small>vs a bot</small></button>
           <button class="mode-btn btn-sandbox" onclick="joinGame('sandbox')">SANDBOX<small>practice</small></button>
-          <button class="mode-btn btn-saw" onclick="joinGame('sawroom')">SAW ROOM<small>◆50,000 / minute</small></button>
+          <button class="mode-btn btn-saw" onclick="joinGame('sawroom')">SAW ROOM<small>◆200,000 / minute</small></button>
         </div>
       </div>
 
@@ -133,7 +133,10 @@
           <button class="map-btn" data-size="small" onclick="pickMapSize('small')">SMALL</button>
           <button class="map-btn" data-size="medium" onclick="pickMapSize('medium')">MEDIUM</button>
           <button class="map-btn" data-size="big" onclick="pickMapSize('big')">BIG</button>
+          <button class="map-btn" data-size="giant" onclick="pickMapSize('giant')">GIANT</button>
+          <button class="map-btn" data-size="duel" onclick="pickMapSize('duel')">DUEL</button>
         </span></div>
+      <div class="set-sub map-note">DUEL is a long strip for 2 players: PvP and bot battles only. The Saw Room always uses its own room.</div>
       <div class="set-arena">
         <div class="set-label">ARENA LOOK</div>
         <canvas id="arenaPreview" width="720" height="405" aria-hidden="true"></canvas>
@@ -228,6 +231,8 @@
         <button class="room-opt" data-size="small" onclick="pickRoomSize('small')">SMALL</button>
         <button class="room-opt" data-size="medium" onclick="pickRoomSize('medium')">MEDIUM</button>
         <button class="room-opt" data-size="big" onclick="pickRoomSize('big')">BIG</button>
+        <button class="room-opt" data-size="giant" onclick="pickRoomSize('giant')">GIANT</button>
+        <button class="room-opt" data-size="duel" onclick="pickRoomSize('duel')">DUEL<span>2 PLAYERS ONLY</span></button>
       </div>
       <button class="mode-btn btn-room-go" onclick="createRoomGo()">&#10010; CREATE AND WAIT FOR PLAYERS</button>
       <button class="mode-btn shop-back" onclick="showScreen('startScreen')">&#10003; BACK</button>
@@ -276,7 +281,8 @@
         <div class="howto-sec"><h3>MODES</h3>
           <p><b>PvP</b> &ndash; two players fight; each round you have 3 lives, and the first to win 3 rounds takes the match.</p>
           <p><b>Create a room / Join a room</b> &ndash; make your own PvP room with a name, 2 to 4 players and a map size, and wait for others to find it in the room list; or browse the open rooms (name, host, who is in it, how many players, map size) and jump in. With 3 or 4 players it is last one standing: the round goes to whoever is still alive when everyone else is out.</p>
-          <p><b>Map size</b> &ndash; pick SMALL, MEDIUM or BIG on the title screen before any mode; a bigger map gives more room to move (and zooms the view out). Quick PvP and co-op only pair you with someone who picked the same size.</p>
+          <p><b>Map size</b> &ndash; pick SMALL, MEDIUM, BIG or GIANT in Settings before any mode; a bigger map gives more room to move and zooms the view out, so you always see all of it. DUEL is a long strip for 2 players. Quick PvP and co-op only pair you with someone who picked the same size.</p>
+          <p><b>Picking a weapon</b> &ndash; every match opens with a 10 second countdown to choose your weapon. Press READY to start sooner. You keep it when you die and come back, and in each new round. You can still swap during a fight.</p>
           <p><b>Quick chat</b> &ndash; press T or tap CHAT in a match for a list of friendly lines (hello, good luck, GG...); it shows as a bubble over your head. Only these lines can be sent.</p>
           <p><b>Bot Battle</b> &ndash; the same PvP match, against a bot. Pick its level: Easy, Common, Average, Strong, Hard or Insane. The higher the level, the more it owns: every weapon, ability and skin has a 20% chance of being the bot's on Easy, up to 80% on Insane, and its weapons are upgraded that far too and the faster and sharper it plays: dodging shots, parrying, and using specials, supers, abilities and items. It fights with random weapons from what it owns and swaps every so often. Bots collect floor powerups like you do (4 at most) and only use what they picked up. The Admin bot is the final test: every weapon fully maxed (all passives live), only the best abilities, and it leans on the legendaries.</p>
           <p><b>Co-op</b> &ndash; two players fight 10 waves of monsters together; the Giant waits at wave 10.</p>
@@ -284,7 +290,7 @@
           <p><b>Extreme</b> &ndash; solo with the toughest monsters, a Giant every 5th wave and much bigger coin rewards.</p>
           <p><b>The Portal Mage</b> &ndash; the hardest boss: win 50,000 coins, 50,000 XP and the Portal Wand.</p>
           <p><b>Tsunami</b> &ndash; a ghost of living water. He swells up and rushes you, sends swift hunting waves, and throws a huge ball of water that bursts into a wave ring. From half health he attacks far more often and gains three more: big splitting waves, a bouncing ball that leaves water behind it, and a cyclone that grabs you and carries you around the arena. Water slows you and drains your health until you get out. Beat him and the mythic Wavestorm can be earned. He hits very hard, but beating him pays 200,000 coins.</p>
-          <p><b>Saw Room</b> &ndash; no monsters, only traps that keep getting worse. You earn 50,000 coins for every minute you survive.</p>
+          <p><b>Saw Room</b> &ndash; the hardest thing in the game. No monsters, just moving traps, shots from every wall, walls of saws with one gap to slip through and hunters that chase you, all getting worse by the second. You earn 200,000 coins for every full minute you survive.</p>
           <p><b>Sandbox</b> &ndash; solo practice with every weapon. Spawn any monster, boss, item or trap and switch on cheats from the TOOLS button. Nothing you do there is saved.</p></div>
         <div class="howto-sec"><h3>THE FORGE</h3>
           <p>Pick a weapon you own and put coins in the fire (500 to 500,000). More coins give a better chance of an upgrade and a much better chance of a rare one; if the metal cracks the coins are gone. Each weapon holds <b>3 upgrades</b>. Melee weapons have over 30 possible upgrades and ranged weapons over 20. These are passives that work while the weapon is in your hand. The <b>5 rare upgrades</b> each give an extra ability on <b>C</b>, and a weapon can only hold one. Reset a weapon in the forge to free its slots; the coins do not come back. A weapon with a rare upgrade glows red. <b>Mythics</b> have a forge list of their own: 32 stronger upgrades and 5 rare abilities that no other weapon can get.</p></div>
@@ -296,7 +302,7 @@
         <div class="howto-sec"><h3>PARRY</h3>
           <p>Parry (P) opens a short window: a melee blow aimed at you is sent back at the attacker, a shot bounces back the way it came, and a fire hand or inferno fizzles out. Parrying a Giant's swing or shockwave stuns him. It then needs 8 seconds to recharge (the blue bar).</p></div>
         <div class="howto-sec"><h3>COINS &amp; UPGRADES</h3>
-          <p>Monsters drop coins &ndash; walk over them to collect. Spend coins in <b>UPGRADE WEAPONS</b> (damage, speed, range, crit, cooldown, multishot and more for each weapon, plus your health, move speed, defense and parry), on <b>ABILITIES</b>, and on skins in <b>CUSTOMIZE</b>.</p>
+          <p>Monsters drop coins &ndash; walk over them to collect. Spend coins in <b>UPGRADE WEAPONS</b> (damage, speed, range, crit, cooldown, multishot and more for each weapon, plus your health, move speed, defense and parry), on <b>ABILITIES</b>, and in <b>CUSTOMIZE</b> on skins, changing colors, glows, animated accessories and nickname backgrounds. Tap one to try it on before you buy it.</p>
           <p><b>&#9733; PASSIVES</b> &ndash; max out <b>every</b> upgrade on one of these weapons and, whenever you hold it, you get its passive (its name shows under your weapon bar, and you glow in its colour):
             <b>Dagger</b> SWIFTNESS +45% move speed, with wind streaks behind you &middot;
             <b>Sword</b> GUARDIAN take 30% less damage &middot;
@@ -342,13 +348,22 @@
     <div class="pixel-box skins-box">
       <div class="title-text shop-title skin-title"><span class="t-em">🎨</span> CUSTOMIZE</div>
       <div class="subtitle">CHARACTER SKIN</div>
-      <canvas id="skinPreviewCanvas" width="72" height="80"></canvas>
+      <canvas id="skinPreviewCanvas" width="120" height="116"></canvas>
+      <button id="fxBuyBtn" class="fx-buy hidden" onclick="buyFx()"></button>
       <div class="skin-section-title">COLOR</div>
       <div id="colorGrid" class="skin-grid"></div>
+      <div class="skin-section-title">CHANGING COLOR</div>
+      <div id="dynGrid" class="hat-grid"></div>
+      <div class="skin-section-title">GLOW</div>
+      <div id="glowGrid" class="hat-grid"></div>
       <div class="skin-section-title">HAT</div>
       <div id="hatGrid" class="hat-grid"></div>
       <div class="skin-section-title">ACCESSORY</div>
       <div id="accGrid" class="hat-grid"></div>
+      <div class="skin-section-title">ANIMATED ACCESSORY</div>
+      <div id="aaccGrid" class="hat-grid"></div>
+      <div class="skin-section-title">NICKNAME BACKGROUND</div>
+      <div id="nameBgGrid" class="hat-grid"></div>
       <div class="skin-section-title">SKINS <span id="skinCoins" class="skin-coins"></span></div>
       <div id="skinShopMsg" class="shop-msg"></div>
       <div id="outfitGrid" class="outfit-grid"></div>
@@ -372,6 +387,23 @@
   </div>
 
   <!-- Weapon unlock -->
+  <!-- The countdown to choose a weapon, at the start of every match -->
+  <div id="pickScreen" class="overlay hidden">
+    <div class="pick-box">
+      <button class="pick-leave" onclick="leaveGame()" aria-label="Leave">&#10005;</button>
+      <div class="pick-head">
+        <div class="pick-title">PICK YOUR WEAPON</div>
+        <div id="pickTimer" class="pick-timer">10</div>
+      </div>
+      <div class="pick-bar"><div id="pickBarFill"></div></div>
+      <div id="pickGrid" class="pick-grid"></div>
+      <div class="pick-foot">
+        <div class="pick-info"><div id="pickName" class="pick-name"></div><div id="pickDesc" class="pick-desc"></div></div>
+        <button id="pickReadyBtn" class="pick-ready" onclick="pickReady()">&#10004; READY</button>
+      </div>
+    </div>
+  </div>
+
   <div id="unlockScreen" class="overlay hidden">
     <div class="pixel-box unlock-box">
       <div class="unlock-title">NEW WEAPON!</div>
@@ -499,6 +531,7 @@
   <script src="sprites.js"></script>
   <script src="weapons.js"></script>
   <script src="arena.js"></script>
+  <script src="cosmetics.js"></script>
   <script src="client.js"></script>
   <script src="custload.js"></script>
 </body>

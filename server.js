@@ -25,7 +25,17 @@ const PROGRESS_FILE = path.join(__dirname, 'progress.json');
 // is simply zoomed out to fit the screen.
 // The world size depends on the room's map (small / medium / big), so these are
 // set from the room each time the code switches to it (useRoom).
-const MAP_SIZES = { small: [560, 315], medium: [720, 405], big: [960, 540] };
+// GIANT is the biggest of them, still always seen whole, just zoomed further out.
+// DUEL is a long strip for exactly two: PvP and bot battles only.
+const MAP_SIZES = { small: [560, 315], medium: [720, 405], big: [960, 540], giant: [1440, 810], duel: [1200, 440] };
+const DUEL_MODES = ['pvp', 'bot', 'create', 'joinroom'];
+// The saw room pays by the minute, so everyone gets the same room: on a huge map
+// its traps and shots would be spread thin and the money easy.
+function mapSizeFor(mode, size) {
+  if (mode === 'sawroom') return 'medium';
+  if (!MAP_SIZES[size] || (size === 'duel' && !DUEL_MODES.includes(mode))) return 'medium';
+  return size;
+}
 const ARENA_X = 12, ARENA_Y = 12;
 let CANVAS_W = 720, CANVAS_H = 405;
 let ARENA_W = CANVAS_W - ARENA_X * 2, ARENA_H = CANVAS_H - ARENA_Y * 2;
@@ -629,7 +639,20 @@ const SKIN_SHOP = [
   { id: 'angel',     name: 'ANGEL',     price: 1100 },
 ];
 const SKIN_COLOR_COUNT = 24, SKIN_HAT_COUNT = 15, SKIN_ACC_COUNT = 10;
-const SKIN_BY_ID = Object.fromEntries(SKIN_SHOP.map(s => [s.id, s]));
+// ── Animated extras bought with coins ── A changing colour (dyn), a glow, an
+// animated accessory (aacc) and a nickname background. public/cosmetics.js paints
+// them, in this same order; a skin wears each as a number, and the number is its
+// place in the list (0 is none). Only ever add to the end of a list. Owned ones sit
+// in ownedSkins with the outfits, so saves, backups and trades already cover them.
+const FX_TABLE = {
+  dyn:    { tag: 'COLOR', items: [['RAINBOW', 150000], ['FIRE', 40000], ['OCEAN', 40000], ['TOXIC', 40000], ['GALAXY', 60000], ['SUNSET', 60000], ['ICE', 50000], ['GOLD', 100000], ['CANDY', 50000]] },
+  glow:   { tag: 'GLOW',  items: [['AURA', 25000], ['RAINBOW', 120000], ['FIRE', 50000], ['ICE', 50000], ['TOXIC', 50000], ['VOID', 70000], ['GOLD', 90000], ['HEARTBEAT', 80000], ['SUPERNOVA', 150000]] },
+  aacc:   { tag: '',      items: [['ORBIT STARS', 50000], ['FLAME CROWN', 90000], ['ANGEL WINGS', 100000], ['DEMON WINGS', 100000], ['HEARTS', 40000], ['SPIN HALO', 70000], ['LIGHTNING', 120000], ['BUBBLES', 35000], ['GHOST PET', 150000], ['WAVY CAPE', 60000], ['SNOWFALL', 40000]] },
+  nameBg: { tag: 'NAME',  items: [['RAINBOW', 80000], ['FIRE', 30000], ['OCEAN', 30000], ['MATRIX', 40000], ['STARS', 25000], ['LAVA', 50000], ['ELECTRIC', 50000], ['GOLD', 70000], ['GLITCH', 45000], ['AURORA', 60000], ['HEARTS', 20000]] },
+};
+const FX_SHOP = Object.entries(FX_TABLE).flatMap(([kind, t]) => t.items.map(([name, price], i) =>
+  ({ id: kind + '_' + (i + 1), kind, idx: i + 1, name: t.tag ? name + ' ' + t.tag : name, price })));
+const SKIN_BY_ID = Object.fromEntries([...SKIN_SHOP, ...FX_SHOP].map(s => [s.id, s]));
 
 // ── Abilities: bought once with coins and kept forever (saved per password,
 // like weapons). Two can be equipped at a time, on Q and E.
@@ -1500,8 +1523,12 @@ function startParry(p) {
 
 // ─── Room State ───────────────────────────────────────────────────────────────
 
+// GIANT holds a lot more floor, so a lot more lies around on it.
+const mapFill = () => (room.mapSize === 'giant' ? 2 : 1);
 function spawnPointFor(num) {
   const midX = ARENA_X + Math.round(ARENA_W / 2) - PLAYER_W / 2, midY = ARENA_Y + Math.round(ARENA_H / 2) - PLAYER_H / 2;
+  // On GIANT, anything but PvP starts in the middle, not a long walk from it all.
+  if (room.mapSize === 'giant' && room.gameMode !== 'pvp') return { x: midX + (num - 1) * 40, y: midY };
   // (not right at the top: the weapon rack covers the top middle of the screen)
   if (num === 3) return { x: midX, y: ARENA_Y + ARENA_H - 40 - PLAYER_H };
   if (num === 4) return { x: midX, y: ARENA_Y + Math.round(ARENA_H * 0.32) };
@@ -2926,16 +2953,19 @@ function updateLantern(dt) {
   }
 }
 
-// ── SAW ROOM ── No monsters: traps, far stronger, of every size, some on the
-// move, each carrying an element, and a storm of shots from the walls. Pays
-// 50,000 coins for every minute you last. It gets worse the longer you stay.
-const SAW_PAY = 50000, SAW_PAY_MS = 60000, SAW_MAX_TRAPS = 22, SAW_DMG_MULT = 2.5, SAW_MOVE_CHANCE = 0.4;
+// ── SAW ROOM ── No monsters: traps, far stronger, of every size, most on the
+// move, each carrying an element; a storm of shots from the walls; whole walls of
+// saws sweeping across with one gap to slip through; and hunters that chase you.
+// Pays 200,000 coins for every minute you last, and it is meant to be earned.
+const SAW_PAY = 200000, SAW_PAY_MS = 60000, SAW_MAX_TRAPS = 24, SAW_DMG_MULT = 4, SAW_MOVE_CHANCE = 0.7;
+const SAW_START_TRAPS = 7, SAW_WALL_STEP = 24, SAW_MAX_HUNTERS = 6;
 const SAW_ELEMENTS = ['fire', 'ice', 'poison', 'shock', 'void'];
 const SAW_TRAP_TYPES = Object.keys(TRAP_TYPES).filter(t => t !== 'healspring' && t !== 'warp');
 function startSawRoom() {
-  room.saw = { t: 0, payT: SAW_PAY_MS, trapT: 600, projT: 1500, earned: 0 };
+  room.saw = { t: 0, payT: SAW_PAY_MS, trapT: 600, projT: 900, wallT: 4000, huntT: 3000, earned: 0 };
   room.wave = { num: 1, monstersLeft: 0, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 };
   room.waveHpMult = 1; room.waveSpeedMult = 1;
+  for (let i = 0; i < SAW_START_TRAPS; i++) spawnSawTrap(1.2);
 }
 // A trap's element, on top of whatever the trap itself does.
 function trapElement(t, tr, by) {
@@ -2979,19 +3009,44 @@ function sawShot(lvl) {
   else if (edge === 2) { x = ARENA_X + 4 + Math.random() * (ARENA_W - 8); y = ARENA_Y + ARENA_H - 4; }
   else { x = ARENA_X + 4; y = ARENA_Y + 4 + Math.random() * (ARENA_H - 8); }
   const a = Math.atan2(cy(p) - y, cx(p) - x) + (Math.random() - 0.5) * 0.5;
-  const sp = Math.min(7, 2.8 + Math.random() * 2 + lvl * 0.3);
+  const sp = Math.min(9, 3.6 + Math.random() * 2 + lvl * 0.4);
+  sawProjectile(x, y, a, sp, Math.min(60, Math.round(16 + lvl * 5)));
+}
+function sawProjectile(x, y, a, sp, damage, extra) {
   const el = SAW_ELEMENTS[Math.floor(Math.random() * SAW_ELEMENTS.length)];
-  room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * sp, dy: Math.sin(a) * sp, damage: Math.min(32, Math.round(10 + lvl * 3)),
+  room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * sp, dy: Math.sin(a) * sp, damage,
     owner: 'monster', traveled: 0, maxRange: 1600, weaponId: 'saw_' + el, isAoe: false, aoeRadius: 0, pierce: false, grapple: false,
     boomerang: false, returning: false, life: 0, hitTargets: null, hitR: 5,
     ...(el === 'fire' ? { burn: 2500 } : el === 'ice' ? { chill: 1500 } : el === 'shock' ? { stun: 400 }
-      : el === 'void' ? { confuseMs: 1200 } : { poisonMs: 2500 }) });
+      : el === 'void' ? { confuseMs: 1200 } : { poisonMs: 2500 }), ...extra });
+}
+// A wall of saws crossing the whole room, with one gap to get through.
+function sawWall(lvl) {
+  const across = Math.random() < 0.5;   // sweeping left/right, or up/down
+  const back = Math.random() < 0.5;
+  const span = across ? ARENA_H : ARENA_W, len = across ? ARENA_W : ARENA_H;
+  const gap = Math.max(54, 96 - lvl * 7), at = gap / 2 + 10 + Math.random() * (span - gap - 20);
+  const sp = Math.min(6, 2.8 + lvl * 0.3), dmg = Math.min(60, Math.round(20 + lvl * 5));
+  for (let d = 8; d < span; d += SAW_WALL_STEP) {
+    if (Math.abs(d - at) < gap / 2) continue;
+    if (across) sawProjectile(back ? ARENA_X + ARENA_W - 6 : ARENA_X + 6, ARENA_Y + d, back ? Math.PI : 0, sp, dmg, { maxRange: len, hitR: 7 });
+    else sawProjectile(ARENA_X + d, back ? ARENA_Y + ARENA_H - 6 : ARENA_Y + 6, back ? -Math.PI / 2 : Math.PI / 2, sp, dmg, { maxRange: len, hitR: 7 });
+  }
+}
+// A hunter: it curves after you for a while. Outrun it and it spends itself.
+function sawHunter(lvl) {
+  const foes = allPlayers().filter(p => p && !p.dead);
+  if (!foes.length) return;
+  const p = foes[Math.floor(Math.random() * foes.length)];
+  const x = Math.random() < 0.5 ? ARENA_X + 6 : ARENA_X + ARENA_W - 6, y = ARENA_Y + 6 + Math.random() * (ARENA_H - 12);
+  sawProjectile(x, y, Math.atan2(cy(p) - y, cx(p) - x), Math.min(4.2, 2.8 + lvl * 0.2), Math.min(70, Math.round(26 + lvl * 6)),
+    { homing: true, turn: 3, seekR: 3000, quarry: p, maxRange: 1100, hitR: 7, sawHunter: true });
 }
 function updateSawRoom(dt) {
   const s = room.saw;
   if (!s) return;
   s.t += dt;
-  const lvl = 1 + s.t / 30000;   // a little worse every 30 seconds
+  const lvl = 1.2 + s.t / 25000;   // worse every 25 seconds
   s.payT -= dt;
   if (s.payT <= 0) {
     s.payT += SAW_PAY_MS;
@@ -3005,14 +3060,21 @@ function updateSawRoom(dt) {
   }
   s.trapT -= dt;
   if (s.trapT <= 0) {
-    s.trapT = Math.max(380, 1000 - s.t / 80);
+    s.trapT = Math.max(300, 900 - s.t / 80);
     if (room.traps.filter(t => !t.owner).length < SAW_MAX_TRAPS) spawnSawTrap(lvl);
   }
   s.projT -= dt;
   if (s.projT <= 0) {
-    s.projT = Math.max(200, 800 - s.t / 90);
-    const n = 1 + Math.floor(Math.random() * Math.min(5, lvl + 1));
+    s.projT = Math.max(180, 800 - s.t / 90);
+    const n = 1 + Math.floor(Math.random() * Math.min(4, lvl));
     for (let i = 0; i < n; i++) sawShot(lvl);
+  }
+  s.wallT -= dt;
+  if (s.wallT <= 0) { s.wallT = Math.max(3200, 7000 - s.t / 25); sawWall(lvl); }
+  s.huntT -= dt;
+  if (s.huntT <= 0) {
+    s.huntT = Math.max(3500, 8000 - s.t / 25);
+    if (room.projectiles.filter(q => q.sawHunter).length < Math.min(SAW_MAX_HUNTERS, 1 + Math.floor(s.t / 15000))) sawHunter(lvl);
   }
 }
 
@@ -3517,8 +3579,23 @@ function clearField() {
   room.itemSpawnTimer = ITEM_SPAWN_MIN;
 }
 
+// A new match opens with a countdown to choose your weapon; the sandbox, a place
+// for trying them all, doesn't need one. Everyone ready ends it early.
+const WEAPON_PICK_MS = 10000;
+function tickWeaponPick(dt) {
+  room.pick.t -= dt;
+  const here = KEYS.filter(k => room[k] && room[k].readyState === 1 && room.players[k]);
+  if (room.pick.t <= 0 || (here.length && here.every(k => room.pick.ready.has(k)))) {
+    room.pick = null;
+    room.gameState = 'GAMEPLAY';
+    broadcastState();
+  }
+}
 function startGame() {
-  if (room.round.matchWinner) room.round = newRound();
+  // A new round rebuilds every fighter: each goes back in holding the same weapon.
+  const held = perKey(() => null);
+  for (const k of KEYS) { const p = room.players[k]; if (p) held[k] = p.unlockedWeapons[p.weaponIdx]; }
+  if (room.round.matchWinner) { room.round = newRound(); room.picked = false; }
   KEYS.forEach((k, i) => {
     room.players[k] = i === 0 || (!isSolo() && i < room.maxPlayers && room[k + 'Joined'])
       ? makePlayer(i + 1, room.playerXp[k], room.playerUpgrades[k]) : null;
@@ -3530,6 +3607,7 @@ function startGame() {
     if (room.playerUnlocks[key]) p.unlockedWeapons = room.playerUnlocks[key];
     if (room.playerAbilities[key]) p.abilities = room.playerAbilities[key].slice();
     p.forge = room.playerForge[key] || null;
+    p.weaponIdx = Math.max(0, p.unlockedWeapons.indexOf(held[key]));
     refreshWeapon(p);
     if (room.bot && key === 'p2') {
       const BL = BOT_LEVELS[room.bot.level];
@@ -3549,10 +3627,16 @@ function startGame() {
   else if (room.gameMode === 'sandbox') startSandbox();
   else if (room.gameMode === 'sawroom') startSawRoom();
   else if (room.gameMode !== 'pvp') startWave(START_WAVE);
+  if (WEAPON_PICK_MS > 0 && !room.picked && room.gameMode !== 'sandbox') {
+    room.picked = true;
+    room.pick = { t: WEAPON_PICK_MS, ready: new Set() };
+    room.gameState = 'WEAPON_PICK';
+  }
 }
 
 function resetToLobby() {
   room.gameState = 'LOBBY';
+  room.pick = null; room.picked = false;
   room.players = perKey(null);
   room.wave = emptyWave();
   room.round = newRound();
@@ -3926,6 +4010,7 @@ setInterval(() => {
 
 function tickRoom(dt) {
   if (room.gameState !== 'GAMEPLAY') {
+    if (room.gameState === 'WEAPON_PICK') tickWeaponPick(dt);
     if (room.gameState === 'ROUND_OVER') {
       // A finished PvP / bot match waits for a choice: RESTART (everyone still
       // here has to ask) or back to the menu. A long timeout stops it hanging.
@@ -4283,8 +4368,8 @@ function tickRoom(dt) {
   // ── Traps ── (in the Portal Mage fight only he lays them)
   if (!room.rareShop) room.trapSpawnTimer -= dt;   // nothing new appears while the rare shop is open
   if (room.trapSpawnTimer <= 0 && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'tsunami' && room.gameMode !== 'sandbox' && room.gameMode !== 'sawroom') {
-    if (room.traps.filter(t => !t.owner).length < MAX_TRAPS) spawnTrap();
-    room.trapSpawnTimer = TRAP_SPAWN_MIN + Math.random() * (TRAP_SPAWN_MAX - TRAP_SPAWN_MIN);
+    if (room.traps.filter(t => !t.owner).length < MAX_TRAPS * mapFill()) spawnTrap();
+    room.trapSpawnTimer = (TRAP_SPAWN_MIN + Math.random() * (TRAP_SPAWN_MAX - TRAP_SPAWN_MIN)) / mapFill();
   }
   room.traps = room.traps.filter(tr => {
     if (tr.vx || tr.vy) {   // a saw-room trap on the move: it bounces round the walls
@@ -4364,8 +4449,8 @@ function tickRoom(dt) {
   // ── Items ──
   if (!room.rareShop) room.itemSpawnTimer -= dt;
   if (room.itemSpawnTimer <= 0) {
-    if (room.items.length < MAX_ITEMS) spawnItem();
-    room.itemSpawnTimer = ITEM_SPAWN_MIN + Math.random() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN);
+    if (room.items.length < MAX_ITEMS * mapFill()) spawnItem();
+    room.itemSpawnTimer = (ITEM_SPAWN_MIN + Math.random() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN)) / mapFill();
   }
   room.items = room.items.filter(it => {
     for (const key of KEYS) {
@@ -9116,6 +9201,7 @@ function buildStateMsg(playerNum) {
       pts: c.targets.filter(t => !t.dead).map(t => [r1(cx(t)), r1(cy(t))]) })),
     rareShop: room.rareShop ? { x: room.rareShop.x, y: room.rareShop.y, w: RARE_SHOP_W, h: RARE_SHOP_H, t: Math.round(room.rareShop.t) } : null,
     leaderboard: isSolo() && room.gameState === 'ROUND_OVER' ? room.lastLeaderboard : null,
+    ...(room.pick ? { pick: { t: Math.round(room.pick.t), max: WEAPON_PICK_MS, ready: [...room.pick.ready] } } : {}),
   };
 }
 
@@ -9265,7 +9351,7 @@ function profileFor(pw, opts = {}) {
     if (refunded) { coins += refunded; d.coins[pw] = coins; markDirty(); }
   }
   const upgrades = normalizeUpgrades(d.upgrades[pw]);
-  const ownedSkins = admin ? SKIN_SHOP.map(s => s.id)
+  const ownedSkins = admin ? [...SKIN_SHOP, ...FX_SHOP].map(s => s.id)
     : (Array.isArray(d.ownedSkins[pw]) ? d.ownedSkins[pw].filter(id => SKIN_BY_ID[id]) : []);
   const abilities = admin ? ABILITIES.map(a => a.id)
     : (Array.isArray(d.abilities[pw]) ? d.abilities[pw].filter(id => ABILITY_BY_ID[id]) : []);
@@ -9287,15 +9373,23 @@ function clampSlots(n) {
   return Math.max(ABILITY_SLOTS, Math.min(MAX_ABILITY_SLOTS, Math.floor(Number(n) || ABILITY_SLOTS)));
 }
 
-// A skin is { colorIdx, hatIdx, outfit }. The outfit survives only if owned.
+// A skin is { colorIdx, hatIdx, accIdx, outfit, dyn, glow, aacc, nameBg }. The
+// outfit survives only if owned.
 function cleanSkin(raw, owned) {
   const s = raw && typeof raw === 'object' ? raw : {};
-  const outfit = typeof s.outfit === 'string' && SKIN_BY_ID[s.outfit] && owned.includes(s.outfit) ? s.outfit : '';
+  const outfit = typeof s.outfit === 'string' && SKIN_BY_ID[s.outfit] && !SKIN_BY_ID[s.outfit].kind && owned.includes(s.outfit) ? s.outfit : '';
+  // An animated extra stays on only while it is owned (it can be traded away).
+  const fx = {};
+  for (const kind of Object.keys(FX_TABLE)) {
+    const i = Math.floor(Number(s[kind]) || 0);
+    fx[kind] = owned.includes(kind + '_' + i) ? i : 0;
+  }
   return {
     colorIdx: Math.max(0, Math.min(SKIN_COLOR_COUNT - 1, Math.floor(Number(s.colorIdx) || 0))),
     hatIdx:   Math.max(0, Math.min(SKIN_HAT_COUNT - 1,   Math.floor(Number(s.hatIdx)   || 0))),
     accIdx:   Math.max(0, Math.min(SKIN_ACC_COUNT - 1,   Math.floor(Number(s.accIdx)   || 0))),
     outfit,
+    ...fx,
   };
 }
 
@@ -9589,7 +9683,7 @@ app.use(express.json({ limit: '64kb' }));
 app.get('/api/rooms', (_req, res) => { res.json({ rooms: openRoomList() }); });
 
 app.get('/api/catalog', (_req, res) => {
-  res.json({ catalog: weaponCatalog(), perks: PERK_UPGRADES, upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP, abilityDefs: ABILITY_DEFS_ALL });
+  res.json({ catalog: weaponCatalog(), perks: PERK_UPGRADES, upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP, fxShop: FX_SHOP, abilityDefs: ABILITY_DEFS_ALL });
 });
 
 app.post('/api/profile', (req, res) => {
@@ -10173,8 +10267,8 @@ const ROOM_NAME_MAX = 20;
 function createRoom(opts) {
   const r = makeRoom();
   r.gameMode = 'pvp';
-  r.maxPlayers = Math.max(2, Math.min(4, Math.floor(Number(opts.maxPlayers) || 2)));
   r.mapSize = MAP_SIZES[opts.size] ? opts.size : 'medium';
+  r.maxPlayers = r.mapSize === 'duel' ? 2 : Math.max(2, Math.min(4, Math.floor(Number(opts.maxPlayers) || 2)));
   r.custom = { name: sanitizeText(opts.roomName, ROOM_NAME_MAX) || 'ROOM', host: sanitizeText(opts.name, 12).toUpperCase() || 'PLAYER' };
   rooms.push(r);
   return [r, 'p1'];
@@ -10230,7 +10324,7 @@ wss.on('connection', (ws) => {
       }
       if (msg.type === 'join' && !ws.room) {
         const mode = ['pvp', 'coop', 'waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom', 'bot', 'create', 'joinroom'].includes(msg.mode) ? msg.mode : 'pvp';
-        const size = MAP_SIZES[msg.size] ? msg.size : 'medium';
+        const size = mapSizeFor(mode, msg.size);
         // EXTREME and the PORTAL MAGE open up with XP (admins skip the wait).
         if (MODE_XP[mode]) {
           const pw = sanitizeText(msg.password, 32);
@@ -10342,6 +10436,8 @@ wss.on('connection', (ws) => {
       if (msg.type === 'rematch' && room.gameState === 'ROUND_OVER' && room.round.matchWinner && room.rematch) room.rematch.add(myKey);
 
       if (msg.type === 'buy_mythic') buyMythic(myKey, sanitizeText(msg.id, 24));
+
+      if (msg.type === 'pick_ready' && room.pick) room.pick.ready.add(myKey);
 
       if (msg.type === 'select_weapon') {
         const p = room.players[myKey];

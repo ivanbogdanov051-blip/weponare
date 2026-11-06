@@ -6,25 +6,29 @@ const canvas = document.getElementById('gameCanvas');
 let ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }) || canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
-// World size. The whole arena is always on screen — the canvas backing store is
-// the world, and CSS scales it down to fit the device, so a bigger map simply
-// means a more zoomed-out view.
+// World size. CANVAS_W/H is the world. VIEW_W/H is the canvas itself, always
+// 16:9, which CSS scales to fit the device: usually the two match, so a bigger map
+// is simply more zoomed out. DUEL is wider than 16:9, so it sits in the middle of
+// a taller view (CAM_Y is the offset).
 let CANVAS_W = 720, CANVAS_H = 405;
+let VIEW_W = 720, VIEW_H = 405, CAM_Y = 0;
 const ARENA_X = 12, ARENA_Y = 12;
 let ARENA_W = CANVAS_W - ARENA_X * 2, ARENA_H = CANVAS_H - ARENA_Y * 2;
 
 // The HUD is laid out in its own 480×270 space and drawn through a scale, so
 // text and bars stay a readable size no matter how big the world gets.
 const HUD_W = 480, HUD_H = 270;
-let HUD_SCALE = CANVAS_W / HUD_W;
-// The room's map size (small / medium / big) sets the world; the canvas is
-// resized to it and CSS fits it to the screen.
+let HUD_SCALE = VIEW_W / HUD_W;
+// The room's map size sets the world; the canvas is resized to its view and CSS
+// fits that to the screen.
 function applyWorld(world) {
   if (!world || (world.w === CANVAS_W && world.h === CANVAS_H)) return;
   CANVAS_W = world.w; CANVAS_H = world.h;
   ARENA_W = CANVAS_W - ARENA_X * 2; ARENA_H = CANVAS_H - ARENA_Y * 2;
-  HUD_SCALE = CANVAS_W / HUD_W;
-  canvas.width = CANVAS_W; canvas.height = CANVAS_H;
+  VIEW_W = CANVAS_W; VIEW_H = Math.round(CANVAS_W * 9 / 16);
+  CAM_Y = Math.round((CANVAS_H - VIEW_H) / 2);
+  HUD_SCALE = VIEW_W / HUD_W;
+  canvas.width = VIEW_W; canvas.height = VIEW_H;
   ctx.imageSmoothingEnabled = false;
   arenaCache = null;
   pred = null;
@@ -130,6 +134,10 @@ function storeBackup(pw, save) { if (pw && save && save.data && save.sig) lsSet(
 let pendingSkin = loadLocalSkin();
 let skinModified = false;
 
+// What a character wears right now: a changing colour goes round on its own.
+function skinHex(skin) {
+  return Cosmetics.colorAt(skin?.dyn, performance.now()) || SKIN_COLORS[skin?.colorIdx] || '#4488ff';
+}
 function getSkinColor(p, defaultColor) {
   if (!p || !p.skin) return defaultColor;
   return SKIN_COLORS[p.skin.colorIdx] ?? defaultColor;
@@ -552,7 +560,7 @@ function tutorialLeft() { if (pendingTutorial) { markTutorialDone(); pendingTuto
 const LOAD_TIPS = ['TIP: PARRY JUST BEFORE A HIT TO STUN THE ATTACKER', 'TIP: SET A PASSWORD TO SAVE YOUR PROGRESS',
   'TIP: COINS FLY TO YOU ON THEIR OWN', 'TIP: EVERY WEAPON HAS A SPECIAL MOVE', 'TIP: CREATE A ROOM AND INVITE YOUR FRIENDS',
   'TIP: THE FORGE CAN GIVE A WEAPON A NEW ABILITY', 'TIP: TRADE WEAPONS AND COINS WITH A FRIEND', 'TIP: CHANGE THE ARENA LOOK IN SETTINGS',
-  'TIP: THE SAW ROOM PAYS 50,000 EVERY MINUTE YOU LAST', 'TIP: A MISSED LEAP SLAM STUNS YOU, NOT THEM'];
+  'TIP: THE SAW ROOM PAYS 200,000 EVERY MINUTE YOU LAST', 'TIP: A MISSED LEAP SLAM STUNS YOU, NOT THEM'];
 (function splash() {
   const el = document.getElementById('splash');
   if (!el) return;
@@ -566,7 +574,7 @@ const LOAD_TIPS = ['TIP: PARRY JUST BEFORE A HIT TO STUN THE ATTACKER', 'TIP: SE
   const mons = [{ t: 'grunt', x: 150, w: 23, h: 27 }, { t: 'brute', x: 185, w: 30, h: 34 }, { t: 'runner', x: 222, w: 20, h: 22 }];
   const coins = [];
   let hero = null;
-  try { hero = playerSprite(SKIN_COLORS[pendingSkin.colorIdx] || '#4488ff', pendingSkin.hatIdx || 0, 1, false, pendingSkin.outfit || '', pendingSkin.accIdx || 0); } catch {}
+  try { hero = playerSprite(skinHex(pendingSkin), pendingSkin.hatIdx || 0, 1, false, pendingSkin.outfit || '', pendingSkin.accIdx || 0); } catch {}
   function frame(now) {
     const t = (now - t0) / 1000;
     g.setTransform(1, 0, 0, 1, 0, 0);
@@ -2270,7 +2278,7 @@ canvas.addEventListener('pointermove', (e) => {
   if (e.pointerType !== 'mouse') return;
   const r = canvas.getBoundingClientRect();
   if (!r.width || !r.height) return;
-  mouseAim = { x: (e.clientX - r.left) * CANVAS_W / r.width, y: (e.clientY - r.top) * CANVAS_H / r.height };
+  mouseAim = { x: (e.clientX - r.left) * VIEW_W / r.width, y: (e.clientY - r.top) * VIEW_H / r.height + CAM_Y };
   // Holding a dash key: keep the server's aim fresh for the next dash.
   if (AB_CODES.some(c => keys[c])) sendInput();
 });
@@ -2285,6 +2293,11 @@ window.addEventListener('keydown', (e) => {
   if (!keys[e.code]) { keys[e.code] = true; sendInput(); }
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','ShiftLeft','ShiftRight','KeyP','ControlLeft','ControlRight'].includes(e.code)) e.preventDefault();
   if (e.code === 'Space' && currState && currState.gameState === 'WEAPON_UNLOCK' && currState.pendingUnlock) sendAckUnlock();
+  if (currState && currState.gameState === 'WEAPON_PICK' && !e.repeat) {
+    if (e.code === 'Space' || e.code === 'Enter') pickReady();
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') pickStep(-1);
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') pickStep(1);
+  }
   if (e.code === 'KeyM') toggleSound();
   if (e.code === 'F3') { e.preventDefault(); toggleNetOverlay(); }
   if (e.code === 'KeyT' && currState && currState.gameState === 'GAMEPLAY' && document.activeElement?.tagName !== 'INPUT') toggleChat();
@@ -2475,8 +2488,8 @@ function handleCanvasTap(clientX, clientY) {
   const rect = canvas.getBoundingClientRect();
   if (!rect.width || !rect.height) return false;
   // Client px → canvas px → HUD space (panels are laid out in HUD coordinates).
-  const hx = (clientX - rect.left) * (CANVAS_W / rect.width)  / HUD_SCALE;
-  const hy = (clientY - rect.top)  * (CANVAS_H / rect.height) / HUD_SCALE;
+  const hx = (clientX - rect.left) * (VIEW_W / rect.width)  / HUD_SCALE;
+  const hy = (clientY - rect.top)  * (VIEW_H / rect.height) / HUD_SCALE;
   const pad = 5; // generous hit area for fingers
   const inside = s => hx >= s.x - pad && hx <= s.x + s.w + pad
                    && hy >= s.y - pad && hy <= s.y + s.h + pad;
@@ -2499,7 +2512,7 @@ canvas.addEventListener('pointerdown', (e) => {
   if (tapMove && e.pointerType === 'mouse' && currState && currState.gameState === 'GAMEPLAY') {
     const r = canvas.getBoundingClientRect();
     if (r.width && r.height) {
-      moveTarget = { x: (e.clientX - r.left) * CANVAS_W / r.width, y: (e.clientY - r.top) * CANVAS_H / r.height };
+      moveTarget = { x: (e.clientX - r.left) * VIEW_W / r.width, y: (e.clientY - r.top) * VIEW_H / r.height + CAM_Y };
       moveDirs = ''; tickTapMove();
       e.preventDefault();
       return;
@@ -2515,7 +2528,7 @@ function tryBladeDash(clientX, clientY) {
   if (!me || me.dead || me.controlling || me.weaponId !== 'lightblade') return false;
   const r = canvas.getBoundingClientRect();
   if (!r.width || !r.height) return false;
-  const x = Math.round((clientX - r.left) * CANVAS_W / r.width), y = Math.round((clientY - r.top) * CANVAS_H / r.height);
+  const x = Math.round((clientX - r.left) * VIEW_W / r.width), y = Math.round((clientY - r.top) * VIEW_H / r.height + CAM_Y);
   ws.send(JSON.stringify({ type: 'blade_dash', x, y }));
   bladeTapMark = { x, y, at: performance.now() };
   return true;
@@ -2617,6 +2630,52 @@ if (window.GameAudio) {
 
 let skinProfile = { coins: 0, owned: [], loaded: false };
 let skinBusy = false;
+// The animated extras. Tapping one you don't own only tries it on in the preview;
+// spending needs the BUY button, as these cost real money in game terms.
+const FX_GRIDS = [['dyn', 'dynGrid', () => Cosmetics.COLORS], ['glow', 'glowGrid', () => Cosmetics.GLOWS],
+                  ['aacc', 'aaccGrid', () => Cosmetics.ACCS], ['nameBg', 'nameBgGrid', () => Cosmetics.NAME_BGS]];
+let fxShop = [], fxTry = null;   // fxTry: { kind, idx } being tried on
+const fxDef = (kind, idx) => fxShop.find(s => s.kind === kind && s.idx === idx);
+const fxOwned = (kind, idx) => !idx || skinProfile.owned.includes(kind + '_' + idx);
+const fxPrice = n => (n >= 1000 ? n / 1000 + 'K' : String(n));
+function fxWorn() { return fxTry ? { ...pendingSkin, [fxTry.kind]: fxTry.idx } : pendingSkin; }
+function dropUnownedFx() {
+  for (const [kind] of FX_GRIDS) if (!fxOwned(kind, pendingSkin[kind] | 0)) { pendingSkin[kind] = 0; skinModified = true; }
+  saveLocalSkin(pendingSkin);
+}
+function pickFx(kind, idx) {
+  if (!fxOwned(kind, idx)) fxTry = fxTry && fxTry.kind === kind && fxTry.idx === idx ? null : { kind, idx };
+  else {
+    fxTry = null;
+    pendingSkin[kind] = idx;
+    skinModified = true;
+    saveLocalSkin(pendingSkin);
+  }
+  buildSkinGrids();
+}
+function syncFxBuy() {
+  const btn = document.getElementById('fxBuyBtn');
+  if (!btn) return;
+  const def = fxTry && fxDef(fxTry.kind, fxTry.idx);
+  btn.classList.toggle('hidden', !def);
+  if (!def) return;
+  const poor = !pendingPass || (skinProfile.loaded && skinProfile.coins < def.price);
+  btn.disabled = poor;
+  btn.textContent = !pendingPass ? 'NEEDS A PASSWORD TO BUY' : poor ? `${def.name}: NOT ENOUGH COINS (◆${def.price.toLocaleString()})` : `BUY ${def.name} ◆${def.price.toLocaleString()}`;
+}
+function buyFx() { if (fxTry) buySkin(fxTry.kind + '_' + fxTry.idx); }
+let skinFxRaf = 0;
+function skinFxFrame() {
+  if (document.getElementById('skinsScreen').classList.contains('hidden')) { skinFxRaf = 0; return; }
+  renderSkinPreview();
+  const now = performance.now();
+  for (const cv of document.querySelectorAll('#nameBgGrid canvas')) {
+    const g = cv.getContext('2d');
+    g.clearRect(0, 0, cv.width, cv.height);
+    Cosmetics.NAME_BGS[cv.dataset.i].paint?.(g, 0, 0, cv.width, cv.height, now);
+  }
+  skinFxRaf = requestAnimationFrame(skinFxFrame);
+}
 
 function skinShopList() { return (window.Sprites && Sprites.SKIN_SHOP) || []; }
 function outfitHidesHat(id) { const o = window.Sprites && Sprites.OUTFITS[id]; return !!(o && o.hat === false); }
@@ -2633,8 +2692,12 @@ async function openSkinsScreen() {
   showScreen('skinsScreen');
   if (pendingSkin.outfit === undefined) pendingSkin.outfit = '';
   skinProfile = { coins: 0, owned: [], loaded: false };
+  fxTry = null;
+  if (!fxShop.length) fetch('/api/catalog').then(r => r.json()).then(d => { fxShop = d.fxShop || []; buildSkinGrids(); }).catch(() => {});
+  if (!pendingPass) dropUnownedFx();
   buildSkinGrids();
   renderSkinPreview();
+  if (!skinFxRaf) skinFxRaf = requestAnimationFrame(skinFxFrame);
   if (!pendingPass) {
     setSkinMsg('Enter a password on the title screen to buy skins — they are saved against it.', true);
     return;
@@ -2656,6 +2719,7 @@ async function openSkinsScreen() {
       pendingSkin.outfit = '';
       saveLocalSkin(pendingSkin);
     }
+    dropUnownedFx();
     setSkinMsg('');
     buildSkinGrids();
     renderSkinPreview();
@@ -2667,6 +2731,8 @@ function closeSkinsScreen() { showScreen('startScreen'); refreshSavedBanner(); }
 
 function selectSkinColor(idx) {
   pendingSkin.colorIdx = idx;
+  pendingSkin.dyn = 0;       // a plain colour replaces a changing one
+  fxTry = null;
   skinModified = true;
   saveLocalSkin(pendingSkin);
   buildSkinGrids();
@@ -2699,7 +2765,7 @@ function selectOutfit(id) {
 
 async function buySkin(id) {
   if (skinBusy) return;
-  const def = skinShopList().find(s => s.id === id);
+  const def = skinShopList().find(s => s.id === id) || fxShop.find(s => s.id === id);
   if (!def) return;
   if (!pendingPass) { setSkinMsg('Enter a password on the title screen to buy skins.', true); return; }
   if (skinProfile.loaded && skinProfile.coins < def.price) {
@@ -2720,7 +2786,7 @@ async function buySkin(id) {
     saveLocalCoins(pendingPass, data.coins);
     if (window.GameAudio) { GameAudio.init(); GameAudio.sfx.unlock(); }
     setSkinMsg(`${def.name} unlocked!`);
-    selectOutfit(id);   // wear it straight away
+    if (def.kind) pickFx(def.kind, def.idx); else selectOutfit(id);   // wear it straight away
   } catch {
     setSkinMsg('Could not reach the server.', true);
   } finally {
@@ -2731,7 +2797,7 @@ async function buySkin(id) {
 function buildSkinGrids() {
   const cg = document.getElementById('colorGrid');
   if (cg) cg.innerHTML = SKIN_COLORS.map((c, i) =>
-    `<div class="skin-color${i === pendingSkin.colorIdx ? ' selected' : ''}" style="background:${c}" onclick="selectSkinColor(${i})"></div>`
+    `<div class="skin-color${i === pendingSkin.colorIdx && !pendingSkin.dyn ? ' selected' : ''}" style="background:${c}" onclick="selectSkinColor(${i})"></div>`
   ).join('');
   const hg = document.getElementById('hatGrid');
   const hatHidden = outfitHidesHat(pendingSkin.outfit);
@@ -2748,6 +2814,19 @@ function buildSkinGrids() {
   ).join('');
   const coinsEl = document.getElementById('skinCoins');
   if (coinsEl) coinsEl.textContent = skinProfile.loaded ? `◆ ${skinProfile.coins.toLocaleString()}` : '';
+  for (const [kind, gridId, list] of FX_GRIDS) {
+    const grid = document.getElementById(gridId);
+    if (!grid) continue;
+    grid.innerHTML = list().map((d, i) => {
+      const owned = fxOwned(kind, i), def = fxDef(kind, i), on = (pendingSkin[kind] | 0) === i;
+      const trying = fxTry && fxTry.kind === kind && fxTry.idx === i;
+      const art = !i ? '' : kind === 'dyn' ? `<i class="fx-dot" style="background:${Cosmetics.swatch(i)}"></i>`
+        : kind === 'nameBg' ? `<canvas data-i="${i}" width="44" height="12"></canvas>` : '';
+      const tag = !owned && def ? `<small>◆${fxPrice(def.price)}</small>` : '';
+      return `<div class="skin-hat fx-chip${on && !fxTry ? ' selected' : ''}${trying ? ' trying' : ''}${owned ? '' : ' locked'}" onclick="pickFx('${kind}',${i})">${art}${d.name}${tag}</div>`;
+    }).join('');
+  }
+  syncFxBuy();
 
   const og = document.getElementById('outfitGrid');
   if (!og) return;
@@ -2763,7 +2842,7 @@ function buildSkinGrids() {
       <canvas data-outfit="${s.id}" width="20" height="31"></canvas>
       <span>${s.name}</span><span class="outfit-tag">${tag}</span></div>`;
   }).join('');
-  const color = SKIN_COLORS[pendingSkin.colorIdx] || '#4488ff';
+  const color = skinHex(pendingSkin);
   for (const cv of og.querySelectorAll('canvas')) {
     const g = cv.getContext('2d');
     g.imageSmoothingEnabled = false;
@@ -2778,15 +2857,20 @@ function renderSkinPreview() {
   if (!uc) return;
   const ux = uc.getContext('2d');
   ux.imageSmoothingEnabled = false;
-  ux.clearRect(0, 0, uc.width, uc.height);     // the stage behind it is drawn in the page
-  const color = SKIN_COLORS[pendingSkin.colorIdx] || '#4488ff';
-  const cv = playerSprite(color, pendingSkin.hatIdx, 1, false, pendingSkin.outfit || '', pendingSkin.accIdx);
+  // The same painters as a fight, on a dark floor so a glow reads as it will there.
+  const skin = fxWorn(), now = performance.now(), color = skinHex(skin);
+  const cv = playerSprite(color, skin.hatIdx, 1, false, skin.outfit || '', skin.accIdx);
   if (!cv) return;
-  // Integer zoom keeps the preview as crisp as the in-game sprite.
-  const z = Math.max(1, Math.floor(Math.min(uc.width / cv.width, uc.height / cv.height)));
-  ux.drawImage(cv, Math.round((uc.width - cv.width * z) / 2),
-                   Math.round((uc.height - cv.height * z) / 2),
-                   cv.width * z, cv.height * z);
+  const Z = 2, x = 22, y = 28, w = 16, h = 22;
+  ux.setTransform(1, 0, 0, 1, 0, 0);
+  ux.fillStyle = '#1a1430'; ux.fillRect(0, 0, uc.width, uc.height);
+  ux.setTransform(Z, 0, 0, Z, 0, 0);
+  Cosmetics.drawGlow(ux, skin.glow, x, y, w, h, color, now);
+  Cosmetics.drawAcc(ux, skin.aacc, x, y, w, h, 1, now, false);
+  ux.drawImage(cv, x, y - PLAYER_PAD);
+  Cosmetics.drawAcc(ux, skin.aacc, x, y, w, h, 1, now, true);
+  const name = (document.getElementById('nameInput')?.value || 'PLAYER').slice(0, 12);
+  Cosmetics.nameTag(ux, x + w / 2, y - 13, name, color, skin.nameBg, now);
 }
 
 
@@ -3536,7 +3620,7 @@ const PERK_ROWS = {
   _hero: { name: 'CHARACTER', color: '#ffcc55', icon(g, w, h) {
     // Your own character, in your chosen skin.
     const skin = pendingSkin || {};
-    const spr = playerSprite(SKIN_COLORS[skin.colorIdx] || '#4488ff', skin.hatIdx || 0, 1, false, skin.outfit || '', skin.accIdx || 0);
+    const spr = playerSprite(skinHex(skin), skin.hatIdx || 0, 1, false, skin.outfit || '', skin.accIdx || 0);
     if (spr) g.drawImage(spr, Math.floor((w - spr.width) / 2), Math.floor((h - spr.height) / 2));
   } },
 };
@@ -4071,7 +4155,7 @@ const ABILITY_ICONS = {
   },
 };
 
-const SCREENS = ['settingsScreen', 'startScreen','lobbyScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen','forgeScreen','tradeScreen'];
+const SCREENS = ['settingsScreen', 'startScreen','lobbyScreen','pickScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen','forgeScreen','tradeScreen'];
 // The main menu is shrunk to whatever the screen allows (never below 45%), so the
 // name and password fields and the mode buttons are all in view on small phones
 // and short windows. Re-measured on resize / rotation / when it is shown.
@@ -4370,7 +4454,7 @@ function soloLobbyMsg(mode) {
   switch (mode) {
     case 'waves':    return line('#ffcc00', 'WAVES MODE', 'SOLO ENDLESS');
     case 'extreme':  return line('#ff5a3a', 'EXTREME MODE', 'SOLO · STRONGEST MONSTERS · HUGE REWARDS');
-    case 'sawroom':  return line('#ff3a3a', 'THE SAW ROOM', 'NO MONSTERS · ONLY TRAPS · ◆ 50,000 EVERY MINUTE');
+    case 'sawroom':  return line('#ff3a3a', 'THE SAW ROOM', 'NO MONSTERS · ONLY SAWS · ◆ 200,000 EVERY MINUTE');
     case 'sandbox':  return line('#9fffd0', 'SANDBOX', 'SOLO PRACTICE · NOTHING IS SAVED');
     case 'tutorial': return line('#7affc8', 'TUTORIAL', 'LEARN THE BASICS');
     case 'portal':   return PORTAL_LOBBY;
@@ -4387,7 +4471,7 @@ function pickMapSize(size) {
   try { localStorage.setItem('weponare_map', size); } catch {}
   for (const b of document.querySelectorAll('.map-btn')) b.classList.toggle('on', b.dataset.size === size);
 }
-pickMapSize(['small', 'medium', 'big'].includes(pendingMapSize) ? pendingMapSize : 'medium');
+pickMapSize(['small', 'medium', 'big', 'giant', 'duel'].includes(pendingMapSize) ? pendingMapSize : 'medium');
 
 // ── Rooms: create one, or browse and join someone else's ──
 let roomDraft = { maxPlayers: 2, size: 'medium' };
@@ -4398,6 +4482,10 @@ function pickRoomPlayers(n) {
 function pickRoomSize(size) {
   roomDraft.size = size;
   for (const b of document.querySelectorAll('#roomSizeOpts .room-opt')) b.classList.toggle('on', b.dataset.size === size);
+  // A duel map is for two.
+  const duel = size === 'duel';
+  if (duel && roomDraft.maxPlayers > 2) pickRoomPlayers(2);
+  for (const b of document.querySelectorAll('#roomPlayersOpts .room-opt')) b.disabled = duel && Number(b.dataset.n) > 2;
 }
 function openCreateRoom() {
   readCredentials();
@@ -4503,7 +4591,71 @@ function pickBotLevel(level) {
 
 function sendRematch() { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'rematch' })); }
 
+// ─── The weapon countdown ─────────────────────────────────────────────────────
+// Every match opens on your weapons. The server keeps the clock; tapping one is
+// the same select_weapon as in a fight, so whatever is lit when the clock runs
+// out is what you start with. The last one you chose starts lit.
+const pickUI = { key: '', secs: -1, sel: '' };
+function buildPick(me) {
+  const ids = me.unlockedWeapons || [];
+  const grid = document.getElementById('pickGrid');
+  grid.innerHTML = ids.map((id, i) => {
+    const m = WEAPON_META[id] || {};
+    return `<button class="pick-card${m.mythic ? ' mythic' : ''}" data-id="${id}" onclick="pickWeaponAt(${i})"><canvas width="104" height="56"></canvas><span>${escapeHtml((m.name || id).toUpperCase())}</span></button>`;
+  }).join('');
+  for (const b of grid.children) {
+    const g = b.querySelector('canvas').getContext('2d'), id = b.dataset.id;
+    try { drawWeaponFitted(g, id, 52, 28, 92, 46, WEAPON_COLOR[id] || '#ccddff', true); } catch {}
+  }
+  const last = ids.indexOf(lsGet('weponare_weapon'));
+  if (last > 0 && !me.weaponIdx) selectWeaponIndex(last);
+}
+function pickWeaponAt(i) {
+  const id = currState?.players?.[myKeyOf()]?.unlockedWeapons?.[i];
+  if (!id) return;
+  selectWeaponIndex(i);
+  lsSet('weponare_weapon', id);
+  if (window.GameAudio) GameAudio.sfx.swing();
+}
+function pickStep(by) {
+  const me = currState?.players?.[myKeyOf()], n = me?.unlockedWeapons?.length;
+  if (n) pickWeaponAt(((me.weaponIdx + by) % n + n) % n);
+}
+function pickReady() { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'pick_ready' })); }
+function renderPick(state) {
+  showScreen('pickScreen');
+  const me = state.players?.[myKeyOf()];
+  if (!me || !state.pick) return;
+  const key = (me.unlockedWeapons || []).join();
+  if (pickUI.key !== key) { pickUI.key = key; pickUI.sel = ''; buildPick(me); }
+  const secs = Math.max(1, Math.ceil(state.pick.t / 1000));
+  if (secs !== pickUI.secs) {
+    pickUI.secs = secs;
+    const el = document.getElementById('pickTimer');
+    el.textContent = secs;
+    el.classList.toggle('urgent', secs <= 3);
+  }
+  document.getElementById('pickBarFill').style.width = (state.pick.t / state.pick.max * 100).toFixed(1) + '%';
+  const id = me.unlockedWeapons?.[me.weaponIdx];
+  if (id !== pickUI.sel) {
+    pickUI.sel = id;
+    for (const b of document.getElementById('pickGrid').children) {
+      const on = b.dataset.id === id;
+      b.classList.toggle('on', on);
+      if (on) b.scrollIntoView({ block: 'nearest' });
+    }
+    document.getElementById('pickName').textContent = (WEAPON_META[id]?.name || id || '').toUpperCase();
+    document.getElementById('pickDesc').textContent = WEAPON_DESC[id] || '';
+  }
+  const ready = state.pick.ready || [], mine = ready.includes(myKeyOf());
+  const btn = document.getElementById('pickReadyBtn');
+  btn.disabled = mine;
+  btn.textContent = mine ? 'WAITING FOR THE OTHERS...' : '✔ READY';
+}
+
 function updateScreens(state) {
+  if (state.gameState === 'WEAPON_PICK') { renderPick(state); return; }
+  pickUI.key = ''; pickUI.secs = -1;
   if (state.gameState === 'LOBBY') {
     const soloMsg = soloLobbyMsg(state.bot ? 'bot' : state.gameMode === 'sandbox' && pendingTutorial ? 'tutorial' : state.gameMode);
     if (soloMsg) {
@@ -4698,7 +4850,9 @@ requestAnimationFrame(renderLoop);
 // ─── Draw ─────────────────────────────────────────────────────────────────────
 
 function draw(state) {
-  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.fillStyle = '#0a0a14'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  ctx.save();
+  ctx.translate(0, -CAM_Y);
   drawArena();
   if (state.gameMode === 'sawroom') drawSawTint();
   drawTraps(state.traps || []);
@@ -4736,6 +4890,7 @@ function draw(state) {
   syncSuperButton(meP);
   syncAbilityButtons(meP);
   drawParticles(state.particles || []);
+  ctx.restore();
   ctx.save();
   ctx.scale(HUD_SCALE, HUD_SCALE);
   drawHUD(state);
@@ -5397,8 +5552,10 @@ function drawStatusMarks(p, x, y) {
 }
 
 function drawPlayerBody(p, baseColor, label, key) {
-  const skinCol = getSkinColor(p, baseColor);
+  const now = performance.now(), fx = p.skin || {};
+  const skinCol = Cosmetics.colorAt(fx.dyn, now) || getSkinColor(p, baseColor);
   const x = Math.round(p.x), y = Math.round(p.y);
+  if (fx.glow) Cosmetics.drawGlow(ctx, fx.glow, x, y, p.w, p.h, skinCol, now);
   if (!p.dead && WEAPON_META[p.weaponId]?.mythic) drawMythicAura(p, x, y);
   drawPassiveFx(p, key, x, y);
 
@@ -5419,10 +5576,12 @@ function drawPlayerBody(p, baseColor, label, key) {
 
   const cv = playerSprite(skinCol, p.skin?.hatIdx || 0, p.facing, p.hitFlash > 0, p.skin?.outfit || '', p.skin?.accIdx || 0);
   if (cv) drawLightRunner(p, key, x, y, cv);
+  if (fx.aacc) Cosmetics.drawAcc(ctx, fx.aacc, x, y, p.w, p.h, p.facing, now, false);
   if (cv) ctx.drawImage(cv, x, y - PLAYER_PAD);
+  if (fx.aacc) Cosmetics.drawAcc(ctx, fx.aacc, x, y, p.w, p.h, p.facing, now, true);
   if (p.lightspeed > 0) drawLightspeedFx(p, x, y);
 
-  drawNametag(x + p.w / 2, y - 13, label, skinCol);
+  Cosmetics.nameTag(ctx, x + p.w / 2, y - 13, label, skinCol, fx.nameBg, now);
   if (key === 'p2' && currState?.bot && currState.botReward) drawBounty(x + p.w / 2, y - 25, currState.botReward);
   if (!(p.kspin > 0)) drawWeaponSprite(p, x, y, key);
   if (p.weaponId === 'infinitybow' && !p.dead) drawInfinityFloaters(p, x, y);
@@ -5551,20 +5710,6 @@ function drawBounty(cx, bottomY, coins) {
   ctx.fillStyle = 'rgba(40,24,0,0.85)'; ctx.fillRect(rx - tw/2 - 3, bottomY - 10, tw + 6, 12);
   ctx.strokeStyle = '#ffcc33'; ctx.lineWidth = 1; ctx.strokeRect(rx - tw/2 - 2.5, bottomY - 9.5, tw + 5, 11);
   ctx.fillStyle = '#ffd84a'; ctx.fillText(label, rx, bottomY);
-  ctx.restore();
-}
-
-function drawNametag(cx, bottomY, label, color) {
-  ctx.save();
-  ctx.font = '9px "Courier New",monospace';
-  ctx.textBaseline = 'bottom'; ctx.textAlign = 'center';
-  const rx = Math.round(cx);
-  const tw = ctx.measureText(label).width;
-  ctx.fillStyle = 'rgba(0,0,0,0.75)';
-  ctx.fillRect(rx - tw/2 - 2, bottomY - 10, tw + 4, 11);
-  ctx.fillStyle = 'rgba(0,0,0,0.9)'; ctx.fillText(label, rx+1, bottomY+1);
-  ctx.fillStyle = color;
-  ctx.fillText(label, rx, bottomY);
   ctx.restore();
 }
 
@@ -7028,17 +7173,19 @@ function drawParticles(particles) {
       ctx.globalAlpha=1;
     } else if (p.type==='newtype') {
       const m=p.max||2200, a=Math.min(1, p.timer/m*2.5);
+      const bx=p.x, by=p.y;
       ctx.globalAlpha=a; ctx.font='bold 13px "Courier New",monospace';
       ctx.textBaseline='middle'; ctx.textAlign='center';
-      ctx.fillStyle='#000'; ctx.fillText(p.text,p.x+2,p.y+2);
-      ctx.fillStyle=p.color||'#ff6644'; ctx.fillText(p.text,p.x,p.y);
+      ctx.fillStyle='#000'; ctx.fillText(p.text,bx+2,by+2);
+      ctx.fillStyle=p.color||'#ff6644'; ctx.fillText(p.text,bx,by);
       ctx.textAlign='left'; ctx.textBaseline='alphabetic'; ctx.globalAlpha=1;
     } else if (p.type==='waveclear') {
       ctx.globalAlpha=Math.min(1,p.timer/2500*3);
       ctx.fillStyle=PAL.xp; ctx.font='bold 18px "Courier New",monospace';
       ctx.textBaseline='middle'; ctx.textAlign='center';
-      ctx.fillStyle='#000'; ctx.fillText(p.text,p.x+2,p.y+2);
-      ctx.fillStyle=PAL.xp; ctx.fillText(p.text,p.x,p.y);
+      const bx=p.x, by=p.y;
+      ctx.fillStyle='#000'; ctx.fillText(p.text,bx+2,by+2);
+      ctx.fillStyle=PAL.xp; ctx.fillText(p.text,bx,by);
       ctx.textAlign='left'; ctx.textBaseline='alphabetic'; ctx.globalAlpha=1;
     } else if (p.type==='dash') {
       // A streak from where the dash started to where it ended.
@@ -7297,7 +7444,7 @@ function drawHUD(state) {
     const sw = state.saw || { t: 0, next: 60000, earned: 0 };
     const sec = Math.floor(sw.t / 1000);
     const t = 'SAW ROOM · ' + Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
-    const sub = '◆ ' + sw.earned.toLocaleString() + ' EARNED · NEXT ◆ 50,000 IN ' + Math.ceil(sw.next / 1000) + 's';
+    const sub = '◆ ' + sw.earned.toLocaleString() + ' EARNED · NEXT ◆ 200,000 IN ' + Math.ceil(sw.next / 1000) + 's';
     ctx.fillStyle = '#000'; ctx.fillText(t, HUD_W/2 + 1, 3);
     ctx.fillStyle = '#ff4a4a'; ctx.fillText(t, HUD_W/2, 2);
     ctx.font = '8px "Courier New",monospace';
