@@ -9351,15 +9351,14 @@ const BOT_LEVELS = {
   strong:  { name: 'STRONG',  own: 0.55, think: 150, aggro: 0.92, parry: 0.45, dodge: 0.60, skill: 0.82, slots: 4, dmg: 1.30, armor: 0.88, hp: 1.2 },
   hard:    { name: 'HARD',    own: 0.68, think: 110, aggro: 1.00, parry: 0.60, dodge: 0.75, skill: 0.95, slots: 5, dmg: 1.50, armor: 0.80, hp: 1.35 },
   insane:  { name: 'INSANE',  own: 0.80, think: 75,  aggro: 1.00, parry: 0.78, dodge: 0.90, skill: 1.00, slots: 6, dmg: 1.80, armor: 0.68, hp: 1.6 },
-  // The ADMIN owns everything and plays best, but like a person: `react` is how
-  // long it takes to notice a blow or a shot, and it makes up its mind once for
-  // each (the others re-roll on every decision). `under` keeps its upgrades that
-  // many levels short of max, so it has no passives, and `cdMul` slows its
+  // The ADMIN owns everything, fully upgraded: every weapon (mythics included, it
+  // is not held to one a game) and every ability. It plays like a person though:
+  // `react` is how long it takes to notice a blow or a shot, and it makes up its
+  // mind once for each (the others re-roll on every decision). `cdMul` slows its
   // attacks, specials and supers.
-  admin:   { name: 'ADMIN',   own: 1.00, think: 60,  aggro: 1.00, parry: 0.55, dodge: 0.65, skill: 0.90, slots: 6, all: true, favor: 0.60, dmg: 1.9, armor: 0.72, hp: 1.7,
-             react: 190, under: 2, cdMul: 1.2 },
+  admin:   { name: 'ADMIN',   own: 1.00, think: 60,  aggro: 1.00, parry: 0.55, dodge: 0.65, skill: 0.90, slots: 6, all: true, favor: 0.60, dmg: 1.5, armor: 0.72, hp: 1.7,
+             react: 190, cdMul: 1.2 },
 };
-const BOT_BEST_ABILITIES = ['execute', 'meteor', 'blackhole', 'airstrike', 'dash', 'heal'];
 const BOT_HEALS = ['heal', 'rejuvenate', 'haven', 'vampirism', 'phoenix'];
 const BOT_GUARDS = ['aegis', 'barrier', 'perfectguard', 'vanish', 'shadowstep', 'warp'];
 const BOT_SWAP_MIN = 10000, BOT_SWAP_VAR = 12000;
@@ -9387,18 +9386,19 @@ function setupBot() {
   const L = BOT_LEVELS[room.bot.level];
   const starters = getUnlockedWeaponIds(0);
   const all = WEAPONS.map(w => w.id);
-  const weapons = gameLoadout(L.all ? sortWeaponIds(all) : sortWeaponIds([...new Set([...starters, ...rollOwned(all, L.own)])]),
-                              (() => { const m = WEAPONS.filter(w => w.mythic); return m[Math.floor(Math.random() * m.length)].id; })());
+  const weapons = L.all ? sortWeaponIds(all)
+    : gameLoadout(sortWeaponIds([...new Set([...starters, ...rollOwned(all, L.own)])]),
+                  (() => { const m = WEAPONS.filter(w => w.mythic); return m[Math.floor(Math.random() * m.length)].id; })());
   const upgrades = {};
   for (const id of weapons) {
     upgrades[id] = {};
     for (const k of upgradesFor(id)) {
-      if (L.all) { upgrades[id][k] = Math.max(0, UPGRADE_STATS[k].max - (L.under || 0)); continue; }   // admin: all well upgraded
+      if (L.all) { upgrades[id][k] = UPGRADE_STATS[k].max; continue; }          // admin: everything maxed
       const lv = Math.round(UPGRADE_STATS[k].max * L.own + (Math.random() - 0.5) * 2);
       upgrades[id][k] = Math.max(0, Math.min(UPGRADE_STATS[k].max - 1, lv));   // never fully maxed: no passives
     }
   }
-  let abilities = L.all ? BOT_BEST_ABILITIES.slice() : pickSome(rollOwned(ABILITIES.map(a => a.id), L.own), L.slots);
+  let abilities = L.all ? pickSome(ABILITIES.map(a => a.id), L.slots) : pickSome(rollOwned(ABILITIES.map(a => a.id), L.own), L.slots);
   if (!abilities.length) abilities = pickSome(ABILITIES.map(a => a.id), 1);   // always has at least one
   const slots = Array.from({ length: L.slots }, (_, i) => abilities[i] || null);
   const outfits = L.all ? ['golden'] : pickSome(rollOwned(SKIN_SHOP.map(s => s.id), L.own), 1);
@@ -9432,6 +9432,14 @@ function botPickWeapon(p) {
   refreshWeapon(p);
 }
 
+// Owning every ability but holding six at a time, like anyone: it deals itself a
+// new hand from all of them, ready ones first.
+function botDealAbilities(p, L) {
+  const all = ABILITIES.map(a => a.id), ready = all.filter(id => !((p.abCd[id] || 0) > 0));
+  const hand = pickSome(ready, L.slots);
+  if (hand.length < L.slots) hand.push(...pickSome(all.filter(id => !hand.includes(id)), L.slots - hand.length));
+  p.abilities = hand;
+}
 function botPlanParry(b, L) {
   if (!b.parryAt && Math.random() < L.parry) b.parryAt = b.clock + L.react * (0.8 + Math.random() * 0.5);
 }
@@ -9451,6 +9459,7 @@ function botTick(dt) {
   b.swapT -= dt;
   if (b.wasDead || b.swapT <= 0) {
     if (b.wasDead || Math.random() < 0.8) botPickWeapon(p);
+    if (L.all) botDealAbilities(p, L);
     b.wasDead = false;
     b.swapT = BOT_SWAP_MIN + Math.random() * BOT_SWAP_VAR;
   }
