@@ -2243,7 +2243,8 @@ function spawnMonster(forceType, opts = {}) {
 // a monster comes in shining: tougher, twice as fast, hitting harder and with an
 // ability it doesn't normally have. Killing one pays a fortune. Bosses and what
 // other monsters summon are never rare.
-const RARE_CHANCE = 0.05, RARE_HP = 4, RARE_DMG = 1.6, RARE_SPEED = 2, RARE_SIZE = 1.12, RARE_XP = 5;
+const RARE_CHANCE = 0.05, RARE_HP = 8, RARE_DMG = 2.4, RARE_DMG_CAP = 110, RARE_SPEED = 2, RARE_SIZE = 1.12, RARE_XP = 8;
+const RARE_AB_FAST = 0.65, RARE_ENRAGE_AT = 0.5, RARE_ENRAGE_FAST = 0.55;   // quicker abilities; below half health, quicker again
 const RARE_COINS = 25000, RARE_COINS_PER_LEVEL = 2500, RARE_COIN_DROPS = 28;
 const RARE_MODES = ['waves', 'extreme', 'coop', 'sandbox'];
 // Each type's extra trick. Whatever suits it, and nothing it can already do.
@@ -2271,7 +2272,7 @@ function rollRare(def, opts) {
 function makeRare(m, def) {
   m.shiny = true;
   m.hp = m.maxHp = Math.round(m.maxHp * RARE_HP);
-  m.atkDamage = Math.min(70, Math.round(m.atkDamage * RARE_DMG));
+  m.atkDamage = Math.min(RARE_DMG_CAP, Math.round(m.atkDamage * RARE_DMG));
   m.speed *= RARE_SPEED;
   m.rareAb = RARE_ABILITY[m.type] || 'dash';
   m.rareCd = 1500;
@@ -2294,7 +2295,9 @@ function rareTick(m, t, dist, dx, dy, dt) {
   m.rareCd -= dt;
   if (m.rareCd > 0) return;
   const ab = m.rareAb, D = RARE_ABILITY_DEF[ab];
-  m.rareCd = D.cd * (0.85 + Math.random() * 0.3);
+  const enraged = m.hp < m.maxHp * RARE_ENRAGE_AT;
+  if (enraged && !m.enraged) { m.enraged = true; room.particles.push({ type: 'crit', x: cx(m), y: m.y - 12, text: 'ENRAGED', timer: 900, max: 900 }); }
+  m.rareCd = D.cd * RARE_AB_FAST * (enraged ? RARE_ENRAGE_FAST : 1) * (0.85 + Math.random() * 0.3);
   if (ab === 'dash') {
     m.pull = { vx: dx / dist * 0.9, vy: dy / dist * 0.9, timer: Math.min(320, dist / 0.9), from: null };
     room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 26, timer: 260, max: 260, color: '#ffd84a' });
