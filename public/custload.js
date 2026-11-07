@@ -12,6 +12,7 @@ const custLoad = { token: 0, t0: 0, minMs: 0, kind: null, raf: 0, last: 0, seen:
 
 const CUST_SCENES = {
   shop:  { a: '#c88a0a', b: '#12b8a0', title: 'OPENING THE WORKSHOP', draw: custDrawShop,    back: () => closeShop() },
+  legend: { a: '#6a2ad8', b: '#ffb82a', title: 'OPENING THE SHOP', draw: custDrawShop, back: () => closeShop() },
   armory: { a: '#d81a4a', b: '#ffb82a', title: 'OPENING THE ARMOURY', draw: custDrawShop,    back: () => closeArmory() },
   abil:  { a: '#c81a9a', b: '#6a2aff', title: 'CHARGING YOUR POWERS', draw: custDrawAbil,    back: () => closeAbilities() },
   skin:  { a: '#ff3a8a', b: '#2ab8ff', title: 'OPENING THE WARDROBE', draw: custDrawSkin,    back: () => closeSkinsScreen() },

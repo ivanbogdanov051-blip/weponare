@@ -93,6 +93,7 @@
           <button class="mode-btn btn-cust btn-skin" onclick="openSkinsScreen()">SKINS<small>look</small></button>
         </div>
         <div class="mode-row">
+          <button class="mode-btn btn-shop" onclick="openLegendShop()">SHOP<small>legendary weapons</small></button>
           <button class="mode-btn btn-forge" onclick="openForge()">THE FORGE<small>coins for upgrades</small></button>
           <button class="mode-btn btn-armory" onclick="openArmory()">ARMOURY<small>new stock every 10 min</small></button>
           <button class="mode-btn btn-trade" onclick="openTrade()">TRADE<small>swap with a friend</small></button>
@@ -193,10 +194,22 @@
   <div id="shopScreen" class="overlay hidden">
     <div class="pixel-box shop-box">
       <div class="title-text shop-title"><span class="t-em">⚡</span> UPGRADES</div>
-      <div class="subtitle">SPEND COINS ON YOUR WEAPONS</div>
+      <div class="subtitle">SPEND COINS ON YOUR WEAPONS &middot; LEGENDARIES ARE IN THE SHOP</div>
       <div id="shopCoins" class="shop-coins"></div>
       <div id="shopMsg" class="shop-msg"></div>
       <div id="shopList" class="shop-list"></div>
+      <button class="mode-btn shop-back" onclick="closeShop()">&#10003; BACK</button>
+    </div>
+  </div>
+
+  <!-- The shop: legendary and mythic weapons, bought with coins -->
+  <div id="legendScreen" class="overlay hidden">
+    <div class="pixel-box shop-box">
+      <div class="title-text shop-title"><span class="t-em">🛒</span> THE SHOP</div>
+      <div class="subtitle">LEGENDARY WEAPONS, BOUGHT WITH COINS</div>
+      <div id="legendCoins" class="shop-coins"></div>
+      <div id="legendMsg" class="shop-msg"></div>
+      <div id="legendList" class="shop-list"></div>
       <button class="mode-btn shop-back" onclick="closeShop()">&#10003; BACK</button>
     </div>
   </div>
@@ -329,7 +342,7 @@
           <p>One player presses START A TRADE and tells the other the code. Each chooses what to give: weapons, coins, abilities or skins. Both have to give something and both have to agree, and any change to an offer clears both agreements. A weapon keeps its upgrades and forge work when it changes hands, and you can receive a weapon you do not have the XP for. What you give is gone, but your other weapons stay yours. To get a lost weapon back, earn the XP between it and the weapon before it. Legendaries take 2,500 XP, then you buy or win them again. Mythics and the two starter weapons can not be traded.</p></div>
         <div class="howto-sec"><h3>WEAPONS &amp; XP</h3>
           <p>Kills give XP, and XP unlocks new weapons for good. Each weapon has its own attack and a <b>special</b> with a cooldown (the purple bar). Melee weapons hit what is in front of you; ranged ones auto-aim at the nearest enemy. Newer ones: the <b>Scimitar</b> (dash), <b>Slingshot</b> (stones knock foes back), <b>Mace</b> (stuns), <b>Javelin</b> (pierces), <b>Claws</b> (heal you as they cut), <b>Ember Staff</b> (burns), <b>Halberd</b> (huge reach) and <b>Frost Bow</b> (slows).</p>
-          <p><b>Legendary</b> weapons are bought with coins in UPGRADE WEAPONS and are the only ones with a <b>SUPER</b> (R). The Fire Glove needs every other weapon first; the Vortex Shield needs nothing; the Wind Wand, Explosive Revolver, Stormbreaker, Winter's Edge, Sunfire Longbow, <b>Chrono Staff</b> (TIME STOP freezes every foe around you, REWIND undoes your wounds) and <b>Void Blade</b> (void waves, RIFT STEP, and a SINGULARITY that collapses in a huge blast) need another legendary; the <b>Mind Tome</b> (lays psychic traps under your enemies, spins beams that freeze them, and its SUPER takes over the strongest enemy on the map &ndash; you vanish and fight with its attacks, and SPECIAL uses its own ability (a charger charges, a bomber detonates, a necromancer raises skeletons for you, Light chains curving dashes, and so on); its passive moves every trap next to your enemies every 30s, with a countdown over your head) needs the Storm Tome fully maxed and three other legendaries; the Portal Wand can only be won from the Portal Mage; and the rarest of all, the <b>Dagger of Ghosts</b>, can only be claimed once you own every other weapon in the game. The <b>Light Blade</b> (dash wherever you click or tap and swipe as you land, chain five curving dashes that hurl foes into the walls, and go LIGHTSPEED for triple speed and lightning crashes) is claimed by beating Light 3 times, over any number of runs, with at least 75% of all weapons fully maxed.</p></div>
+          <p><b>Legendary</b> weapons are bought with coins in the <b>SHOP</b> and are the only ones with a <b>SUPER</b> (R). The Fire Glove needs every other weapon first; the Vortex Shield needs nothing; the Wind Wand, Explosive Revolver, Stormbreaker, Winter's Edge, Sunfire Longbow, <b>Chrono Staff</b> (TIME STOP freezes every foe around you, REWIND undoes your wounds) and <b>Void Blade</b> (void waves, RIFT STEP, and a SINGULARITY that collapses in a huge blast) need another legendary; the <b>Mind Tome</b> (lays psychic traps under your enemies, spins beams that freeze them, and its SUPER takes over the strongest enemy on the map &ndash; you vanish and fight with its attacks, and SPECIAL uses its own ability (a charger charges, a bomber detonates, a necromancer raises skeletons for you, Light chains curving dashes, and so on); its passive moves every trap next to your enemies every 30s, with a countdown over your head) needs the Storm Tome fully maxed and three other legendaries; the Portal Wand can only be won from the Portal Mage; and the rarest of all, the <b>Dagger of Ghosts</b>, can only be claimed once you own every other weapon in the game. The <b>Light Blade</b> (dash wherever you click or tap and swipe as you land, chain five curving dashes that hurl foes into the walls, and go LIGHTSPEED for triple speed and lightning crashes) is claimed by beating Light 3 times, over any number of runs, with at least 75% of all weapons fully maxed.</p></div>
         <div class="howto-sec"><h3>PARRY</h3>
           <p>Parry (P) opens a short window: a melee blow aimed at you is sent back at the attacker, a shot bounces back the way it came, and a fire hand or inferno fizzles out. Parrying a Giant's swing or shockwave stuns him. It then needs 8 seconds to recharge (the blue bar).</p></div>
         <div class="howto-sec"><h3>COINS &amp; UPGRADES</h3>

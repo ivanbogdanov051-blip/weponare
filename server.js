@@ -10210,7 +10210,7 @@ app.post('/api/profile', (req, res) => {
 // Each player gets their own stock, dealt from what they don't own yet and kept
 // for ARMORY_ROTATE_MS. All clocks turn over together, so "next stock in" is true
 // for everyone. Buying keeps the piece for good; it never rotates out of your bag.
-const ARMORY_ROTATE_MS = 10 * 60 * 1000, ARMORY_OFFERS = 9, ARMORY_SHIELDS = 3;
+const ARMORY_ROTATE_MS = 10 * 60 * 1000, ARMORY_OFFERS = 15, ARMORY_SHIELDS = 5;
 const armoryWindow = () => Math.floor(Date.now() / ARMORY_ROTATE_MS);
 function rollArmoryRarity() {
   const total = Armor.RARITIES.reduce((s, r) => s + r.weight, 0);

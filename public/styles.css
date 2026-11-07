@@ -1856,3 +1856,9 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 #touchControls .action-btn.shield-btn.cooling { opacity: 1; filter: grayscale(0.85) brightness(0.55); }
 #touchControls .action-btn.shield-btn.shield-on { box-shadow: 0 0 0 2px #10141e, 0 0 14px var(--abc, #b8c0cc), inset 0 0 10px var(--abc, #b8c0cc); }
 @media (max-height: 420px) { #touchControls .action-btn.shield-btn { width: 48px; height: 48px; } #touchControls .action-btn.shield-btn canvas { width: 32px; height: 32px; } }
+
+.mode-btn.btn-shop { border-color: #8a5ae8; color: #cfb0ff; }
+.mode-btn.btn-shop:hover { border-color: #b88aff; color: #fff; }
+.btn-shop::before { content: '🛒'; }
+/* The armoury, zoomed out: everything is 80% size, so a lot more fits on screen. */
+#armoryScreen .arm-box { zoom: 0.8; }

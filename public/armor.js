@@ -9,12 +9,12 @@
 // only ever add pieces, never rename one.
 (function (root) {
   const RARITIES = [
-    { id: 'common',    name: 'COMMON',    color: '#b8c0cc', weight: 36, price: [1500, 4000],      hp: [10, 30] },
-    { id: 'uncommon',  name: 'UNCOMMON',  color: '#5ad86a', weight: 28, price: [8000, 16000],     hp: [20, 45] },
-    { id: 'rare',      name: 'RARE',      color: '#4aa8ff', weight: 19, price: [30000, 55000],    hp: [35, 60] },
-    { id: 'epic',      name: 'EPIC',      color: '#c05aff', weight: 11, price: [90000, 150000],   hp: [50, 100] },
-    { id: 'legendary', name: 'LEGENDARY', color: '#ffb82a', weight: 5,  price: [300000, 500000],  hp: [75, 150] },
-    { id: 'mythic',    name: 'MYTHIC',    color: '#ff2a3a', weight: 1,  price: [1000000, 2000000], hp: [100, 200] },
+    { id: 'common',    name: 'COMMON',    color: '#b8c0cc', weight: 28, price: [1500, 4000],      hp: [10, 30] },
+    { id: 'uncommon',  name: 'UNCOMMON',  color: '#5ad86a', weight: 26, price: [8000, 16000],     hp: [20, 45] },
+    { id: 'rare',      name: 'RARE',      color: '#4aa8ff', weight: 20, price: [30000, 55000],    hp: [35, 60] },
+    { id: 'epic',      name: 'EPIC',      color: '#c05aff', weight: 14, price: [90000, 150000],   hp: [50, 100] },
+    { id: 'legendary', name: 'LEGENDARY', color: '#ffb82a', weight: 9,  price: [300000, 500000],  hp: [75, 150] },
+    { id: 'mythic',    name: 'MYTHIC',    color: '#ff2a3a', weight: 3,  price: [1000000, 2000000], hp: [100, 200] },
   ];
   const SLOTS = { head: 'HELMET', chest: 'CHESTPLATE', legs: 'LEGGINGS', shield: 'SHIELD' };
   const HELM_WORD = { cap: 'CAP', hood: 'HOOD', visor: 'VISOR', great: 'GREATHELM', mask: 'MASK', circlet: 'CROWN' };

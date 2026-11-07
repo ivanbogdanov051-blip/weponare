@@ -3349,23 +3349,29 @@ function renderTrade() {
 }
 
 function setShopMsg(text, isError) {
-  const el = document.getElementById('shopMsg');
-  if (!el) return;
-  el.textContent = text || '';
-  el.className = 'shop-msg' + (isError ? ' err' : '');
+  for (const id of ['shopMsg', 'legendMsg']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.textContent = text || '';
+    el.className = 'shop-msg' + (isError ? ' err' : '');
+  }
 }
 
-async function openShop() {
+// The upgrades screen and the legendary weapon SHOP share one profile and one set of messages.
+async function openLegendShop() { return openShop('legendScreen'); }
+async function openShop(screen = 'shopScreen') {
   readCredentials();
-  showScreen('shopScreen');
+  showScreen(screen);
   document.getElementById('shopList').innerHTML = '';
   document.getElementById('shopCoins').innerHTML = '';
+  document.getElementById('legendList').innerHTML = '';
+  document.getElementById('legendCoins').innerHTML = '';
   if (!pendingPass) {
     setShopMsg('Enter a password on the title screen first — coins and upgrades are saved against it.', true);
     return;
   }
   setShopMsg('');
-  const loading = custLoadStart('shop');
+  const loading = custLoadStart(screen === 'legendScreen' ? 'legend' : 'shop');
   try {
     const res = await fetch('/api/profile', {
       method: 'POST',
@@ -3387,6 +3393,7 @@ async function openShop() {
       ? `Some upgrades were changed. The old levels were refunded: +${data.refunded.toLocaleString()} coins.`
       : '');
     renderShop();
+    renderLegendShop();
   } catch {
     setShopMsg('Could not reach the server.', true);
   } finally { custLoadEnd(loading); }
@@ -3399,6 +3406,7 @@ function renderShop() {
   document.getElementById('shopCoins').innerHTML =
     `<span class="coin-ic">◆</span> ${coins.toLocaleString()} COINS`;
 
+  document.getElementById('legendCoins').innerHTML = document.getElementById('shopCoins').innerHTML;
   const list = document.getElementById('shopList');
   if (!weapons.length) {
     list.innerHTML = '<div class="shop-empty">No weapons yet — play a match to unlock some.</div>';
@@ -3406,9 +3414,8 @@ function renderShop() {
   }
 
   const perkIds = Object.keys(shopData.perks || {});
-  // Parry and character first, then legendary weapons for sale, then your weapons.
-  list.innerHTML = [...perkIds, '__legend__', ...weapons].map(id => {
-    if (id === '__legend__') return lostRow() + mythicPicker(weapons) + legendaryCards(weapons, coins);
+  // Parry and character first, then your weapons. (Legendary weapons are bought in the SHOP.)
+  list.innerHTML = [...perkIds, ...weapons].map(id => {
     const lv = upgrades[id] || {};
     const perk = PERK_ROWS[id];
     const name = perk ? perk.name : WEAPON_META[id]?.name || id.toUpperCase();
@@ -3439,6 +3446,10 @@ function renderShop() {
     </div>`;
   }).join('');
 
+  drawShopIcons(list);
+  refreshShopButtons();
+}
+function drawShopIcons(list) {
   for (const cv of list.querySelectorAll('canvas.shop-ic')) {
     const g = cv.getContext('2d');
     g.clearRect(0, 0, cv.width, cv.height);
@@ -3448,7 +3459,15 @@ function renderShop() {
     drawWeaponPixelsFitted(g, id, cv.width / 2, cv.height / 2, cv.width - 8, cv.height - 8,
                            WEAPON_COLOR[id] || '#ccc');
   }
-  refreshShopButtons();
+}
+// THE SHOP: every legendary and mythic weapon, what it needs, and a button to buy it.
+function renderLegendShop() {
+  if (!shopData) return;
+  const list = document.getElementById('legendList'), { coins, weapons } = shopData;
+  document.getElementById('legendCoins').innerHTML = `<span class="coin-ic">◆</span> ${coins.toLocaleString()} COINS`;
+  list.innerHTML = lostRow() + mythicPicker(weapons) + legendaryCards(weapons, coins)
+    || '<div class="shop-empty">You own every weapon the shop sells.</div>';
+  drawShopIcons(list);
 }
 
 // Weapons given away in a trade, and the XP left before each comes back.
@@ -3726,6 +3745,7 @@ async function buyWeapon(id) {
     saveLocalCoins(pendingPass, data.coins);
     if (window.GameAudio) { GameAudio.init(); GameAudio.sfx.unlock(); }
     renderShop();
+    renderLegendShop();
     setShopMsg(`${w.name} unlocked! Press R (or the SUPER button) in game for its super.`);
   } catch {
     setShopMsg('Could not reach the server.', true);
@@ -4286,7 +4306,7 @@ const ABILITY_ICONS = {
   },
 };
 
-const SCREENS = ['settingsScreen', 'startScreen','lobbyScreen','pickScreen','armoryScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen','forgeScreen','tradeScreen'];
+const SCREENS = ['settingsScreen', 'startScreen','lobbyScreen','pickScreen','armoryScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','legendScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen','forgeScreen','tradeScreen'];
 // The main menu is shrunk to whatever the screen allows (never below 45%), so the
 // name and password fields and the mode buttons are all in view on small phones
 // and short windows. Re-measured on resize / rotation / when it is shown.
@@ -8374,6 +8394,7 @@ async function pickMythic(id) {
     storeBackup(pendingPass, data.save);
     shopData = { ...shopData, ...data };
     renderShop();
+    renderLegendShop();
     setShopMsg((WEAPON_META[id]?.name || id) + ' goes into your next games.');
   } catch { setShopMsg('Could not reach the server.', true); }
   finally { shopBusy = false; }
