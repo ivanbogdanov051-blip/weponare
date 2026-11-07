@@ -1566,32 +1566,37 @@ function startParry(p) {
 }
 
 // ─── SHIELDS ─────────────────────────────────────────────────────────────────
-// A worn shield takes damage in your health's place until it has taken its `guard`,
-// then breaks and comes back whole `cd` ms later. What's left of a hit that breaks it
-// goes through to you. A hit on it sets off its abilities, at most once every
-// SHIELD_ABILITY_GAP, so a spray of bullets can't teleport you ten times. They go off
-// on the player's next turn rather than inside the hit: a hit can land while the game
-// is partway through its lists of monsters and shots.
-const SHIELD_ABILITY_GAP = 4000, SHIELD_NEAR = 300, SHIELD_AROUND = 130, SHIELD_PULL_R = 240;
+// Switched on (block: X, or the shield button), a shield takes damage in your health's
+// place for SHIELD_UP_MS or until it has taken its `guard`, whichever comes first. What's
+// left of a hit that breaks it goes through to you. Switching it on sets off all its
+// abilities at once, and it's ready again SHIELD_CD_MS after the press.
+const SHIELD_NEAR = 300, SHIELD_AROUND = 130, SHIELD_PULL_R = 240;
 function shieldColor(p) { return Armor.RARITIES[p.shield?.rarity || 0].color; }
 function fitShield(p) {
-  p.shHp = p.shield ? p.shield.guard : 0;
-  p.shieldCd = 0; p.shAbCd = 0; p.shSafe = 0; p.shShow = 0; p.shBack = 0; p.shFire = false;
+  p.shHp = 0; p.shCap = 0; p.shUp = 0; p.shieldCd = 0; p.shSafe = 0; p.shShow = 0; p.shBack = 0;
+}
+function raiseShield(p, key) {
+  const sh = p.shield;
+  p.shUp = Armor.SHIELD_UP_MS;
+  p.shCap = p.shHp = sh.guard;
+  p.shieldCd = Armor.SHIELD_CD_MS;
+  room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: p.w + 18, timer: 320, max: 320, color: shieldColor(p) });
+  room.particles.push({ type: 'crit', x: cx(p), y: p.y - 10, text: 'SHIELD UP', timer: 600, max: 600 });
+  const m = hasEffect(p, 'strength') ? 1.8 : 1;
+  for (const [id, v] of Object.entries(sh.on)) SHIELD_ON[id]?.(p, key, v, m);
 }
 // Returns what's left of a hit once the shield has had it. `struck` is a real blow:
-// burns and poison wear a shield down too, but don't set it off.
+// burns and poison wear a shield down too, but a mirrored one can't send them back.
 function shieldSoak(p, dmg, struck) {
   const sh = p.shield;
-  if (!sh || !(p.shHp > 0) || !(dmg > 0)) return dmg;
-  if (struck && !(p.shAbCd > 0) && Object.keys(sh.on).length) { p.shAbCd = SHIELD_ABILITY_GAP; p.shFire = true; }
+  if (!sh || !(p.shUp > 0) || !(dmg > 0)) return dmg;
   p.shShow = 320;
   const took = Math.min(p.shHp, dmg);
   if (struck && sh.on.reflect) p.shBack += took * sh.on.reflect;
   if (p.shSafe > 0) return 0;                       // BRACE: it took that one for free
   p.shHp -= took;
   if (p.shHp <= 0) {
-    p.shHp = 0;
-    p.shieldCd = sh.cd;
+    p.shHp = 0; p.shUp = 0;
     room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: p.w + 26, timer: 420, max: 420, color: shieldColor(p) });
     room.particles.push({ type: 'crit', x: cx(p), y: p.y - 10, text: 'SHIELD BROKEN', timer: 800, max: 800 });
   }
@@ -1599,17 +1604,12 @@ function shieldSoak(p, dmg, struck) {
 }
 function shieldTick(p, key, dt) {
   if (!p.shield) return;
-  if (p.shAbCd > 0) p.shAbCd -= dt;
   if (p.shSafe > 0) p.shSafe -= dt;
   if (p.shShow > 0) p.shShow -= dt;
-  if (p.shieldCd > 0) {
-    p.shieldCd -= dt;
-    if (p.shieldCd <= 0) {
-      p.shieldCd = 0;
-      p.shHp = p.shield.guard;
-      room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: p.w + 14, timer: 320, max: 320, color: shieldColor(p) });
-      room.particles.push({ type: 'crit', x: cx(p), y: p.y - 10, text: 'SHIELD UP', timer: 600, max: 600 });
-    }
+  if (p.shieldCd > 0) p.shieldCd = Math.max(0, p.shieldCd - dt);
+  if (p.shUp > 0) {
+    p.shUp -= dt;
+    if (p.shUp <= 0) { p.shUp = 0; p.shHp = 0; }    // time's up: what it had left goes with it
   }
   if (p.shBack >= 1) {                              // what a mirrored shield sends back
     const t = nearestFoe(p, key, SHIELD_NEAR), back = Math.round(p.shBack);
@@ -1619,11 +1619,6 @@ function shieldTick(p, key, dt) {
       if (!t.num) t.invincible = 0;
       strikeTarget(t, back, key);
     }
-  }
-  if (p.shFire) {
-    p.shFire = false;
-    const m = hasEffect(p, 'strength') ? 1.8 : 1;
-    for (const [id, v] of Object.entries(p.shield.on)) SHIELD_ON[id]?.(p, key, v, m);
   }
 }
 const shieldDmg = (t, v, m) => abDmg(t, v, 0.03, m);
@@ -1638,7 +1633,7 @@ function shieldWarp(p, x, y) {
   room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 340, max: 340, color: '#ffffff' });
 }
 const SHIELD_ON = {
-  // reflect has no entry: it works on every hit (see shieldSoak), not just the ones that set it off.
+  // reflect has no entry: it works on every hit while the shield is on (see shieldSoak).
   blink(p, key, v) {
     if (!mayWarp(p)) return;
     const ux = p.mvx ?? (p.facing || 1), uy = p.mvy ?? 0;
@@ -1727,10 +1722,7 @@ const SHIELD_ON = {
     p.specialCooldown = Math.max(0, p.specialCooldown - v);
     p.superCooldown = Math.max(0, p.superCooldown - v);
   },
-  mend(p, key, v) {                                 // already broken: it comes back that much sooner instead
-    if (p.shHp > 0) p.shHp = Math.min(p.shield.guard, p.shHp + Math.round(p.shield.guard * v));
-    else p.shieldCd *= 1 - v;
-  },
+  bulk(p, key, v) { p.shCap = p.shHp = Math.round(p.shield.guard * (1 + v)); },
   brace(p, key, v) { p.shSafe = v; },
 };
 
@@ -1790,7 +1782,7 @@ const KEYS = ['p1', 'p2', 'p3', 'p4'];
 const isPKey = k => KEYS.includes(k);
 const perKey = v => Object.fromEntries(KEYS.map(k => [k, typeof v === 'function' ? v(k) : v]));
 function allPlayers() { return KEYS.map(k => room.players[k]); }
-const blankInput = () => ({ up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false, ab1: false, ab2: false });
+const blankInput = () => ({ up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false, ab1: false, ab2: false, block: false });
 const blankPrev = () => ({ attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false });
 function newRound() { return { wins: perKey(0), maxWins: 3, matchWinner: 0 }; }
 
@@ -4411,7 +4403,7 @@ function respawnPlayer(p) {
   p.pull = null;
   p.invincible = 2000;
   p.hitFlash   = 0;
-  fitShield(p);      // a new life, a whole shield
+  fitShield(p);      // a new life, and the shield is ready
 }
 
 function checkRoundEnd() {
@@ -4631,6 +4623,8 @@ function tickRoom(dt) {
     if (p.wsRam) { wsRamTick(p, key, factor, dt); continue; }   // the ram is all you do while it lasts
     if (p.gsStun > 0) continue;   // stunned: nothing at all
     // The katana's spin (and the Worldsplitter's leap) is all you do while it lasts — only parry gets through.
+    if (p.shield && (room.inputs[key].block || p.shWant) && !(p.shieldCd > 0) && !p.controlling) raiseShield(p, key);
+    p.shWant = false;
     if (p.kspin > 0 || p.sky) {
       if (room.parryJustPressed[key] && p.parryCooldown <= 0) {
         startParry(p);
@@ -9576,8 +9570,8 @@ function playerView(p) {
     abil: abilityView(p),
     ...(p.fg?.speed ? { fgs: 1 + p.fg.speed } : {}),
     ...(p.suit?.length ? { arm: p.suit.join() } : {}), ...(p.fg?.aura ? { aura: 1 } : {}),
-    ...(p.shield ? { sh: p.shield.id, shHp: Math.ceil(p.shHp), shMax: p.shield.guard, shCd: Math.max(0, Math.round(p.shieldCd)), shCdMax: p.shield.cd } : {}),
-    ...(p.shShow > 0 ? { shHit: 1 } : {}),
+    ...(p.shield ? { sh: p.shield.id, shHp: Math.ceil(p.shHp), shMax: p.shCap || p.shield.guard, shCd: Math.max(0, Math.round(p.shieldCd)), shCdMax: Armor.SHIELD_CD_MS } : {}),
+    ...(p.shUp > 0 ? { shOn: 1 } : {}), ...(p.shShow > 0 ? { shHit: 1 } : {}),
     ...(p.fr?.length ? { fr: p.fr } : {}),
     vShield: p.vortexShield > 0 ? Math.round(p.vortexShield) : 0, vStore: Math.round(p.vortexStore || 0),
     parryCd: Math.max(0, p.parryCooldown), parryMax: parryCdOf(p), parryActive: p.parryTimer > 0,
@@ -11013,12 +11007,14 @@ wss.on('connection', (ws) => {
         room.inputs[myKey] = {
           up: !!k.up, down: !!k.down, left: !!k.left, right: !!k.right,
           attack: !!k.attack, swap: !!k.swap, swapPrev: !!k.swapPrev, special: !!k.special, parry: !!k.parry, super: !!k.super,
-          ab1: !!k.ab1, ab2: !!k.ab2, ab3: !!k.ab3, ab4: !!k.ab4, ab5: !!k.ab5, ab6: !!k.ab6, ab7: !!k.ab7,
+          ab1: !!k.ab1, ab2: !!k.ab2, ab3: !!k.ab3, ab4: !!k.ab4, ab5: !!k.ab5, ab6: !!k.ab6, ab7: !!k.ab7, block: !!k.block,
           // The joystick's exact direction, in radians.
           ang: Number.isFinite(k.ang) ? k.ang : null,
           // Mouse position in world space (desktop only): where DASH goes.
           aimX: Number.isFinite(k.aimX) ? k.aimX : null, aimY: Number.isFinite(k.aimY) ? k.aimY : null,
         };
+        // A quick tap can press and release between two ticks: the press still counts.
+        if (k.block && room.players[myKey]) room.players[myKey].shWant = true;
       }
 
       // Safe chat: a line from the fixed list, a few at most per second.

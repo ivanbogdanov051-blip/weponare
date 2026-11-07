@@ -2294,9 +2294,9 @@ canvas.addEventListener('pointermove', (e) => {
 canvas.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') mouseAim = null; });
 
 const blankControls = { up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false,
-                        ab1: false, ab2: false, ab3: false, ab4: false, ab5: false, ab6: false, ab7: false, ang: null, aimX: null, aimY: null };
+                        ab1: false, ab2: false, ab3: false, ab4: false, ab5: false, ab6: false, ab7: false, block: false, ang: null, aimX: null, aimY: null };
 const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false,
-                    ab1: false, ab2: false, ab3: false, ab4: false, ab5: false, ab6: false, ab7: false, ang: null };
+                    ab1: false, ab2: false, ab3: false, ab4: false, ab5: false, ab6: false, ab7: false, block: false, ang: null };
 
 window.addEventListener('keydown', (e) => {
   if (!keys[e.code]) { keys[e.code] = true; sendInput(); }
@@ -2348,6 +2348,7 @@ function currentInputs() {
     ab5:     !!keys['KeyV'] || touchKeys.ab5,
     ab6:     !!keys['KeyB'] || touchKeys.ab6,
     ab7:     !!keys['KeyC'] || touchKeys.ab7,   // the rare forged ability
+    block:   !!keys['KeyX'] || touchKeys.block, // switch your shield on
     // The joystick's exact direction (the keys stay 8-way).
     ang:     anyKey || !Number.isFinite(touchKeys.ang) ? null : touchKeys.ang,
     // Mouse position in the world, for DASH (desktop only).
@@ -2555,7 +2556,7 @@ function setupTouchControls() {
     ['btn-up','up'], ['btn-down','down'], ['btn-left','left'],
     ['btn-right','right'], ['btn-attack','attack'], ['btn-next','swap'], ['btn-prev','swapPrev'],
     ['btn-special','special'], ['btn-parry','parry'], ['btn-super','super'],
-    ['btn-ab1','ab1'], ['btn-ab2','ab2'], ['btn-ab3','ab3'], ['btn-ab4','ab4'], ['btn-ab5','ab5'], ['btn-ab6','ab6'], ['btn-ab7','ab7'],
+    ['btn-ab1','ab1'], ['btn-ab2','ab2'], ['btn-ab3','ab3'], ['btn-ab4','ab4'], ['btn-ab5','ab5'], ['btn-ab6','ab6'], ['btn-ab7','ab7'], ['btn-shield','block'],
   ];
   for (const [id, key] of btnMap) {
     const el = document.getElementById(id);
@@ -2961,8 +2962,8 @@ function armoryCard(a, sale) {
     : `<span class="arm-price">◆ ${a.price.toLocaleString()}</span>`;
   return `<div class="arm-card${a.rarity === 5 ? ' mythic' : ''}" style="--rc:${R.color}">
     <div class="arm-top"><canvas data-armor="${a.id}" width="68" height="68"></canvas>
-      <div class="arm-head"><b>${escapeHtml(a.name)}</b><span class="arm-rar">${R.name} ${Armor.SLOTS[a.slot]}</span><span class="arm-hp">${isShield ? Armor.shieldStat(a) : `+${a.hp} HEALTH`}</span>${isShield ? `<span class="arm-rar">${Armor.shieldBack(a)}</span>` : ''}</div></div>
-    ${on.length ? `<div class="arm-sub">WHEN HIT, EVERY 4s</div>${on.map(l => `<div class="arm-fx on">${escapeHtml(l)}</div>`).join('')}` : ''}
+      <div class="arm-head"><b>${escapeHtml(a.name)}</b><span class="arm-rar">${R.name} ${Armor.SLOTS[a.slot]}</span><span class="arm-hp">${isShield ? Armor.shieldStat(a) : `+${a.hp} HEALTH`}</span>${isShield ? `<span class="arm-rar">${Armor.shieldBack}</span>` : ''}</div></div>
+    ${on.length ? `<div class="arm-sub">WHEN YOU SWITCH IT ON</div>${on.map(l => `<div class="arm-fx on">${escapeHtml(l)}</div>`).join('')}` : ''}
     ${isShield && a.fx && Object.keys(a.fx).length ? '<div class="arm-sub">PASSIVE</div>' : ''}
     ${Armor.fxLines(a.fx).map(l => `<div class="arm-fx">${escapeHtml(l)}</div>`).join('')}
     <div class="arm-foot">${action}</div></div>`;
@@ -2976,7 +2977,7 @@ function renderArmoryList() {
     : arm.tab === 'mine' ? d.owned.map(id => Armor.BY_ID[id]).filter(a => a && bySlot(a)).sort(strong)
     : Armor.PIECES.filter(bySlot).slice().sort(strong);
   const firstShield = arm.tab === 'shop' ? items.find(a => a.slot === 'shield') : null;
-  list.innerHTML = items.map(a => (a === firstShield ? '<div class="arm-sec">SHIELDS: they take damage instead of your health, until they break</div>' : '') + armoryCard(a, arm.tab === 'shop')).join('')
+  list.innerHTML = items.map(a => (a === firstShield ? '<div class="arm-sec">SHIELDS: press the shield button (X) and it takes damage instead of your health</div>' : '') + armoryCard(a, arm.tab === 'shop')).join('')
     || '<div class="arm-none">Nothing here yet. Armour you buy or trade for lands here.</div>';
   drawForgeIcons(list);
 }
@@ -5038,6 +5039,7 @@ function draw(state) {
   const meP = state.players[myKeyOf()] || null;
   syncSuperButton(meP);
   syncAbilityButtons(meP);
+  syncShieldButton(meP);
   drawParticles(state.particles || []);
   ctx.restore();
   ctx.save();
@@ -5774,37 +5776,63 @@ function shieldIcon(id) {
   Armor.drawIcon(cv, Armor.BY_ID[id]);
   return (shieldIcons[id] = cv);
 }
-// On your arm while it's whole, swung up when it takes a hit, gone once it's broken.
-// The thin bar over your head is what it has left.
+// On your arm all the time, swung up when it takes a hit. Switched on, a small
+// forcefield in its rarity's colour stands round you, with what it has left over your head.
 function drawWornShield(p, x, y, now) {
   const a = Armor.BY_ID[p.sh];
   if (!a) return;
-  const col = Armor.RARITIES[a.rarity].color;
-  if (p.shHp > 0) {
-    const size = p.shHit ? 24 : 13, front = p.facing < 0 ? x - size + 3 : x + p.w - 3;
-    const top = y + p.h / 2 - size / 2;
+  const col = Armor.RARITIES[a.rarity].color, on = p.shOn && p.shHp > 0;
+  if (on) {
+    const mx = x + p.w / 2, my = y + p.h / 2, r = Math.max(p.w, p.h) / 2 + 9 + Math.sin(now / 170) * 0.8;
     ctx.save();
-    if (p.shHit) {
-      ctx.globalAlpha = 0.5; ctx.strokeStyle = col; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(x + p.w / 2, y + p.h / 2, p.w + 6, 0, Math.PI * 2); ctx.stroke();
-    } else if (a.rarity === 5) {          // a mythic glows red, even just carried
-      ctx.globalAlpha = 0.28 + Math.sin(now / 260) * 0.12; ctx.fillStyle = '#ff2a3a';
-      ctx.beginPath(); ctx.arc(front + size / 2, top + size / 2, size * 0.8, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    ctx.imageSmoothingEnabled = true;     // shrinking pixel art looks like noise without it
-    ctx.drawImage(shieldIcon(p.sh), Math.round(front), Math.round(top), size, size);
+    ctx.globalAlpha = p.shHit ? 0.34 : 0.16; ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(mx, my, r, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = p.shHit ? 1 : 0.75; ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(mx, my, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 0.8; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;      // a glint running round it
+    ctx.beginPath(); ctx.arc(mx, my, r, now / 300, now / 300 + 0.7); ctx.stroke();
     ctx.restore();
     drawHpBar(x - 1, y - 7, p.w + 2, 2, p.shHp / (p.shMax || 1), col, '#101018');
   }
+  const size = p.shHit ? 24 : 13, front = p.facing < 0 ? x - size + 3 : x + p.w - 3, top = y + p.h / 2 - size / 2;
+  ctx.save();
+  if (a.rarity === 5 && !p.shHit) {       // a mythic glows red, even just carried
+    ctx.globalAlpha = 0.28 + Math.sin(now / 260) * 0.12; ctx.fillStyle = '#ff2a3a';
+    ctx.beginPath(); ctx.arc(front + size / 2, top + size / 2, size * 0.8, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.imageSmoothingEnabled = true;       // shrinking pixel art looks like noise without it
+  ctx.drawImage(shieldIcon(p.sh), Math.round(front), Math.round(top), size, size);
+  ctx.restore();
 }
-// The strip over a player's health bar at the top of the screen.
+// The strip over a player's health bar at the top of the screen: what's left while it's
+// on, the cooldown filling up when it's not.
 function drawShieldStrip(x, y, w, p) {
   if (!p.sh) return;
   const col = Armor.RARITIES[Armor.BY_ID[p.sh]?.rarity || 0].color;
   ctx.fillStyle = '#101018'; ctx.fillRect(x, y, w, 2);
-  if (p.shHp > 0) { ctx.fillStyle = col; ctx.fillRect(x, y, Math.round(w * p.shHp / (p.shMax || 1)), 2); }
-  else { ctx.fillStyle = '#5a5a6a'; ctx.fillRect(x, y, Math.round(w * (1 - (p.shCd || 0) / (p.shCdMax || 1))), 2); }
+  if (p.shOn) { ctx.fillStyle = col; ctx.fillRect(x, y, Math.round(w * p.shHp / (p.shMax || 1)), 2); }
+  else { ctx.fillStyle = (p.shCd || 0) > 0 ? '#5a5a6a' : col; ctx.fillRect(x, y, Math.round(w * (1 - (p.shCd || 0) / (p.shCdMax || 1))), 2); }
+}
+// The touch button: your own shield's picture, grey while it's cooling down.
+let shieldBtn = { id: undefined, cooling: null, on: null };
+function syncShieldButton(me) {
+  const el = document.getElementById('btn-shield');
+  if (!el) return;
+  const id = me && me.sh ? me.sh : null;
+  if (id !== shieldBtn.id) {
+    shieldBtn.id = id;
+    el.classList.toggle('hidden-btn', !id);
+    touchZonesAt = -1e9;
+    if (id) {
+      el.style.setProperty('--abc', Armor.RARITIES[Armor.BY_ID[id]?.rarity || 0].color);
+      const g = el.querySelector('canvas').getContext('2d');
+      g.clearRect(0, 0, 34, 34); g.drawImage(shieldIcon(id), 0, 0);
+    } else touchKeys.block = false;
+  }
+  const on = !!(me && me.shOn), cooling = !!(me && !on && me.shCd > 0);
+  if (on !== shieldBtn.on) { shieldBtn.on = on; el.classList.toggle('shield-on', on); }
+  if (cooling !== shieldBtn.cooling) { shieldBtn.cooling = cooling; el.classList.toggle('cooling', cooling); }
 }
 
 // Armour's burning aura.
@@ -7813,9 +7841,9 @@ function drawHUD(state) {
     }
     let by = 42;
     if (mp.sh) {
-      const whole = mp.shHp > 0, col = Armor.RARITIES[Armor.BY_ID[mp.sh]?.rarity || 0].color;
-      drawBar(by, whole ? mp.shHp / (mp.shMax || 1) : Math.max(0, 1 - (mp.shCd || 0) / (mp.shCdMax || 1)), whole,
-              whole ? 'SHIELD ' + mp.shHp : 'BROKEN ' + Math.ceil((mp.shCd || 0) / 1000) + 's', col, '#4a4a5a', '#101018');
+      const on = !!mp.shOn, ready = on || !(mp.shCd > 0), col = Armor.RARITIES[Armor.BY_ID[mp.sh]?.rarity || 0].color;
+      drawBar(by, on ? mp.shHp / (mp.shMax || 1) : Math.max(0, 1 - (mp.shCd || 0) / (mp.shCdMax || 1)), ready,
+              on ? 'SHIELD ' + mp.shHp : ready ? 'X SHIELD' : 'SHD ' + Math.ceil(mp.shCd / 1000) + 's', col, '#4a4a5a', '#101018');
       by += 7;
     }
     if (mp.superMax > 0) {
