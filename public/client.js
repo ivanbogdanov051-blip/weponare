@@ -445,7 +445,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:' && location.ho
 // ticked off by actually doing it; the explanation steps have a NEXT button.
 // The controls shown match the device: keys on a computer, buttons on touch.
 let pendingTutorial = false;
-const tut = { on: false, i: 0, entered: false, base: null };
+const tut = { on: false, i: 0, entered: false, base: null, spot: null };
 const TUT_DONE_KEY = 'weponare_tutorial_done';
 function tutorialDone() { try { return localStorage.getItem(TUT_DONE_KEY) === '1'; } catch { return true; } }
 function markTutorialDone() { try { localStorage.setItem(TUT_DONE_KEY, '1'); } catch {} }
@@ -467,7 +467,7 @@ const TUT_STEPS = [
     enter: () => { tutSend({ type: 'sandbox', action: 'spawn', what: 'grunt', count: 1 }); return { seen: false }; },
     done: (me, s, b) => { if ((s.monsters || []).length) b.seen = true; return b.seen && !(s.monsters || []).length; } },
   { title: 'SWITCH WEAPONS',
-    text: () => (touchUi() ? 'Tap the <b>&lt;</b> / <b>&gt;</b> buttons' : 'Press ' + kb('ENTER') + ' (or ' + kb('Z') + ' for the previous one)')
+    text: () => (touchUi() ? 'Tap another weapon in the <b>weapon rack</b> at the top' : 'Press ' + kb('ENTER') + ' (or ' + kb('Z') + ' for the previous one)')
       + ' to change weapons. Every weapon plays differently: swords swing, bows shoot, staffs blast.',
     enter: (me) => ({ w: me.weaponId }),
     done: (me, s, b) => me.weaponId !== b.w },
@@ -524,6 +524,7 @@ function tutorialTick() {
   const active = pendingTutorial && s && s.gameState === 'GAMEPLAY' && s.sandbox && s.sandbox.tutorial;
   if (!active) {
     if (panel && !panel.classList.contains('hidden')) panel.classList.add('hidden');
+    tutAim = null; tutDomArrow(null);
     return;
   }
   const me = s.players && s.players[myKeyOf()];
@@ -534,9 +535,12 @@ function tutorialTick() {
   if (!tut.entered) { tut.entered = true; tut.base = st.enter ? st.enter(view, s) : null; }
   if (!st.next && st.done(view, s, tut.base)) {
     if (window.GameAudio) GameAudio.sfx.pickup();
-    tut.i++; tut.entered = false;
+    tut.i++; tut.entered = false; tut.spot = null;
     return;
   }
+  tutAim = tutAimFor(tut.i, view, s);
+  tutDomArrow(tutAim);
+  panel.classList.toggle('tut-low', tut.i === 4 && touchUi());   // the weapon rack sits under the panel otherwise
   // Only touch the DOM when what is shown changes.
   const key = tut.i + ':' + touchUi();
   if (panel.classList.contains('hidden')) panel.classList.remove('hidden');
@@ -550,6 +554,154 @@ function tutorialTick() {
     nb.innerHTML = st.last ? 'START PLAYING &#9654;' : 'NEXT &#9654;';
   }
 }
+// ── Arrows ── Each step points at what to do. A target on the arena (a monster, a
+// spot to walk to, a gem, the weapon rack, the item bar) gets an arrow drawn on the
+// canvas; a touch button gets a bobbing arrow made of page elements, because the
+// buttons can sit outside the canvas. On a keyboard there are no buttons, so the
+// arrow floats over your character with the key to press.
+let tutAim = null;
+const tutHudOf = (x, y) => ({ x: x / HUD_SCALE, y: (y - CAM_Y) / HUD_SCALE });   // arena pixels -> HUD pixels
+function tutBtn(id, label) {
+  const el = document.getElementById(id);
+  if (!el || el.classList.contains('hidden-btn')) return null;
+  const r = el.getBoundingClientRect();
+  return r.width ? { dom: r, label } : null;
+}
+function tutNearest(list, me) {
+  let best = null, bd = 1e9;
+  for (const o of list || []) { const d = Math.hypot(o.x + (o.w || 0) / 2 - me.x - me.w / 2, o.y + (o.h || 0) / 2 - me.y - me.h / 2); if (d < bd) { bd = d; best = o; } }
+  return best;
+}
+function tutAimFor(i, me, s) {
+  const touch = touchUi();
+  const onMe = (label) => {
+    const top = tutHudOf(me.x + me.w / 2, me.y - 12);
+    return top.y < 62 ? { pt: tutHudOf(me.x + me.w / 2, me.y + me.h + 4), dir: 'up', label } : { pt: top, dir: 'down', label };
+  };
+  const onThing = (o, label, ring) => {
+    const top = tutHudOf(o.x + (o.w || 0) / 2, o.y - 4), low = tutHudOf(o.x + (o.w || 0) / 2, o.y + (o.h || 0) + 4);
+    const flip = top.y < 62;                                // no room above it: point up from underneath
+    return { pt: flip ? low : top, dir: flip ? 'up' : 'down', label, ring: ring ? tutHudOf(o.x + (o.w || 0) / 2, o.y + (o.h || 0) / 2) : null };
+  };
+  switch (i) {
+    case 1: {                                               // MOVE
+      if (touch) return tutBtn('joyKnob', 'DRAG');
+      if (!tut.spot) {                                      // somewhere inside the arena, a good walk away, toward the middle
+        const ax = VIEW_W / 2 - me.x, ay = (CAM_Y + VIEW_H / 2) - me.y, d = Math.hypot(ax, ay) || 1;
+        const go = d < 40 ? [1, 0] : [ax / d, ay / d];
+        tut.spot = { x: me.x + me.w / 2 + go[0] * 190, y: me.y + me.h / 2 + go[1] * 190 };
+      }
+      const t = tutHudOf(tut.spot.x, tut.spot.y), q = tutHudOf(me.x + me.w / 2, me.y + me.h / 2);
+      return { pt: { x: t.x, y: t.y - 10 }, dir: 'down', label: 'WALK HERE', ring: t, from: q };
+    }
+    case 2: return touch ? tutBtn('btn-attack', 'TAP') : onMe('PRESS SPACE');
+    case 3: case 8: {                                       // monsters
+      const m = tutNearest(s.monsters, me);
+      return m ? onThing(m, 'ATTACK IT', true) : null;
+    }
+    case 4: {                                               // SWITCH WEAPONS
+      if (!touch) return onMe('PRESS ENTER');
+      const n = (me.unlockedWeapons || []).length, cur = Math.max(0, (me.unlockedWeapons || []).indexOf(me.weaponId));
+      const r = weaponSlotRects.find(q => q.index === (cur + 1) % Math.max(1, n)) || weaponSlotRects[0];
+      return r ? { pt: { x: r.x + r.w / 2, y: r.y + r.h + 11 }, dir: 'up', label: 'TAP A WEAPON' } : null;
+    }
+    case 5: return touch ? tutBtn('btn-special', 'TAP') : onMe('PRESS SHIFT');
+    case 6: return touch ? tutBtn('btn-parry', 'TAP') : onMe('PRESS P');
+    case 7: {                                               // ITEMS: the gem, then its slot
+      const inv = s.inventory || [];
+      if (inv.length) {
+        const r = itemSlotRects[0];
+        if (!r) return null;
+        const left = r.x < HUD_W / 2;
+        return { pt: { x: left ? r.x + r.w + 3 : r.x - 3, y: r.y + r.h / 2 }, dir: left ? 'left' : 'right', label: touch ? 'TAP IT' : 'PRESS 1' };
+      }
+      const it = tutNearest(s.items, me);
+      return it ? onThing(it, 'WALK OVER IT', true) : null;
+    }
+    default: return null;
+  }
+}
+// Page-element arrow for touch buttons.
+// Sides, in order of preference. 'down' means the arrow sits above the button and points down.
+const TUT_SIDES = ['down', 'right', 'up', 'left'];
+let tutSide = { key: '', side: 'down' };
+function tutPlace(el, r, side) {
+  el.classList.remove('hidden', 'side-down', 'side-up', 'side-left', 'side-right'); el.classList.add('side-' + side);
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  if (side === 'down') { el.style.left = Math.round(cx) + 'px'; el.style.top = Math.round(r.top - 4) + 'px'; }
+  if (side === 'up') { el.style.left = Math.round(cx) + 'px'; el.style.top = Math.round(r.bottom + 4) + 'px'; }
+  if (side === 'right') { el.style.left = Math.round(r.left - 4) + 'px'; el.style.top = Math.round(cy) + 'px'; }   // sits left of it, points right
+  if (side === 'left') { el.style.left = Math.round(r.right + 4) + 'px'; el.style.top = Math.round(cy) + 'px'; }
+}
+function tutDomArrow(aim) {
+  const el = document.getElementById('tutPoint');
+  if (!el) return;
+  if (!aim || !aim.dom) { if (!el.classList.contains('hidden')) el.classList.add('hidden'); return; }
+  const r = aim.dom, lbl = el.querySelector('.tp-lbl');
+  if (lbl.textContent !== aim.label) lbl.textContent = aim.label;
+  // Work out the side only when the target moves: try each, keep the first that fits on screen
+  // and doesn't cover any other button.
+  const key = aim.label + [r.left, r.top, r.width].map(Math.round).join();
+  if (key !== tutSide.key) {
+    const others = [...document.querySelectorAll('#touchControls .action-btn:not(.hidden-btn), #joystick, #gameControls button, #tutPanel')]
+      .map(b => b.getBoundingClientRect()).filter(q => q.width && !(q.left === r.left && q.top === r.top && q.width === r.width));
+    let pick = null;
+    for (const side of TUT_SIDES) {
+      tutPlace(el, r, side);
+      const q = el.getBoundingClientRect();
+      const fits = q.left >= 2 && q.top >= 2 && q.right <= innerWidth - 2 && q.bottom <= innerHeight - 2;
+      const clear = others.every(o => q.right <= o.left || q.left >= o.right || q.bottom <= o.top || q.top >= o.bottom);
+      if (fits && clear) { pick = side; break; }
+      if (fits && !pick) pick = pick || null;
+    }
+    tutSide = { key, side: pick || 'down' };
+  }
+  tutPlace(el, r, tutSide.side);
+}
+// Canvas arrow, drawn in HUD pixels. dir is where it points; its tail is on the other side.
+function drawTutorialArrow() {
+  const a = tutAim;
+  if (!a || !a.pt) return;
+  const now = performance.now(), bob = Math.sin(now / 170) * 2.5;
+  const v = { down: [0, 1], up: [0, -1], left: [-1, 0], right: [1, 0] }[a.dir || 'down'], px = -v[1], py = v[0];
+  ctx.save();
+  ctx.lineJoin = 'round';
+  if (a.ring) {                                             // a pulsing ring on the thing itself
+    const r = 11 + Math.sin(now / 220) * 2;
+    ctx.strokeStyle = '#7affc8'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.9;
+    ctx.beginPath(); ctx.arc(a.ring.x, a.ring.y, r, 0, Math.PI * 2); ctx.stroke();
+    if (a.from) {                                           // and a dotted trail to it from you
+      ctx.setLineDash([2, 4]); ctx.globalAlpha = 0.55;
+      ctx.beginPath(); ctx.moveTo(a.from.x, a.from.y); ctx.lineTo(a.ring.x, a.ring.y); ctx.stroke(); ctx.setLineDash([]);
+    }
+    ctx.globalAlpha = 1;
+  }
+  const tx = a.pt.x + v[0] * bob, ty = a.pt.y + v[1] * bob;          // the tip
+  const head = 7, wing = 6, shaft = 10, sw = 2.5;
+  const bx = tx - v[0] * head, by = ty - v[1] * head;                // where the head meets the shaft
+  const ex = bx - v[0] * shaft, ey = by - v[1] * shaft;              // the tail
+  ctx.beginPath();
+  ctx.moveTo(tx, ty);
+  ctx.lineTo(bx + px * wing, by + py * wing); ctx.lineTo(bx + px * sw, by + py * sw);
+  ctx.lineTo(ex + px * sw, ey + py * sw); ctx.lineTo(ex - px * sw, ey - py * sw);
+  ctx.lineTo(bx - px * sw, by - py * sw); ctx.lineTo(bx - px * wing, by - py * wing);
+  ctx.closePath();
+  ctx.fillStyle = '#ffd84a'; ctx.fill();
+  ctx.strokeStyle = '#2a1a00'; ctx.lineWidth = 1.5; ctx.stroke();
+  if (a.label) {                                            // the words, past the tail
+    ctx.font = 'bold 8px "Courier New",monospace';
+    const w = ctx.measureText(a.label).width + 8, h = 12;
+    let lx = ex - v[0] * 3 - (v[0] > 0 ? w : v[0] < 0 ? 0 : w / 2), ly = ey - v[1] * 3 - (v[1] > 0 ? h : v[1] < 0 ? 0 : h / 2);
+    if (v[0] < 0) lx = ex + 3 - 0;
+    lx = Math.max(2, Math.min(HUD_W - w - 2, lx)); ly = Math.max(28, Math.min(HUD_H - h - 2, ly));
+    ctx.fillStyle = 'rgba(14,14,32,0.92)'; ctx.fillRect(lx, ly, w, h);
+    ctx.strokeStyle = '#ffd84a'; ctx.lineWidth = 1; ctx.strokeRect(lx + 0.5, ly + 0.5, w - 1, h - 1);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffd84a'; ctx.fillText(a.label, lx + w / 2, ly + h / 2 + 0.5);
+  }
+  ctx.restore();
+}
+
 // Leaving the tutorial any other way (EXIT, disconnect) also counts as seen.
 function tutorialLeft() { if (pendingTutorial) { markTutorialDone(); pendingTutorial = false; } }
 
@@ -624,9 +776,10 @@ const LOAD_TIPS = ['TIP: PARRY JUST BEFORE A HIT TO STUN THE ATTACKER', 'TIP: SE
   }
   requestAnimationFrame(frame);
 })();
-// First visit (and not arriving on an invite link): straight into the tutorial.
+// Everyone who gets in without a saved password is asked whether they want the
+// tutorial, every time (not arriving on an invite link: they came to join a friend).
 function afterSplash() {
-  if (tutorialDone()) return;
+  if (lsGet('weponare_pass')) return;
   if (new URLSearchParams(location.search).get('room')) return;
   document.getElementById('tutAskScreen').className = 'overlay active';
 }
@@ -5069,6 +5222,7 @@ function draw(state) {
   drawItemBar(state.inventory || [], meP);
   drawWeaponPanel(state);
   drawPickupBanners(state.particles);
+  if (tutAim && tutAim.pt && pendingTutorial) drawTutorialArrow();
   ctx.restore();
   if (netOverlay) drawNetOverlay();
 }

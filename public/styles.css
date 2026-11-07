@@ -1862,3 +1862,26 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 .btn-shop::before { content: '🛒'; }
 /* The armoury, zoomed out: everything is 80% size, so a lot more fits on screen. */
 #armoryScreen .arm-box { zoom: 0.8; }
+
+/* ── Tutorial arrow over a touch button ── */
+#tutPoint { position: fixed; z-index: 31; transform: translate(-50%, -100%); pointer-events: none; display: flex; flex-direction: column; align-items: center; animation: tpBob 0.7s ease-in-out infinite; }
+#tutPoint.hidden { display: none; }
+#tutPoint .tp-lbl { padding: 2px 8px; background: rgba(14, 14, 32, 0.94); border: 2px solid #ffd84a; color: #ffd84a; font: bold 12px 'Courier New', monospace; letter-spacing: 1px; white-space: nowrap; }
+#tutPoint .tp-arrow { width: 0; height: 0; border-left: 13px solid transparent; border-right: 13px solid transparent; border-top: 20px solid #ffd84a; filter: drop-shadow(0 0 0 #2a1a00) drop-shadow(0 2px 0 #2a1a00); margin-top: 1px; }
+#tutPoint.below { transform: translate(-50%, 0); flex-direction: column-reverse; animation-name: tpBobUp; }
+#tutPoint.below .tp-arrow { border-top: 0; border-bottom: 20px solid #ffd84a; margin: 0 0 1px; }
+@keyframes tpBob { 0%, 100% { margin-top: 0; } 50% { margin-top: -8px; } }
+@keyframes tpBobUp { 0%, 100% { margin-top: 0; } 50% { margin-top: 8px; } }
+#tutPanel.tut-low { top: 74px; }
+
+/* The button arrow can sit on any side of its button. */
+#tutPoint.side-down { transform: translate(-50%, -100%); flex-direction: column; }
+#tutPoint.side-up { transform: translate(-50%, 0); flex-direction: column-reverse; animation-name: tpBobUp; }
+#tutPoint.side-up .tp-arrow { border-top: 0; border-bottom: 20px solid #ffd84a; margin: 0 0 1px; }
+#tutPoint.side-right { transform: translate(-100%, -50%); flex-direction: row; align-items: center; animation-name: tpBobR; }
+#tutPoint.side-right .tp-arrow { border-top: 13px solid transparent; border-bottom: 13px solid transparent; border-left: 20px solid #ffd84a; border-right: 0; margin: 0 0 0 1px; }
+#tutPoint.side-left { transform: translate(0, -50%); flex-direction: row-reverse; align-items: center; animation-name: tpBobL; }
+#tutPoint.side-left .tp-arrow { border-top: 13px solid transparent; border-bottom: 13px solid transparent; border-right: 20px solid #ffd84a; border-left: 0; margin: 0 1px 0 0; }
+@keyframes tpBobR { 0%, 100% { margin-left: 0; } 50% { margin-left: 8px; } }
+@keyframes tpBobL { 0%, 100% { margin-left: 0; } 50% { margin-left: -8px; } }
+#tutPanel.tut-low { top: 128px; }
