@@ -175,7 +175,7 @@ function toggleNetOverlay() {
 // Snapshots leave out what hasn't changed (slimState in server.js has the same
 // lists): everything past this point sees a complete one.
 const SLIM_TOP = ['gameMode', 'world', 'maxPlayers', 'playerNames', 'round', 'sandbox', 'finalWave', 'isAdmin', 'victory', 'botReward'];
-const SLIM_PLAYER = ['w', 'h', 'atkSpd', 'reach', 'wType', 'upg', 'unlockedWeapons', 'skin', 'arm', 'specialMax', 'superMax', 'parryMax', 'speed'];
+const SLIM_PLAYER = ['w', 'h', 'atkSpd', 'reach', 'wType', 'upg', 'unlockedWeapons', 'skin', 'arm', 'sh', 'shMax', 'shCdMax', 'specialMax', 'superMax', 'parryMax', 'speed'];
 const slimHad = { top: {}, pl: {} };
 function unslim(m) {
   for (const k of SLIM_TOP) { if (k in m) slimHad.top[k] = m[k]; else if (k in slimHad.top) m[k] = slimHad.top[k]; }
@@ -2937,29 +2937,33 @@ function renderArmorySide() {
   const d = arm.data, side = document.getElementById('armSide');
   if (!side) return;
   const worn = d ? d.worn : {}, ids = Object.values(worn);
-  const lines = Armor.fxLines(Armor.fxOf(ids)), hp = Armor.hpOf(ids);
+  const lines = Armor.fxLines(Armor.fxOf(ids)), hp = Armor.hpOf(ids), sh = Armor.BY_ID[worn.shield];
   side.innerHTML = `<canvas id="armHero" width="88" height="112"></canvas>
     <div class="arm-slots">${Object.entries(Armor.SLOTS).map(([s, label]) => {
       const a = Armor.BY_ID[worn[s]], R = a && Armor.RARITIES[a.rarity];
       return `<button class="arm-slot${a ? ' full' : ''}${a && a.rarity === 5 ? ' mythic' : ''}" style="--rc:${R ? R.color : '#6a6a8a'}" ${a ? `onclick="armoryOff('${s}')" title="Take off"` : 'disabled'}>
         ${a ? `<canvas data-armor="${a.id}" width="34" height="34"></canvas>` : '<i>+</i>'}<span>${a ? escapeHtml(a.name) : label}</span></button>`;
     }).join('')}</div>
-    <div class="arm-total"><b>+${hp} HEALTH</b>${lines.map(l => `<span>${escapeHtml(l)}</span>`).join('') || '<span>Nothing worn yet. Tap a piece you own to put it on.</span>'}</div>`;
+    <div class="arm-total"><b>+${hp} HEALTH</b>${sh ? `<b>SHIELD ${Armor.shieldStat(sh)}</b>` : ''}${lines.map(l => `<span>${escapeHtml(l)}</span>`).join('') || '<span>Nothing worn yet. Tap a piece you own to put it on.</span>'}</div>`;
   drawForgeIcons(side);
   const cv = document.getElementById('armHero'), g = cv.getContext('2d');
   g.imageSmoothingEnabled = false;
   const spr = playerSprite(skinHex(pendingSkin), pendingSkin.hatIdx || 0, 1, false, pendingSkin.outfit || '', pendingSkin.accIdx || 0, armWornKey());
   if (spr) { const z = Math.floor(Math.min(cv.width / spr.width, cv.height / spr.height)); g.drawImage(spr, Math.round((cv.width - spr.width * z) / 2), Math.round((cv.height - spr.height * z) / 2), spr.width * z, spr.height * z); }
+  if (sh) g.drawImage(shieldIcon(sh.id), cv.width - 38, cv.height - 44, 34, 34);
 }
 function armoryCard(a, sale) {
   const d = arm.data, R = Armor.RARITIES[a.rarity], owned = d.owned.includes(a.id), worn = d.worn[a.slot] === a.id, poor = d.coins < a.price;
+  const isShield = a.slot === 'shield', on = Armor.onLines(a);
   const action = worn ? '<button class="arm-act on" disabled>WORN</button>'
     : owned ? `<button class="arm-act wear" onclick="armoryWear('${a.id}')">WEAR</button>`
     : sale ? `<button class="arm-act buy" ${poor ? 'disabled' : ''} onclick="armoryBuy('${a.id}')">◆ ${a.price.toLocaleString()}</button>`
     : `<span class="arm-price">◆ ${a.price.toLocaleString()}</span>`;
   return `<div class="arm-card${a.rarity === 5 ? ' mythic' : ''}" style="--rc:${R.color}">
     <div class="arm-top"><canvas data-armor="${a.id}" width="68" height="68"></canvas>
-      <div class="arm-head"><b>${escapeHtml(a.name)}</b><span class="arm-rar">${R.name} ${Armor.SLOTS[a.slot]}</span><span class="arm-hp">+${a.hp} HEALTH</span></div></div>
+      <div class="arm-head"><b>${escapeHtml(a.name)}</b><span class="arm-rar">${R.name} ${Armor.SLOTS[a.slot]}</span><span class="arm-hp">${isShield ? Armor.shieldStat(a) : `+${a.hp} HEALTH`}</span>${isShield ? `<span class="arm-rar">${Armor.shieldBack(a)}</span>` : ''}</div></div>
+    ${on.length ? `<div class="arm-sub">WHEN HIT, EVERY 4s</div>${on.map(l => `<div class="arm-fx on">${escapeHtml(l)}</div>`).join('')}` : ''}
+    ${isShield && a.fx && Object.keys(a.fx).length ? '<div class="arm-sub">PASSIVE</div>' : ''}
     ${Armor.fxLines(a.fx).map(l => `<div class="arm-fx">${escapeHtml(l)}</div>`).join('')}
     <div class="arm-foot">${action}</div></div>`;
 }
@@ -2971,7 +2975,8 @@ function renderArmoryList() {
   const items = arm.tab === 'shop' ? d.stock.map(id => Armor.BY_ID[id]).filter(Boolean)
     : arm.tab === 'mine' ? d.owned.map(id => Armor.BY_ID[id]).filter(a => a && bySlot(a)).sort(strong)
     : Armor.PIECES.filter(bySlot).slice().sort(strong);
-  list.innerHTML = items.map(a => armoryCard(a, arm.tab === 'shop')).join('')
+  const firstShield = arm.tab === 'shop' ? items.find(a => a.slot === 'shield') : null;
+  list.innerHTML = items.map(a => (a === firstShield ? '<div class="arm-sec">SHIELDS: they take damage instead of your health, until they break</div>' : '') + armoryCard(a, arm.tab === 'shop')).join('')
     || '<div class="arm-none">Nothing here yet. Armour you buy or trade for lands here.</div>';
   drawForgeIcons(list);
 }
@@ -3271,7 +3276,7 @@ function tradeList(o) {
   if (o.coins) rows.push(`<div class="tr-item"><b class="tr-coin">◆ ${o.coins.toLocaleString()} COINS</b></div>`);
   for (const w of o.weapons) rows.push(`<div class="tr-item"><canvas class="${w.rare ? 'rare-glow' : ''}" data-weapon="${w.id}" width="56" height="32"></canvas><div><b>${escapeHtml(w.name)}</b>${tradeLine(w)}</div></div>`);
   for (const a of o.abilities) rows.push(`<div class="tr-item"><div><b>${escapeHtml(a.name)}</b><span class="tr-sub">ABILITY</span></div></div>`);
-  for (const a of o.armor || []) rows.push(`<div class="tr-item"><canvas data-armor="${a.id}" width="34" height="34"></canvas><div><b style="color:${Armor.RARITIES[a.rarity].color}">${escapeHtml(a.name)}</b><span class="tr-sub">${Armor.RARITIES[a.rarity].name} ARMOUR</span></div></div>`);
+  for (const a of o.armor || []) rows.push(`<div class="tr-item"><canvas data-armor="${a.id}" width="34" height="34"></canvas><div><b style="color:${Armor.RARITIES[a.rarity].color}">${escapeHtml(a.name)}</b><span class="tr-sub">${Armor.RARITIES[a.rarity].name} ${Armor.BY_ID[a.id]?.slot === 'shield' ? 'SHIELD' : 'ARMOUR'}</span></div></div>`);
   for (const k of o.skins) rows.push(`<div class="tr-item"><div><b>${escapeHtml(k.name)}</b><span class="tr-sub">SKIN</span></div></div>`);
   return rows.join('') || '<div class="tr-none">Nothing yet</div>';
 }
@@ -5747,6 +5752,8 @@ function drawPlayerBody(p, baseColor, label, key) {
   drawVortexShield(p, x, y);
   if (p.effects && p.effects.burn > 0) drawFlames(x, y, p.w, p.h);
 
+  if (p.sh && !p.dead) drawWornShield(p, x, y, now);
+
   if (p.parryActive) {
     const t = performance.now() / 60;
     ctx.save();
@@ -5756,6 +5763,48 @@ function drawPlayerBody(p, baseColor, label, key) {
     ctx.beginPath(); ctx.arc(x + p.w/2, y + p.h/2, p.w + 1 + Math.sin(t)*1.5, 0, Math.PI*2); ctx.stroke();
     ctx.restore();
   }
+}
+
+// A shield's picture, kept ready: this is drawn every frame for everyone wearing one.
+const shieldIcons = {};
+function shieldIcon(id) {
+  if (shieldIcons[id]) return shieldIcons[id];
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 34;
+  Armor.drawIcon(cv, Armor.BY_ID[id]);
+  return (shieldIcons[id] = cv);
+}
+// On your arm while it's whole, swung up when it takes a hit, gone once it's broken.
+// The thin bar over your head is what it has left.
+function drawWornShield(p, x, y, now) {
+  const a = Armor.BY_ID[p.sh];
+  if (!a) return;
+  const col = Armor.RARITIES[a.rarity].color;
+  if (p.shHp > 0) {
+    const size = p.shHit ? 24 : 13, front = p.facing < 0 ? x - size + 3 : x + p.w - 3;
+    const top = y + p.h / 2 - size / 2;
+    ctx.save();
+    if (p.shHit) {
+      ctx.globalAlpha = 0.5; ctx.strokeStyle = col; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x + p.w / 2, y + p.h / 2, p.w + 6, 0, Math.PI * 2); ctx.stroke();
+    } else if (a.rarity === 5) {          // a mythic glows red, even just carried
+      ctx.globalAlpha = 0.28 + Math.sin(now / 260) * 0.12; ctx.fillStyle = '#ff2a3a';
+      ctx.beginPath(); ctx.arc(front + size / 2, top + size / 2, size * 0.8, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.imageSmoothingEnabled = true;     // shrinking pixel art looks like noise without it
+    ctx.drawImage(shieldIcon(p.sh), Math.round(front), Math.round(top), size, size);
+    ctx.restore();
+    drawHpBar(x - 1, y - 7, p.w + 2, 2, p.shHp / (p.shMax || 1), col, '#101018');
+  }
+}
+// The strip over a player's health bar at the top of the screen.
+function drawShieldStrip(x, y, w, p) {
+  if (!p.sh) return;
+  const col = Armor.RARITIES[Armor.BY_ID[p.sh]?.rarity || 0].color;
+  ctx.fillStyle = '#101018'; ctx.fillRect(x, y, w, 2);
+  if (p.shHp > 0) { ctx.fillStyle = col; ctx.fillRect(x, y, Math.round(w * p.shHp / (p.shMax || 1)), 2); }
+  else { ctx.fillStyle = '#5a5a6a'; ctx.fillRect(x, y, Math.round(w * (1 - (p.shCd || 0) / (p.shCdMax || 1))), 2); }
 }
 
 // Armour's burning aura.
@@ -7636,6 +7685,7 @@ function drawHUD(state) {
     ctx.fillStyle = '#000'; ctx.fillText(names.p1 || 'P1', 5, 3);
     ctx.fillStyle = col;    ctx.fillText(names.p1 || 'P1', 4, 2);
     drawHpBar(4, 15, 74, 5, p1.hp / p1.maxHp, col, '#330000');
+    drawShieldStrip(4, 13, 74, p1);
     for (let i = 0; i < (p1.lives || 0); i++) { ctx.fillStyle = col; ctx.fillRect(4 + i*7, 21, 5, 3); }
   }
 
@@ -7646,6 +7696,7 @@ function drawHUD(state) {
     ctx.fillStyle = col;    ctx.fillText(names.p2 || 'P2', RX - 4, 2);
     ctx.textAlign = 'left';
     drawHpBar(RX - 80, 15, 74, 5, p2.hp / p2.maxHp, col, '#330000');
+    drawShieldStrip(RX - 80, 13, 74, p2);
     for (let i = 0; i < (p2.lives || 0); i++) { ctx.fillStyle = col; ctx.fillRect(RX - 9 - i*7, 21, 5, 3); }
   }
   // Players 3 and 4 share the middle of the bar.
@@ -7660,6 +7711,7 @@ function drawHUD(state) {
     ctx.fillStyle = q.dead && q.lives <= 0 ? '#555' : col; ctx.fillText(nm, tx, 2);
     ctx.textAlign = 'left';
     drawHpBar(x0, 15, 74, 5, q.hp / q.maxHp, col, '#330000');
+    drawShieldStrip(x0, 13, 74, q);
     for (let i = 0; i < (q.lives || 0); i++) { ctx.fillStyle = col; ctx.fillRect(x0 + i*7, 21, 5, 3); }
   }
 
@@ -7760,6 +7812,12 @@ function drawHUD(state) {
               ready ? 'PARRY' : 'PAR', '#66ccff', '#2a5a7a', '#0a1a2a');
     }
     let by = 42;
+    if (mp.sh) {
+      const whole = mp.shHp > 0, col = Armor.RARITIES[Armor.BY_ID[mp.sh]?.rarity || 0].color;
+      drawBar(by, whole ? mp.shHp / (mp.shMax || 1) : Math.max(0, 1 - (mp.shCd || 0) / (mp.shCdMax || 1)), whole,
+              whole ? 'SHIELD ' + mp.shHp : 'BROKEN ' + Math.ceil((mp.shCd || 0) / 1000) + 's', col, '#4a4a5a', '#101018');
+      by += 7;
+    }
     if (mp.superMax > 0) {
       const ready = (mp.superCd || 0) <= 0;
       drawBar(by, ready ? 1 : Math.max(0, 1 - mp.superCd / mp.superMax), ready,

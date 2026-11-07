@@ -3,9 +3,10 @@
 // (the server to work out stats and prices, the page to draw them), so a piece
 // can't say one thing in the shop and do another in a fight.
 //
-// A piece is one of 40 sets × 3 slots: 120 in all. Most passives are the same
-// numbers the forge uses (see forgeFx in server.js), so they work with every
-// weapon. Ids are saved in players' files: only ever add sets, never rename one.
+// A piece is one of 40 sets × 3 slots, 120 in all, or one of 56 shields, which go
+// in a fourth slot. Most passives are the same numbers the forge uses (see forgeFx
+// in server.js), so they work with every weapon. Ids are saved in players' files:
+// only ever add pieces, never rename one.
 (function (root) {
   const RARITIES = [
     { id: 'common',    name: 'COMMON',    color: '#b8c0cc', weight: 36, price: [1500, 4000],      hp: [10, 30] },
@@ -15,7 +16,7 @@
     { id: 'legendary', name: 'LEGENDARY', color: '#ffb82a', weight: 5,  price: [300000, 500000],  hp: [75, 150] },
     { id: 'mythic',    name: 'MYTHIC',    color: '#ff2a3a', weight: 1,  price: [1000000, 2000000], hp: [100, 200] },
   ];
-  const SLOTS = { head: 'HELMET', chest: 'CHESTPLATE', legs: 'LEGGINGS' };
+  const SLOTS = { head: 'HELMET', chest: 'CHESTPLATE', legs: 'LEGGINGS', shield: 'SHIELD' };
   const HELM_WORD = { cap: 'CAP', hood: 'HOOD', visor: 'VISOR', great: 'GREATHELM', mask: 'MASK', circlet: 'CROWN' };
   const CHEST_WORD = { vest: 'VEST', plate: 'CUIRASS', robe: 'ROBE', scale: 'SCALEMAIL', spiked: 'WARPLATE' };
   const LEGS_WORD = { pants: 'TROUSERS', greaves: 'GREAVES', tasset: 'TASSETS', scale: 'LEGGUARDS', spiked: 'WARBOOTS' };
@@ -119,6 +120,87 @@
                     hp: hp[i], fx: fx ? fx[i] : {}, price: roundPrice(R.price[0] + (R.price[1] - R.price[0]) * k) });
     });
   }
+
+  // ── SHIELDS ── No extra health: a worn shield takes hits in your health's place,
+  // up to `guard` damage, then breaks and comes back whole after `cd` ms. A hit on it
+  // sets off its `on` abilities (server.js: SHIELD_ON), every few seconds at most.
+  // COMMON ones only soak; rarer ones do more: 0 to 4 abilities, 0 or 1 passive.
+  // [id, name, rarity, [dark, mid, light, accent], shape, trim, emblem, guard, cd, on, passive]
+  const SHIELDS = [
+    // ── COMMON: a plain block ──
+    ['sh_oak', 'OAK BUCKLER', 0, ['#3a2410', '#7a5228', '#a87a40', '#d8b070'], 'buckler', 'plain', '', 40, 18000],
+    ['sh_pine', 'PINE ROUNDEL', 0, ['#3a3016', '#8a7238', '#b89a52', '#e0cc88'], 'round', 'studs', '', 50, 19000],
+    ['sh_pan', 'TIN PAN LID', 0, ['#4a5a6a', '#8a9aaa', '#c0ccd8', '#f0f4f8'], 'round', 'rim', '', 35, 16500],
+    ['sh_crate', 'CRATE LID', 0, ['#4a3218', '#94683a', '#b88a52', '#5a3a1a'], 'tower', 'band', '', 45, 19500],
+    ['sh_targe', 'LEATHER TARGE', 0, ['#4a2e18', '#8a5a30', '#b8884a', '#e0b070'], 'round', 'studs', 'stitch', 45, 17500],
+    ['sh_barrel', 'BARREL LID', 0, ['#3e2a1a', '#6e4e30', '#967048', '#a8a8b0'], 'round', 'band', '', 35, 17500],
+    ['sh_heater', 'RUSTY HEATER', 0, ['#4a2214', '#8a4a2a', '#b0703a', '#d8a060'], 'heater', 'plain', 'cross', 45, 18000],
+    ['sh_disc', 'COPPER DISC', 0, ['#5a3014', '#b06a2a', '#e09a4a', '#ffd08a'], 'buckler', 'rim', 'diamond', 35, 16000],
+    ['sh_bone', 'BONE GUARD', 0, ['#6a6450', '#c8c0a8', '#e8e4d0', '#4a4030'], 'kite', 'plain', 'skull', 45, 19000],
+    ['sh_slab', 'STONE SLAB', 0, ['#3e4044', '#74787e', '#a0a4aa', '#54585e'], 'tower', 'plain', '', 50, 20500],
+
+    // ── UNCOMMON: one ability ──
+    ['sh_kite', 'IRON KITE', 1, ['#3a4250', '#6a7686', '#9aa8b8', '#d8e4f0'], 'kite', 'rim', 'shield', 60, 16000, { shove: 70 }],
+    ['sh_scout', "SCOUT'S ROUNDEL", 1, ['#26402a', '#4a7a4a', '#7ab06a', '#e8d870'], 'round', 'quarter', 'arrow', 55, 16000, { haste: 1500 }],
+    ['sh_medic', "MEDIC'S TARGE", 1, ['#5a1e22', '#d8d8d8', '#ffffff', '#e8323a'], 'heater', 'studs', 'cross', 55, 16000, { heal: 0.05 }],
+    ['sh_bounce', 'BOUNCING BOARD', 1, ['#14405a', '#2a8ab0', '#6ad0e8', '#ffffff'], 'buckler', 'split', 'moon', 65, 16000, { reflect: 0.5 }],
+    ['sh_spring', 'SPRINGWOOD GUARD', 1, ['#2a3a12', '#5a8a2a', '#9ac04a', '#e8ff8a'], 'tall', 'plain', 'leaf', 60, 15500, { leap: 90 }],
+    ['sh_bramble', 'BRAMBLE BOSS', 1, ['#1e3010', '#3a6a20', '#6a9a3a', '#c83a3a'], 'round', 'spikes', 'claw', 60, 16000, { counter: 20 }],
+    ['sh_tinder', 'TINDERBOX', 1, ['#3a1608', '#8a3a12', '#d86a1a', '#ffd84a'], 'tower', 'band', 'flame', 65, 16500, { nova: 14 }],
+    ['sh_chill', 'CHILLPLATE', 1, ['#1e4a6a', '#5a9ac8', '#b0e0f8', '#ffffff'], 'heater', 'rim', 'snow', 65, 16000, { frost: 500 }],
+    ['sh_pavise', "TACTICIAN'S PAVISE", 1, ['#22344a', '#3a5a8a', '#6a8ab8', '#ffd84a'], 'tall', 'split', 'eye', 70, 15500, { refresh: 1000 }],
+    ['sh_hook', 'HOOKED BUCKLER', 1, ['#2e2e36', '#5a5a68', '#8a8a9a', '#ffb02a'], 'buckler', 'spikes', 'claw', 55, 15000, { pull: 70 }],
+    ['sh_spark', 'SPARK COIL', 1, ['#22285a', '#4a4ab0', '#8a8ae8', '#ffe84a'], 'round', 'rim', 'bolt', 60, 16000, { chain: 16 }],
+    ['sh_wasp', 'WASP NEST', 1, ['#2a2008', '#c89a12', '#ffd84a', '#1a1408'], 'kite', 'studs', 'drop', 65, 16000, { venom: 3 }],
+
+    // ── RARE: a better ability, sometimes a passive ──
+    ['sh_warp', 'WARPGLASS BUCKLER', 2, ['#2a1458', '#6a3ac8', '#a88aff', '#e8d8ff'], 'buckler', 'rim', 'star', 85, 14500, { blink: 130 }],
+    ['sh_ghost', 'GHOSTWOOD WARD', 2, ['#2a3a44', '#6a8a94', '#b0d0d8', '#e8ffff'], 'tall', 'plain', 'moon', 80, 14500, { vanish: 900 }],
+    ['sh_mirror', 'MIRROR STEEL', 2, ['#5a6474', '#a8b4c4', '#e8f0f8', '#7ad8ff'], 'heater', 'split', 'star', 90, 14500, { reflect: 0.8 }],
+    ['sh_thorn', 'THORN WALL', 2, ['#143018', '#2a6a30', '#5aa04a', '#d8ff4a'], 'tower', 'spikes', 'leaf', 90, 15000, { spines: 3000 }],
+    ['sh_warden', "WARDEN'S BULWARK", 2, ['#2e3a4a', '#6a7a8e', '#b0c0d0', '#7ad8ff'], 'tower', 'rim', 'shield', 100, 15000, { harden: 2000 }, { armor: 0.04 }],
+    ['sh_rage', "BERSERKER'S BOARD", 2, ['#3a0a0a', '#8a1a1a', '#d83a2a', '#ffb02a'], 'round', 'quarter', 'skull', 85, 14500, { fury: 2000 }],
+    ['sh_leech', 'LEECH SHELL', 2, ['#2a0610', '#7a1228', '#c82a4a', '#ffb0c0'], 'kite', 'band', 'heart', 85, 14500, { leech: 3000 }],
+    ['sh_storm', 'STORM TOWER', 2, ['#14143e', '#3a3ab8', '#7a8aff', '#ffff7a'], 'tall', 'rim', 'bolt', 90, 14500, { chain: 30 }, { spCd: 0.05 }],
+    ['sh_ember', 'EMBER KITE', 2, ['#4a1408', '#b03a12', '#ff7a1a', '#ffd84a'], 'kite', 'rim', 'flame', 85, 14500, { nova: 28 }, { burn: 500 }],
+    ['sh_frost', 'FROSTWALL', 2, ['#1a3a5a', '#3a7ab0', '#8ad0f0', '#e8ffff'], 'tower', 'quarter', 'snow', 95, 14500, { frost: 900 }, { stunRes: 0.15 }],
+    ['sh_sapper', "SAPPER'S PLATE", 2, ['#2a2e22', '#5a6444', '#8a9a6a', '#ff6a3a'], 'heater', 'band', 'diamond', 90, 14500, { mine: 60 }],
+    ['sh_glass', 'HOURGLASS', 2, ['#6a4a1a', '#d8b05a', '#ffe8a8', '#4a8ad8'], 'tall', 'quarter', 'sun', 85, 13500, { mend: 0.35 }],
+
+    // ── EPIC: two abilities ──
+    ['sh_phase', 'PHASE ROUNDEL', 3, ['#180e4a', '#4a2ad8', '#8a7aff', '#7affff'], 'round', 'rim', 'star', 120, 13000, { blink: 160, haste: 1500 }],
+    ['sh_shiv', "ASSASSIN'S TARGE", 3, ['#180e1e', '#3a1a3e', '#6a2a5a', '#ff2a6a'], 'buckler', 'quarter', 'sword', 110, 12500, { behind: 40, fury: 1500 }],
+    ['sh_knight', "KNIGHT'S PAVISE", 3, ['#8a7a4a', '#d8cca0', '#fff6d8', '#ffc82a'], 'tower', 'rim', 'cross', 140, 13500, { shove: 110, harden: 2000 }, { armor: 0.06 }],
+    ['sh_spirit', 'SPIRIT SHELL', 3, ['#0e4a4a', '#2aa8a0', '#7affe0', '#ffffff'], 'round', 'studs', 'heart', 120, 13000, { heal: 0.1, refresh: 1500 }],
+    ['sh_hail', 'HAILSTONE', 3, ['#2a4a7a', '#6a9ad8', '#c8e8ff', '#ffffff'], 'kite', 'spikes', 'snow', 120, 13000, { frost: 1000, shards: 14 }],
+    ['sh_dragon', 'DRAGONHIDE', 3, ['#3a0e12', '#a01e2a', '#e8502a', '#ffd84a'], 'heater', 'spikes', 'flame', 125, 13000, { nova: 40, spines: 3000 }, { burn: 600 }],
+    ['sh_viper', "VIPER'S MIRROR", 3, ['#123a1e', '#2a7a3a', '#5ac85a', '#d8ff4a'], 'kite', 'split', 'drop', 120, 13000, { reflect: 0.8, venom: 5 }],
+    ['sh_thunder', 'THUNDERHEAD', 3, ['#1a2a5a', '#2a5ab0', '#5ab0ff', '#ffff7a'], 'round', 'quarter', 'bolt', 115, 13000, { chain: 36, stun: 800 }],
+    ['sh_grave', 'GRAVEYARD GATE', 3, ['#10141a', '#3a4450', '#6a7a84', '#7affb0'], 'tall', 'band', 'skull', 125, 12500, { pull: 110, mine: 80 }],
+    ['sh_night', 'NIGHTFALL', 3, ['#0e0e1e', '#2a2a44', '#4a4a6a', '#a07aff'], 'heater', 'rim', 'moon', 110, 12500, { vanish: 1200, leech: 2500 }, { dodge: 0.05 }],
+
+    // ── LEGENDARY: three abilities ──
+    ['sh_dawn', 'AEGIS OF DAWN', 4, ['#a8701a', '#ffc82a', '#fff0a0', '#ffffff'], 'heater', 'rim', 'sun', 170, 12000, { heal: 0.12, harden: 2500, nova: 50 }, { regen: 1 }],
+    ['sh_tempest', 'TEMPEST WALL', 4, ['#14143e', '#2a4ad8', '#5ac0ff', '#ffff7a'], 'tall', 'spikes', 'bolt', 165, 11500, { blink: 180, chain: 45, haste: 2000 }],
+    ['sh_oracle', "ORACLE'S MIRROR", 4, ['#3a2a6a', '#8a7ae0', '#e0d8ff', '#ffd84a'], 'round', 'split', 'eye', 175, 11500, { reflect: 1, stun: 1000, refresh: 2000 }],
+    ['sh_kraken', 'KRAKEN GATE', 4, ['#04283e', '#0e6a8a', '#2ab8c8', '#a8ffe8'], 'tower', 'spikes', 'drop', 180, 12000, { pull: 140, frost: 1200, shards: 20 }],
+    ['sh_warlord', "WARLORD'S BASTION", 4, ['#2a2e36', '#5a6474', '#9aa8b8', '#ffb02a'], 'tower', 'studs', 'crown', 195, 12000, { shove: 150, fury: 3000, spines: 4000 }, { thorns: 0.1 }],
+    ['sh_shade', 'SHADE PRISM', 4, ['#08080e', '#20202c', '#46465a', '#c07aff'], 'kite', 'quarter', 'eye', 155, 11000, { vanish: 1500, behind: 70, mend: 0.4 }],
+    ['sh_phoenix', 'IRON PHOENIX', 4, ['#6a1a0a', '#e8501a', '#ffb02a', '#fff0a0'], 'heater', 'studs', 'wing', 165, 11000, { brace: 600, heal: 0.15, mine: 110 }, { stunRes: 0.3 }],
+
+    // ── MYTHIC: four abilities and a passive. They glow red. ──
+    ['sh_worldend', "WORLD'S END", 5, ['#2a0404', '#a00a1a', '#ff3a2a', '#ffe0a0'], 'tower', 'spikes', 'sword', 290, 10500, { nova: 80, shove: 180, harden: 3000, heal: 0.15 }, { armor: 0.1 }],
+    ['sh_voidgate', 'VOIDGATE', 5, ['#06021a', '#2a0a5a', '#7a1ac8', '#ff5ad8'], 'round', 'rim', 'eye', 240, 9000, { blink: 220, vanish: 1500, mend: 0.5, leech: 4000 }, { dodge: 0.12 }],
+    ['sh_celestial', 'CELESTIAL MIRROR', 5, ['#8a3a06', '#ff9a0a', '#ffe04a', '#ffffff'], 'heater', 'split', 'sun', 270, 10000, { reflect: 1.2, stun: 1400, refresh: 3000, brace: 800 }, { regen: 2 }],
+    ['sh_stormheart', 'STORMHEART', 5, ['#0a0a3a', '#2a2ae8', '#5ac0ff', '#fff07a'], 'kite', 'spikes', 'bolt', 255, 10000, { chain: 70, frost: 1500, fury: 3000, haste: 2500 }, { speed: 0.1 }],
+    ['sh_crown', 'CROWN OF THORNS', 5, ['#140606', '#4a1a12', '#8a3a1a', '#ff7a1a'], 'tall', 'spikes', 'crown', 270, 10000, { spines: 5000, shards: 30, venom: 8, pull: 160 }, { thorns: 0.15 }],
+  ];
+  const inRarity = [0, 0, 0, 0, 0, 0], ofRarity = r => SHIELDS.filter(s => s[2] === r).length;
+  for (const [id, name, rarity, pal, shape, trim, motif, guard, cd, on, fx] of SHIELDS) {
+    const R = RARITIES[rarity], k = inRarity[rarity]++ / Math.max(1, ofRarity(rarity) - 1);
+    PIECES.push({ id, set: id, name, slot: 'shield', rarity, pal, shape, trim, motif, guard, cd, on: on || {}, hp: 0, fx: fx || {},
+                  price: roundPrice(R.price[0] + (R.price[1] - R.price[0]) * k) });
+  }
   const BY_ID = Object.fromEntries(PIECES.map(p => [p.id, p]));
 
   // The strongest a full suit can stack, whatever is worn: `max` keys don't add up
@@ -163,8 +245,25 @@
     lives: v => `+${v} extra life (not in PvP)`, magnet: v => `Coins fly to you from ${v}px further away`, stunRes: v => `Stuns last ${pct(v)}% less`,
   };
   const fxLines = fx => Object.entries(fx || {}).map(([k, v]) => (FX_TEXT[k] ? FX_TEXT[k](v) : k));
+  // What a shield does when it's hit.
+  const ON_TEXT = {
+    blink: v => `Teleport ${v}px the way you were moving`, leap: v => `Spring ${v}px away from the closest foe`,
+    behind: v => `Warp behind the closest foe and hit for ${v}`, reflect: v => `${pct(v)}% of the damage it takes hits the closest foe`,
+    counter: v => `Strike the closest foe for ${v}`, stun: v => `Stun the closest foe for ${secs(v)}s`,
+    shove: v => `Blast foes around you ${v}px away`, nova: v => `A ring of fire burns foes for ${v}`,
+    frost: v => `Freeze foes around you for ${secs(v)}s`, chain: v => `Lightning jumps between 4 foes for ${v}`,
+    shards: v => `Fire 8 shards for ${v} each`, venom: v => `Poison foes around you (${v} a tick)`,
+    pull: v => `Drag foes ${v}px towards you`, mine: v => `Drop a landmine for ${v}`, heal: v => `Heal ${pct(v)}% of your health`,
+    haste: v => `Move faster for ${secs(v)}s`, fury: v => `Deal 80% more damage for ${secs(v)}s`, harden: v => `Take 50% less damage for ${secs(v)}s`,
+    vanish: v => `Turn invisible for ${secs(v)}s`, leech: v => `Heal 25% of the damage you deal for ${secs(v)}s`,
+    spines: v => `Hits on you bounce back for ${secs(v)}s`, refresh: v => `${secs(v)}s off your special and super`,
+    mend: v => `Repair ${pct(v)}% of the shield`, brace: v => `Shield takes no damage for ${secs(v)}s`,
+  };
+  const onLines = a => Object.entries(a?.on || {}).map(([k, v]) => (ON_TEXT[k] ? ON_TEXT[k](v) : k));
+  const shieldStat = a => `TAKES ${a.guard} DAMAGE`;
+  const shieldBack = a => `Breaks, then back in ${secs(a.cd)}s`;
 
-  const Armor = { RARITIES, SLOTS, PIECES, BY_ID, combineFx, fxOf, hpOf, fxLines };
+  const Armor = { RARITIES, SLOTS, PIECES, BY_ID, ON_TEXT, combineFx, fxOf, hpOf, fxLines, onLines, shieldStat, shieldBack };
 
   // ── The pictures ── Everything below is browser-only. Letters are shades of the
   // set's palette (a dark, b mid, c light, d accent). A helmet's 12 rows sit straight
@@ -223,12 +322,45 @@
     coin: ['.ddd.', 'dd.dd', 'dd.dd', 'dd.dd', '.ddd.'], eye: ['.....', '.ddd.', 'd.d.d', '.ddd.', '.....'], snow: ['d.d.d', '.ddd.', 'ddddd', '.ddd.', 'd.d.d'],
     flame: ['..d..', '.dd..', '.ddd.', 'ddddd', '.ddd.'], drop: ['..d..', '..d..', '.ddd.', 'ddddd', '.ddd.'], bolt: ['..dd.', '.dd..', 'dddd.', '..dd.', '.dd..'],
     moon: ['.ddd.', 'dd...', 'dd...', 'dd...', '.ddd.'], heart: ['dd.dd', 'ddddd', 'ddddd', '.ddd.', '..d..'], sun: ['d.d.d', '.ddd.', 'ddddd', '.ddd.', 'd.d.d'],
+    star: ['..d..', 'ddddd', '.ddd.', '.d.d.', 'd...d'], crown: ['.....', 'd.d.d', 'ddddd', 'ddddd', '.....'], wing: ['d....', 'dd...', 'ddd.d', '.dddd', '..dd.'],
+  };
+  // A shield's outline: how many pixels each row runs either side of the middle.
+  const SHIELD_SHAPES = {
+    heater: [6, 7, 7, 7, 7, 7, 7, 7, 6, 6, 5, 4, 3, 2, 1], round: [3, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7, 6, 5, 3],
+    kite: [3, 5, 6, 7, 7, 7, 6, 6, 5, 5, 4, 3, 3, 2, 1], tower: [7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 6],
+    buckler: [3, 4, 5, 6, 6, 6, 6, 6, 6, 5, 4, 3], tall: [4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 2],
+  };
+  // Which shade one pixel of a shield's face takes. d = how far in from the edge.
+  const SHIELD_TRIMS = {
+    plain: (x, y, d) => (d === 1 && x < 8 ? 'c' : 'b'),
+    rim: (x, y, d) => (d === 1 ? 'd' : d === 2 && x < 8 ? 'c' : 'b'),
+    studs: (x, y, d) => (d === 1 && y % 3 === 1 ? 'd' : 'b'),
+    quarter: (x, y, d, mid) => ((x < 8) === (y < mid) ? 'c' : 'b'),
+    split: (x) => (x < 8 ? 'c' : 'b'),
+    band: (x, y, d, mid) => (Math.abs(y - mid) < 2 ? 'd' : d === 1 && x < 8 ? 'c' : 'b'),
+    spikes: (x, y, d) => (d === 1 ? 'c' : 'b'),
   };
 
   // Paint a piece onto a 2D context, one "pixel" being `s` units, top-left at x,y.
   function paintPiece(g, p, x, y, s) {
     const shade = { a: p.pal[0], b: p.pal[1], c: p.pal[2], d: p.pal[3] };
     const dot = (px, py, c) => { g.fillStyle = shade[c]; g.fillRect(x + px * s, y + py * s, s, s); };
+    if (p.slot === 'shield') {
+      const rows = SHIELD_SHAPES[p.shape], top = Math.floor((16 - rows.length) / 2), mid = Math.floor(rows.length / 2) - 1;
+      const trim = SHIELD_TRIMS[p.trim] || SHIELD_TRIMS.plain, width = ry => rows[ry] || 0;
+      rows.forEach((w, ry) => {
+        for (let rx = 8 - w; rx < 8 + w; rx++) {
+          const fromSide = Math.min(rx - (8 - w), 7 + w - rx);
+          const fromCap = rx < 8 ? Math.min(...[ry, rows.length - 1 - ry]) : Math.min(ry, rows.length - 1 - ry);
+          const edge = fromSide === 0 || fromCap === 0 || width(ry - 1) < Math.abs(rx - 7.5) + 0.5 || width(ry + 1) < Math.abs(rx - 7.5) + 0.5;
+          dot(rx, ry + top, edge ? 'a' : trim(rx, ry, Math.min(fromSide, fromCap), mid));
+        }
+      });
+      if (p.trim === 'spikes') for (const [sx, sy] of [[-1, 2], [16, 2], [-1, 6], [16, 6], [7, -1], [8, -1]]) if (sy >= 0 ? rows[sy] : true) dot(sx, sy + top, 'd');
+      const m = MOTIFS[p.motif];
+      if (m) m.forEach((r, ry) => { for (let rx = 0; rx < 5; rx++) if (r[rx] === 'd') dot(rx + 5, ry + top + Math.max(2, mid - 2), 'd'); });
+      return;
+    }
     const rows = p.slot === 'head' ? HELMS[p.helm] : p.slot === 'chest' ? CHESTS[p.chest] : LEGS[p.legs];
     const top = p.slot === 'head' ? 3 : 2;     // room for a crest
     rows.forEach((r, ry) => { for (let rx = 0; rx < r.length; rx++) if (r[rx] !== '.') dot(rx, ry + top, r[rx]); });

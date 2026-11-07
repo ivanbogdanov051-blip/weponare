@@ -1838,3 +1838,9 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 }
 .menu-box .mode-btn.btn-armory small { color: #fff; }
 .menu-box .mode-btn.btn-armory:hover { filter: brightness(1.12); color: #fff; }
+
+/* ── Shields in the armoury ── */
+.arm-sub { font-size: 9px; font-weight: bold; letter-spacing: 1px; color: var(--rc); margin-top: 2px; }
+.arm-fx.on::before { content: '>'; }
+.arm-sec { grid-column: 1 / -1; padding: 6px 2px 0; font-size: 12px; font-weight: bold; color: #ffe84a; text-shadow: 1px 1px 0 #000; }
+.arm-total b + b { margin-top: -2px; color: #7ad8ff; }

@@ -1565,6 +1565,175 @@ function startParry(p) {
   spawnParrySpark(cx(p), cy(p));
 }
 
+// ─── SHIELDS ─────────────────────────────────────────────────────────────────
+// A worn shield takes damage in your health's place until it has taken its `guard`,
+// then breaks and comes back whole `cd` ms later. What's left of a hit that breaks it
+// goes through to you. A hit on it sets off its abilities, at most once every
+// SHIELD_ABILITY_GAP, so a spray of bullets can't teleport you ten times. They go off
+// on the player's next turn rather than inside the hit: a hit can land while the game
+// is partway through its lists of monsters and shots.
+const SHIELD_ABILITY_GAP = 4000, SHIELD_NEAR = 300, SHIELD_AROUND = 130, SHIELD_PULL_R = 240;
+function shieldColor(p) { return Armor.RARITIES[p.shield?.rarity || 0].color; }
+function fitShield(p) {
+  p.shHp = p.shield ? p.shield.guard : 0;
+  p.shieldCd = 0; p.shAbCd = 0; p.shSafe = 0; p.shShow = 0; p.shBack = 0; p.shFire = false;
+}
+// Returns what's left of a hit once the shield has had it. `struck` is a real blow:
+// burns and poison wear a shield down too, but don't set it off.
+function shieldSoak(p, dmg, struck) {
+  const sh = p.shield;
+  if (!sh || !(p.shHp > 0) || !(dmg > 0)) return dmg;
+  if (struck && !(p.shAbCd > 0) && Object.keys(sh.on).length) { p.shAbCd = SHIELD_ABILITY_GAP; p.shFire = true; }
+  p.shShow = 320;
+  const took = Math.min(p.shHp, dmg);
+  if (struck && sh.on.reflect) p.shBack += took * sh.on.reflect;
+  if (p.shSafe > 0) return 0;                       // BRACE: it took that one for free
+  p.shHp -= took;
+  if (p.shHp <= 0) {
+    p.shHp = 0;
+    p.shieldCd = sh.cd;
+    room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: p.w + 26, timer: 420, max: 420, color: shieldColor(p) });
+    room.particles.push({ type: 'crit', x: cx(p), y: p.y - 10, text: 'SHIELD BROKEN', timer: 800, max: 800 });
+  }
+  return dmg - took;
+}
+function shieldTick(p, key, dt) {
+  if (!p.shield) return;
+  if (p.shAbCd > 0) p.shAbCd -= dt;
+  if (p.shSafe > 0) p.shSafe -= dt;
+  if (p.shShow > 0) p.shShow -= dt;
+  if (p.shieldCd > 0) {
+    p.shieldCd -= dt;
+    if (p.shieldCd <= 0) {
+      p.shieldCd = 0;
+      p.shHp = p.shield.guard;
+      room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: p.w + 14, timer: 320, max: 320, color: shieldColor(p) });
+      room.particles.push({ type: 'crit', x: cx(p), y: p.y - 10, text: 'SHIELD UP', timer: 600, max: 600 });
+    }
+  }
+  if (p.shBack >= 1) {                              // what a mirrored shield sends back
+    const t = nearestFoe(p, key, SHIELD_NEAR), back = Math.round(p.shBack);
+    p.shBack = 0;
+    if (t) {
+      room.particles.push({ type: 'bolt', x: cx(p), y: cy(p), x2: cx(t), y2: cy(t), timer: 220, max: 220, color: shieldColor(p) });
+      if (!t.num) t.invincible = 0;
+      strikeTarget(t, back, key);
+    }
+  }
+  if (p.shFire) {
+    p.shFire = false;
+    const m = hasEffect(p, 'strength') ? 1.8 : 1;
+    for (const [id, v] of Object.entries(p.shield.on)) SHIELD_ON[id]?.(p, key, v, m);
+  }
+}
+const shieldDmg = (t, v, m) => abDmg(t, v, 0.03, m);
+const foesAround = (p, key, r = SHIELD_AROUND) => enemyTargets(key).filter(t => Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) <= r + t.w / 2);
+const mayWarp = p => !p.sky && !p.wsRam && !p.controlling;
+// Move you there in a flash. The arena's walls stop you; nothing else does.
+function shieldWarp(p, x, y) {
+  room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 340, max: 340, color: shieldColor(p) });
+  p.x = x - p.w / 2; p.y = y - p.h / 2;
+  clampToArena(p, 2);
+  p.pull = null; p.bladeDash = null;
+  room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 340, max: 340, color: '#ffffff' });
+}
+const SHIELD_ON = {
+  // reflect has no entry: it works on every hit (see shieldSoak), not just the ones that set it off.
+  blink(p, key, v) {
+    if (!mayWarp(p)) return;
+    const ux = p.mvx ?? (p.facing || 1), uy = p.mvy ?? 0;
+    shieldWarp(p, cx(p) + ux * v, cy(p) + uy * v);
+  },
+  leap(p, key, v) {
+    if (!mayWarp(p)) return;
+    const t = nearestFoe(p, key), dx = t ? cx(p) - cx(t) : -(p.facing || 1), dy = t ? cy(p) - cy(t) : 0, d = Math.hypot(dx, dy) || 1;
+    shieldWarp(p, cx(p) + dx / d * v, cy(p) + dy / d * v);
+  },
+  behind(p, key, v, m) {
+    const t = nearestFoe(p, key, SHIELD_NEAR * 1.4);
+    if (!t || !mayWarp(p)) return;
+    const dx = cx(t) - cx(p), dy = cy(t) - cy(p), d = Math.hypot(dx, dy) || 1, back = t.w / 2 + p.w / 2 + 8;
+    shieldWarp(p, cx(t) + dx / d * back, cy(t) + dy / d * back);
+    p.facing = dx > 0 ? -1 : 1;
+    if (!t.num) t.invincible = 0;
+    strikeTarget(t, shieldDmg(t, v, m), key);
+  },
+  counter(p, key, v, m) {
+    const t = nearestFoe(p, key, SHIELD_NEAR);
+    if (!t) return;
+    room.particles.push({ type: 'bolt', x: cx(p), y: cy(p), x2: cx(t), y2: cy(t), timer: 240, max: 240, color: shieldColor(p) });
+    if (!t.num) t.invincible = 0;
+    strikeTarget(t, shieldDmg(t, v, m), key);
+  },
+  stun(p, key, v) {
+    const t = nearestFoe(p, key, SHIELD_NEAR);
+    if (!t) return;
+    room.particles.push({ type: 'bolt', x: cx(p), y: cy(p), x2: cx(t), y2: cy(t), timer: 240, max: 240, color: '#ffe84a' });
+    stagger(t, v, 'stun');
+  },
+  shove(p, key, v) {
+    for (const t of foesAround(p, key)) gsPush(t, cx(p), cy(p), v);
+    room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: SHIELD_AROUND, timer: 360, max: 360, color: '#ffffff' });
+  },
+  nova(p, key, v, m) {
+    room.fires.push({ id: nextId(), kind: 'ring', owner: key, x: cx(p), y: cy(p), r: 6, maxR: SHIELD_AROUND, t: 0, life: 620, dmg: Math.round(v * m), hit: new Set() });
+  },
+  frost(p, key, v) {
+    for (const t of foesAround(p, key)) stagger(t, v, 'ice');
+    room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: SHIELD_AROUND, timer: 400, max: 400, color: '#9fe8ff' });
+  },
+  chain(p, key, v, m) {
+    const t = nearestFoe(p, key, SHIELD_NEAR);
+    if (!t) return;
+    room.particles.push({ type: 'bolt', x: cx(p), y: cy(p), x2: cx(t), y2: cy(t), timer: 260, max: 260, color: WEAPON_COLORS.stormhammer });
+    if (!t.num) t.invincible = 0;
+    strikeTarget(t, shieldDmg(t, v, m), key);
+    arcLightning(t, shieldDmg(t, v, m), 3, key);
+  },
+  shards(p, key, v, m) {
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      room.projectiles.push({ id: nextId(), x: cx(p), y: cy(p), dx: Math.cos(a) * 8, dy: Math.sin(a) * 8, damage: Math.round(v * m), owner: key,
+        traveled: 0, maxRange: 240, weaponId: 'sentrybolt', isAoe: false, aoeRadius: 0, pierce: false, grapple: false,
+        boomerang: false, returning: false, life: 0, hitTargets: null, hitR: 5 });
+    }
+  },
+  venom(p, key, v) {
+    for (const t of foesAround(p, key)) { t.venomT = HY_VENOM_MS; t.venomDmg = Math.max(t.venomDmg || 0, v); }
+    room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: SHIELD_AROUND, timer: 400, max: 400, color: '#7ac850' });
+  },
+  pull(p, key, v) {
+    for (const t of foesAround(p, key, SHIELD_PULL_R)) {
+      if (t.boss) continue;
+      const dx = cx(p) - cx(t), dy = cy(p) - cy(t), d = Math.hypot(dx, dy) || 1, go = Math.min(v, d - 18);
+      if (go > 0) t.pull = { vx: dx / d * go / 260, vy: dy / d * go / 260, timer: 260, from: null };
+    }
+    room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: SHIELD_PULL_R / 2, timer: 300, max: 300, color: '#c07aff' });
+  },
+  mine(p, key, v, m) {
+    room.fires.push({ id: nextId(), kind: 'mine', owner: key, x: cx(p), y: cy(p), r: 7, t: 0, life: MINE_LIFE, dmg: Math.round(v * m) });
+  },
+  heal(p, key, v) {
+    p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * v));
+    room.particles.push({ type: 'crit', x: cx(p), y: p.y - 20, text: 'HEALED', timer: 600, max: 600 });
+  },
+  haste(p, key, v) { applyEffect(p, 'speed', v); },
+  fury(p, key, v) { applyEffect(p, 'strength', v); },
+  harden(p, key, v) { applyEffect(p, 'ironskin', v); },
+  vanish(p, key, v) { applyEffect(p, 'vanish', v); },
+  leech(p, key, v) { applyEffect(p, 'vampire', v); },
+  spines(p, key, v) { applyEffect(p, 'thorns', v); },
+  refresh(p, key, v) {
+    p.specialCooldown = Math.max(0, p.specialCooldown - v);
+    p.superCooldown = Math.max(0, p.superCooldown - v);
+  },
+  mend(p, key, v) {                                 // already broken: it comes back that much sooner instead
+    if (p.shHp > 0) p.shHp = Math.min(p.shield.guard, p.shHp + Math.round(p.shield.guard * v));
+    else p.shieldCd *= 1 - v;
+  },
+  brace(p, key, v) { p.shSafe = v; },
+};
+
 // ─── Room State ───────────────────────────────────────────────────────────────
 
 // GIANT holds a lot more floor, so a lot more lies around on it.
@@ -3869,12 +4038,16 @@ function tickWeaponPick(dt) {
 }
 // Put a suit on a fighter: extra health at once, passives from here on.
 function wearArmor(p, ids) {
-  p.suit = (ids || []).filter(id => Armor.BY_ID[id]);    // (not .armor: on a target, that's damage resistance)
+  const worn = (ids || []).filter(id => Armor.BY_ID[id]);
+  p.suit = worn.filter(id => Armor.BY_ID[id].slot !== 'shield');   // (not .armor: on a target, that's damage resistance)
   // You still wear it in the Saw Room, but it does nothing there: with a good suit
   // you could stand still and be paid for it (a legendary set lasted 77s, idle).
-  if (!p.suit.length || room.gameMode === 'sawroom') return;
-  p.arFx = Armor.fxOf(p.suit);
-  p.arHp = Armor.hpOf(p.suit);
+  // A shield would soak the saws the same way, so it stays off too.
+  if (!worn.length || room.gameMode === 'sawroom') return;
+  p.arFx = Armor.fxOf(worn);
+  p.arHp = Armor.hpOf(worn);
+  p.shield = worn.map(id => Armor.BY_ID[id]).find(a => a.slot === 'shield') || null;
+  fitShield(p);
   applyPerks(p);
   p.hp = p.maxHp;
   if (p.arFx.lives && room.gameMode !== 'pvp') p.lives += p.arFx.lives;
@@ -4005,9 +4178,11 @@ function applyDamage(target, dmg, attackerKey) {
     room.particles.push({ type: 'shockwave', x: cx(target), y: cy(target), maxR: target.w + 6, timer: 220, max: 220, color: '#7ad8ff' });
     return;
   }
+  const landed = dmg;
+  if (target.num) dmg = shieldSoak(target, dmg, true);
   target.hp -= dmg;
   if (afg) forgeProcs(afg, attackerKey, target, dmg);
-  if (tfg?.thorns && !room.fgGuard) forgeThorns(target, tfg, atk, dmg);
+  if (tfg?.thorns && !room.fgGuard) forgeThorns(target, tfg, atk, landed);
   if (atk && atk !== target && atk.passive === 'revolver') hitBlast(target, attackerKey, atk);
   // ESCAPE PORTAL: a hit that leaves the portal wand's holder low warps them out.
   if (target.num && target.passive === 'portalwand' && target.hp > 0 && target.hp < target.maxHp * ESCAPE_AT
@@ -4236,6 +4411,7 @@ function respawnPlayer(p) {
   p.pull = null;
   p.invincible = 2000;
   p.hitFlash   = 0;
+  fitShield(p);      // a new life, a whole shield
 }
 
 function checkRoundEnd() {
@@ -4374,6 +4550,7 @@ function tickRoom(dt) {
       if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
     }
     if (hasEffect(p, 'confuse')) { vx = -vx; vy = -vy; if (vx) p.facing = vx > 0 ? 1 : -1; }   // MIRROR RUNE
+    if (vx || vy) { const l = Math.hypot(vx, vy); p.mvx = vx / l; p.mvy = vy / l; }           // the way a shield's teleport goes
     if (p.passive === 'samuraiblade' && (vx || vy)) {                  // WAY OF THE BLADE
       const f = nearestFoe(p, key);
       if (f) {
@@ -4419,6 +4596,7 @@ function tickRoom(dt) {
     if (p.vortexShield    > 0) p.vortexShield    -= dt;
     if (p.parryCooldown   > 0) p.parryCooldown   -= dt;
     if (p.parryTimer      > 0) p.parryTimer      -= dt;
+    shieldTick(p, key, dt);
     if (p.invincible      > 0) p.invincible      -= dt;
     if (p.hitFlash        > 0) p.hitFlash        -= dt;
     if (p.swingTimer      > 0) p.swingTimer      -= dt;
@@ -5068,6 +5246,7 @@ function dotDamage(t, dmg, killer = 'trap') {
   if (t.num && t.defense) dmg = Math.max(1, Math.round(dmg * (1 - t.defense)));
   if (t.num && t.vortexShield > 0) { bankVortex(t, dmg); return; }   // blocked, but banked
   if (t.hidden || t.p3) return;
+  if (t.num) dmg = shieldSoak(t, dmg, false);
   t.hp -= dmg;
   if (t.mage) mageFloor(t);
   t.hitFlash = Math.max(t.hitFlash || 0, 90);
@@ -9397,6 +9576,8 @@ function playerView(p) {
     abil: abilityView(p),
     ...(p.fg?.speed ? { fgs: 1 + p.fg.speed } : {}),
     ...(p.suit?.length ? { arm: p.suit.join() } : {}), ...(p.fg?.aura ? { aura: 1 } : {}),
+    ...(p.shield ? { sh: p.shield.id, shHp: Math.ceil(p.shHp), shMax: p.shield.guard, shCd: Math.max(0, Math.round(p.shieldCd)), shCdMax: p.shield.cd } : {}),
+    ...(p.shShow > 0 ? { shHit: 1 } : {}),
     ...(p.fr?.length ? { fr: p.fr } : {}),
     vShield: p.vortexShield > 0 ? Math.round(p.vortexShield) : 0, vStore: Math.round(p.vortexStore || 0),
     parryCd: Math.max(0, p.parryCooldown), parryMax: parryCdOf(p), parryActive: p.parryTimer > 0,
@@ -9545,7 +9726,7 @@ const ACK_SLACK_MS = 300;
 // client.js, which has the same two lists), and a complete snapshot still goes
 // out every second so a dropped one heals itself.
 const SLIM_TOP = ['gameMode', 'world', 'maxPlayers', 'playerNames', 'round', 'sandbox', 'finalWave', 'isAdmin', 'victory', 'botReward'];
-const SLIM_PLAYER = ['w', 'h', 'atkSpd', 'reach', 'wType', 'upg', 'unlockedWeapons', 'skin', 'arm', 'specialMax', 'superMax', 'parryMax', 'speed'];
+const SLIM_PLAYER = ['w', 'h', 'atkSpd', 'reach', 'wType', 'upg', 'unlockedWeapons', 'skin', 'arm', 'sh', 'shMax', 'shCdMax', 'specialMax', 'superMax', 'parryMax', 'speed'];
 const SLIM_FULL_MS = 1000;
 function slimState(ws, m) {
   const had = ws.slim || (ws.slim = { at: 0, top: {}, pl: {} });
@@ -10032,7 +10213,7 @@ app.post('/api/profile', (req, res) => {
 // Each player gets their own stock, dealt from what they don't own yet and kept
 // for ARMORY_ROTATE_MS. All clocks turn over together, so "next stock in" is true
 // for everyone. Buying keeps the piece for good; it never rotates out of your bag.
-const ARMORY_ROTATE_MS = 10 * 60 * 1000, ARMORY_OFFERS = 9;
+const ARMORY_ROTATE_MS = 10 * 60 * 1000, ARMORY_OFFERS = 9, ARMORY_SHIELDS = 3;
 const armoryWindow = () => Math.floor(Date.now() / ARMORY_ROTATE_MS);
 function rollArmoryRarity() {
   const total = Armor.RARITIES.reduce((s, r) => s + r.weight, 0);
@@ -10042,15 +10223,20 @@ function rollArmoryRarity() {
 }
 function armoryStock(pw, owned) {
   const d = progress(), w = armoryWindow(), have = d.armory[pw];
-  if (have && have.w === w) return have.ids;
+  // (A stock dealt before shields existed has none, and is dealt again.)
+  if (have && have.w === w && have.ids.some(id => Armor.BY_ID[id]?.slot === 'shield')) return have.ids;
   const ids = [];
-  for (let i = 0; i < ARMORY_OFFERS; i++) {
-    const r = rollArmoryRarity(), free = a => !ids.includes(a.id) && !owned.includes(a.id);
-    const pool = Armor.PIECES.filter(a => a.rarity === r && free(a));
-    const any = pool.length ? pool : Armor.PIECES.filter(free);
-    const list = any.length ? any : Armor.PIECES.filter(a => !ids.includes(a.id));
-    if (list.length) ids.push(list[Math.floor(Math.random() * list.length)].id);
-  }
+  const deal = (count, stock) => {
+    for (let i = 0; i < count; i++) {
+      const r = rollArmoryRarity(), free = a => !ids.includes(a.id) && !owned.includes(a.id);
+      const pool = stock.filter(a => a.rarity === r && free(a));
+      const any = pool.length ? pool : stock.filter(free);
+      const list = any.length ? any : stock.filter(a => !ids.includes(a.id));
+      if (list.length) ids.push(list[Math.floor(Math.random() * list.length)].id);
+    }
+  };
+  deal(ARMORY_OFFERS, Armor.PIECES.filter(a => a.slot !== 'shield'));
+  deal(ARMORY_SHIELDS, Armor.PIECES.filter(a => a.slot === 'shield'));
   d.armory[pw] = { w, ids };
   markDirty();
   return ids;
