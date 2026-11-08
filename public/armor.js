@@ -204,6 +204,8 @@
                   price: roundPrice(R.price[0] + (R.price[1] - R.price[0]) * k) });
   }
   const BY_ID = Object.fromEntries(PIECES.map(p => [p.id, p]));
+  // Event gear: won in an event and never sold in the armoury (still tradeable).
+  BY_ID.sh_voidgate.event = 'VOID DUNGEON';
 
   // The strongest a full suit can stack, whatever is worn: `max` keys don't add up
   // (two "every 6th hit" pieces are not "every 12th"), and the rest are capped so

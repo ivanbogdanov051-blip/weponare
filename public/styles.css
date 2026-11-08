@@ -1885,3 +1885,44 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 @keyframes tpBobR { 0%, 100% { margin-left: 0; } 50% { margin-left: 8px; } }
 @keyframes tpBobL { 0%, 100% { margin-left: 0; } 50% { margin-left: -8px; } }
 #tutPanel.tut-low { top: 128px; }
+
+/* ── EVENTS ── */
+.mode-btn.btn-events { position: relative; flex: none; width: 100%; min-height: 0; margin: 4px 0 2px; padding: 7px 10px; border: 2px solid #fff; border-radius: 10px; color: #fff; font-weight: bold; letter-spacing: 3px; text-shadow: 1px 1px 0 #2a0040;
+  background: linear-gradient(90deg, #7a2aff, #ff3aff, #ff9a3a, #ff3aff, #7a2aff); background-size: 200% 100%; animation: evBtn 4s linear infinite; box-shadow: 0 0 12px rgba(255, 58, 255, 0.55); }
+.mode-btn.btn-events small { display: block; letter-spacing: 1px; }
+.btn-events::before { content: '🌀'; }
+@keyframes evBtn { 0% { background-position: 0 0; } 100% { background-position: 200% 0; } }
+.ev-live { margin-left: 8px; padding: 1px 6px; border-radius: 999px; background: #ff2a3a; color: #fff; font-size: 10px; letter-spacing: 1px; animation: evLive 1s ease-in-out infinite; vertical-align: middle; }
+.ev-live.hidden { display: none; }
+@keyframes evLive { 50% { box-shadow: 0 0 10px #ff2a3a; } }
+#eventsScreen { padding: 0; overflow: hidden; background: radial-gradient(ellipse at 20% 0, #ff3aff 0, transparent 42%), radial-gradient(ellipse at 85% 10%, #7a2aff 0, transparent 40%), radial-gradient(ellipse at 50% 110%, #ff9a3a 0, transparent 45%), #12002a; }
+#eventsScreen > .arm-box { margin: 0; zoom: 0.9; }
+.ev-title { text-shadow: 2px 2px 0 #3a0060, 0 0 16px #ff3aff; }
+.ev-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 460px)); justify-content: center; gap: 12px; align-content: start; padding: 2px; }
+.ev-card { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 14px; background: rgba(14, 4, 40, 0.86); border: 2px solid rgba(255, 255, 255, 0.3); }
+.ev-card.live { border-color: #ff5ad8; box-shadow: 0 0 18px rgba(255, 58, 255, 0.45); }
+.ev-banner { position: relative; border-radius: 10px; overflow: hidden; }
+.ev-art { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+.ev-tags { position: absolute; top: 6px; left: 6px; right: 6px; display: flex; justify-content: space-between; gap: 6px; }
+.ev-tag { padding: 2px 8px; border-radius: 999px; background: rgba(0, 0, 0, 0.6); font-size: 11px; font-weight: bold; letter-spacing: 1px; color: #cfc6ee; }
+.ev-tag.on { background: #ff2a3a; color: #fff; animation: evLive 1s ease-in-out infinite; }
+.ev-time { padding: 2px 8px; border-radius: 999px; background: rgba(0, 0, 0, 0.6); font-size: 11px; font-weight: bold; color: #9affd8; }
+.ev-name { position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; font-size: 22px; font-weight: bold; letter-spacing: 4px; color: #fff; text-shadow: 2px 2px 0 #3a0060, 0 0 12px #ff3aff; }
+.ev-desc { font-size: 12px; line-height: 1.4; color: #efe6ff; }
+.ev-sub { font-size: 10px; font-weight: bold; letter-spacing: 2px; color: #ff9aea; margin-top: 2px; }
+.ev-prize { display: flex; gap: 8px; align-items: center; padding: 6px; border-radius: 10px; background: rgba(255, 42, 58, 0.12); border: 1px solid rgba(255, 90, 216, 0.5); }
+.ev-prize canvas { width: 44px; height: 44px; flex: none; image-rendering: pixelated; filter: drop-shadow(0 0 6px #ff2a3a); }
+.ev-prize b { display: block; color: #ff5ad8; font-size: 13px; }
+.ev-prize span { display: block; font-size: 10px; color: #e8e0ff; }
+.ev-prize.coins { background: rgba(255, 216, 74, 0.1); border-color: rgba(255, 216, 74, 0.5); }
+.ev-prize.coins i { width: 44px; text-align: center; font-style: normal; font-size: 28px; color: #ffe84a; }
+.ev-prize.coins b { color: #ffe84a; }
+.ev-fee { font-size: 11px; text-align: center; color: #ffd0d0; }
+.ev-fee b { color: #ff7a8a; }
+.ev-enter { min-height: 42px; border-radius: 10px; border: 2px solid #fff; cursor: pointer; font: bold 15px 'Courier New', monospace; letter-spacing: 1px; color: #2a0040;
+  background: linear-gradient(90deg, #ff9aff, #ffe84a); }
+.ev-enter.go { background: linear-gradient(90deg, #ff5a3a, #ffe84a); color: #2a0a00; animation: evLive 0.6s ease-in-out infinite; }
+.ev-enter:disabled { cursor: default; color: #cfc6ee; background: rgba(0, 0, 0, 0.4); border-color: rgba(255, 255, 255, 0.3); }
+.ev-admin { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.ev-admin button { padding: 4px 10px; border-radius: 8px; border: 1px dashed #ffd84a; background: rgba(0, 0, 0, 0.4); color: #ffd84a; font: bold 11px 'Courier New', monospace; cursor: pointer; }
+.arm-price.ev { color: #ff5ad8; font-size: 11px; }

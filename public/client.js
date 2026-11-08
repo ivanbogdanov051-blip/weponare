@@ -321,7 +321,7 @@ async function refreshSavedBanner0() {
 }
 
 function joinGame(mode) {
-  if (mode !== 'create' && mode !== 'joinroom') pendingRoom = {};
+  if (mode !== 'create' && mode !== 'joinroom' && mode !== 'voiddungeon') pendingRoom = {};
   if (window.GameAudio) { GameAudio.init(); GameAudio.resume(); }
   readCredentials();
   pendingMode = mode;
@@ -779,6 +779,7 @@ const LOAD_TIPS = ['TIP: PARRY JUST BEFORE A HIT TO STUN THE ATTACKER', 'TIP: SE
 // Everyone who gets in without a saved password is asked whether they want the
 // tutorial, every time (not arriving on an invite link: they came to join a friend).
 function afterSplash() {
+  refreshEventBadge(true);
   if (lsGet('weponare_pass')) return;
   if (new URLSearchParams(location.search).get('room')) return;
   document.getElementById('tutAskScreen').className = 'overlay active';
@@ -972,6 +973,11 @@ function connect() {
     }
     // The server seats us once we've picked a mode: solo modes get a room of
     // their own; PvP / co-op pair us with someone who picked the same mode.
+    if (msg.type === 'event_denied') {
+      leaveGame();
+      openEvents().then(() => setEvMsg(msg.reason || 'Could not enter the event.', true));
+      return;
+    }
     if (msg.type === 'mode_locked') {
       menuXp = msg.xp || 0;
       leaveGame();
@@ -988,7 +994,7 @@ function connect() {
       myNum = msg.num;
       invite = null;
       const mode = msg.mode || pendingMode;
-      if (loadCard.mode !== 'tutorial') loadCard.mode = mode;
+      if (loadCard.mode !== 'tutorial' && loadCard.mode !== 'voiddungeon') loadCard.mode = mode;
       const modeLabel = mode === 'coop' ? 'CO-OP' : (msg.maxPlayers || 2) > 2 ? 'LAST ONE STANDING' : 'PvP';
       const soloMsg = soloLobbyMsg(loadCard.mode);
       if (soloMsg) {
@@ -3037,6 +3043,150 @@ function renderSkinPreview() {
 }
 
 
+// ─── EVENTS ───────────────────────────────────────────────────────────────────
+// Hosted for a while, each with its own fight and prizes. The server keeps the
+// clock and the money: here they're only shown, and the entry asked for.
+const evs = { data: null, busy: false, timer: 0, ends: 0, raf: 0, confirm: null, badgeAt: 0 };
+function setEvMsg(text, bad) {
+  const el = document.getElementById('evMsg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'arm-msg' + (bad ? ' err' : '');
+}
+async function openEvents() {
+  readCredentials();
+  showScreen('eventsScreen');
+  setEvMsg('');
+  evs.confirm = null;
+  const loading = custLoadStart('events');
+  try { evTake(await abilPost('/api/events', {})); } catch (e) { setEvMsg(e.message || 'Could not reach the server.', true); }
+  finally { custLoadEnd(loading); }
+  clearInterval(evs.timer);
+  evs.timer = setInterval(evClock, 1000);
+  cancelAnimationFrame(evs.raf);
+  evs.raf = requestAnimationFrame(evArt);
+}
+function closeEvents() { clearInterval(evs.timer); cancelAnimationFrame(evs.raf); showScreen('startScreen'); refreshSavedBanner(); refreshEventBadge(true); }
+function evTake(d) { evs.data = d; evs.ends = performance.now(); renderEvents(); }
+const evLeft = ms => { const s = Math.max(0, Math.floor(ms / 1000)), dd = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return dd ? `${dd}d ${h}h ${m}m` : h ? `${h}h ${m}m ${s % 60}s` : `${m}m ${s % 60}s`; };
+function evClock() {
+  if (document.getElementById('eventsScreen').classList.contains('hidden')) { clearInterval(evs.timer); return; }
+  const since = performance.now() - evs.ends;
+  for (const el of document.querySelectorAll('[data-ev-end]')) {
+    const left = +el.dataset.evEnd - since;
+    el.textContent = left > 0 ? 'ENDS IN ' + evLeft(left) : 'ENDED';
+  }
+}
+function renderEvents() {
+  const d = evs.data, list = document.getElementById('evList');
+  if (!d || !list) return;
+  document.getElementById('evCoins').innerHTML = `◆ ${(d.coins || 0).toLocaleString()}`;
+  list.innerHTML = d.events.map(e => {
+    const poor = !d.admin && (d.coins || 0) < e.fee, confirm = evs.confirm === e.id;
+    const gear = e.gear.map(id => { const a = Armor.BY_ID[id]; const own = (d.owned || []).includes(id);
+      return `<div class="ev-prize"><canvas data-armor="${id}" width="44" height="44"></canvas><div><b>${escapeHtml(a?.name || id)}</b>
+        <span>${a ? Armor.RARITIES[a.rarity].name + ' ' + Armor.SLOTS[a.slot] : ''} &middot; ONLY FROM THIS EVENT${own ? ' &middot; YOU HAVE IT' : ''}</span></div></div>`; }).join('');
+    const btn = !e.live ? '<button class="ev-enter" disabled>NOT RUNNING</button>'
+      : !pendingPass ? '<button class="ev-enter" disabled>SET A PASSWORD FIRST</button>'
+      : poor ? `<button class="ev-enter" disabled>NEED ◆ ${e.fee.toLocaleString()}</button>`
+      : confirm ? `<button class="ev-enter go" onclick="enterEvent('${e.id}')">TAP AGAIN: PAY ◆ ${e.fee.toLocaleString()}</button>`
+      : `<button class="ev-enter" onclick="askEnterEvent('${e.id}')">ENTER ◆ ${e.fee.toLocaleString()}</button>`;
+    const host = d.admin ? `<div class="ev-admin"><button onclick="hostEvent('${e.id}')">${e.live ? 'HOST AGAIN (2 WEEKS FROM NOW)' : 'HOST FOR 2 WEEKS'}</button>${e.live ? `<button onclick="hostEvent('${e.id}', true)">END NOW</button>` : ''}</div>` : '';
+    return `<div class="ev-card${e.live ? ' live' : ''}">
+      <div class="ev-banner"><canvas class="ev-art" data-ev="${e.id}" width="360" height="150"></canvas>
+        <div class="ev-tags"><span class="ev-tag${e.live ? ' on' : ''}">${e.live ? 'LIVE' : 'NOT RUNNING'}</span>${e.live ? `<span class="ev-time" data-ev-end="${e.endsIn}"></span>` : ''}</div>
+        <div class="ev-name">${escapeHtml(e.name)}</div></div>
+      <div class="ev-desc">${escapeHtml(e.desc)}</div>
+      <div class="ev-sub">PRIZES</div>
+      ${gear}
+      <div class="ev-prize coins"><i>◆</i><div><b>${e.prize.toLocaleString()} COINS</b><span>and your ${e.fee.toLocaleString()} entry back</span></div></div>
+      <div class="ev-fee">ENTRY ◆ ${e.fee.toLocaleString()} &middot; <b>lose and it's gone</b></div>
+      ${btn}${host}
+    </div>`;
+  }).join('') || '<div class="arm-none">No events yet.</div>';
+  drawForgeIcons(list);
+  evClock();
+}
+function askEnterEvent(id) { evs.confirm = id; renderEvents(); setTimeout(() => { if (evs.confirm === id) { evs.confirm = null; renderEvents(); } }, 4000); }
+async function enterEvent(id) {
+  if (evs.busy) return;
+  evs.busy = true; evs.confirm = null;
+  try {
+    const r = await abilPost('/api/events/enter', { id });
+    clearInterval(evs.timer); cancelAnimationFrame(evs.raf);
+    pendingRoom = { ticket: r.ticket };
+    joinGame(id);
+  } catch (e) { setEvMsg(e.message, true); renderEvents(); }
+  finally { evs.busy = false; }
+}
+async function hostEvent(id, stop) {
+  try { const r = await abilPost('/api/events/host', { id, stop: !!stop }); evs.data = { ...evs.data, ...r }; evs.ends = performance.now(); renderEvents();
+        setEvMsg(stop ? 'Event ended.' : 'Event hosted for 2 weeks.'); refreshEventBadge(true); }
+  catch (e) { setEvMsg(e.message, true); }
+}
+// The banner: the rare Abyss, alive, over his own floor.
+function evArt(now) {
+  if (document.getElementById('eventsScreen').classList.contains('hidden')) return;
+  for (const cv of document.querySelectorAll('canvas.ev-art')) {
+    const g = cv.getContext('2d'), W = cv.width, H = cv.height, main = ctx;
+    g.save();
+    try {
+      const sky = g.createLinearGradient(0, 0, W, H); sky.addColorStop(0, '#12002a'); sky.addColorStop(1, '#3a0a5a');
+      g.fillStyle = sky; g.fillRect(0, 0, W, H);
+      for (let i = 0; i < 40; i++) { const x = (i * 97 + now / 40 * (1 + i % 3)) % W, y = (i * 53) % H; g.fillStyle = i % 4 ? 'rgba(255,90,216,0.5)' : '#fff'; g.fillRect(x, y, 2, 2); }
+      const r = 52 + Math.sin(now / 400) * 4;
+      g.strokeStyle = 'rgba(255,90,216,0.5)'; g.lineWidth = 2; g.beginPath(); g.ellipse(W / 2, H - 22, r * 1.8, r * 0.35, 0, 0, Math.PI * 2); g.stroke();
+      ctx = g;                         // the boss painter draws to ctx: lend it the banner for this call
+      g.translate(W / 2, H - 14); g.scale(1.25, 1.25);
+      drawAbyss({ x: -28, y: -84, w: 56, h: 84, abyss: true, phase: (Math.floor(now / 3000) % 2) + 1, act: null, hitFlash: 0, shiny: true });
+    } catch {} finally { ctx = main; g.restore(); }
+  }
+  evs.raf = requestAnimationFrame(evArt);
+}
+// The menu's EVENTS button says LIVE while something is running.
+async function refreshEventBadge(force) {
+  if (!force && performance.now() - evs.badgeAt < 30000) return;
+  evs.badgeAt = performance.now();
+  try {
+    const d = await (await fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
+    const live = (d.events || []).filter(e => e.live);
+    document.getElementById('evLive')?.classList.toggle('hidden', !live.length);
+    const sub = document.getElementById('evSub');
+    if (sub) sub.textContent = live.length ? live.map(e => e.name).join(', ') + ' is on!' : 'limited-time fights';
+  } catch {}
+}
+// The trophy left where the rare Abyss fell: touch it to claim the prize.
+function drawTrophy(t, now) {
+  const x = t.x + t.w / 2, bob = Math.sin(now / 300) * 3, y = t.y + bob;
+  ctx.save();
+  // Rays turning behind it.
+  ctx.translate(x, t.y + t.h / 2);
+  ctx.rotate(now / 1600);
+  for (let i = 0; i < 10; i++) { ctx.rotate(Math.PI / 5); ctx.fillStyle = i % 2 ? 'rgba(255,216,74,0.18)' : 'rgba(255,90,216,0.16)'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-7, -64); ctx.lineTo(7, -64); ctx.fill(); }
+  ctx.restore();
+  ctx.save();
+  const p = 0.6 + 0.4 * Math.sin(now / 200);
+  ctx.globalAlpha = 0.35 * p; ctx.fillStyle = '#ffd84a'; ctx.beginPath(); ctx.arc(x, y + t.h / 2, 30, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  const L = Math.round(x - 14), T = Math.round(y);
+  const px = (c, a, b, w, h) => { ctx.fillStyle = c; ctx.fillRect(L + a, T + b, w, h); };
+  // Outline, then gold, then shine. (28 x 36)
+  px('#3a1a00', 3, 1, 22, 16); px('#3a1a00', 0, 3, 4, 9); px('#3a1a00', 24, 3, 4, 9); px('#3a1a00', 10, 16, 8, 9); px('#3a1a00', 5, 25, 18, 10);
+  px('#ffb02a', 4, 2, 20, 14); px('#ffb02a', 1, 4, 3, 2); px('#ffb02a', 1, 4, 2, 7); px('#ffb02a', 25, 4, 2, 7); px('#ffb02a', 24, 4, 3, 2);
+  px('#ffb02a', 11, 16, 6, 9); px('#ffb02a', 6, 26, 16, 8);
+  px('#ffe88a', 6, 3, 4, 11); px('#ffe88a', 12, 17, 2, 7); px('#ffe88a', 7, 27, 6, 2);
+  px('#c87a10', 19, 3, 4, 12); px('#c87a10', 6, 31, 16, 2);
+  // The void gem.
+  px('#2a0a5a', 11, 6, 6, 6); px('#ff5ad8', 12, 7, 4, 4); px('#ffffff', 12, 7, 1, 1);
+  ctx.restore();
+  ctx.save();
+  ctx.font = 'bold 9px "Courier New",monospace'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#000'; ctx.fillText('TOUCH TO CLAIM', x + 1, t.y - 8 + bob);
+  ctx.fillStyle = '#ffd84a'; ctx.fillText('TOUCH TO CLAIM', x, t.y - 9 + bob);
+  ctx.restore();
+}
+
 // ─── THE ARMOURY ──────────────────────────────────────────────────────────────
 // Three tabs: what's on sale now, what you own, and every piece in the game. The
 // server deals the stock and keeps the clock; here it's only shown and asked for.
@@ -3112,6 +3262,7 @@ function armoryCard(a, sale) {
   const action = worn ? '<button class="arm-act on" disabled>WORN</button>'
     : owned ? `<button class="arm-act wear" onclick="armoryWear('${a.id}')">WEAR</button>`
     : sale ? `<button class="arm-act buy" ${poor ? 'disabled' : ''} onclick="armoryBuy('${a.id}')">◆ ${a.price.toLocaleString()}</button>`
+    : a.event ? `<span class="arm-price ev">EVENT ONLY: ${a.event}</span>`
     : `<span class="arm-price">◆ ${a.price.toLocaleString()}</span>`;
   return `<div class="arm-card${a.rarity === 5 ? ' mythic' : ''}" style="--rc:${R.color}">
     <div class="arm-top"><canvas data-armor="${a.id}" width="68" height="68"></canvas>
@@ -4459,7 +4610,7 @@ const ABILITY_ICONS = {
   },
 };
 
-const SCREENS = ['settingsScreen', 'startScreen','lobbyScreen','pickScreen','armoryScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','legendScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen','forgeScreen','tradeScreen'];
+const SCREENS = ['settingsScreen', 'startScreen','lobbyScreen','pickScreen','armoryScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','legendScreen','eventsScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen','forgeScreen','tradeScreen'];
 // The main menu is shrunk to whatever the screen allows (never below 45%), so the
 // name and password fields and the mode buttons are all in view on small phones
 // and short windows. Re-measured on resize / rotation / when it is shown.
@@ -4507,6 +4658,7 @@ const LOAD_MODES = {
   extreme:  { a: '#d81a0a', b: '#ff8a1a', name: 'THE WORST',    foes: [['wraith', 26, 32], ['behemoth', 40, 46], ['infernal', 28, 34]] },
   portal:   { a: '#7a2aff', b: '#ff3ad8', name: 'PORTAL MAGE',  boss: 'mage' },
   abyss:    { a: '#2a0a6a', b: '#7a3aff', name: 'THE ABYSS',    boss: 'abyss' },
+  voiddungeon: { a: '#12002a', b: '#ff3aff', name: 'VOID DUNGEON', boss: 'abyss' },
   tsunami:  { a: '#1a6ae8', b: '#8ad8ff', name: 'TSUNAMI',      boss: 'tsunami' },
   sawroom:  { a: '#b0102a', b: '#ff5a2a', name: 'THE SAWS',     boss: 'saw' },
   sandbox:  { a: '#1ab85a', b: '#4aee9a', name: 'PRACTICE',     foes: [['grunt', 23, 27]] },
@@ -4763,6 +4915,7 @@ function soloLobbyMsg(mode) {
     case 'tutorial': return line('#7affc8', 'TUTORIAL', 'LEARN THE BASICS');
     case 'portal':   return PORTAL_LOBBY;
     case 'abyss':    return ABYSS_LOBBY;
+    case 'voiddungeon': return ABYSS_LOBBY;
     case 'tsunami':  return TSUNAMI_LOBBY;
     case 'bot':      return BOT_LOBBY();
     default:         return null;
@@ -5027,7 +5180,21 @@ function updateScreens(state) {
     document.getElementById('matchChoice')?.classList.add('hidden');
     const lb = document.getElementById('leaderboardBox');
     const hint = document.getElementById('roundHint');
-    if (state.gameMode === 'abyss') {
+    if (state.event) {
+      // An event: what you won, or that the entry is gone.
+      lb.classList.add('hidden');
+      hint.textContent = 'RETURNING TO MENU...';
+      const w = state.eventWin, ab = (state.monsters || []).find(m => m.abyss);
+      document.getElementById('roundTitle').innerHTML = state.victory
+        ? '<span style="color:#ff5ad8">VOID DUNGEON CLEARED!</span>' : '<span style="color:#ff5a6a">THE VOID TOOK YOU</span>';
+      document.getElementById('roundStats').innerHTML = state.victory && w
+        ? `THE RARE ABYSS HAS FALLEN<br><span style="color:${PAL.coin}">+${w.coins.toLocaleString()} COINS</span> (YOUR ENTRY BACK, AND 1,000,000)<br>`
+          + w.gear.map(id => `<span style="color:#ff5ad8">${escapeHtml(Armor.BY_ID[id]?.name || id)}</span> ${w.fresh.includes(id) ? 'IS YOURS!' : '(YOU ALREADY HAD IT)'}`).join('<br>')
+          + `<br><span style="color:${PAL.coin}">◆ ${state.myCoins || 0}</span>`
+        : `YOUR 200,000 ENTRY IS GONE<br>`
+          + (ab ? (ab.p3 ? `ONLY <span style="color:#ff7ad8">${ab.p3}s</span> LEFT TO SURVIVE<br>` : `HE HAD <span style="color:#c8a0ff">${Math.ceil(ab.hp).toLocaleString()}</span> HP LEFT (PHASE ${ab.phase || 1})<br>`) : '')
+          + `<span style="color:${PAL.coin}">◆ ${state.myCoins || 0}</span>`;
+    } else if (state.gameMode === 'abyss') {
       lb.classList.add('hidden');
       hint.textContent = 'RETURNING TO MENU...';
       const ab = (state.monsters || []).find(m => m.abyss);
@@ -5173,6 +5340,7 @@ requestAnimationFrame(renderLoop);
 
 function draw(state) {
   ctx.fillStyle = '#0a0a14'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  syncEventArena(state);
   ctx.save();
   ctx.translate(0, -CAM_Y);
   drawArena();
@@ -5180,6 +5348,7 @@ function draw(state) {
   drawTraps(state.traps || []);
   drawTrapElements(state.traps || []);
   drawItems(state.items || []);
+  if (state.trophy) drawTrophy(state.trophy, performance.now());
   drawCoins(state.coins || []);
   drawMoveMarker();
   for (const sl of slashes) {
@@ -5259,11 +5428,72 @@ function drawArena() {
   ctx.drawImage(arenaCache, 0, 0);
 }
 
-function paintArena(g) { paintArenaScene(g, CANVAS_W, CANVAS_H, ARENA_X, ARENA_Y, arenaPick); }
+function paintArena(g) {
+  if (arenaEvent === 'voiddungeon') { paintArenaScene(g, CANVAS_W, CANVAS_H, ARENA_X, ARENA_Y, VOID_ARENA); paintVoidDecor(g); return; }
+  paintArenaScene(g, CANVAS_W, CANVAS_H, ARENA_X, ARENA_Y, arenaPick);
+}
+// ── THE VOID DUNGEON's arena ── the void colours, a summoning circle in the middle,
+// cracks of light running out of it and four void pools. All flat floor: nothing
+// here blocks you. Painted once into the arena cache like any other floor.
+const VOID_ARENA = { theme: 'void', floor: 'stars', wall: 'crystal' };
+let arenaEvent = null;
+function syncEventArena(state) {
+  const ev = state.event || null;
+  if (ev !== arenaEvent) { arenaEvent = ev; arenaCache = null; }
+}
+function paintVoidDecor(g) {
+  const ax = ARENA_X, ay = ARENA_Y, aw = CANVAS_W - ax * 2, ah = CANVAS_H - ay * 2;
+  const cx0 = ax + aw / 2, cy0 = ay + ah / 2, R = Math.min(aw, ah) * 0.34;
+  g.save();
+  // A soft glow under the circle.
+  const glow = g.createRadialGradient(cx0, cy0, 0, cx0, cy0, R * 1.5);
+  glow.addColorStop(0, 'rgba(255,58,255,0.22)'); glow.addColorStop(0.6, 'rgba(122,42,255,0.10)'); glow.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = glow; g.fillRect(cx0 - R * 1.5, cy0 - R * 1.5, R * 3, R * 3);
+  // Cracks of light, jagged, running out from the circle.
+  let seed = 7;
+  const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+  g.lineCap = 'round';
+  for (let i = 0; i < 12; i++) {
+    const a = i * Math.PI / 6 + rnd() * 0.3;
+    let x = cx0 + Math.cos(a) * R, y = cy0 + Math.sin(a) * R;
+    const len = R * (0.7 + rnd() * 0.9);
+    g.beginPath(); g.moveTo(x, y);
+    for (let s = 1; s <= 6; s++) {
+      const d = R + len * s / 6, j = (rnd() - 0.5) * 0.35;
+      x = cx0 + Math.cos(a + j) * d; y = cy0 + Math.sin(a + j) * d;
+      g.lineTo(x, y);
+    }
+    g.strokeStyle = 'rgba(122,42,255,0.45)'; g.lineWidth = 5; g.stroke();
+    g.strokeStyle = 'rgba(255,90,216,0.75)'; g.lineWidth = 1.5; g.stroke();
+  }
+  // The summoning circle: rings, runes, a six-pointed star.
+  g.strokeStyle = 'rgba(255,90,216,0.55)';
+  for (const [r, w] of [[R, 3], [R * 0.86, 1.5], [R * 0.4, 2]]) { g.lineWidth = w; g.beginPath(); g.arc(cx0, cy0, r, 0, Math.PI * 2); g.stroke(); }
+  g.lineWidth = 2;
+  for (let i = 0; i < 36; i++) {
+    const a = i * Math.PI / 18, r1 = R * 0.88, r2 = R * (i % 3 ? 0.95 : 0.99);
+    g.beginPath(); g.moveTo(cx0 + Math.cos(a) * r1, cy0 + Math.sin(a) * r1); g.lineTo(cx0 + Math.cos(a) * r2, cy0 + Math.sin(a) * r2); g.stroke();
+  }
+  g.strokeStyle = 'rgba(160,90,255,0.5)'; g.lineWidth = 2;
+  for (const off of [0, Math.PI]) {
+    g.beginPath();
+    for (let i = 0; i <= 3; i++) { const a = off - Math.PI / 2 + i * Math.PI * 2 / 3; const x = cx0 + Math.cos(a) * R * 0.86, y = cy0 + Math.sin(a) * R * 0.86; if (i) g.lineTo(x, y); else g.moveTo(x, y); }
+    g.stroke();
+  }
+  // Four void pools near the corners.
+  for (const [fx, fy] of [[0.13, 0.2], [0.87, 0.2], [0.13, 0.82], [0.87, 0.82]]) {
+    const px = ax + aw * fx, py = ay + ah * fy, pr = Math.min(aw, ah) * 0.07;
+    const pool = g.createRadialGradient(px, py, 0, px, py, pr);
+    pool.addColorStop(0, '#000000'); pool.addColorStop(0.7, '#12002a'); pool.addColorStop(1, 'rgba(122,42,255,0)');
+    g.fillStyle = pool; g.beginPath(); g.ellipse(px, py, pr * 1.3, pr, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = 'rgba(255,90,216,0.6)'; g.lineWidth = 1.5; g.beginPath(); g.ellipse(px, py, pr * 1.1, pr * 0.82, 0, 0, Math.PI * 2); g.stroke();
+  }
+  g.restore();
+}
 
 // ── Arena look (Settings) ──
 // Saved on this device, like the map size. Only you see your choice.
-const ARENA_PICKS = { theme: ARENA_THEMES, floor: ARENA_FLOORS, wall: ARENA_WALLS };
+const ARENA_PICKS = { theme: ARENA_THEMES.filter(t => !t.hidden), floor: ARENA_FLOORS, wall: ARENA_WALLS };
 const ARENA_PICK_EL = { theme: 'arenaPickTheme', floor: 'arenaPickFloor', wall: 'arenaPickWall' };
 function loadArenaPick() {
   let saved = null;
@@ -6239,7 +6469,10 @@ function drawWeaponSprite(p, px, py, key) {
 // roughly how hard it hits — is readable at a glance, not just from its size.
 function drawMonster(m) {
   if (m.mage && m.hidden) return;   // gone into hiding behind his giants
-  if (m.abyss) { drawAbyss(m); drawEnemyBars(m, Math.round(m.x), Math.round(m.y)); return; }
+  if (m.abyss) {
+    if (m.evK) { Cosmetics.softGlow(ctx, '#ff3aff', m.x - m.w * 0.6, m.y - m.h * 0.5, m.w * 2.2, m.h * 2, 0.7 + 0.3 * Math.sin(performance.now() / 200)); drawShinySparks(m, Math.round(m.x), Math.round(m.y)); }   // the rare one: a void glow
+    drawAbyss(m); drawEnemyBars(m, Math.round(m.x), Math.round(m.y)); return;
+  }
   if (m.tsunami) { drawTsunami(m); drawEnemyBars(m, Math.round(m.x), Math.round(m.y)); return; }
   const type = m.type || 'grunt';
   const state = m.hitFlash > 0 ? 'flash' : monsterBodyState(m);
@@ -6819,11 +7052,12 @@ function drawAbyss(m) {
     const k = Math.min(1, (m.actT || 0) / 1500);
     for (let i = 0; i < 6; i++) {
       const a = now / (110 - k * 50) + i * Math.PI / 3;
-      ctx.save(); ctx.translate(c.x + Math.cos(a) * 62, c.y + Math.sin(a) * 62); ctx.rotate(a + Math.PI / 2);
-      drawWeaponPixels(ctx, 'm_scythe', 1.4, '#c88aff'); ctx.restore();
+      const sr = 62 * (m.evK || 1);
+      ctx.save(); ctx.translate(c.x + Math.cos(a) * sr, c.y + Math.sin(a) * sr); ctx.rotate(a + Math.PI / 2);
+      drawWeaponPixels(ctx, 'm_scythe', 1.4 * (m.evK || 1), '#c88aff'); ctx.restore();
     }
     ctx.globalAlpha = 0.25; ctx.strokeStyle = '#c88aff'; ctx.lineWidth = 6;
-    ctx.beginPath(); ctx.arc(c.x, c.y, 62, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.arc(c.x, c.y, 62 * (m.evK || 1), 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
   }
   for (let i = 0; i < 4; i++) {
     const sh = shoulders[i], hd = hands[i];
@@ -7305,11 +7539,11 @@ function drawProjectiles(projs) {
     if (pr.weaponId === 'soulwisp') { drawWisp(pr, ang, now); continue; }
     if (pr.weaponId && pr.weaponId.startsWith('saw_')) { drawSawShot(pr, now); continue; }
     if (pr.weaponId === 'dlkunai' || pr.weaponId === 'dlpair') { drawFlyingKunai(pr, ang, pr.weaponId === 'dlpair'); continue; }
-    if (pr.weaponId === 'abyssorb') { drawAbyssOrb(pr.x, pr.y, pr.special ? 12 : 20, now); continue; }
+    if (pr.weaponId === 'abyssorb') { drawAbyssOrb(pr.x, pr.y, (pr.special ? 12 : 20) * (pr.big || 1), now); continue; }
     if (pr.weaponId === 'abyssscythe') {
       ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(now / 45);
-      ctx.globalAlpha = 0.35; ctx.fillStyle = '#7a2aff'; ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 1; drawWeaponPixels(ctx, 'm_scythe', 1.1, '#c88aff');
+      ctx.globalAlpha = 0.35; ctx.fillStyle = '#7a2aff'; ctx.beginPath(); ctx.arc(0, 0, 12 * (pr.big || 1), 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1; drawWeaponPixels(ctx, 'm_scythe', 1.1 * (pr.big || 1), '#c88aff');
       ctx.restore(); continue;
     }
     // Spitter venom: a monster's shot, not a player's weapon.
@@ -7933,7 +8167,7 @@ function drawHUD(state) {
     ctx.font = '10px "Courier New",monospace';
   } else if (state.gameMode === 'abyss') {
     const ab = (state.monsters || []).find(m => m.abyss);
-    const t = 'THE ABYSS';
+    const t = state.trophy ? 'CLAIM THE TROPHY!' : state.event ? 'VOID DUNGEON - RARE ABYSS' : 'THE ABYSS';
     const sub = !ab ? '' : ab.p3 ? 'SURVIVE ' + ab.p3 + 's' : 'PHASE ' + (ab.phase || 1);
     ctx.fillStyle = '#000'; ctx.fillText(t, HUD_W/2 + 1, 3);
     ctx.fillStyle = '#b07aff'; ctx.fillText(t, HUD_W/2, 2);

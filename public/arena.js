@@ -15,6 +15,8 @@ const ARENA_THEMES = [
   { id: 'desert', name: 'DESERT', a: '#52300e', b: '#602620', p1: '#e8a84a', p2: '#ff7a4a', dark: '#2a1608', mid: '#8a5a24', lite: '#d8a85a', glow: '#ffe08a' },
   { id: 'ice',    name: 'ICE',    a: '#183658', b: '#283670', p1: '#5aa0d0', p2: '#a090f0', dark: '#0e1e3a', mid: '#3a6a9a', lite: '#a8e0f8', glow: '#e8fcff' },
   { id: 'night',  name: 'NIGHT',  a: '#1a1a2e', b: '#20203a', p1: '#8a8ac8', p2: '#6a8ac8', dark: '#14142a', mid: '#2a2a4a', lite: '#5a5a8a', glow: '#8a8ac8' },
+  // Events only: never offered in Settings.
+  { id: 'void',   name: 'VOID',   a: '#0a0220', b: '#1a0436', p1: '#ff3aff', p2: '#7a2aff', dark: '#06010f', mid: '#2a0a5a', lite: '#a05aff', glow: '#ff5ad8', hidden: true },
 ];
 
 const ARENA_FLOORS = [

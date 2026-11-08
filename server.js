@@ -1190,6 +1190,7 @@ function progress() {
   if (!d.armor) d.armor = {};              // password -> [piece ids owned]
   if (!d.armorWorn) d.armorWorn = {};      // password -> { head, chest, legs }
   if (!d.armory) d.armory = {};            // password -> { w: 10-minute window, ids: what is on sale }
+  if (!d.events) d.events = {};            // event id -> { start, end } (the last time it was hosted)
   return d;
 }
 function markDirty() { progressDirty = true; }
@@ -4111,6 +4112,7 @@ function applyDamage(target, dmg, attackerKey) {
     return;
   }
   if (room.gameMode === 'coop' && target.num && isPKey(attackerKey)) return;
+  if (room.event && attackerKey === 'monster' && target.num) dmg *= VA.dmg;   // the rare Abyss hits much harder
   // Weapon upgrades on the attacking player: critical hits, lifesteal, knockback.
   const atk = isPKey(attackerKey) ? room.players[attackerKey] : null;
   const aw = atk && atk !== target ? weapon(atk) : null;
@@ -4783,6 +4785,7 @@ function tickRoom(dt) {
   if (room.spawnLater && room.spawnLater.length) { room.projectiles.push(...room.spawnLater); room.spawnLater = []; }   // born mid-pass (Ashfeather's split arrows)
   updateFires(factor, dt);
   updateDangers(dt);
+  if (room.trophy) trophyTick();
   updateDarklight(dt);
   updateStarfall(dt);
   updateWorldsplitter(dt);
@@ -6705,6 +6708,24 @@ const ABYSS_RAPID_SHOTS = 22, ABYSS_RAPID_EVERY = 90, ABYSS_RAPID_DMG = 9;
 const ABYSS_SPIN_MS = 1500, ABYSS_SPIN_R = 62, ABYSS_FLING_DMG = 28;
 const ABYSS_SLASH_WIND = 650, ABYSS_SLASH_MS = 950, ABYSS_SLASH_R = 165, ABYSS_SLASH_DMG = 52;
 
+// ─── EVENTS ───────────────────────────────────────────────────────────────────
+// Hosted for a while (the admin hosts one from the EVENTS menu, and can host it
+// again later), each with its own fight and prizes. Some prizes come from events
+// and nowhere else: `gear` is never sold in the armoury.
+// Entering costs `fee`, paid up front for a ticket (see /api/events/enter). Lose and
+// it's gone; win and it comes back with `prize` on top.
+const EVENT_DAY = 24 * 60 * 60 * 1000;
+const EVENTS = {
+  voiddungeon: {
+    name: 'VOID DUNGEON', fee: 200000, prize: 1000000, gear: ['sh_voidgate'], lasts: 14 * EVENT_DAY, boss: 'rareabyss',
+    desc: 'A giant arena of pure void, and the RARE ABYSS waiting inside: three times his health, bigger, faster, '
+        + 'hitting much harder, with bigger attacks and a new one, ECLIPSE. Beat him, then touch the trophy to claim the prize.',
+  },
+};
+// The rare Abyss, next to the ordinary one.
+const VA = { hp: 3, size: 1.4, speed: 1.5, rate: 1.4, dmg: 1.6, eclipseRing: 30, eclipseCore: 45 };
+const TROPHY_W = 28, TROPHY_H = 36, TROPHY_DELAY_MS = 1000;
+
 // ── Endless Scythe ──
 const HORIZON_STUN_MS = 450;
 const VOIDBEAM_MS = 2000, VOIDBEAM_SPIN = Math.PI * 3, VOIDBEAM_W = 12, VOIDBEAM_TICK = 110, VOIDBEAM_PULL_R = 240, VOIDBEAM_HOLD = 50;
@@ -6784,14 +6805,20 @@ function updateScytheWhirl(f, dt) {
 function startAbyssFight() {
   room.wave = { num: 1, monstersLeft: 1, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 };
   room.waveHpMult = 1; room.waveSpeedMult = 1;
-  spawnMonster('abyss');
+  spawnMonster('abyss', { noRare: true });
   const m = room.monsters[room.monsters.length - 1];
   m.hp = m.maxHp = ABYSS_HP;
-  m.x = CANVAS_W / 2 - m.w / 2; m.y = ARENA_Y + 30;
   Object.assign(m, { abyss: true, phase: 1, act: null, actT: 0, actCd: 2000, lastAct: null, orbit: 1,
                      p3: false, p3T: 0, chaos: null, rapid: 0, rapidT: 0 });
+  const ev = room.event && EVENTS[room.event];
+  if (ev && ev.boss === 'rareabyss') {            // THE VOID DUNGEON's Abyss
+    m.hp = m.maxHp = Math.round(ABYSS_HP * VA.hp);
+    m.w = Math.round(m.w * VA.size); m.h = Math.round(m.h * VA.size);
+    m.evK = VA.size;                               // (not .shiny: that is the rare-monster system, with its own tricks)
+  }
+  m.x = CANVAS_W / 2 - m.w / 2; m.y = ARENA_Y + 30;
   room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26,
-                        text: 'THE ABYSS AWAKENS', color: '#b07aff', timer: 3200, max: 3200 });
+                        text: m.evK ? 'THE RARE ABYSS AWAKENS' : 'THE ABYSS AWAKENS', color: m.evK ? '#ff5ad8' : '#b07aff', timer: 3200, max: 3200 });
 }
 
 // Where his four hands are (upper pair, lower pair).
@@ -6841,7 +6868,7 @@ function launchAbyssOrb(f) {
   const a = best ? Math.atan2(cy(best) - f.y, cx(best) - f.x) : (o && o.facing < 0 ? Math.PI : 0);
   room.projectiles.push({ id: nextId(), x: f.x, y: f.y, dx: Math.cos(a) * f.speed, dy: Math.sin(a) * f.speed, damage: f.dmg,
     owner: f.owner, traveled: 0, maxRange: 1400, weaponId: 'abyssorb', isAoe: true, aoeRadius: f.aoe, hitR: f.maxR,
-    pierce: false, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: null, special: !f.mon });
+    pierce: false, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: null, special: !f.mon, big: f.big });
   room.particles.push({ type: 'shockwave', x: f.x, y: f.y, maxR: 30, timer: 300, max: 300, color: '#b07aff' });
 }
 
@@ -6900,6 +6927,8 @@ function swatShots(p, range) {
 }
 
 function updateAbyss(m, target, dist, dx, dy, spd, factor, dt) {
+  const k = m.evK || 1, rate = m.evK ? VA.rate : 1;     // the rare one: bigger attacks, quicker to the next
+  if (m.evK) spd *= VA.speed;
   // ── Phase 3: immortal at the top of the map; survive the chaos ──
   if (m.p3) {
     m.hp = 1;
@@ -6907,25 +6936,25 @@ function updateAbyss(m, target, dist, dx, dy, spd, factor, dt) {
     m.x += (tx - m.x) * Math.min(1, 0.06 * factor); m.y += (ty - m.y) * Math.min(1, 0.06 * factor);
     m.p3T -= dt;
     const c = m.chaos;
-    c.hole -= dt; c.meteor -= dt; c.blade -= dt;
+    c.hole -= dt * rate; c.meteor -= dt * rate; c.blade -= dt * rate;
     if (c.hole <= 0) {
       c.hole = 900;
       const near = Math.random() < 0.5 && target;
       const at = near ? arenaClamp(cx(target) + (Math.random() - 0.5) * 140, cy(target) + (Math.random() - 0.5) * 140, 30)
                       : arenaClamp(ARENA_X + Math.random() * ARENA_W, ARENA_Y + 60 + Math.random() * (ARENA_H - 60), 30);
       // Marked first, so it can be seen coming.
-      room.fires.push({ id: nextId(), kind: 'abyssmark', owner: 'monster', x: at.x, y: at.y, r: 16, t: 0, life: ABYSS_HOLE_WARN_MS,
-                        hole: { r: 16, pullR: 115, dmg: 7, life: 2300 } });
+      room.fires.push({ id: nextId(), kind: 'abyssmark', owner: 'monster', x: at.x, y: at.y, r: Math.round(16 * k), t: 0, life: ABYSS_HOLE_WARN_MS,
+                        hole: { r: Math.round(16 * k), pullR: Math.round(115 * k), dmg: 7, life: 2300 } });
     }
     if (c.meteor <= 0) {
       c.meteor = 420;
-      room.fires.push({ id: nextId(), kind: 'meteor', owner: 'monster', x: cx(m), y: cy(m), r: 38, t: 0, life: METEOR_FALL_MS,
+      room.fires.push({ id: nextId(), kind: 'meteor', owner: 'monster', x: cx(m), y: cy(m), r: Math.round(38 * k), t: 0, life: METEOR_FALL_MS,
                         seek: Math.random() < 0.6, placed: false, pvp: 24, base: 0, pct: 0 });
     }
     if (c.blade <= 0 && room.fires.filter(f => f.kind === 'abyssblade').length < 7) {
       c.blade = 1100;
       const a = Math.PI * (0.15 + Math.random() * 0.7);
-      room.fires.push({ id: nextId(), kind: 'abyssblade', owner: 'monster', x: cx(m), y: cy(m) + 20, r: 11, t: 0, life: ABYSS_P3_MS + 5000,
+      room.fires.push({ id: nextId(), kind: 'abyssblade', owner: 'monster', x: cx(m), y: cy(m) + 20, r: Math.round(11 * k), t: 0, life: ABYSS_P3_MS + 5000,
                         vx: Math.cos(a) * 3.1 * (Math.random() < 0.5 ? -1 : 1), vy: Math.sin(a) * 3.1, dmg: 15, a: 0 });
     }
     if (m.p3T <= 0) abyssDefeated(m);
@@ -6962,16 +6991,16 @@ function updateAbyss(m, target, dist, dx, dy, spd, factor, dt) {
     // The scythes whirl round him: touching the ring hurts.
     for (const t of enemyTargets('monster')) {
       const d = Math.hypot(cx(t) - cx(m), cy(t) - cy(m));
-      if (Math.abs(d - ABYSS_SPIN_R) < 16 + t.w / 2) applyDamage(t, 14, 'monster');
+      if (Math.abs(d - ABYSS_SPIN_R * k) < 16 * k + t.w / 2) applyDamage(t, 14, 'monster');
     }
     if (m.actT >= ABYSS_SPIN_MS) {
       const a0 = Math.atan2(cy(target) - cy(m), cx(target) - cx(m));
       for (let i = 0; i < 6; i++) {
         const a = a0 + i * Math.PI / 3;
-        room.projectiles.push({ id: nextId(), x: cx(m) + Math.cos(a) * ABYSS_SPIN_R, y: cy(m) + Math.sin(a) * ABYSS_SPIN_R,
-          dx: Math.cos(a) * 6.2, dy: Math.sin(a) * 6.2, damage: ABYSS_FLING_DMG, owner: 'monster', traveled: 0, maxRange: 700,
+        room.projectiles.push({ id: nextId(), x: cx(m) + Math.cos(a) * ABYSS_SPIN_R * k, y: cy(m) + Math.sin(a) * ABYSS_SPIN_R * k,
+          dx: Math.cos(a) * 6.2 * (m.evK ? VA.speed : 1), dy: Math.sin(a) * 6.2 * (m.evK ? VA.speed : 1), damage: ABYSS_FLING_DMG, owner: 'monster', traveled: 0, maxRange: 700,
           weaponId: 'abyssscythe', isAoe: false, aoeRadius: 0, pierce: true, grapple: false, boomerang: false, returning: false,
-          life: 0, hitTargets: new Set(), hitR: 8 });
+          life: 0, hitTargets: new Set(), hitR: Math.round(8 * k), big: m.evK ? k : undefined });
       }
       room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 90, timer: 400, max: 400, color: '#e0a0ff' });
       m.act = null; m.actCd = 1700;
@@ -6984,7 +7013,7 @@ function updateAbyss(m, target, dist, dx, dy, spd, factor, dt) {
       m.slashHit = true;
       for (const t of enemyTargets('monster')) {
         const d = Math.hypot(cx(t) - cx(m), cy(t) - cy(m));
-        if (d > ABYSS_SLASH_R + t.w / 2) continue;
+        if (d > ABYSS_SLASH_R * k + t.w / 2) continue;
         let diff = Math.abs(Math.atan2(cy(t) - cy(m), cx(t) - cx(m)) - m.slashA) % (Math.PI * 2);
         if (diff > Math.PI) diff = Math.PI * 2 - diff;
         if (diff > 1.45 && d > 30) continue;
@@ -6993,7 +7022,7 @@ function updateAbyss(m, target, dist, dx, dy, spd, factor, dt) {
         const k = Math.hypot(cx(t) - cx(m), cy(t) - cy(m)) || 1;
         t.x += (cx(t) - cx(m)) / k * 26; t.y += (cy(t) - cy(m)) / k * 26; clampToArena(t);
       }
-      room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: ABYSS_SLASH_R, timer: 380, max: 380, color: '#e0a0ff' });
+      room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: ABYSS_SLASH_R * k, timer: 380, max: 380, color: '#e0a0ff' });
     }
     if (m.actT >= ABYSS_SLASH_MS) { m.act = null; m.actCd = 1500; }
     return;
@@ -7017,20 +7046,31 @@ function updateAbyss(m, target, dist, dx, dy, spd, factor, dt) {
     m.x += dx / dist * spd * 1.25 * factor; m.y += dy / dist * spd * 1.25 * factor;
   }
 
-  if (m.actCd > 0) { m.actCd -= dt; return; }
+  if (m.actCd > 0) { m.actCd -= dt * rate; return; }
   if (m.act) return;
   const pool = m.phase === 1 ? ['converge', 'rapid', 'orb'] : ['spin', 'slash', 'slash'];
+  if (m.evK) pool.push('eclipse');                     // the rare one's own attack, in every phase
   let pick;
   do { pick = pool[Math.floor(Math.random() * pool.length)]; } while (pick === m.lastAct && Math.random() < 0.8);
   m.lastAct = pick; m.act = pick; m.actT = 0;
-  if (pick === 'converge') {
+  if (pick === 'eclipse') {
+    // ECLIPSE: a ring of void marks closes round you, then one under your feet. Get out.
+    const at = { x: cx(target), y: cy(target) }, a0 = Math.random() * Math.PI;
+    for (let i = 0; i < 6; i++) {
+      const a = a0 + i * Math.PI / 3;
+      addDanger(at.x + Math.cos(a) * 78 * k, at.y + Math.sin(a) * 78 * k, Math.round(34 * k), 1000, VA.eclipseRing, { color: 'hex', slow: 1500 });
+    }
+    addDanger(at.x, at.y, Math.round(44 * k), 1400, VA.eclipseCore, { color: 'hex', stun: 500 });
+    room.particles.push({ type: 'crit', x: cx(m), y: m.y - 14, text: 'ECLIPSE', timer: 900, max: 900 });
+    m.act = null; m.actCd = 1700;
+  } else if (pick === 'converge') {
     abyssConverge('monster', abyssHands(m), { x: cx(target), y: cy(target) }, 16,
-                  { r: 14, pullR: 135, dmg: 12, life: 2600, boom: 45, boomR: 70 });
+                  { r: Math.round(14 * k), pullR: Math.round(135 * k), dmg: 12, life: 2600, boom: 45, boomR: Math.round(70 * k) });
   } else if (pick === 'rapid') {
     m.rapid = ABYSS_RAPID_SHOTS; m.rapidT = 250; m.actCd = 0;
   } else if (pick === 'orb') {
     room.fires.push({ id: nextId(), kind: 'abysscharge', owner: 'monster', mon: m.id, x: cx(m), y: cy(m) - m.h * 0.75, r: 4, t: 0,
-                      life: ABYSS_CHARGE_MS, dmg: ABYSS_ORB_DMG, aoe: ABYSS_ORB_AOE, maxR: 22, speed: 2.6 });
+                      life: ABYSS_CHARGE_MS, dmg: ABYSS_ORB_DMG, aoe: Math.round(ABYSS_ORB_AOE * k), maxR: Math.round(22 * k), speed: 2.6 * (m.evK ? VA.speed : 1), big: m.evK });
   } else if (pick === 'slash') {
     m.slashA = Math.atan2(cy(target) - cy(m), cx(target) - cx(m)); m.slashHit = false;
   }
@@ -7048,6 +7088,36 @@ function abyssPhase3(m) {
                         text: 'FINAL PHASE - SURVIVE 10 SECONDS!', color: '#ff7ad8', timer: 3000, max: 3000 });
 }
 
+// Whoever touches the trophy first claims the event's prize, and the fight is over.
+function trophyTick() {
+  const t = room.trophy;
+  if (Date.now() < t.readyAt) return;
+  for (const key of KEYS) {
+    const p = room.players[key];
+    if (p && !p.dead && aabb(p, t)) { claimEventPrize(key); return; }
+  }
+}
+function claimEventPrize(key) {
+  const ev = EVENTS[room.event], p = room.players[key], pw = room.passwords[key];
+  room.trophy = null;
+  const coins = ev.prize + ev.fee;               // the prize, and the entry back
+  addCoins(key, coins);
+  const fresh = [];
+  if (pw && !isAdminPw(pw)) {
+    const d = progress(), own = d.armor[pw] || [];
+    for (const id of ev.gear) if (Armor.BY_ID[id] && !own.includes(id)) { own.push(id); fresh.push(id); }
+    d.armor[pw] = own;
+    markDirty();
+  }
+  room.eventWin = { coins, gear: ev.gear, fresh };
+  room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 200, timer: 900, max: 900, color: '#ffd84a' });
+  room.particles.push({ type: 'coin', x: cx(p), y: p.y - 10, text: '+' + coins.toLocaleString() + ' COINS', timer: 3500, max: 3500 });
+  for (const id of ev.gear) room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 46, text: Armor.BY_ID[id].name + ' IS YOURS!', color: '#ff5ad8', timer: 4000, max: 4000 });
+  room.victory = true;
+  room.gameState = 'ROUND_OVER';
+  room.roundOverTimer = 8000;
+}
+
 function abyssDefeated(m) {
   if (m.dead) return;
   m.dead = true; m.p3 = false;
@@ -7062,6 +7132,14 @@ function abyssDefeated(m) {
   room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 260, timer: 1000, max: 1000, color: '#b07aff' });
   room.particles.push({ type: 'waveclear', x: CANVAS_W / 2, y: CANVAS_H / 2 - 10, text: 'THE ABYSS IS DEFEATED!', timer: 4000 });
   if (room.gameMode === 'sandbox') return;
+  if (room.event) {                            // an event: the prize waits in a trophy, until someone touches it
+    // Where he fell, and only claimable after a moment, so it is seen before it is won.
+    const at = arenaClamp(cx(m), Math.max(cy(m), ARENA_Y + ARENA_H * 0.32), 24);   // kept clear of the weapon rack along the top
+    room.trophy = { x: Math.round(at.x - TROPHY_W / 2), y: Math.round(at.y - TROPHY_H / 2), w: TROPHY_W, h: TROPHY_H, readyAt: Date.now() + TROPHY_DELAY_MS };
+    room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 46, text: 'TOUCH THE TROPHY TO CLAIM YOUR PRIZE',
+                          color: '#ffd84a', timer: 5000, max: 5000 });
+    return;
+  }
   for (const key of KEYS) {
     const p = room.players[key];
     if (!p) continue;
@@ -9615,6 +9693,7 @@ function buildStateMsg(playerNum) {
     myNum: playerNum,
     gameState: room.gameState,
     gameMode: room.gameMode,
+    ...(room.event ? { event: room.event } : {}), ...(room.trophy ? { trophy: room.trophy } : {}), ...(room.eventWin ? { eventWin: room.eventWin } : {}),
     world: { size: room.mapSize, w: CANVAS_W, h: CANVAS_H },
     maxPlayers: room.maxPlayers,
     ...(room.custom ? { roomName: room.custom.name, roomId: room.id } : {}),
@@ -9653,6 +9732,7 @@ function buildStateMsg(playerNum) {
                   ...(m.boss ? { boss: true, wind: m.windup > 0 ? m.wind : null, windup: Math.max(0, Math.round(m.windup)), stun: Math.max(0, Math.round(m.stun)) } : {}),
                   ...(m.mage ? { mage: true, hidden: !!m.hidden, phase: m.phase, cast: m.tpT > 0 ? 'teleport' : m.castT > 0 ? m.cast : null } : {}),
                   ...(m.tsunami ? { tsunami: true, phase: m.phase, act: m.act || null } : {}),
+                  ...(m.evK ? { evK: m.evK } : {}),
                   ...(m.abyss ? { abyss: true, phase: m.phase, act: m.rapid > 0 ? 'rapid' : m.act, actT: Math.round(m.actT || 0),
                                   ...(m.act === 'slash' ? { sa: Math.round(m.slashA * 100) / 100 } : {}),
                                   ...(m.p3 ? { p3: Math.max(0, Math.ceil(m.p3T / 1000)) } : {}) } : {}) })),
@@ -9661,7 +9741,7 @@ function buildStateMsg(playerNum) {
                   face: a.face, swing: a.swing > 0 ? Math.round(a.swing) : 0, fade: a.life < 1500 })),
     projectiles: room.projectiles.map(pr => ({ id: pr.id, x: r1(pr.x), y: r1(pr.y), dx: r1(pr.dx), dy: r1(pr.dy), weaponId: pr.weaponId,
                   upg: pr.upg || null, isAoe: pr.isAoe, special: !!pr.special, grapple: !!pr.grapple,
-                  hook: !!pr.hook, boomerang: !!pr.boomerang, ...(pr.owner === 'monster' ? { owner: 'monster' } : {}) })),
+                  hook: !!pr.hook, boomerang: !!pr.boomerang, ...(pr.owner === 'monster' ? { owner: 'monster' } : {}), ...(pr.big ? { big: pr.big } : {}) })),
     pools:       room.fires.filter(f => f.kind === 'tspool').map(f => [Math.round(f.x), Math.round(f.y), Math.round(f.t / f.life * 100) / 100, f.owner === 'monster' ? 0 : +f.owner.slice(1)]),
     fires:       room.fires.filter(f => f.kind !== 'tspool').map(f => ({ id: f.id, kind: f.kind, x: r1(f.x), y: r1(f.y), r: r1(f.r || 0),
                                     a: Math.round((f.a || 0) * 100) / 100, v: f.v ? r1(f.v) : 0, k: Math.round(f.t / f.life * 100) / 100,
@@ -10232,8 +10312,8 @@ function armoryStock(pw, owned) {
       if (list.length) ids.push(list[Math.floor(Math.random() * list.length)].id);
     }
   };
-  deal(ARMORY_OFFERS, Armor.PIECES.filter(a => a.slot !== 'shield'));
-  deal(ARMORY_SHIELDS, Armor.PIECES.filter(a => a.slot === 'shield'));
+  deal(ARMORY_OFFERS, Armor.PIECES.filter(a => a.slot !== 'shield' && !a.event));
+  deal(ARMORY_SHIELDS, Armor.PIECES.filter(a => a.slot === 'shield' && !a.event));
   d.armory[pw] = { w, ids };
   markDirty();
   return ids;
@@ -10922,10 +11002,19 @@ wss.on('connection', (ws) => {
         return;
       }
       if (msg.type === 'join' && !ws.room) {
-        const mode = ['pvp', 'coop', 'waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom', 'bot', 'create', 'joinroom'].includes(msg.mode) ? msg.mode : 'pvp';
-        const size = mapSizeFor(mode, msg.size);
-        // EXTREME and the PORTAL MAGE open up with XP (admins skip the wait).
-        if (MODE_XP[mode]) {
+        // An event: only with the ticket its entry fee bought. The Void Dungeon is the
+        // Abyss's own fight, made rare, on a giant map.
+        let evId = null;
+        if (msg.mode === 'voiddungeon') {
+          const tk = String(msg.ticket || ''), t = eventTickets.get(tk);
+          if (!t || t.pw !== sanitizeText(msg.password, 32)) { ws.send(JSON.stringify({ type: 'event_denied', reason: 'Enter it from the EVENTS menu first.' })); return; }
+          eventTickets.delete(tk);
+          evId = t.id;
+        }
+        const mode = evId ? 'abyss' : ['pvp', 'coop', 'waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom', 'bot', 'create', 'joinroom'].includes(msg.mode) ? msg.mode : 'pvp';
+        const size = evId ? mapSizeFor('abyss', 'giant') : mapSizeFor(mode, msg.size);
+        // EXTREME and the PORTAL MAGE open up with XP (admins skip the wait). An event ticket is its own way in.
+        if (MODE_XP[mode] && !evId) {
           const pw = sanitizeText(msg.password, 32);
           const saved = pw ? (isAdminPw(pw) ? Infinity : (progress().players[pw] || 0)) : 0;
           const xp = Math.max(saved, Math.floor(Number(msg.localXp) || 0));
@@ -10944,6 +11033,7 @@ wss.on('connection', (ws) => {
         const [r, key] = seat || (mode === 'bot' ? newBotRoom(BOT_LEVELS[msg.level] ? msg.level : 'average', size)
           : mode === 'create' ? createRoom({ ...msg, size }) : findSeat(mode, size));
         ws.room = r; ws.key = key;
+        if (evId) r.event = evId;
         if (mode === 'sandbox' && msg.tutorial) r.tutorial = true;
         r[key] = ws;
         ws.send(JSON.stringify({ type: 'seat', num: KEYS.indexOf(key) + 1, mode, maxPlayers: r.maxPlayers, roomName: r.custom ? r.custom.name : null }));
@@ -11095,5 +11185,68 @@ app.use(express.static(path.join(__dirname, 'public'), {
     if (/\.(js|css|html)$/.test(file)) res.setHeader('Cache-Control', 'no-cache');
   },
 }));
+
+// ─── EVENTS: the menu, hosting, and paying to get in ─────────────────────────
+// A ticket is good for one fight and EVENT_TICKET_MS. One that is never used (the
+// game never connected) gives its fee back.
+const EVENT_TICKET_MS = 90 * 1000;
+const eventTickets = new Map();     // ticket -> { pw, id, at, paid }
+function hostEvent(id, ms) {
+  const now = Date.now();
+  progress().events[id] = { start: now, end: now + (ms || EVENTS[id].lasts) };
+  markDirty();
+}
+function eventInfo(id) {
+  const ev = EVENTS[id], h = progress().events[id], now = Date.now();
+  const live = !!h && now >= h.start && now < h.end;
+  return { id, name: ev.name, desc: ev.desc, fee: ev.fee, prize: ev.prize, gear: ev.gear, lasts: ev.lasts,
+           live, endsIn: live ? h.end - now : 0, hosted: !!h };
+}
+function refundTicket(t) {
+  if (!t.paid) return;
+  const d = progress();
+  d.coins[t.pw] = (d.coins[t.pw] || 0) + t.paid;
+  markDirty();
+  for (const [r, key] of liveSeats(t.pw)) r.playerCoins[key] = d.coins[t.pw];
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [tk, t] of eventTickets) if (now - t.at > EVENT_TICKET_MS) { eventTickets.delete(tk); refundTicket(t); }
+}, 10 * 1000).unref?.();
+app.post('/api/events', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  const prof = pw ? profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup }) : null;
+  res.json({ events: Object.keys(EVENTS).map(eventInfo), admin: isAdminPw(pw), coins: prof ? prof.coins : 0, owned: prof ? prof.armor : [] });
+});
+// The admin hosts an event (for its full length, from now), or ends it early.
+app.post('/api/events/host', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32), id = sanitizeText(req.body?.id, 24);
+  if (!isAdminPw(pw)) return res.status(403).json({ error: 'Only the admin can host events.' });
+  if (!EVENTS[id]) return res.status(400).json({ error: 'No such event.' });
+  if (req.body?.stop) { const h = progress().events[id]; if (h) { h.end = Date.now(); markDirty(); } }
+  else hostEvent(id);
+  res.json({ events: Object.keys(EVENTS).map(eventInfo), admin: true });
+});
+app.post('/api/events/enter', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32), id = sanitizeText(req.body?.id, 24);
+  if (!pw) return res.status(400).json({ error: 'Set a password first: the prize is saved against it.' });
+  const ev = EVENTS[id];
+  if (!ev || !eventInfo(id).live) return res.status(400).json({ error: 'That event is not running right now.' });
+  const admin = isAdminPw(pw);
+  const prof = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });
+  if (!admin && prof.coins < ev.fee) return res.status(400).json({ error: `You need ${ev.fee.toLocaleString()} coins to enter.` });
+  const d = progress();
+  if (!admin) {
+    d.coins[pw] = prof.coins - ev.fee;
+    markDirty();
+    for (const [r, key] of liveSeats(pw)) r.playerCoins[key] = d.coins[pw];
+  }
+  const ticket = crypto.randomBytes(12).toString('hex');
+  eventTickets.set(ticket, { pw, id, at: Date.now(), paid: admin ? 0 : ev.fee });
+  const after = profileFor(pw, {});
+  res.json({ ticket, coins: after.coins, save: after.save });
+});
+// The first event is hosted the first time the server starts with it.
+if (!progress().events.voiddungeon) hostEvent('voiddungeon');
 
 server.listen(PORT, () => console.log('Weponare running on port', PORT));

@@ -48,6 +48,7 @@
       <input type="text" id="nameInput" class="name-input" placeholder="YOUR NAME" maxlength="12" autocomplete="off" spellcheck="false">
       <input type="password" id="passInput" class="name-input pass-input" placeholder="PASSWORD (saves progress)" maxlength="32" autocomplete="new-password" spellcheck="false">
       <div id="savedInfo" class="saved-info"></div>
+      <button id="eventsBtn" class="mode-btn btn-events" onclick="openEvents()">EVENTS<span id="evLive" class="ev-live hidden">LIVE</span><small id="evSub">limited-time fights</small></button>
 
       <div class="menu-tab hidden" data-tab="pvp">
         <div class="menu-sec"><span>ONLINE PVP</span></div>
@@ -161,6 +162,17 @@
         <button class="mode-btn btn-howto" onclick="openHowTo()">? HOW TO PLAY</button>
       </div>
       <button class="mode-btn shop-back" onclick="closeSettings()">&#10003; DONE</button>
+    </div>
+  </div>
+
+  <!-- Events: hosted for a while, each with its own fight and prizes -->
+  <div id="eventsScreen" class="overlay hidden">
+    <div class="arm-box ev-box">
+      <button class="arm-x" onclick="closeEvents()" aria-label="Close">&#10005;</button>
+      <div class="arm-title ev-title">EVENTS</div>
+      <div class="arm-bar"><span id="evCoins" class="arm-coins"></span></div>
+      <div id="evMsg" class="arm-msg"></div>
+      <div id="evList" class="ev-list"></div>
     </div>
   </div>
 
@@ -347,6 +359,7 @@
           <p>Parry (P) opens a short window: a melee blow aimed at you is sent back at the attacker, a shot bounces back the way it came, and a fire hand or inferno fizzles out. Parrying a Giant's swing or shockwave stuns him. It then needs 8 seconds to recharge (the blue bar).</p></div>
         <div class="howto-sec"><h3>COINS &amp; UPGRADES</h3>
           <p><b>The Armoury</b> sells armour, with new stock every 10 minutes. There are 120 pieces in six rarities, from Common (a little health) to Mythic (huge health and 3 or 4 passives, and they glow red). You can own as many as you like and wear one helmet, one chestplate and one pair of leggings. What you buy stays yours, and armour can be traded. It does nothing in the Saw Room.</p>
+          <p><b>Events</b> are hosted for a while (each says when it ends) and can be hosted again later. They have their own fights and prizes, some found nowhere else. The first is the <b>Void Dungeon</b>: pay 200,000 coins to enter a giant void arena and face the <b>rare Abyss</b> (three times the health, bigger, faster, much harder hits, bigger attacks and a new one, ECLIPSE: a ring of void marks closes round you, then one under your feet). Beat him and touch the trophy he leaves to win the mythic shield <b>VOID GATE</b>, which only comes from this event, and 1,000,000 coins plus your 200,000 back. Lose, or leave, and the 200,000 is gone.</p>
           <p><b>Shields</b> are sold there too, and go in a slot of their own. There are 56, in the same six rarities. A shield gives no health. Press the shield button (X on a keyboard) and for 5 seconds a small forcefield takes hits in place of your health, until it has taken all it can and breaks; any hit that breaks it carries on through to you. It is ready again 15 seconds after you pressed it. Rarer shields take more, and pressing the button sets off up to 4 abilities: take 50% less damage for 5 seconds, teleport the way you were moving, burn or freeze whoever is close, heal and more. Some have a passive as well.</p>
           <p>Monsters drop coins &ndash; walk over them to collect. Spend coins in <b>UPGRADE WEAPONS</b> (damage, speed, range, crit, cooldown, multishot and more for each weapon, plus your health, move speed, defense and parry), on <b>ABILITIES</b>, and in <b>CUSTOMIZE</b> on skins, changing colors, glows, animated accessories and nickname backgrounds. Tap one to try it on before you buy it.</p>
           <p><b>&#9733; PASSIVES</b> &ndash; max out <b>every</b> upgrade on one of these weapons and, whenever you hold it, you get its passive (its name shows under your weapon bar, and you glow in its colour):
