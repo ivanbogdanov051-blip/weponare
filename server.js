@@ -1244,6 +1244,7 @@ function saveData(pw) {
     tsunamiBeat: !!d.tsunamiBeat[pw],
     forge: d.forge[pw] || {}, lost: d.lostWeapons[pw] || {}, rev: d.saveRev[pw] || 0,
     armor: d.armor[pw] || [], worn: d.armorWorn[pw] || {},
+    mythicPick: d.mythicPick[pw] || null,
   });
 }
 function makeSave(pw) {
@@ -1299,6 +1300,7 @@ function restoreBackup(pw, backup) {
     d.saveRev[pw] = num(b.rev);
     d.armor[pw] = armor;
     d.armorWorn[pw] = cleanWorn(b.worn, armor);
+    if (typeof b.mythicPick === 'string' && WEAPON_BY_ID[b.mythicPick]?.mythic) d.mythicPick[pw] = b.mythicPick;
     if (b.skin && typeof b.skin === 'object' && d.skins[pw] === undefined) d.skins[pw] = b.skin;
     markDirty();
     return;
@@ -1329,6 +1331,8 @@ function restoreBackup(pw, backup) {
   if (num(b.samuraiKills) > (d.samuraiKills[pw] || 0)) { d.samuraiKills[pw] = num(b.samuraiKills); changed = true; }
   if (num(b.mythicKills) > (d.mythicKills[pw] || 0)) { d.mythicKills[pw] = num(b.mythicKills); changed = true; }
   if (b.tsunamiBeat && !d.tsunamiBeat[pw]) { d.tsunamiBeat[pw] = true; changed = true; }
+  // The mythic you take into games: kept from the copy if the server has lost it.
+  if (!d.mythicPick[pw] && typeof b.mythicPick === 'string' && WEAPON_BY_ID[b.mythicPick]?.mythic) { d.mythicPick[pw] = b.mythicPick; changed = true; }
   if (!staleCopy) for (const [wid, lv] of Object.entries(ups)) {
     const allowed = upgradesFor(wid);
     for (const [k, n] of Object.entries(lv)) {
@@ -4470,7 +4474,13 @@ setInterval(() => {
   const nowMs = Date.now();
   const dt = Math.max(1, Math.min(80, nowMs - lastTickAt));
   lastTickAt = nowMs;
-  for (const r of rooms.slice()) { useRoom(r); tickRoom(dt); }
+  // One room's bug must not take the whole server down (and everyone with it):
+  // it is logged, once per room, and the other rooms carry on.
+  for (const r of rooms.slice()) {
+    useRoom(r);
+    try { tickRoom(dt); }
+    catch (e) { if (!r.tickErr) { r.tickErr = true; console.error('Room tick failed (' + r.gameMode + '):', e && e.stack || e); } }
+  }
 }, TICK_MS);
 
 function tickRoom(dt) {
@@ -7019,8 +7029,8 @@ function updateAbyss(m, target, dist, dx, dy, spd, factor, dt) {
         if (diff > 1.45 && d > 30) continue;
         if (t.parryTimer > 0) { applyDamage(m, Math.round(ABYSS_SLASH_DMG * reflectOf(t)), playerKeyOf(t)); spawnParrySpark(cx(t), cy(t)); continue; }
         applyDamage(t, ABYSS_SLASH_DMG, 'monster');
-        const k = Math.hypot(cx(t) - cx(m), cy(t) - cy(m)) || 1;
-        t.x += (cx(t) - cx(m)) / k * 26; t.y += (cy(t) - cy(m)) / k * 26; clampToArena(t);
+        const len = Math.hypot(cx(t) - cx(m), cy(t) - cy(m)) || 1;
+        t.x += (cx(t) - cx(m)) / len * 26; t.y += (cy(t) - cy(m)) / len * 26; clampToArena(t);
       }
       room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: ABYSS_SLASH_R * k, timer: 380, max: 380, color: '#e0a0ff' });
     }

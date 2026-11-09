@@ -48,7 +48,6 @@
       <input type="text" id="nameInput" class="name-input" placeholder="YOUR NAME" maxlength="12" autocomplete="off" spellcheck="false">
       <input type="password" id="passInput" class="name-input pass-input" placeholder="PASSWORD (saves progress)" maxlength="32" autocomplete="new-password" spellcheck="false">
       <div id="savedInfo" class="saved-info"></div>
-      <button id="eventsBtn" class="mode-btn btn-events" onclick="openEvents()">EVENTS<span id="evLive" class="ev-live hidden">LIVE</span><small id="evSub">limited-time fights</small></button>
 
       <div class="menu-tab hidden" data-tab="pvp">
         <div class="menu-sec"><span>ONLINE PVP</span></div>
@@ -68,6 +67,10 @@
           <button class="mode-btn btn-waves" onclick="joinGame('waves')">WAVES<small>survive</small></button>
           <button class="mode-btn btn-extreme" id="modeExtreme" onclick="playLocked('extreme')">EXTREME<small>hardest waves</small></button>
         </div>
+      </div>
+
+      <div class="menu-tab hidden" data-tab="practice">
+        <div class="menu-sec"><span>PRACTICE AND TRAINING</span></div>
         <div class="mode-row">
           <button class="mode-btn btn-bot" onclick="openBotPicker()">BOT BATTLE<small>vs a bot</small></button>
           <button class="mode-btn btn-sandbox" onclick="joinGame('sandbox')">SANDBOX<small>practice</small></button>
@@ -86,17 +89,30 @@
         </div>
       </div>
 
-      <div class="menu-tab hidden" data-tab="custom">
-        <div class="menu-sec"><span>CUSTOMISE AND WEAPONS</span></div>
+      <div class="menu-tab hidden" data-tab="events">
+        <div class="menu-sec"><span>EVENTS</span></div>
         <div class="mode-row">
-          <button class="mode-btn btn-cust btn-upg" onclick="openShop()">UPGRADES<small>weapons</small></button>
-          <button class="mode-btn btn-cust btn-abil" onclick="openAbilities()">ABILITIES<small>powers</small></button>
-          <button class="mode-btn btn-cust btn-skin" onclick="openSkinsScreen()">SKINS<small>look</small></button>
+          <button id="eventsBtn" class="mode-btn btn-events" onclick="openEvents()">EVENTS<span id="evLive" class="ev-live hidden">LIVE</span><small id="evSub">limited-time fights</small></button>
         </div>
+      </div>
+
+      <div class="menu-tab hidden" data-tab="shop">
+        <div class="menu-sec"><span>SHOPS AND GEAR</span></div>
         <div class="mode-row">
           <button class="mode-btn btn-shop" onclick="openLegendShop()">SHOP<small>legendary weapons</small></button>
-          <button class="mode-btn btn-forge" onclick="openForge()">THE FORGE<small>coins for upgrades</small></button>
           <button class="mode-btn btn-armory" onclick="openArmory()">ARMOURY<small>new stock every 10 min</small></button>
+        </div>
+        <div class="mode-row">
+          <button class="mode-btn btn-cust btn-upg" onclick="openShop()">UPGRADES<small>weapons</small></button>
+          <button class="mode-btn btn-forge" onclick="openForge()">THE FORGE<small>coins for upgrades</small></button>
+        </div>
+      </div>
+
+      <div class="menu-tab hidden" data-tab="custom">
+        <div class="menu-sec"><span>YOU AND YOUR FRIENDS</span></div>
+        <div class="mode-row">
+          <button class="mode-btn btn-cust btn-skin" onclick="openSkinsScreen()">SKINS<small>look</small></button>
+          <button class="mode-btn btn-cust btn-abil" onclick="openAbilities()">ABILITIES<small>powers</small></button>
           <button class="mode-btn btn-trade" onclick="openTrade()">TRADE<small>swap with a friend</small></button>
         </div>
       </div>
@@ -106,8 +122,11 @@
     <nav id="menuTabs" class="menu-tabs" role="tablist" aria-label="Game menu">
       <button role="tab" data-tab="pvp" aria-selected="false" aria-label="Online PvP" title="Online PvP" onclick="pickMenuTab('pvp')">⚔️</button>
       <button role="tab" data-tab="waves" class="on" aria-selected="true" aria-label="Waves and Extreme" title="Waves and Extreme" onclick="pickMenuTab('waves')">🌊</button>
+      <button role="tab" data-tab="practice" aria-selected="false" aria-label="Practice" title="Practice and training" onclick="pickMenuTab('practice')">🎯</button>
       <button role="tab" data-tab="bosses" aria-selected="false" aria-label="Bosses" title="Bosses" onclick="pickMenuTab('bosses')">👹</button>
-      <button role="tab" data-tab="custom" aria-selected="false" aria-label="Customise and weapons" title="Customise and weapons" onclick="pickMenuTab('custom')">🛠️</button>
+      <button role="tab" data-tab="events" aria-selected="false" aria-label="Events" title="Events" onclick="pickMenuTab('events')">🎉<i id="evDot" class="tab-dot hidden"></i></button>
+      <button role="tab" data-tab="shop" aria-selected="false" aria-label="Shops and gear" title="Shops and gear" onclick="pickMenuTab('shop')">🛒</button>
+      <button role="tab" data-tab="custom" aria-selected="false" aria-label="Skins, abilities and trade" title="Skins, abilities and trade" onclick="pickMenuTab('custom')">🎨</button>
     </nav>
   </div>
 

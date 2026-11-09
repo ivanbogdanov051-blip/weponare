@@ -3152,6 +3152,7 @@ async function refreshEventBadge(force) {
     const d = await (await fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
     const live = (d.events || []).filter(e => e.live);
     document.getElementById('evLive')?.classList.toggle('hidden', !live.length);
+    document.getElementById('evDot')?.classList.toggle('hidden', !live.length);
     const sub = document.getElementById('evSub');
     if (sub) sub.textContent = live.length ? live.map(e => e.name).join(', ') + ' is on!' : 'limited-time fights';
   } catch {}
