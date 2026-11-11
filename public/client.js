@@ -51,7 +51,7 @@ let WEAPON_COLOR = {
   glaive:'#b0d8c0', katana:'#eef0ff', chakram:'#66e0c0', cannon:'#9a90a8',
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
-  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff', samuraiblade:'#ff5a5a', darklight:'#e8e8f4', starfall:'#ffe9a0', worldsplitter:'#ff6a1a', soullantern:'#6affc8', ashfeather:'#ff8a3a', chronosedge:'#7ac8ff', hydrafang:'#5ae87a',
+  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff', samuraiblade:'#ff5a5a', darklight:'#e8e8f4', starfall:'#ffe9a0', worldsplitter:'#ff6a1a', soullantern:'#6affc8', ashfeather:'#ff8a3a', chronosedge:'#7ac8ff', hydrafang:'#5ae87a', firespear:'#ff5a1a',
   greatestsword:'#ffe9a8', wavestorm:'#4ac8ff', ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
   scimitar:'#e8e0c8', slingshot:'#b08a5a', mace:'#9aa4b0', javelin:'#d8c8a0', claws:'#e0e4ec',
   emberstaff:'#ff7a2a', halberd:'#c0c8d8', frostbow:'#9fe8ff', chronostaff:'#e8c87a', voidblade:'#9a5aff',
@@ -86,6 +86,7 @@ const WEAPON_DESC = {
   ashfeather:"MYTHIC. A bow of living flame, its limbs made of phoenix feathers",
   chronosedge:"MYTHIC. A sword of gold and azure with a clock beating in its guard",
   hydrafang:"MYTHIC. A trident whose three prongs are living serpent heads",
+  firespear:"SECRET. A spear of living fire, only ever won in the SECRET BOT event",
   ghostdagger:'The rarest weapon of all: turn invisible, throw a deadly dagger, and make it rain knives. Does half damage to bosses',
   stormhammer:'A war hammer full of lightning that comes back when you throw it',
   frostscythe:'A sweeping scythe of ice that freezes whatever it keeps cutting',
@@ -321,7 +322,7 @@ async function refreshSavedBanner0() {
 }
 
 function joinGame(mode) {
-  if (mode !== 'create' && mode !== 'joinroom' && mode !== 'voiddungeon') pendingRoom = {};
+  if (mode !== 'create' && mode !== 'joinroom' && !EVENT_IDS.includes(mode)) pendingRoom = {};
   if (window.GameAudio) { GameAudio.init(); GameAudio.resume(); }
   readCredentials();
   pendingMode = mode;
@@ -994,7 +995,7 @@ function connect() {
       myNum = msg.num;
       invite = null;
       const mode = msg.mode || pendingMode;
-      if (loadCard.mode !== 'tutorial' && loadCard.mode !== 'voiddungeon') loadCard.mode = mode;
+      if (loadCard.mode !== 'tutorial' && !EVENT_IDS.includes(loadCard.mode)) loadCard.mode = mode;
       const modeLabel = mode === 'coop' ? 'CO-OP' : (msg.maxPlayers || 2) > 2 ? 'LAST ONE STANDING' : 'PvP';
       const soloMsg = soloLobbyMsg(loadCard.mode);
       if (soloMsg) {
@@ -1328,7 +1329,7 @@ const ATTACK_ANIM = {
   stormhammer: 'chop', frostscythe: 'spin', sunbow: 'draw',
   scimitar: 'slash', slingshot: 'draw', mace: 'chop', javelin: 'throw', claws: 'stab',
   emberstaff: 'cast', halberd: 'sweep', frostbow: 'draw', chronostaff: 'cast', voidblade: 'slash', mindtome: 'tome',
-  lightblade: 'slash', darklight: 'throw', starfall: 'cast', worldsplitter: 'heavy', greatestsword: 'doublechop', wavestorm: 'cast', soullantern: 'cast', ashfeather: 'draw', chronosedge: 'slash', hydrafang: 'stab',
+  lightblade: 'slash', darklight: 'throw', starfall: 'cast', worldsplitter: 'heavy', greatestsword: 'doublechop', wavestorm: 'cast', soullantern: 'cast', ashfeather: 'draw', chronosedge: 'slash', hydrafang: 'stab', firespear: 'stab',
 };
 const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
                   heavy: 300, doublechop: 700, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
@@ -2163,6 +2164,9 @@ function drawFireRings(fires) {
     if (f.kind === 'mine') { drawPlayerMine(f, now); continue; }
     if (f.kind === 'mindbeams') { drawMindBeams(f, now); continue; }
     if (f.kind === 'lightstreak') { drawLightStreak(f, now); continue; }
+    if (f.kind === 'fsspear') { drawThrownSpear(f, now); continue; }
+    if (f.kind === 'fsfire') { drawSpearFire(f, now); continue; }
+    if (f.kind === 'fsring') { drawSpearRing(f, now); continue; }
     if (f.kind === 'blizzard') { drawBlizzard(f, now); continue; }
     if (f.kind === 'sunorb') { drawSunorb(f, now); continue; }
     if (f.kind === 'sunbeam') { drawSunbeam(f, now); continue; }
@@ -2678,6 +2682,7 @@ function handleCanvasTap(clientX, clientY) {
 canvas.addEventListener('pointerdown', (e) => {
   if (handleCanvasTap(e.clientX, e.clientY)) { e.preventDefault(); return; }
   if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (trySpearTp(e.clientX, e.clientY)) { e.preventDefault(); return; }
   if (tapMove && e.pointerType === 'mouse' && currState && currState.gameState === 'GAMEPLAY') {
     const r = canvas.getBoundingClientRect();
     if (r.width && r.height) {
@@ -3084,7 +3089,9 @@ function renderEvents() {
   document.getElementById('evCoins').innerHTML = `◆ ${(d.coins || 0).toLocaleString()}`;
   list.innerHTML = d.events.map(e => {
     const poor = !d.admin && (d.coins || 0) < e.fee, confirm = evs.confirm === e.id;
-    const gear = e.gear.map(id => { const a = Armor.BY_ID[id]; const own = (d.owned || []).includes(id);
+    const gear = e.gear.map(id => { const a = Armor.BY_ID[id], wm = !a && (WEAPON_META[id] || (e.gearInfo || []).find(g => g.id === id && g.weapon)); const own = (d.owned || []).includes(id);
+      if (wm) return `<div class="ev-prize"><canvas class="shop-ic" data-weapon="${id}" width="56" height="32"></canvas><div><b>${escapeHtml(wm.name)}</b>
+        <span>SECRET WEAPON &middot; ONLY FROM THIS EVENT${own ? ' &middot; YOU HAVE IT' : ''}</span></div></div>`;
       return `<div class="ev-prize"><canvas data-armor="${id}" width="44" height="44"></canvas><div><b>${escapeHtml(a?.name || id)}</b>
         <span>${a ? Armor.RARITIES[a.rarity].name + ' ' + Armor.SLOTS[a.slot] : ''} &middot; ONLY FROM THIS EVENT${own ? ' &middot; YOU HAVE IT' : ''}</span></div></div>`; }).join('');
     const btn = !e.live ? '<button class="ev-enter" disabled>NOT RUNNING</button>'
@@ -3092,7 +3099,7 @@ function renderEvents() {
       : poor ? `<button class="ev-enter" disabled>NEED ◆ ${e.fee.toLocaleString()}</button>`
       : confirm ? `<button class="ev-enter go" onclick="enterEvent('${e.id}')">TAP AGAIN: PAY ◆ ${e.fee.toLocaleString()}</button>`
       : `<button class="ev-enter" onclick="askEnterEvent('${e.id}')">ENTER ◆ ${e.fee.toLocaleString()}</button>`;
-    const host = d.admin ? `<div class="ev-admin"><button onclick="hostEvent('${e.id}')">${e.live ? 'HOST AGAIN (2 WEEKS FROM NOW)' : 'HOST FOR 2 WEEKS'}</button>${e.live ? `<button onclick="hostEvent('${e.id}', true)">END NOW</button>` : ''}</div>` : '';
+    const host = d.admin ? `<div class="ev-admin"><button onclick="hostEvent('${e.id}')">${e.live ? 'HOST AGAIN (' + Math.round(e.lasts / 86400000) + ' DAYS FROM NOW)' : 'HOST FOR ' + Math.round(e.lasts / 86400000) + ' DAYS'}</button>${e.live ? `<button onclick="hostEvent('${e.id}', true)">END NOW</button>` : ''}</div>` : '';
     return `<div class="ev-card${e.live ? ' live' : ''}">
       <div class="ev-banner"><canvas class="ev-art" data-ev="${e.id}" width="360" height="150"></canvas>
         <div class="ev-tags"><span class="ev-tag${e.live ? ' on' : ''}">${e.live ? 'LIVE' : 'NOT RUNNING'}</span>${e.live ? `<span class="ev-time" data-ev-end="${e.endsIn}"></span>` : ''}</div>
@@ -3106,6 +3113,7 @@ function renderEvents() {
     </div>`;
   }).join('') || '<div class="arm-none">No events yet.</div>';
   drawForgeIcons(list);
+  drawShopIcons(list);
   evClock();
 }
 function askEnterEvent(id) { evs.confirm = id; renderEvents(); setTimeout(() => { if (evs.confirm === id) { evs.confirm = null; renderEvents(); } }, 4000); }
@@ -3122,7 +3130,7 @@ async function enterEvent(id) {
 }
 async function hostEvent(id, stop) {
   try { const r = await abilPost('/api/events/host', { id, stop: !!stop }); evs.data = { ...evs.data, ...r }; evs.ends = performance.now(); renderEvents();
-        setEvMsg(stop ? 'Event ended.' : 'Event hosted for 2 weeks.'); refreshEventBadge(true); }
+        setEvMsg(stop ? 'Event ended.' : 'Event hosted.'); refreshEventBadge(true); }
   catch (e) { setEvMsg(e.message, true); }
 }
 // The banner: the rare Abyss, alive, over his own floor.
@@ -3132,6 +3140,7 @@ function evArt(now) {
     const g = cv.getContext('2d'), W = cv.width, H = cv.height, main = ctx;
     g.save();
     try {
+      if (cv.dataset.ev === 'secretbot') { drawSecretBanner(g, W, H, now); continue; }
       const sky = g.createLinearGradient(0, 0, W, H); sky.addColorStop(0, '#12002a'); sky.addColorStop(1, '#3a0a5a');
       g.fillStyle = sky; g.fillRect(0, 0, W, H);
       for (let i = 0; i < 40; i++) { const x = (i * 97 + now / 40 * (1 + i % 3)) % W, y = (i * 53) % H; g.fillStyle = i % 4 ? 'rgba(255,90,216,0.5)' : '#fff'; g.fillRect(x, y, 2, 2); }
@@ -3794,6 +3803,10 @@ const LEGEND_MOVES = {
              + ' REWIND: snap back to where you were 3s ago, with the health you had then, cutting everything on the way ·'
              + ' <b>SUPER</b> TIME STOP: for 4s every enemy and every enemy shot is frozen while you move.'
              + ' Only one mythic goes into a game, and a mythic never earns you another weapon.',
+  firespear: '<b>ATK</b> your screen fades red: tap or click where to TELEPORT and land there in a burst of fire (or press ATK'
+           + ' again to go toward the mouse or the nearest foe) · <b>SPECIAL</b> throw the spear: it leaves a trail of strong fire'
+           + ' that keeps burning you a moment after you step out, and bursts on what it hits into a ring of fire that sets everyone'
+           + ' near alight · <b>SUPER</b> spin it in a wide circle of fire, then strike everyone it caught again, one after another.',
   hydrafang: '<b>ATK</b> a serpent head darts out, hunts a foe and leaves venom in it · <b>SPECIAL</b> three hydra heads burst'
            + ' from the ground round you and spit venom for 8s · <b>SUPER</b> NINE HEADS: the whole hydra rises round you'
            + ' for 5s, every head biting at whatever comes close. Only one mythic goes into a game, and a mythic never earns'
@@ -3899,10 +3912,24 @@ function legendaryCards(weapons, coins) {
     const ready = legendOk && (w.noRequirement || have >= xpIds.length);
     const afford = coins >= w.price;
     const col = WEAPON_COLOR[w.id] || '#ff6a1a';
+    if (w.secret) {
+      return `<div class="shop-row legendary secret-row">
+        <div class="shop-head">
+          <canvas class="shop-ic" data-weapon="${w.id}" width="56" height="32"></canvas>
+          <span class="shop-name" style="color:${col}">${w.name}</span>
+          <span class="legend-tag secret-tag">SECRET</span>
+        </div>
+        <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>${legendPassive(w.id)}
+        <div class="legend-buy">
+          <button class="buy-weapon poor" disabled>EVENT ONLY</button>
+          <span class="legend-need">Beat the SECRET BOT in the EVENTS menu to win it</span>
+        </div>
+      </div>`;
+    }
     if (w.mythic) {
       const up = (shopData && shopData.upgrades) || {}, defs = (shopData && shopData.upgradeDefs) || {};
       const maxed = id => weapons.includes(id) && (WEAPON_META[id]?.upgrades || []).filter(k => defs[k]).every(k => ((up[id] || {})[k] || 0) >= defs[k].max);
-      const legendIds = Object.values(WEAPON_META).filter(o => o.shopOnly && !o.mythic).map(o => o.id), haveL = legendIds.filter(id => weapons.includes(id)).length;
+      const legendIds = Object.values(WEAPON_META).filter(o => o.shopOnly && !o.mythic && !o.secret).map(o => o.id), haveL = legendIds.filter(id => weapons.includes(id)).length;
       const legendNeed = `<span class="${haveL >= legendIds.length ? 'need-ok' : 'need-no'}">${haveL >= legendIds.length ? '✔' : '✘'} ALL LEGENDARIES ${haveL}/${legendIds.length}</span> `;
       const beat = !!(shopData && shopData.tsunamiBeat);
       const bossNeed = w.mythicBoss === 'tsunami' ? `<span class="${beat ? 'need-ok' : 'need-no'}">${beat ? '✔' : '✘'} BEAT TSUNAMI</span> ` : '';
@@ -3998,7 +4025,7 @@ function legendaryCards(weapons, coins) {
       </div>`;
     }
     if (w.needAll) {
-      const left = all.filter(o => o.id !== w.id && !o.mythic && !weapons.includes(o.id)).length;
+      const left = all.filter(o => o.id !== w.id && !o.mythic && !o.secret && !weapons.includes(o.id)).length;
       return `<div class="shop-row legendary ghost-row">
         <div class="shop-head">
           <canvas class="shop-ic" data-weapon="${w.id}" width="56" height="32"></canvas>
@@ -4660,6 +4687,7 @@ const LOAD_MODES = {
   portal:   { a: '#7a2aff', b: '#ff3ad8', name: 'PORTAL MAGE',  boss: 'mage' },
   abyss:    { a: '#2a0a6a', b: '#7a3aff', name: 'THE ABYSS',    boss: 'abyss' },
   voiddungeon: { a: '#12002a', b: '#ff3aff', name: 'VOID DUNGEON', boss: 'abyss' },
+  secretbot: { a: '#2a0400', b: '#ff5a1a', name: 'SECRET BOT', rival: 'robot' },
   tsunami:  { a: '#1a6ae8', b: '#8ad8ff', name: 'TSUNAMI',      boss: 'tsunami' },
   sawroom:  { a: '#b0102a', b: '#ff5a2a', name: 'THE SAWS',     boss: 'saw' },
   sandbox:  { a: '#1ab85a', b: '#4aee9a', name: 'PRACTICE',     foes: [['grunt', 23, 27]] },
@@ -4917,6 +4945,7 @@ function soloLobbyMsg(mode) {
     case 'portal':   return PORTAL_LOBBY;
     case 'abyss':    return ABYSS_LOBBY;
     case 'voiddungeon': return ABYSS_LOBBY;
+    case 'secretbot': return line('#ff7a3a', 'SECRET BOT', 'EVENT · AN INSANE BOT WITH A SECRET WEAPON');
     case 'tsunami':  return TSUNAMI_LOBBY;
     case 'bot':      return BOT_LOBBY();
     default:         return null;
@@ -5133,7 +5162,7 @@ function updateScreens(state) {
   if (state.gameState === 'WEAPON_PICK') { renderPick(state); return; }
   pickUI.key = ''; pickUI.secs = -1;
   if (state.gameState === 'LOBBY') {
-    const soloMsg = soloLobbyMsg(state.bot ? 'bot' : state.gameMode === 'sandbox' && pendingTutorial ? 'tutorial' : state.gameMode);
+    const soloMsg = soloLobbyMsg(state.event === 'secretbot' ? 'secretbot' : state.bot ? 'bot' : state.gameMode === 'sandbox' && pendingTutorial ? 'tutorial' : state.gameMode);
     if (soloMsg) {
       setLobbyMsg(soloMsg);
     } else {
@@ -5185,14 +5214,16 @@ function updateScreens(state) {
       // An event: what you won, or that the entry is gone.
       lb.classList.add('hidden');
       hint.textContent = 'RETURNING TO MENU...';
-      const w = state.eventWin, ab = (state.monsters || []).find(m => m.abyss);
+      const w = state.eventWin, ab = (state.monsters || []).find(m => m.abyss), bot = state.event === 'secretbot' ? state.players?.p2 : null;
       document.getElementById('roundTitle').innerHTML = state.victory
-        ? '<span style="color:#ff5ad8">VOID DUNGEON CLEARED!</span>' : '<span style="color:#ff5a6a">THE VOID TOOK YOU</span>';
+        ? `<span style="color:#ff5ad8">${bot ? 'SECRET BOT BEATEN!' : 'VOID DUNGEON CLEARED!'}</span>`
+        : `<span style="color:#ff5a6a">${state.event === 'secretbot' ? 'THE SECRET BOT WINS' : 'THE VOID TOOK YOU'}</span>`;
       document.getElementById('roundStats').innerHTML = state.victory && w
-        ? `THE RARE ABYSS HAS FALLEN<br><span style="color:${PAL.coin}">+${w.coins.toLocaleString()} COINS</span> (YOUR ENTRY BACK, AND 1,000,000)<br>`
-          + w.gear.map(id => `<span style="color:#ff5ad8">${escapeHtml(Armor.BY_ID[id]?.name || id)}</span> ${w.fresh.includes(id) ? 'IS YOURS!' : '(YOU ALREADY HAD IT)'}`).join('<br>')
+        ? `${state.event === 'secretbot' ? 'THE FIRE SPEAR IS WON' : 'THE RARE ABYSS HAS FALLEN'}<br><span style="color:${PAL.coin}">+${w.coins.toLocaleString()} COINS</span> (YOUR ENTRY BACK, AND 1,000,000)<br>`
+          + w.gear.map(id => `<span style="color:#ff5ad8">${escapeHtml((WEAPON_META[id] || Armor.BY_ID[id])?.name || id)}</span> ${w.fresh.includes(id) ? 'IS YOURS!' : '(YOU ALREADY HAD IT)'}`).join('<br>')
           + `<br><span style="color:${PAL.coin}">◆ ${state.myCoins || 0}</span>`
         : `YOUR 200,000 ENTRY IS GONE<br>`
+          + (bot ? `IT HAD <span style="color:#ff7a3a">${Math.max(0, bot.lives || 0)}</span> ${bot.lives === 1 ? 'LIFE' : 'LIVES'} LEFT<br>` : '')
           + (ab ? (ab.p3 ? `ONLY <span style="color:#ff7ad8">${ab.p3}s</span> LEFT TO SURVIVE<br>` : `HE HAD <span style="color:#c8a0ff">${Math.ceil(ab.hp).toLocaleString()}</span> HP LEFT (PHASE ${ab.phase || 1})<br>`) : '')
           + `<span style="color:${PAL.coin}">◆ ${state.myCoins || 0}</span>`;
     } else if (state.gameMode === 'abyss') {
@@ -5392,6 +5423,7 @@ function draw(state) {
   drawItemBar(state.inventory || [], meP);
   drawWeaponPanel(state);
   drawPickupBanners(state.particles);
+  if (meP && meP.fsArm > 0 && !meP.dead) drawSpearArmTint(meP);
   if (tutAim && tutAim.pt && pendingTutorial) drawTutorialArrow();
   ctx.restore();
   if (netOverlay) drawNetOverlay();
@@ -5430,6 +5462,7 @@ function drawArena() {
 }
 
 function paintArena(g) {
+  if (arenaEvent === 'secretbot') { paintArenaScene(g, CANVAS_W, CANVAS_H, ARENA_X, ARENA_Y, FIRE_ARENA); paintFireDecor(g); return; }
   if (arenaEvent === 'voiddungeon') { paintArenaScene(g, CANVAS_W, CANVAS_H, ARENA_X, ARENA_Y, VOID_ARENA); paintVoidDecor(g); return; }
   paintArenaScene(g, CANVAS_W, CANVAS_H, ARENA_X, ARENA_Y, arenaPick);
 }
@@ -5875,8 +5908,11 @@ function drawPlayer(p, baseColor, label, key) {
   if (unseen && key !== 'p' + myNum) return;
   if (p.sky) p = skyfallPose(p);
   if (unseen) { ctx.save(); ctx.globalAlpha = 0.35 + 0.1 * Math.sin(performance.now() / 120); }
+  const blink = p.fsBlink > 0 ? Math.min(1, p.fsBlink / 320) : 0;
+  if (blink) { drawSpearStreak(p, blink); ctx.save(); ctx.globalAlpha *= 1 - blink * 0.6; }
   if (p.wsk) drawWaterForm(p, baseColor, label, key);
   else drawPlayerBody(p, baseColor, label, key);
+  if (blink) { ctx.restore(); drawSpearBlink(p, blink); }
   if (p.gstun) drawStunStars(p);
   if (unseen) ctx.restore();
 }
@@ -6140,7 +6176,7 @@ function drawPlayerBody(p, baseColor, label, key) {
 
   Cosmetics.nameTag(ctx, x + p.w / 2, y - 13, label, skinCol, fx.nameBg, now);
   if (key === 'p2' && currState?.bot && currState.botReward) drawBounty(x + p.w / 2, y - 25, currState.botReward);
-  if (!(p.kspin > 0)) drawWeaponSprite(p, x, y, key);
+  if (!(p.kspin > 0) && !p.fspin) drawWeaponSprite(p, x, y, key);
   if (p.weaponId === 'infinitybow' && !p.dead) drawInfinityFloaters(p, x, y);
   if (p.weaponId === 'endlessscythe' && !p.dead) drawEndlessFloaters(p, x, y, key);
   if (p.kspin > 0 && !p.dead) drawKatanaSpin(p, x, y);
@@ -6150,6 +6186,11 @@ function drawPlayerBody(p, baseColor, label, key) {
   if (p.souls && !p.dead) drawSouls(p, x, y);
   if (p.ddoor > 0 && !p.dead) drawDeathsDoor(p, x, y);
   if (p.phx > 0 && !p.dead) drawPhoenixForm(p, x, y);
+  if (p.fsArm > 0 && !p.dead) drawSpearArmed(p, x, y);
+  if (p.fsCh != null && !p.dead) drawSpearCharge(p, x, y);
+  if (p.fspin && !p.dead) drawSpearSpin(p, x, y);
+  if (p.sfire && !p.dead) drawStrongFire(x, y, p.w, p.h);
+  if (p.fstun && !p.dead) drawFireStun(p);
   if (p.mirror && !p.dead) drawMirrorShield(p, x, y);
   if (p.venom && !p.dead) drawVenomDrip(p, x, y);
   if (p.regrow && !p.dead) drawRegrow(p, x, y);
@@ -8154,7 +8195,14 @@ function drawHUD(state) {
 
   const w = state.wave;
   ctx.textAlign = 'center';
-  if (state.gameMode === 'sandbox' && state.sandbox?.tutorial) {
+  if (state.event === 'secretbot') {
+    const t = state.trophy ? 'CLAIM THE TROPHY!' : 'SECRET BOT';
+    ctx.fillStyle = '#000'; ctx.fillText(t, HUD_W/2 + 1, 3);
+    ctx.fillStyle = '#ff7a3a'; ctx.fillText(t, HUD_W/2, 2);
+    ctx.font = '8px "Courier New",monospace';
+    ctx.fillStyle = '#999'; ctx.fillText('EVENT · THREE LIVES EACH', HUD_W/2, 15);
+    ctx.font = '10px "Courier New",monospace';
+  } else if (state.gameMode === 'sandbox' && state.sandbox?.tutorial) {
     ctx.fillStyle = '#000'; ctx.fillText('TUTORIAL', HUD_W/2 + 1, 3);
     ctx.fillStyle = '#7affc8'; ctx.fillText('TUTORIAL', HUD_W/2, 2);
   } else if (state.gameMode === 'sandbox') {
@@ -9444,4 +9492,225 @@ function drawRegrow(p, x, y) {
     ctx.fillRect(Math.round(mx + Math.cos(a) * 10), Math.round(y + p.h - t * (p.h + 8)), 2, 2);
   }
   ctx.restore();
+}
+
+
+// ─── THE FIRE SPEAR ──────────────────────────────────────────────────────────
+// The SECRET BOT event's secret weapon. ATK arms it (the screen fades red) and the
+// next tap or click on the field is where you teleport.
+const EVENT_IDS = ['voiddungeon', 'secretbot'];
+function trySpearTp(clientX, clientY) {
+  if (!currState || currState.gameState !== 'GAMEPLAY' || !myNum || !ws || ws.readyState !== 1) return false;
+  const me = currState.players?.['p' + myNum];
+  if (!me || me.dead || me.controlling || me.weaponId !== 'firespear' || !(me.fsArm > 0)) return false;
+  const r = canvas.getBoundingClientRect();
+  if (!r.width || !r.height) return false;
+  const x = Math.round((clientX - r.left) * VIEW_W / r.width), y = Math.round((clientY - r.top) * VIEW_H / r.height + CAM_Y);
+  ws.send(JSON.stringify({ type: 'spear_tp', x, y }));
+  return true;
+}
+// Armed: the edges of your screen burn red until you choose where to go.
+function drawSpearArmTint(me) {
+  const k = Math.min(1, me.fsArm / 500), pulse = 0.5 + 0.5 * Math.sin(performance.now() / 150);
+  ctx.save();
+  const g = ctx.createRadialGradient(HUD_W / 2, HUD_H / 2, HUD_H * 0.28, HUD_W / 2, HUD_H / 2, HUD_W * 0.6);
+  g.addColorStop(0, 'rgba(255,40,20,0)');
+  g.addColorStop(1, 'rgba(255,30,10,' + ((0.42 + 0.16 * pulse) * k).toFixed(3) + ')');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, HUD_W, HUD_H);
+  ctx.fillStyle = 'rgba(255,40,20,' + (0.09 * k).toFixed(3) + ')'; ctx.fillRect(0, 0, HUD_W, HUD_H);
+  const msg = isTouchDevice ? 'TAP WHERE TO TELEPORT' : 'CLICK WHERE TO TELEPORT';
+  ctx.font = 'bold 9px "Courier New",monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.globalAlpha = k;
+  ctx.fillStyle = '#000'; ctx.fillText(msg, HUD_W / 2 + 1, 31);
+  ctx.fillStyle = '#ffd0a0'; ctx.fillText(msg, HUD_W / 2, 30);
+  ctx.restore();
+}
+// Others see it too: embers rising off whoever has it armed.
+function drawSpearArmed(p, x, y) {
+  const now = performance.now(), mx = x + p.w / 2;
+  ctx.save();
+  ctx.globalAlpha = 0.25 + 0.1 * Math.sin(now / 120); ctx.fillStyle = '#ff3a1a';
+  ctx.beginPath(); ctx.ellipse(mx, y + p.h / 2, p.w * 0.95, p.h * 0.75, 0, 0, Math.PI * 2); ctx.fill();
+  for (let i = 0; i < 6; i++) {
+    const t = ((now / 700) + i / 6) % 1;
+    ctx.globalAlpha = 1 - t; ctx.fillStyle = i % 2 ? '#ff6a1a' : '#ffd84a';
+    ctx.fillRect(Math.round(mx + Math.sin(i * 2.3 + now / 300) * p.w * 0.6), Math.round(y + p.h - t * (p.h + 10)), 2, 2);
+  }
+  ctx.restore();
+}
+// The streak left behind by a teleport, embers along it.
+function drawSpearStreak(p, k) {
+  if (!p.fsFrom) return;
+  const now = performance.now(), [fx, fy] = p.fsFrom, mx = p.x + p.w / 2, my = p.y + p.h / 2;
+  ctx.save();
+  const gr = ctx.createLinearGradient(fx, fy, mx, my);
+  gr.addColorStop(0, 'rgba(255,40,20,0)'); gr.addColorStop(1, 'rgba(255,150,40,' + (0.8 * k).toFixed(3) + ')');
+  ctx.strokeStyle = gr; ctx.lineWidth = 1 + 6 * k; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(mx, my); ctx.stroke();
+  for (let i = 0; i < 9; i++) {
+    const t = (i + (now / 70) % 1) / 9;
+    ctx.globalAlpha = k * (1 - t * 0.6); ctx.fillStyle = i % 2 ? '#ffd84a' : '#ff5a1a';
+    ctx.fillRect(Math.round(fx + (mx - fx) * t + Math.sin(i * 7 + now / 50) * 4), Math.round(fy + (my - fy) * t + Math.cos(i * 5 + now / 50) * 4), 2, 2);
+  }
+  ctx.restore();
+}
+// You, mid-teleport: flickering between red and orange as you fade back in.
+function drawSpearBlink(p, k) {
+  const now = performance.now(), mx = p.x + p.w / 2, my = p.y + p.h / 2;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.9 * k;
+  const g = ctx.createRadialGradient(mx, my, 1, mx, my, p.w * 1.1);
+  g.addColorStop(0, Math.floor(now / 60) % 2 ? '#ff8a1a' : '#ff2a1a'); g.addColorStop(0.6, 'rgba(255,90,20,0.5)'); g.addColorStop(1, 'rgba(255,60,10,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(mx, my, p.w * 1.05, p.h * 0.85, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+// IGNITION: five little flames under you, lit one per teleport; all five and the special is charged.
+function drawSpearCharge(p, x, y) {
+  const now = performance.now(), n = p.fsCh, full = n >= 5;
+  ctx.save();
+  for (let i = 0; i < 5; i++) {
+    const fx = Math.round(x + p.w / 2 - 10 + i * 5), fy = y + p.h + 4;
+    ctx.fillStyle = i < n ? (full ? (Math.floor(now / 120 + i) % 2 ? '#ffd84a' : '#ff5a1a') : '#ff7a2a') : 'rgba(80,30,20,0.7)';
+    ctx.fillRect(fx, fy, 3, 3);
+    if (i < n) { ctx.fillStyle = '#ffd84a'; ctx.fillRect(fx + 1, fy - 1, 1, 1); }
+  }
+  if (full) {
+    ctx.globalAlpha = 0.3 + 0.15 * Math.sin(now / 90); ctx.strokeStyle = '#ff5a1a'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x + p.w / 2, y + p.h / 2, p.w + 2, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+}
+// SUPER: the spear whirling round you inside a wide circle of fire.
+function drawSpearSpin(p, x, y) {
+  const now = performance.now(), mx = x + p.w / 2, my = y + p.h / 2, R = 170;
+  ctx.save();
+  ctx.globalAlpha = 0.16; ctx.fillStyle = '#ff3a1a'; ctx.beginPath(); ctx.arc(mx, my, R, 0, Math.PI * 2); ctx.fill();
+  for (let i = 0; i < 28; i++) {
+    const a = i / 28 * Math.PI * 2 + now / 260, fl = 5 + 3 * Math.sin(now / 70 + i * 1.7);
+    ctx.globalAlpha = 0.85; ctx.fillStyle = i % 3 ? '#ff6a1a' : '#ffd84a';
+    ctx.beginPath(); ctx.ellipse(mx + Math.cos(a) * R, my + Math.sin(a) * R, 3, fl, a + Math.PI / 2, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 0.5; ctx.strokeStyle = '#ffb84a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(mx, my, R, 0, Math.PI * 2); ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.translate(mx, my); ctx.rotate(now / 55);
+  for (let i = 0; i < 2; i++) { ctx.rotate(Math.PI); ctx.save(); ctx.translate(-22, 0); drawWeaponPixels(ctx, 'firespear', 1, WEAPON_COLOR.firespear); ctx.restore(); }
+  ctx.restore();
+}
+// STRONG FIRE: bigger, hotter flames than an ordinary burn.
+function drawStrongFire(x, y, w, h) {
+  const now = performance.now();
+  ctx.save();
+  for (let i = 0; i < 7; i++) {
+    const t = ((now / 380) + i / 7) % 1, fx = x + w * (0.1 + 0.8 * ((i * 0.37) % 1)), fy = y + h - t * (h + 8);
+    ctx.globalAlpha = 0.9 * (1 - t); ctx.fillStyle = t < 0.4 ? '#ffd84a' : t < 0.7 ? '#ff7a1a' : '#ff2a1a';
+    const s = 4 * (1 - t) + 1;
+    ctx.fillRect(Math.round(fx - s / 2), Math.round(fy), Math.ceil(s), Math.ceil(s * 1.4));
+  }
+  ctx.restore();
+}
+// Stunned by an IGNITION hit: flames circling over the head.
+function drawFireStun(p) {
+  const now = performance.now(), x = p.x + p.w / 2, y = p.y - 5;
+  ctx.save();
+  for (let i = 0; i < 4; i++) {
+    const a = now / 160 + i * Math.PI / 2, sx = Math.round(x + Math.cos(a) * 10), sy = Math.round(y + Math.sin(a) * 3);
+    ctx.fillStyle = '#ff5a1a'; ctx.fillRect(sx - 1, sy - 2, 3, 4);
+    ctx.fillStyle = '#ffd84a'; ctx.fillRect(sx, sy - 3, 1, 2);
+  }
+  ctx.restore();
+}
+// The thrown spear, a tail of fire behind it.
+function drawThrownSpear(f, now) {
+  ctx.save();
+  ctx.translate(f.x, f.y); ctx.rotate(f.a);
+  for (let i = 0; i < 6; i++) {
+    const t = i / 6;
+    ctx.globalAlpha = 0.55 * (1 - t); ctx.fillStyle = i % 2 ? '#ffd84a' : '#ff5a1a';
+    ctx.beginPath(); ctx.arc(-26 - i * 6, Math.sin(now * 30 + i) * 2, 5 - i * 0.6, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.translate(-28, 0);
+  drawWeaponPixels(ctx, 'firespear', 1.05, WEAPON_COLOR.firespear);
+  ctx.restore();
+}
+// Its trail: patches of fire flickering on the floor, dying down as they go out.
+function drawSpearFire(f, now) {
+  const left = 1 - (f.k || 0), r = f.r * (0.6 + 0.4 * Math.min(1, left * 3));
+  ctx.save();
+  ctx.globalAlpha = 0.28 * Math.min(1, left * 2); ctx.fillStyle = '#ff3a1a';
+  ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, Math.PI * 2); ctx.fill();
+  for (let i = 0; i < 4; i++) {
+    const t = ((now * 1.6) + i / 4 + f.id * 0.17) % 1, fx = f.x + Math.sin(f.id * 3 + i * 2.1) * r * 0.6, fy = f.y + r * 0.3 - t * r * 1.4;
+    ctx.globalAlpha = Math.min(1, left * 2) * (1 - t);
+    ctx.fillStyle = t < 0.35 ? '#ffd84a' : t < 0.7 ? '#ff7a1a' : '#ff2a1a';
+    const s = 3.5 * (1 - t) + 1.5;
+    ctx.fillRect(Math.round(fx - s / 2), Math.round(fy), Math.ceil(s), Math.ceil(s * 1.5));
+  }
+  ctx.restore();
+}
+// Where it struck: a ring of fire and light bursting outward.
+function drawSpearRing(f, now) {
+  const k = f.k || 0, rr = f.r * (0.25 + 0.75 * Math.sqrt(k)), fade = 1 - k;
+  ctx.save();
+  ctx.globalAlpha = 0.35 * fade; ctx.fillStyle = '#ffd84a';
+  ctx.beginPath(); ctx.arc(f.x, f.y, rr * 0.7, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.9 * fade; ctx.strokeStyle = '#ff5a1a'; ctx.lineWidth = 6 * fade + 2;
+  ctx.beginPath(); ctx.arc(f.x, f.y, rr, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = '#fff2c8'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(f.x, f.y, rr - 3, 0, Math.PI * 2); ctx.stroke();
+  for (let i = 0; i < 16; i++) {
+    const a = i / 16 * Math.PI * 2 + now;
+    ctx.fillStyle = i % 2 ? '#ffd84a' : '#ff3a1a';
+    ctx.fillRect(Math.round(f.x + Math.cos(a) * rr - 2), Math.round(f.y + Math.sin(a) * rr - 4), 4, 6);
+  }
+  ctx.restore();
+}
+
+// ── THE SECRET BOT's arena ── lava, scales, rock, and a scorched ring in the middle.
+const FIRE_ARENA = { theme: 'lava', floor: 'scales', wall: 'rock' };
+function paintFireDecor(g) {
+  const ax = ARENA_X, ay = ARENA_Y, aw = CANVAS_W - ax * 2, ah = CANVAS_H - ay * 2;
+  const cx0 = ax + aw / 2, cy0 = ay + ah / 2, R = Math.min(aw, ah) * 0.3;
+  g.save();
+  const glow = g.createRadialGradient(cx0, cy0, 0, cx0, cy0, R * 1.6);
+  glow.addColorStop(0, 'rgba(255,90,26,0.22)'); glow.addColorStop(1, 'rgba(255,90,26,0)');
+  g.fillStyle = glow; g.fillRect(ax, ay, aw, ah);
+  g.strokeStyle = 'rgba(255,120,40,0.35)'; g.lineWidth = 3;
+  g.beginPath(); g.arc(cx0, cy0, R, 0, Math.PI * 2); g.stroke();
+  g.strokeStyle = 'rgba(255,200,80,0.25)'; g.lineWidth = 1;
+  g.beginPath(); g.arc(cx0, cy0, R - 8, 0, Math.PI * 2); g.stroke();
+  // cracks of fire running out of the ring
+  g.strokeStyle = 'rgba(255,110,30,0.3)'; g.lineWidth = 2;
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * Math.PI * 2 + 0.2;
+    let x = cx0 + Math.cos(a) * R, y = cy0 + Math.sin(a) * R;
+    g.beginPath(); g.moveTo(x, y);
+    for (let s = 0; s < 4; s++) { x += Math.cos(a + (s % 2 ? 0.4 : -0.4)) * R * 0.22; y += Math.sin(a + (s % 2 ? 0.4 : -0.4)) * R * 0.22; g.lineTo(x, y); }
+    g.stroke();
+  }
+  g.restore();
+}
+// The event card's banner: the bot, the spear burning in its hand, embers rising.
+function drawSecretBanner(g, W, H, now) {
+  const sky = g.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, '#1a0402'); sky.addColorStop(1, '#6a1806');
+  g.fillStyle = sky; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 46; i++) {
+    const t = ((now / 2600) + i * 0.137) % 1, x = (i * 83) % W + Math.sin(now / 500 + i) * 6, y = H - t * (H + 10);
+    g.globalAlpha = 1 - t; g.fillStyle = i % 3 ? '#ff6a1a' : '#ffd84a'; g.fillRect(Math.round(x), Math.round(y), 2, 2);
+  }
+  g.globalAlpha = 1;
+  const r = 58 + Math.sin(now / 300) * 4;
+  g.strokeStyle = 'rgba(255,106,26,0.75)'; g.lineWidth = 3;
+  g.beginPath(); g.ellipse(W / 2, H - 20, r * 1.6, r * 0.3, 0, 0, Math.PI * 2); g.stroke();
+  const spr = playerSprite('#a8b0c0', 0, 1, false, 'robot', 0), bob = Math.sin(now / 400) * 2;
+  if (spr) { g.save(); g.translate(W / 2 - 34, H - 104 + bob); g.scale(3, 3); g.drawImage(spr, 0, -7); g.restore(); }
+  g.save(); g.translate(W / 2 + 30, H - 52 + bob); g.rotate(-1.15 + Math.sin(now / 600) * 0.08);
+  g.globalAlpha = 0.35 + 0.15 * Math.sin(now / 90); g.fillStyle = '#ff5a1a';
+  g.beginPath(); g.ellipse(70, 0, 26, 14, 0, 0, Math.PI * 2); g.fill();
+  g.globalAlpha = 1;
+  drawWeaponPixels(g, 'firespear', 2, WEAPON_COLOR.firespear);
+  g.restore();
+  g.font = 'bold 22px "Courier New", monospace'; g.textAlign = 'left'; g.fillStyle = '#ffd84a'; g.strokeStyle = '#2a0400'; g.lineWidth = 4;
+  g.strokeText('?', W / 2 - 60, 34 + bob); g.fillText('?', W / 2 - 60, 34 + bob);
 }

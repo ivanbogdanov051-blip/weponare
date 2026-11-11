@@ -775,6 +775,21 @@ const WEAPON_ART = {
     k.line(22, -8.6, 69, -7.6, 0.5, '#ffffff'); k.line(69, -7.6, 83, -0.2, 0.5, '#ffffff');             // honed edge
     k.r(82.4, -0.5, 1.4, 1, '#ffffff');                                                                 // the point
   }},
+  // The Fire Spear (SECRET): a haft of black iron cracked with embers, bound in gold,
+  // and a head of living flame, white-hot at its heart.
+  firespear: { draw(k, wc) {
+    k.circ(-5, 0, 2.2, '#ff3a1a'); k.circ(-5, 0, 1.1, '#ffd84a');                  // a burning pommel
+    k.r(-4, -1.3, 32, 2.6, '#2a0a06');                                             // the haft
+    for (let x = -2; x < 26; x += 4) k.r(x, -0.4, 2, 0.8, '#ff5a1a');              // embers in its cracks
+    for (const x of [-3, 7, 17]) k.r(x, -1.8, 1.6, 3.6, '#d9a520');                // gold bands
+    k.poly([[27, -4], [30, -1.6], [30, 1.6], [27, 4], [28.6, 0]], '#d9a520');       // the collar
+    k.glow(38, 0, 10, '#ff6a1a', 0.35);
+    k.poly([[29, -3.8], [37, -5.4], [47, 0], [37, 5.4], [29, 3.8]], '#e8240e');     // the head, all flame
+    k.poly([[30, -2.6], [37, -3.6], [45, 0], [37, 3.6], [30, 2.6]], '#ff8a1a');
+    k.poly([[31, -1.3], [37, -1.8], [42.5, 0], [37, 1.8], [31, 1.3]], '#ffd84a');
+    k.r(33, -0.4, 6, 0.8, '#ffffff');                                              // white-hot core
+    k.poly([[33.5, -5], [35.5, -8.5], [37, -4.8]], '#ff6a1a'); k.poly([[33.5, 5], [35.5, 8.5], [37, 4.8]], '#ff6a1a');   // flames licking off it
+  }},
   // Wavestorm: a silver and sapphire wand, a single drop of water floating at its tip.
   wavestorm: { draw(k, wc) {
     k.circ(-2.5, 0, 2.2, '#c8d8e8'); k.circ(-2.5, 0, 1.1, '#2a7ad8');                 // pommel

@@ -423,6 +423,19 @@ const WEAPONS = [
   // ATK: ten hunting waves in a rapid burst. SPECIAL: swell up, turn to water and
   // ram everything in your way. SUPER: his cyclone, far worse. PASSIVE: ENDLESS
   // TIDE, water wherever you walk and a faster step while you hold it.
+  // ── SECRET ── Never sold: only won in the SECRET BOT event (see EVENTS).
+  // THE FIRE SPEAR. ATK: your screen fades red, and your next tap or click on the
+  // field TELEPORTS you toward it (press ATK again instead to go toward the mouse or
+  // the nearest foe); you land in a burst of fire. SPECIAL: throw the spear. It
+  // leaves a trail of strong fire (it burns while you stand in it, and a moment
+  // after you leave) and bursts on whatever it hits into a ring of fire that sets
+  // everyone near alight. SUPER: spin the spear in a wide circle of fire, then strike
+  // everyone it caught again, one after another. PASSIVE: IGNITION, every 5 teleports
+  // charge the special: its next hit deals 3x and stuns.
+  { id: 'firespear', name: 'FIRE SPEAR', damage: 44, range: 220, atkSpd: 1500, type: 'ranged', unlockXp: 0,
+    shopOnly: true, noRequirement: true, secret: true, price: 0, fireSpear: true,
+    special: { kind: 'spearthrow', dmg: 110, range: 420, cd: 7000 },
+    super:   { kind: 'spearspin', dmg: 85, cd: 24000 } },
   { id: 'wavestorm', name: 'WAVESTORM', damage: 26, range: 430, atkSpd: 2200, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, mythic: true, price: 600000, waveBurst: true,
     mythicKills: 350, mythicNeeds: ['windwand'], mythicBoss: 'tsunami',
@@ -452,7 +465,7 @@ const WEAPON_COLORS = {
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
   shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
   fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff', samuraiblade: '#ff5a5a', endlessscythe: '#7a2aff', darklight: '#e8e8f4', starfall: '#ffe9a0', worldsplitter: '#ff6a1a', soullantern: '#6affc8', ashfeather: '#ff8a3a', chronosedge: '#7ac8ff', hydrafang: '#5ae87a',
-  greatestsword: '#ffe9a8', wavestorm: '#4ac8ff', ghostdagger: '#a8f0ff', stormhammer: '#7ac8ff', frostscythe: '#bfefff', sunbow: '#ffd24a',
+  greatestsword: '#ffe9a8', wavestorm: '#4ac8ff', firespear: '#ff5a1a', ghostdagger: '#a8f0ff', stormhammer: '#7ac8ff', frostscythe: '#bfefff', sunbow: '#ffd24a',
 };
 
 // ── Weapon upgrades bought with coins from the menu ──
@@ -524,6 +537,7 @@ const WEAPON_UPGRADES = {
   ashfeather:  ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   chronosedge: ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   hydrafang:   ['dmg', 'spd', 'crit', 'cdr', 'rng'],
+  firespear:   ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   ghostdagger: ['dmg', 'spd', 'crit', 'cdr'],
   stormhammer: ['dmg', 'spd', 'crit', 'cdr', 'knock'],
   frostscythe: ['dmg', 'rng', 'chill', 'cdr', 'aoe'],
@@ -564,6 +578,7 @@ const PASSIVES = {
   wavestorm:   { name: 'ENDLESS TIDE', color: '#4ac8ff', desc: 'water pours out wherever you walk, slowing and draining enemies, and you move 25% faster' },
   worldsplitter: { name: 'AFTERSHOCK', color: '#ff6a1a', desc: 'every 3rd swing splits the ground three ways' },
   chronosedge: { name: 'BORROWED TIME', color: '#7ac8ff', desc: 'your special and super recharge 30% faster' },
+  firespear:   { name: 'IGNITION', color: '#ff5a1a', desc: 'every 5 teleports charge your special: the next foe it hits takes 3x damage and is stunned' },
   hydrafang:   { name: 'REGROWTH', color: '#5ae87a', desc: 'drop below 30% health and you regrow 5% of it a second for 4s (every 15s)' },
   ashfeather:  { name: 'REBIRTH', color: '#ff8a3a', desc: 'the first time you would die in a game, you rise again at half health in an explosion of fire' },
   soullantern: { name: 'SOUL BOND', color: '#6affc8', desc: 'every soul you carry shields you from 2% of all damage (up to 32%)' },
@@ -1508,7 +1523,7 @@ function forgeCan(w) {
   if (w.special && !(w.special.minCd >= w.special.cd)) can.push('special');   // the Fire Glove's is already at its limit
   if (w.type === 'melee' && !w.swing360 && !w.fireRing && !w.vortexShield && !w.lightDash) can.push('arc');
   const special = w.mindTrap || w.portalShot || w.kunaiOrbit || w.starStaff || w.groundSplit || w.timeBlade || w.fireRing
-    || w.vortexShield || w.lightDash || w.infinityShot || w.grapple;
+    || w.vortexShield || w.lightDash || w.infinityShot || w.grapple || w.fireSpear;
   if (forgeClass(w) === 'ranged' && !special) {
     const hunts = w.soulWisp || w.phoenixBow || w.hydraBite || w.slashWave || w.waveBurst;   // these shots already find their target
     can.push('shots');
@@ -2737,7 +2752,7 @@ function mythicOffer(pw, def) {
   const admin = isAdminPw(pw);
   const prof = profileFor(pw, {});
   // To own even one mythic you must already own every legendary weapon.
-  const legends = WEAPONS.filter(w => w.shopOnly && !w.mythic);
+  const legends = WEAPONS.filter(w => w.shopOnly && !w.mythic && !w.secret);
   const haveLegends = legends.filter(w => prof.weapons.includes(w.id)).length;
   const needs = [{ name: 'ALL LEGENDARIES ' + haveLegends + '/' + legends.length, plain: true, ok: admin || haveLegends >= legends.length },
     ...(def.mythicBoss === 'tsunami' ? [{ name: 'BEAT TSUNAMI', plain: true, ok: admin || !!progress().tsunamiBeat[pw] }] : []),
@@ -4116,7 +4131,7 @@ function applyDamage(target, dmg, attackerKey) {
     return;
   }
   if (room.gameMode === 'coop' && target.num && isPKey(attackerKey)) return;
-  if (room.event && attackerKey === 'monster' && target.num) dmg *= VA.dmg;   // the rare Abyss hits much harder
+  if (room.event === 'voiddungeon' && attackerKey === 'monster' && target.num) dmg *= VA.dmg;   // the rare Abyss hits much harder
   // Weapon upgrades on the attacking player: critical hits, lifesteal, knockback.
   const atk = isPKey(attackerKey) ? room.players[attackerKey] : null;
   const aw = atk && atk !== target ? weapon(atk) : null;
@@ -4412,6 +4427,7 @@ function respawnPlayer(p) {
   p.pull = null;
   p.invincible = 2000;
   p.hitFlash   = 0;
+  p.fsArm = 0; p.fsSpin = null; p.sfire = null; p.fsClick = null;
   fitShield(p);      // a new life, and the shield is ready
 }
 
@@ -4430,6 +4446,22 @@ function checkRoundEnd() {
     return;
   }
 
+  if (room.event) {
+    // An event against a bot: one match, three lives each. Lose yours and it's over;
+    // take all of its and it leaves the trophy behind.
+    const p1Out = !p1 || (p1.dead && p1.lives <= 0), p2Out = !p2 || (p2.dead && p2.lives <= 0);
+    if (p1Out && !room.eventWin) { room.gameState = 'ROUND_OVER'; room.roundOverTimer = 6000; room.victory = false; return; }
+    if (p2Out && !room.trophy && !room.eventWin) {
+      room.fires = room.fires.filter(f => f.owner !== 'p2');
+      room.projectiles = room.projectiles.filter(pr => pr.owner !== 'p2');
+      if (p1 && p1.sfire && p1.sfire.owner === 'p2') p1.sfire = null;
+      const at = arenaClamp(p2 ? cx(p2) : CANVAS_W / 2, Math.max(p2 ? cy(p2) : 0, ARENA_Y + ARENA_H * 0.32), 24);
+      room.trophy = { x: Math.round(at.x - TROPHY_W / 2), y: Math.round(at.y - TROPHY_H / 2), w: TROPHY_W, h: TROPHY_H, readyAt: Date.now() + TROPHY_DELAY_MS };
+      room.particles.push({ type: 'waveclear', x: CANVAS_W / 2, y: CANVAS_H / 2 - 10, text: 'THE SECRET BOT IS DOWN!', timer: 4000 });
+      room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 46, text: 'TOUCH THE TROPHY TO CLAIM YOUR PRIZE', color: '#ffd84a', timer: 5000, max: 5000 });
+    }
+    return;
+  }
   if (room.gameMode === 'coop') {
     const p1Out = !p1 || (p1.dead && p1.lives <= 0);
     const p2Out = !p2 || (p2.dead && p2.lives <= 0);
@@ -4502,7 +4534,7 @@ function tickRoom(dt) {
                            (!isSolo() && KEYS.some(k => k !== 'p1' && room.unlockQueues[k].length > 0));
         if (hasUnlocks) {
           room.gameState = 'WEAPON_UNLOCK';
-        } else if (isSolo()) {
+        } else if (isSolo() || room.event) {
           endWavesRun();
         } else {
           startGame();
@@ -4640,7 +4672,7 @@ function tickRoom(dt) {
     // The katana's spin (and the Worldsplitter's leap) is all you do while it lasts — only parry gets through.
     if (p.shield && (room.inputs[key].block || p.shWant) && !(p.shieldCd > 0) && !p.controlling) raiseShield(p, key);
     p.shWant = false;
-    if (p.kspin > 0 || p.sky) {
+    if (p.kspin > 0 || p.sky || p.fsSpin) {
       if (room.parryJustPressed[key] && p.parryCooldown <= 0) {
         startParry(p);
       }
@@ -4804,6 +4836,7 @@ function tickRoom(dt) {
   updatePhoenix(dt);
   updateChronos(dt);
   updateHydra(dt);
+  updateFireSpear(dt);
   if (room.gameMode === 'sawroom') updateSawRoom(dt);
   updateRareShop(dt);
 
@@ -5417,6 +5450,7 @@ function attackMove(p, pKey) {
 
   if (w.mindTrap) { placeMindTrap(p, pKey, w, dmgMult); return; }
   if (w.lightDash) { p.swingTimer = 0; bladeAttack(p, pKey, w, dmgMult); return; }
+  if (w.fireSpear) { spearAttack(p, pKey, w); return; }
   if (w.vortexShield) {
     p.vortexShield = VORTEX_SHIELD_MS;
     room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 22, timer: 300, max: 300, color: WEAPON_COLORS.vortex });
@@ -5587,6 +5621,11 @@ function doSuper(p, pKey) {
   p.swingTimer = 300;
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
   if (su.kind === 'skyfall') { startSkyfall(p, pKey, Math.round(su.dmg * dmgMult)); return; }
+  if (su.kind === 'spearspin') {
+    p.fsSpin = { t: FS_SPIN_MS, tick: 0, dmg: Math.round(su.dmg * dmgMult), hit: [] };
+    room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 60, timer: 800, max: 800, color: '#ff5a1a', text: 'FIRE SPIN' });
+    return;
+  }
   if (su.kind === 'greatcrack') { castGreatCrack(p, pKey, Math.round(su.dmg * dmgMult)); return; }
   if (su.kind === 'wavecyclone') { castWaveCyclone(p, pKey, Math.round(su.dmg * dmgMult)); return; }
   if (su.kind === 'timestop') { stopTime(p, pKey); return; }
@@ -6288,6 +6327,9 @@ function updateFires(factor, dt) {
     if (f.kind === 'cloud') return updateCloud(f, dt);
     if (f.kind === 'blackhole') return updateBlackhole(f, factor, dt);
     if (f.kind === 'lightstreak') return updateLightStreak(f);
+    if (f.kind === 'fsspear') return updateSpearThrow(f, factor);
+    if (f.kind === 'fsfire') return updateSpearFire(f, dt);
+    if (f.kind === 'fsring') return true;      // the burst itself, only to be seen
     if (f.kind === 'drain') return updateDrain(f, factor, dt);
     if (f.kind === 'tornado') return updateTornado(f, factor, dt);
     if (f.kind === 'hurricane') return updateHurricane(f, factor, dt);
@@ -6727,13 +6769,19 @@ const ABYSS_SLASH_WIND = 650, ABYSS_SLASH_MS = 950, ABYSS_SLASH_R = 165, ABYSS_S
 const EVENT_DAY = 24 * 60 * 60 * 1000;
 const EVENTS = {
   voiddungeon: {
-    name: 'VOID DUNGEON', fee: 200000, prize: 1000000, gear: ['sh_voidgate'], lasts: 14 * EVENT_DAY, boss: 'rareabyss',
-    desc: 'A giant arena of pure void, and the RARE ABYSS waiting inside: three times his health, bigger, faster, '
-        + 'hitting much harder, with bigger attacks and a new one, ECLIPSE. Beat him, then touch the trophy to claim the prize.',
+    name: 'VOID DUNGEON', fee: 200000, prize: 1000000, gear: ['sh_voidgate'], lasts: 19 * EVENT_DAY, boss: 'rareabyss',
+    desc: 'A giant arena of pure void, and the RARE ABYSS waiting inside: four times his health, bigger, faster, '
+        + 'hitting far harder, with bigger attacks and a new one, ECLIPSE. Beat him, then touch the trophy to claim the prize.',
+  },
+  secretbot: {
+    name: 'SECRET BOT', fee: 200000, prize: 1000000, gear: ['firespear'], lasts: 14 * EVENT_DAY, boss: 'secretbot',
+    desc: 'A bot as strong as the INSANE one, holding a secret weapon: the FIRE SPEAR, fully upgraded. It teleports, '
+        + 'throws fire, spins a ring of flame, uses every ability, and carries the best shield in the game. '
+        + 'Three lives each. Take all three of its lives, then touch the trophy to win the spear.',
   },
 };
 // The rare Abyss, next to the ordinary one.
-const VA = { hp: 3, size: 1.4, speed: 1.5, rate: 1.4, dmg: 1.6, eclipseRing: 30, eclipseCore: 45 };
+const VA = { hp: 4, size: 1.4, speed: 1.6, rate: 1.6, dmg: 1.9, eclipseRing: 34, eclipseCore: 50 };
 const TROPHY_W = 28, TROPHY_H = 36, TROPHY_DELAY_MS = 1000;
 
 // ── Endless Scythe ──
@@ -7115,14 +7163,19 @@ function claimEventPrize(key) {
   const fresh = [];
   if (pw && !isAdminPw(pw)) {
     const d = progress(), own = d.armor[pw] || [];
-    for (const id of ev.gear) if (Armor.BY_ID[id] && !own.includes(id)) { own.push(id); fresh.push(id); }
+    for (const id of ev.gear) {
+      if (WEAPON_BY_ID[id]) {                    // a weapon (the Fire Spear)
+        const have = d.weapons[pw] || [];
+        if (!have.includes(id)) { d.weapons[pw] = sortWeaponIds([...have, id]); fresh.push(id); }
+      } else if (Armor.BY_ID[id] && !own.includes(id)) { own.push(id); fresh.push(id); }
+    }
     d.armor[pw] = own;
     markDirty();
   }
   room.eventWin = { coins, gear: ev.gear, fresh };
   room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 200, timer: 900, max: 900, color: '#ffd84a' });
   room.particles.push({ type: 'coin', x: cx(p), y: p.y - 10, text: '+' + coins.toLocaleString() + ' COINS', timer: 3500, max: 3500 });
-  for (const id of ev.gear) room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 46, text: Armor.BY_ID[id].name + ' IS YOURS!', color: '#ff5ad8', timer: 4000, max: 4000 });
+  for (const id of ev.gear) room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 46, text: (WEAPON_BY_ID[id] || Armor.BY_ID[id]).name + ' IS YOURS!', color: '#ff5ad8', timer: 4000, max: 4000 });
   room.victory = true;
   room.gameState = 'ROUND_OVER';
   room.roundOverTimer = 8000;
@@ -8513,6 +8566,210 @@ function puppetAttack(m, pKey) {
   if (m.boss) room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: reach, timer: 300, max: 300, color: '#c8e07a' });
 }
 
+// ── THE FIRE SPEAR ── (the SECRET BOT event's secret weapon; see WEAPONS)
+const FS_ARM_MS = 4000, FS_CLICK_MS = 400, FS_BLINK_MS = 320, FS_LAND_R = 46, FS_ARM_GAP = 150;
+const FS_THROW_SPEED = 7.5, FS_HIT_R = 12, FS_TRAIL_GAP = 18, FS_TRAIL_R = 15, FS_TRAIL_MS = 2600, FS_TRAIL_TICK = 300, FS_TRAIL_SHARE = 0.07;
+const FS_RING_R = 95, FS_RING_MS = 650, FS_RING_SHARE = 0.6;
+const FS_BURN_TICK = 300, FS_BURN_DMG = 5, FS_BURN_LINGER = 1500, FS_BURN_RING = 3000, FS_BURN_LAND = 1200;
+const FS_CHARGE_N = 5, FS_CHARGE_MULT = 3, FS_CHARGE_STUN = 1500;
+const FS_SPIN_MS = 1100, FS_SPIN_R = 170, FS_SPIN_TICK = 220, FS_SPIN_SHARE = 0.35, FS_CHAIN_GAP = 280, FS_CHAIN_IFRAME = 500;
+
+// STRONG FIRE: an ordinary burn, and on top of it FS_BURN_DMG every FS_BURN_TICK
+// for as long as it lasts (it keeps going a moment after you step out of the fire).
+function strongFire(t, ms, owner) {
+  if (t.dead) return;
+  ignite(t, ms);
+  t.sfire = { left: Math.max(t.sfire?.left || 0, ms), acc: t.sfire?.acc || 0, owner };
+}
+
+// ATK: the first press arms it (the screen fades red); the next tap or click on the
+// field is where you go. A second press goes toward the mouse, or the nearest foe.
+function spearAttack(p, pKey, w) {
+  p.swingTimer = 0;
+  if (p.fsArm > 0) {
+    const inp = room.inputs[pKey] || {};
+    let tx, ty;
+    if (inp.aimX != null && inp.aimY != null) { tx = inp.aimX; ty = inp.aimY; }
+    else {
+      const f = nearestFoe(p, pKey);
+      if (f) { tx = cx(f); ty = cy(f); } else { tx = cx(p) + (p.facing || 1) * w.range; ty = cy(p); }
+    }
+    spearTeleport(p, pKey, tx, ty);
+    return;
+  }
+  p.fsArm = FS_ARM_MS;
+  p.atkCooldown = FS_ARM_GAP;          // so one press isn't read as two
+}
+// The teleport: gone in a flash of red, back in a burst of orange fire.
+function spearTeleport(p, key, tx, ty) {
+  const w = weapon(p), sx = cx(p), sy = cy(p), a = Math.atan2(ty - sy, tx - sx);
+  const dist = Math.min(w.range, Math.hypot(tx - sx, ty - sy));
+  room.particles.push({ type: 'teleport', x: sx, y: sy, timer: 420, max: 420, color: '#ff3a1a' });
+  p.x = sx + Math.cos(a) * dist - p.w / 2; p.y = sy + Math.sin(a) * dist - p.h / 2;
+  clampToArena(p, 2);
+  p.pull = null; p.fsArm = 0; p.fsClick = null;
+  p.fsBlink = FS_BLINK_MS; p.fsFrom = { x: sx, y: sy };
+  p.invincible = Math.max(p.invincible || 0, 200);
+  if (Math.abs(Math.cos(a)) > 0.05) p.facing = Math.cos(a) < 0 ? -1 : 1;
+  p.atkCooldown = w.atkSpd * (hasEffect(p, 'haste') ? 0.5 : 1);
+  p.swingTimer = 200;
+  room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 420, max: 420, color: '#ffa52a' });
+  room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: FS_LAND_R, timer: 320, max: 320, color: '#ff6a1a' });
+  const dmg = Math.round(w.damage * (hasEffect(p, 'strength') ? 1.8 : 1));
+  for (const t of enemyTargets(key)) {
+    if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) > FS_LAND_R + t.w / 2) continue;
+    if (!t.num) t.invincible = 0;
+    strikeTarget(t, dmg, key);
+    if (!t.dead) strongFire(t, FS_BURN_LAND, key);
+  }
+  // IGNITION: every 5 teleports charge the special.
+  if (p.passive === 'firespear' && !p.fsCharged) {
+    p.fsCount = (p.fsCount || 0) + 1;
+    if (p.fsCount >= FS_CHARGE_N) {
+      p.fsCharged = true; p.fsCount = 0;
+      room.particles.push({ type: 'crit', x: cx(p), y: p.y - 12, text: 'SPECIAL CHARGED', timer: 900, max: 900 });
+    }
+  }
+}
+
+// SPECIAL: the spear, thrown at the nearest foe.
+function throwSpear(p, key, sp, dmg) {
+  const f = nearestFoe(p, key), inp = room.inputs[key] || {};
+  const a = f ? Math.atan2(cy(f) - cy(p), cx(f) - cx(p))
+    : inp.aimX != null && inp.aimY != null ? Math.atan2(inp.aimY - cy(p), inp.aimX - cx(p)) : (p.facing === -1 ? Math.PI : 0);
+  p.facing = Math.cos(a) < 0 ? -1 : 1;
+  room.fires.push({ id: nextId(), kind: 'fsspear', owner: key, x: cx(p), y: cy(p), a, vx: Math.cos(a) * FS_THROW_SPEED, vy: Math.sin(a) * FS_THROW_SPEED,
+                    r: FS_HIT_R, t: 0, life: 60000, left: sp.range, lx: cx(p), ly: cy(p), dmg });
+}
+// In flight: it drops fire behind it, and bursts on the first foe it reaches (or the wall, or at the end of its range).
+function updateSpearThrow(f, factor) {
+  f.x += f.vx * factor; f.y += f.vy * factor; f.left -= Math.hypot(f.vx, f.vy) * factor;
+  while (Math.hypot(f.x - f.lx, f.y - f.ly) >= FS_TRAIL_GAP) {
+    f.lx += Math.cos(f.a) * FS_TRAIL_GAP; f.ly += Math.sin(f.a) * FS_TRAIL_GAP;
+    room.fires.push({ id: nextId(), kind: 'fsfire', owner: f.owner, x: Math.round(f.lx), y: Math.round(f.ly), r: FS_TRAIL_R, t: 0, life: FS_TRAIL_MS,
+                      tick: 0, dmg: Math.max(1, Math.round(f.dmg * FS_TRAIL_SHARE)) });
+  }
+  for (const t of enemyTargets(f.owner)) {
+    if (Math.hypot(cx(t) - f.x, cy(t) - f.y) > f.r + t.w / 2) continue;
+    if (playerKeyOf(t) && t.parryTimer > 0) { spawnParrySpark(cx(t), cy(t)); return false; }   // parried: it falls
+    spearBurst(f, t);
+    return false;
+  }
+  const out = f.x < ARENA_X || f.x > ARENA_X + ARENA_W || f.y < ARENA_Y || f.y > ARENA_Y + ARENA_H;
+  if (out || f.left <= 0) { spearBurst(f, null); return false; }
+  return true;
+}
+// The burst: a ring of fire round where it struck, everyone in it set alight.
+function spearBurst(f, hit) {
+  const o = room.players[f.owner];
+  const at = hit ? { x: cx(hit), y: cy(hit) } : arenaClamp(f.x, f.y, 4);
+  room.fires.push({ id: nextId(), kind: 'fsring', owner: f.owner, x: Math.round(at.x), y: Math.round(at.y), r: FS_RING_R, t: 0, life: FS_RING_MS });
+  room.particles.push({ type: 'shockwave', x: at.x, y: at.y, maxR: FS_RING_R, timer: 500, max: 500, color: '#ff5a1a' });
+  if (hit) {
+    let dmg = f.dmg;
+    if (o && o.fsCharged) {                      // IGNITION: three times as hard, and stunned in flames
+      o.fsCharged = false;
+      dmg *= FS_CHARGE_MULT;
+      stunTarget(hit, FS_CHARGE_STUN);
+      hit.fsStunT = FS_CHARGE_STUN;
+      room.particles.push({ type: 'trapburst', x: cx(hit), y: cy(hit), maxR: 44, timer: 800, max: 800, color: '#ff3a1a', text: 'IGNITED!' });
+    }
+    if (!hit.num) hit.invincible = 0;
+    applyDamage(hit, dmg, f.owner);
+    if (!hit.dead) strongFire(hit, FS_BURN_RING, f.owner);
+  }
+  for (const t of enemyTargets(f.owner)) {
+    if (t === hit || Math.hypot(cx(t) - at.x, cy(t) - at.y) > FS_RING_R + t.w / 2) continue;
+    if (!t.num) t.invincible = 0;
+    applyDamage(t, Math.round(f.dmg * FS_RING_SHARE), f.owner);
+    if (!t.dead) strongFire(t, FS_BURN_RING, f.owner);
+  }
+}
+// The trail: hurts whoever stands in it (one patch at a time) and leaves them burning.
+function updateSpearFire(f, dt) {
+  f.tick -= dt;
+  if (f.tick > 0) return true;
+  f.tick = FS_TRAIL_TICK;
+  const now = Date.now();
+  for (const t of enemyTargets(f.owner)) {
+    if (Math.hypot(cx(t) - f.x, cy(t) - f.y) > f.r + t.w / 2) continue;
+    if (t.fsTrailAt && now - t.fsTrailAt < FS_TRAIL_TICK - 20) continue;
+    t.fsTrailAt = now;
+    dotDamage(t, f.dmg, f.owner);
+    if (!t.dead) strongFire(t, FS_BURN_LINGER, f.owner);
+  }
+  return true;
+}
+
+// Every tick: the arming clock, the teleport click, the spin and its strikes, strong fire.
+function updateFireSpear(dt) {
+  for (const key of KEYS) {
+    const p = room.players[key];
+    if (!p) continue;
+    if (p.fsBlink > 0) p.fsBlink -= dt;
+    if (p.fsStunT > 0) p.fsStunT -= dt;
+    if (p.fsArm > 0) {
+      p.fsArm -= dt;
+      if (p.dead || !weapon(p).fireSpear) p.fsArm = 0;
+      else if (p.fsClick && Date.now() - p.fsClick.at <= FS_CLICK_MS && !(p.gsStun > 0) && !p.mindControlledBy && !p.controlling && !p.fsSpin) {
+        spearTeleport(p, key, p.fsClick.x, p.fsClick.y);
+      }
+    }
+    if (p.fsClick && Date.now() - p.fsClick.at > FS_CLICK_MS) p.fsClick = null;
+    if (p.fsSpin) spearSpinTick(p, key, dt);
+  }
+  for (const m of room.monsters) if (m.fsStunT > 0) m.fsStunT -= dt;
+  for (const t of [...allPlayers(), ...room.monsters, ...room.allies]) {
+    if (!t || !t.sfire) continue;
+    if (t.dead) { t.sfire = null; continue; }
+    const s = t.sfire;
+    s.left -= dt; s.acc += dt;
+    while (s.acc >= FS_BURN_TICK && !t.dead) { s.acc -= FS_BURN_TICK; dotDamage(t, FS_BURN_DMG, s.owner); }
+    if (s.left <= 0 || t.dead) t.sfire = null;
+  }
+}
+// SUPER: a wide circle of fire for FS_SPIN_MS; then everyone it caught is struck
+// again, one by one, FS_CHAIN_GAP apart.
+function spearSpinTick(p, key, dt) {
+  const s = p.fsSpin;
+  if (p.dead) { p.fsSpin = null; return; }
+  if (!s.chain) {
+    s.t -= dt; s.tick -= dt;
+    if (s.tick <= 0) {
+      s.tick = FS_SPIN_TICK;
+      for (const t of enemyTargets(key)) {
+        if (Math.hypot(cx(t) - cx(p), cy(t) - cy(p)) > FS_SPIN_R + t.w / 2) continue;
+        if (!t.num) t.invincible = 0;
+        strikeTarget(t, Math.max(1, Math.round(s.dmg * FS_SPIN_SHARE)), key);
+        if (!t.dead) strongFire(t, FS_BURN_LAND, key);
+        if (!s.hit.includes(t)) s.hit.push(t);
+      }
+    }
+    if (s.t <= 0) { if (s.hit.length) s.chain = { list: s.hit.slice(), wait: 0 }; else p.fsSpin = null; }
+    return;
+  }
+  const c = s.chain;
+  c.wait -= dt;
+  if (c.wait > 0) return;
+  let t = c.list.shift();
+  while (t && (t.dead || (t.num && unseen(t)))) t = c.list.shift();
+  if (!t) { p.fsSpin = null; return; }
+  const sx = cx(p), sy = cy(p), a = Math.atan2(cy(t) - sy, cx(t) - sx), gap = (t.w + p.w) / 2 + 4;
+  p.fsFrom = { x: sx, y: sy }; p.fsBlink = FS_BLINK_MS;
+  p.x = cx(t) - Math.cos(a) * gap - p.w / 2; p.y = cy(t) - Math.sin(a) * gap - p.h / 2;
+  clampToArena(p, 2);
+  p.facing = cx(t) < cx(p) ? -1 : 1;
+  p.invincible = Math.max(p.invincible || 0, FS_CHAIN_GAP + 60);
+  p.swingTimer = 200;
+  room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 380, max: 380, color: '#ffa52a' });
+  // "Hit again": through the moment of safety a hit gives (not the longer one after respawning).
+  if (!t.num || t.invincible <= FS_CHAIN_IFRAME) t.invincible = 0;
+  strikeTarget(t, s.dmg, key);
+  if (!t.dead) strongFire(t, FS_BURN_RING, key);
+  room.particles.push({ type: 'shockwave', x: cx(t), y: cy(t), maxR: 30, timer: 300, max: 300, color: '#ff3a1a' });
+  c.wait = FS_CHAIN_GAP;
+}
+
 // ── Light Blade ──
 // Every dash is a short sprint: the player is carried along an angle (curving
 // toward a target for the special), hitting each foe once per leg.
@@ -8722,7 +8979,7 @@ function maxedWeaponCount(weapons, upgrades) {
   return WEAPONS.filter(w => w.id !== 'lightblade' && weapons.includes(w.id)
     && upgradesFor(w.id).every(k => ((upgrades?.[w.id] || {})[k] || 0) >= UPGRADE_STATS[k].max)).length;
 }
-const lightMaxedNeed = () => Math.ceil(WEAPONS.filter(w => w.id !== 'lightblade' && !w.mythic).length * LIGHT_MAXED_SHARE);
+const lightMaxedNeed = () => Math.ceil(WEAPONS.filter(w => w.id !== 'lightblade' && !w.mythic && !w.secret).length * LIGHT_MAXED_SHARE);
 
 // Beating Light counts toward the Light Blade, for every player in the run.
 function creditLightKill() {
@@ -9349,6 +9606,7 @@ function doSpecial(p, pKey) {
     return;
   }
   if (sp.kind === 'kunaistorm') { darklightStorm(p, pKey, spDmg); return; }
+  if (sp.kind === 'spearthrow') { throwSpear(p, pKey, sp, spDmg); return; }
   if (sp.kind === 'tectonic') { castTectonic(p, pKey, sp, spDmg); return; }
   if (sp.kind === 'leapslam') { startLeapSlam(p, pKey, spDmg); return; }
   if (sp.kind === 'tidalram') { startTidalRam(p, pKey, spDmg); return; }
@@ -9682,6 +9940,11 @@ function playerView(p) {
     ...(p.souls ? { souls: p.souls } : {}),
     ...(p.deathDoor > 0 ? { ddoor: Math.round(p.deathDoor) } : {}),
     ...(p.phoenix ? { phx: Math.round(p.phoenix.t) } : {}),
+    ...(p.fsArm > 0 ? { fsArm: Math.round(p.fsArm) } : {}),
+    ...(p.fsBlink > 0 && p.fsFrom ? { fsBlink: Math.round(p.fsBlink), fsFrom: [r1(p.fsFrom.x), r1(p.fsFrom.y)] } : {}),
+    ...(w.fireSpear && p.passive === 'firespear' ? { fsCh: p.fsCharged ? FS_CHARGE_N : (p.fsCount || 0) } : {}),
+    ...(p.fsSpin && !p.fsSpin.chain ? { fspin: 1 } : {}),
+    ...(p.sfire ? { sfire: 1 } : {}), ...(p.fsStunT > 0 ? { fstun: 1 } : {}),
     ...(p.mirrorT > 0 ? { mirror: true } : {}),
     ...(p.venomT > 0 ? { venom: true } : {}),
     ...(p.regrowT > 0 ? { regrow: true } : {}),
@@ -9890,7 +10153,7 @@ function weaponCatalog() {
     needMind: !!w.needMind,
     needLight: !!w.needLight,
     needSamurai: !!w.needSamurai,
-    bossReward: !!w.bossReward,
+    bossReward: !!w.bossReward, secret: !!w.secret,
     special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd } : null,
     super: w.super ? { kind: w.super.kind, dmg: w.super.dmg, cd: w.super.cd } : null,
     upgrades: upgradesFor(w.id),
@@ -10053,6 +10316,10 @@ const BOT_LEVELS = {
   // `react` is how long it takes to notice a blow or a shot, and it makes up its
   // mind once for each (the others re-roll on every decision). `cdMul` slows its
   // attacks, specials and supers.
+  // The SECRET BOT event's: an INSANE bot with the Fire Spear, maxed (so its passive
+  // too), every ability (six at a time, dealt again as it goes) and the best shield.
+  secret:  { name: 'SECRET',  own: 0.80, think: 75,  aggro: 1.00, parry: 0.78, dodge: 0.90, skill: 1.00, slots: 6, dmg: 1.80, armor: 0.68, hp: 1.6,
+             secret: true, allAbil: true },
   admin:   { name: 'ADMIN',   own: 1.00, think: 60,  aggro: 1.00, parry: 0.55, dodge: 0.65, skill: 0.90, slots: 6, all: true, favor: 0.60, dmg: 1.5, armor: 0.72, hp: 1.7,
              react: 190, cdMul: 1.2 },
 };
@@ -10082,24 +10349,25 @@ function newBotRoom(level, size) {
 function setupBot() {
   const L = BOT_LEVELS[room.bot.level];
   const starters = getUnlockedWeaponIds(0);
-  const all = WEAPONS.map(w => w.id);
-  const weapons = L.all ? sortWeaponIds(all)
+  const all = WEAPONS.filter(w => !w.secret).map(w => w.id);      // a secret weapon is the SECRET BOT's alone
+  const weapons = L.secret ? ['firespear'] : L.all ? sortWeaponIds(all)
     : gameLoadout(sortWeaponIds([...new Set([...starters, ...rollOwned(all, L.own)])]),
                   (() => { const m = WEAPONS.filter(w => w.mythic); return m[Math.floor(Math.random() * m.length)].id; })());
   const upgrades = {};
   for (const id of weapons) {
     upgrades[id] = {};
     for (const k of upgradesFor(id)) {
-      if (L.all) { upgrades[id][k] = UPGRADE_STATS[k].max; continue; }          // admin: everything maxed
+      if (L.all || L.secret) { upgrades[id][k] = UPGRADE_STATS[k].max; continue; }          // admin and the secret bot: everything maxed
       const lv = Math.round(UPGRADE_STATS[k].max * L.own + (Math.random() - 0.5) * 2);
       upgrades[id][k] = Math.max(0, Math.min(UPGRADE_STATS[k].max - 1, lv));   // never fully maxed: no passives
     }
   }
-  let abilities = L.all ? pickSome(ABILITIES.map(a => a.id), L.slots) : pickSome(rollOwned(ABILITIES.map(a => a.id), L.own), L.slots);
+  let abilities = L.all || L.allAbil ? pickSome(ABILITIES.map(a => a.id), L.slots) : pickSome(rollOwned(ABILITIES.map(a => a.id), L.own), L.slots);
   if (!abilities.length) abilities = pickSome(ABILITIES.map(a => a.id), 1);   // always has at least one
   const slots = Array.from({ length: L.slots }, (_, i) => abilities[i] || null);
   const outfits = L.all ? ['golden'] : pickSome(rollOwned(SKIN_SHOP.map(s => s.id), L.own), 1);
-  room.playerNames.p2 = 'BOT ' + L.name;
+  room.playerNames.p2 = L.secret ? 'SECRET BOT' : 'BOT ' + L.name;
+  if (L.secret) room.playerArmor.p2 = [bestShieldId()];
   room.passwords.p2 = '';
   room.playerXp.p2 = 0;
   room.playerCoins.p2 = 0;
@@ -10110,9 +10378,15 @@ function setupBot() {
     colorIdx: Math.floor(Math.random() * SKIN_COLOR_COUNT), hatIdx: Math.floor(Math.random() * SKIN_HAT_COUNT),
     accIdx: Math.floor(Math.random() * SKIN_ACC_COUNT), outfit: outfits.length && (L.all || Math.random() < 0.7) ? outfits[0] : '',
   };
+  if (L.secret) room.playerSkins.p2 = { colorIdx: 0, hatIdx: 0, accIdx: 0, outfit: 'robot' };
   room.p2Joined = true;
   room.bot.thinkT = 0; room.bot.swapT = 0; room.bot.strafe = 1; room.bot.wasDead = true;
   room.bot.clock = 0; room.bot.parryAt = 0; room.bot.foeSwung = false; room.bot.shots = new WeakMap();
+}
+
+// The best shield in the game: the mythic that takes the most.
+function bestShieldId() {
+  return Armor.PIECES.filter(a => a.slot === 'shield').sort((a, b) => b.rarity - a.rarity || b.guard - a.guard)[0].id;
 }
 
 // Hold a random weapon from what it owns.
@@ -10156,7 +10430,7 @@ function botTick(dt) {
   b.swapT -= dt;
   if (b.wasDead || b.swapT <= 0) {
     if (b.wasDead || Math.random() < 0.8) botPickWeapon(p);
-    if (L.all) botDealAbilities(p, L);
+    if (L.all || L.allAbil) botDealAbilities(p, L);
     b.wasDead = false;
     b.swapT = BOT_SWAP_MIN + Math.random() * BOT_SWAP_VAR;
   }
@@ -10180,7 +10454,7 @@ function botTick(dt) {
   let mx = 0, my = 0, d = Infinity, dx = 0, dy = 0;
   if (see) {
     dx = cx(foe) - px; dy = cy(foe) - py; d = Math.hypot(dx, dy) || 1;
-    const want = w.lightDash ? 150 : melee ? Math.max(14, w.range * 0.55) : Math.min(260, w.range * 0.65);
+    const want = w.lightDash ? 150 : w.fireSpear ? 110 : melee ? Math.max(14, w.range * 0.55) : Math.min(260, w.range * 0.65);
     if (d > want + 15) { mx += dx / d; my += dy / d; }
     else if (!melee && d < want - 30) { mx -= dx / d; my -= dy / d; }
     if (Math.random() < 0.08) b.strafe = -b.strafe;
@@ -10253,12 +10527,18 @@ function botTick(dt) {
   inp.left = mx < -0.38; inp.right = mx > 0.38; inp.up = my < -0.38; inp.down = my > 0.38;
 
   // Attack, special, super, abilities, items.
-  const reach = w.lightDash ? 240 : melee ? w.range + (p.w + (foe ? foe.w : 16)) / 2 + 6 : w.range;
+  const reach = w.lightDash ? 240 : w.fireSpear ? w.range + 30 : melee ? w.range + (p.w + (foe ? foe.w : 16)) / 2 + 6 : w.range;
   inp.attack = see && d <= reach && Math.random() < L.aggro;
+  // Its shield goes up when a fight is close and it's taking hits.
+  inp.block = !!(see && p.shield && !(p.shieldCd > 0) && (d < 110 || (d < 170 && (threat || p.hp < p.maxHp * 0.85))) && Math.random() < L.skill * 0.6);
   if (!see) return;
+  // The Fire Spear, armed: its "tap" lands right on you.
+  if (w.fireSpear && p.fsArm > 0 && d <= reach && Math.random() < L.aggro) {
+    p.fsClick = { x: Math.round(cx(foe) + (Math.random() - 0.5) * 18), y: Math.round(cy(foe) + (Math.random() - 0.5) * 18), at: Date.now() };
+  }
   const spRange = (w.special && w.special.range) || Math.max(140, w.range * 1.3);
   if (w.special && p.specialCooldown <= 0 && d <= Math.max(spRange, 120) && Math.random() < L.skill * 0.6) inp.special = true;
-  if (w.super && p.superCooldown <= 0 && d <= 320 && Math.random() < L.skill * 0.5) inp.super = true;
+  if (w.super && p.superCooldown <= 0 && d <= (w.fireSpear ? FS_SPIN_R : 320) && Math.random() < L.skill * 0.5) inp.super = true;
   const hurt = p.hp / p.maxHp;
   // Items: only what it has picked up. Heals when hurt, the rest once the fight is on.
   if (p.inventory && p.inventory.length && Math.random() < 0.3 + L.skill * 0.4) {
@@ -10547,10 +10827,11 @@ app.post('/api/buy_weapon', (req, res) => {
   const def = WEAPON_BY_ID[weaponId];
   if (!def || !def.shopOnly) return res.status(400).json({ error: 'That weapon is not for sale.' });
   if (def.mythic) return res.status(400).json({ error: 'Mythics are only sold in the rare shop that opens after a Giant wave.' });
+  if (def.secret) return res.status(400).json({ error: 'A secret weapon: only won in the SECRET BOT event.' });
   if (def.bossReward) return res.status(400).json({ error: def.id === 'infinitybow' ? 'Only won by defeating the Abyss.' : def.id === 'endlessscythe' ? 'Only won by defeating the Abyss a second time.' : 'Only won by defeating the Portal Mage.' });
   if (def.needAll) {
     const prof0 = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });
-    const left = WEAPONS.filter(w => w.id !== weaponId && !w.mythic && !prof0.weapons.includes(w.id)).length;
+    const left = WEAPONS.filter(w => w.id !== weaponId && !w.mythic && !w.secret && !prof0.weapons.includes(w.id)).length;
     if (left) return res.status(400).json({ error: `Own every other weapon first (${left} to go).` });
   }
 
@@ -11015,14 +11296,14 @@ wss.on('connection', (ws) => {
         // An event: only with the ticket its entry fee bought. The Void Dungeon is the
         // Abyss's own fight, made rare, on a giant map.
         let evId = null;
-        if (msg.mode === 'voiddungeon') {
+        if (EVENTS[msg.mode]) {
           const tk = String(msg.ticket || ''), t = eventTickets.get(tk);
-          if (!t || t.pw !== sanitizeText(msg.password, 32)) { ws.send(JSON.stringify({ type: 'event_denied', reason: 'Enter it from the EVENTS menu first.' })); return; }
+          if (!t || t.id !== msg.mode || t.pw !== sanitizeText(msg.password, 32)) { ws.send(JSON.stringify({ type: 'event_denied', reason: 'Enter it from the EVENTS menu first.' })); return; }
           eventTickets.delete(tk);
           evId = t.id;
         }
-        const mode = evId ? 'abyss' : ['pvp', 'coop', 'waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom', 'bot', 'create', 'joinroom'].includes(msg.mode) ? msg.mode : 'pvp';
-        const size = evId ? mapSizeFor('abyss', 'giant') : mapSizeFor(mode, msg.size);
+        const mode = evId ? (evId === 'secretbot' ? 'bot' : 'abyss') : ['pvp', 'coop', 'waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom', 'bot', 'create', 'joinroom'].includes(msg.mode) ? msg.mode : 'pvp';
+        const size = evId ? (evId === 'secretbot' ? 'big' : mapSizeFor('abyss', 'giant')) : mapSizeFor(mode, msg.size);
         // EXTREME and the PORTAL MAGE open up with XP (admins skip the wait). An event ticket is its own way in.
         if (MODE_XP[mode] && !evId) {
           const pw = sanitizeText(msg.password, 32);
@@ -11040,7 +11321,7 @@ wss.on('connection', (ws) => {
           seat = [r, free];
         }
         // BOT BATTLE: a PvP room of your own, the bot in the other seat.
-        const [r, key] = seat || (mode === 'bot' ? newBotRoom(BOT_LEVELS[msg.level] ? msg.level : 'average', size)
+        const [r, key] = seat || (mode === 'bot' ? newBotRoom(evId === 'secretbot' ? 'secret' : BOT_LEVELS[msg.level] && !BOT_LEVELS[msg.level].secret ? msg.level : 'average', size)
           : mode === 'create' ? createRoom({ ...msg, size }) : findSeat(mode, size));
         ws.room = r; ws.key = key;
         if (evId) r.event = evId;
@@ -11130,6 +11411,12 @@ wss.on('connection', (ws) => {
         }
       }
 
+      // Fire Spear: once armed, a click or tap on the field is where you teleport.
+      if (msg.type === 'spear_tp' && Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
+        const p = room.players[myKey];
+        if (p && !p.dead && weapon(p).fireSpear && p.fsArm > 0) p.fsClick = { x: msg.x, y: msg.y, at: Date.now() };
+      }
+
       // Light Blade: a click or tap on the field is an attack aimed at that spot.
       if (msg.type === 'blade_dash' && Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
         const p = room.players[myKey];
@@ -11203,14 +11490,16 @@ const EVENT_TICKET_MS = 90 * 1000;
 const eventTickets = new Map();     // ticket -> { pw, id, at, paid }
 function hostEvent(id, ms) {
   const now = Date.now();
-  progress().events[id] = { start: now, end: now + (ms || EVENTS[id].lasts) };
+  progress().events[id] = { start: now, end: now + (ms || EVENTS[id].lasts), plus5: true };   // (plus5: already its full length)
   markDirty();
 }
 function eventInfo(id) {
   const ev = EVENTS[id], h = progress().events[id], now = Date.now();
   const live = !!h && now >= h.start && now < h.end;
   return { id, name: ev.name, desc: ev.desc, fee: ev.fee, prize: ev.prize, gear: ev.gear, lasts: ev.lasts,
-           live, endsIn: live ? h.end - now : 0, hosted: !!h };
+           live, endsIn: live ? h.end - now : 0, hosted: !!h,
+           // what each prize is, for a page that hasn't loaded the weapon list yet
+           gearInfo: ev.gear.map(g => WEAPON_BY_ID[g] ? { id: g, name: WEAPON_BY_ID[g].name, weapon: true } : { id: g, name: Armor.BY_ID[g]?.name || g }) };
 }
 function refundTicket(t) {
   if (!t.paid) return;
@@ -11226,7 +11515,7 @@ setInterval(() => {
 app.post('/api/events', (req, res) => {
   const pw = sanitizeText(req.body?.password, 32);
   const prof = pw ? profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup }) : null;
-  res.json({ events: Object.keys(EVENTS).map(eventInfo), admin: isAdminPw(pw), coins: prof ? prof.coins : 0, owned: prof ? prof.armor : [] });
+  res.json({ events: Object.keys(EVENTS).map(eventInfo), admin: isAdminPw(pw), coins: prof ? prof.coins : 0, owned: prof ? [...prof.armor, ...prof.weapons] : [] });
 });
 // The admin hosts an event (for its full length, from now), or ends it early.
 app.post('/api/events/host', (req, res) => {
@@ -11258,5 +11547,8 @@ app.post('/api/events/enter', (req, res) => {
 });
 // The first event is hosted the first time the server starts with it.
 if (!progress().events.voiddungeon) hostEvent('voiddungeon');
+if (!progress().events.secretbot) hostEvent('secretbot');
+// The Void Dungeon was given 5 more days (once).
+{ const h = progress().events.voiddungeon; if (h && !h.plus5) { h.end += 5 * EVENT_DAY; h.plus5 = true; markDirty(); } }
 
 server.listen(PORT, () => console.log('Weponare running on port', PORT));

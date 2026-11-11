@@ -1933,3 +1933,7 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 .ev-admin { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .ev-admin button { padding: 4px 10px; border-radius: 8px; border: 1px dashed #ffd84a; background: rgba(0, 0, 0, 0.4); color: #ffd84a; font: bold 11px 'Courier New', monospace; cursor: pointer; }
 .arm-price.ev { color: #ff5ad8; font-size: 11px; }
+
+/* The Fire Spear: SECRET, only from the SECRET BOT event. */
+.legend-tag.secret-tag { color: #fff2c8; border-color: #ff7a2a; background: linear-gradient(90deg, #6a1206, #ff5a1a); text-shadow: 0 0 4px #ffd84a; }
+.shop-row.secret-row { border-color: #ff5a1a; box-shadow: 0 0 10px rgba(255, 90, 26, 0.35); }
