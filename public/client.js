@@ -3803,9 +3803,9 @@ const LEGEND_MOVES = {
              + ' REWIND: snap back to where you were 3s ago, with the health you had then, cutting everything on the way ·'
              + ' <b>SUPER</b> TIME STOP: for 4s every enemy and every enemy shot is frozen while you move.'
              + ' Only one mythic goes into a game, and a mythic never earns you another weapon.',
-  firespear: '<b>ATK</b> your screen fades red: tap or click where to TELEPORT and land there in a burst of fire (or press ATK'
+  firespear: '<b>ATK</b> your screen fades red: tap or click where to TELEPORT (any distance) and land there in a burst of fire (or press ATK'
            + ' again to go toward the mouse or the nearest foe) · <b>SPECIAL</b> throw the spear: it leaves a trail of strong fire'
-           + ' that keeps burning you a moment after you step out, and bursts on what it hits into a ring of fire that sets everyone'
+           + ' that keeps burning you a moment after you step out, and bursts on what it hits into a big ring of fire that sets everyone'
            + ' near alight · <b>SUPER</b> spin it in a wide circle of fire, then strike everyone it caught again, one after another.',
   hydrafang: '<b>ATK</b> a serpent head darts out, hunts a foe and leaves venom in it · <b>SPECIAL</b> three hydra heads burst'
            + ' from the ground round you and spit venom for 8s · <b>SUPER</b> NINE HEADS: the whole hydra rises round you'

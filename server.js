@@ -8569,7 +8569,7 @@ function puppetAttack(m, pKey) {
 // ── THE FIRE SPEAR ── (the SECRET BOT event's secret weapon; see WEAPONS)
 const FS_ARM_MS = 4000, FS_CLICK_MS = 400, FS_BLINK_MS = 320, FS_LAND_R = 46, FS_ARM_GAP = 150;
 const FS_THROW_SPEED = 7.5, FS_HIT_R = 12, FS_TRAIL_GAP = 18, FS_TRAIL_R = 15, FS_TRAIL_MS = 2600, FS_TRAIL_TICK = 300, FS_TRAIL_SHARE = 0.07;
-const FS_RING_R = 95, FS_RING_MS = 650, FS_RING_SHARE = 0.6;
+const FS_RING_R = 170, FS_RING_MS = 750, FS_RING_SHARE = 0.6;
 const FS_BURN_TICK = 300, FS_BURN_DMG = 5, FS_BURN_LINGER = 1500, FS_BURN_RING = 3000, FS_BURN_LAND = 1200;
 const FS_CHARGE_N = 5, FS_CHARGE_MULT = 3, FS_CHARGE_STUN = 1500;
 const FS_SPIN_MS = 1100, FS_SPIN_R = 170, FS_SPIN_TICK = 220, FS_SPIN_SHARE = 0.35, FS_CHAIN_GAP = 280, FS_CHAIN_IFRAME = 500;
@@ -8603,7 +8603,7 @@ function spearAttack(p, pKey, w) {
 // The teleport: gone in a flash of red, back in a burst of orange fire.
 function spearTeleport(p, key, tx, ty) {
   const w = weapon(p), sx = cx(p), sy = cy(p), a = Math.atan2(ty - sy, tx - sx);
-  const dist = Math.min(w.range, Math.hypot(tx - sx, ty - sy));
+  const dist = Math.hypot(tx - sx, ty - sy);          // any distance (the walls still stop you)
   room.particles.push({ type: 'teleport', x: sx, y: sy, timer: 420, max: 420, color: '#ff3a1a' });
   p.x = sx + Math.cos(a) * dist - p.w / 2; p.y = sy + Math.sin(a) * dist - p.h / 2;
   clampToArena(p, 2);
