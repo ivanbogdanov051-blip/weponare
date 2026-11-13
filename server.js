@@ -426,14 +426,14 @@ const WEAPONS = [
   // ── THE ICE KNIGHT's (see IK_GEAR) ── Never sold: won by beating him. Marked
   // `secret` like the Fire Spear, so they stay out of every "own all the legendaries"
   // count and out of bots' hands; `from: 'boss'` is how the shop words them.
-  { id: 'icegreatsword', name: 'ICE GREATSWORD', damage: 62, range: 100, atkSpd: 950, type: 'melee', unlockXp: 0,
+  { id: 'icegreatsword', name: 'ICE GREATSWORD', damage: 100, range: 100, atkSpd: 800, type: 'melee', unlockXp: 0,
     shopOnly: true, noRequirement: true, secret: true, from: 'boss', price: 0, iceSword: true,
-    special: { kind: 'icequake', dmg: 150, range: 420, cd: 9000 },
-    super:   { kind: 'icethrow', dmg: 260, cd: 24000 } },
-  { id: 'icebow', name: 'ICE BOW', damage: 70, range: 380, atkSpd: 800, type: 'ranged', unlockXp: 0,
+    special: { kind: 'icequake', dmg: 240, range: 420, cd: 7500 },
+    super:   { kind: 'icethrow', dmg: 450, cd: 20000 } },
+  { id: 'icebow', name: 'ICE BOW', damage: 115, range: 420, atkSpd: 650, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, secret: true, from: 'boss', price: 0, iceBow: true,
-    special: { kind: 'icevolley', dmg: 32, range: 500, cd: 8000 },
-    super:   { kind: 'icetriple', dmg: 130, cd: 24000 } },
+    special: { kind: 'icevolley', dmg: 52, range: 500, cd: 6500 },
+    super:   { kind: 'icetriple', dmg: 220, cd: 20000 } },
   // ── SECRET ── Never sold: only won in the SECRET BOT event (see EVENTS).
   // THE FIRE SPEAR. ATK: your screen fades red, and your next tap or click on the
   // field TELEPORTS you toward it (press ATK again instead to go toward the mouse or
@@ -6863,7 +6863,7 @@ const PAID_MODES = { iceknight: { fee: IK_FEE, name: 'THE ICE KNIGHT' } };
 const IK = {
   speed: 1.4, reach: 70, gap: 1500, fast: 3,
   swipeWarn: 2000, swipeR: 150, swipeArc: 1.25, swipeDmg: 100, slow: 2500,
-  heroSwipe: 62, heroWave: 70,      // what the ICE GREATSWORD does with the same two moves
+  heroSwipe: 100, heroWave: 112,    // the ICE GREATSWORD: the same two moves, the same damage
   bowAim: 700, bowPut: 500, fallMs: 2000, fallR: 44, fallDmg: 150, fallFreeze: 1100, pillarMs: 4000,
   parryMs: 1400, parryStun: 3000, parryCounter: 75,
   waveWind: 550, waveDmg: 112, waveSpeed: 6.5,
@@ -7235,8 +7235,8 @@ function iceAllyShoot(a, t, dist, dt) {
 // everyone there is stunned 3s and flung, the one it struck takes a critical hit;
 // then it flies back to you. PASSIVE: ABSOLUTE ZERO, after it lands the arena is
 // slippery ice for 3s.
-const IS_QUAKE_RUNS = 20, IS_QUAKE_R = 16, IS_QUAKE_SPEED = 13, IS_QUAKE_MS = 520;
-const IS_THROW_SPEED = 8, IS_THROW_RANGE = 540, IS_BACK_SPEED = 10, IS_RIFT_R = 90, IS_STUN = 3000, IS_FLOOR_MS = 3000;
+const IS_QUAKE_RUNS = 24, IS_QUAKE_R = 18, IS_QUAKE_SPEED = 14, IS_QUAKE_MS = 600;
+const IS_THROW_SPEED = 8, IS_THROW_RANGE = 540, IS_BACK_SPEED = 10, IS_RIFT_R = 115, IS_STUN = 3000, IS_FLOOR_MS = 3000;
 function iceSwordAttack(p, pKey, w, dmgMult) {
   if (p.iceSwordOut) { p.atkCooldown = 200; p.swingTimer = 0; return; }   // it's still in the air
   const f = nearestFoe(p, pKey), a = nearestTargetAngle(p, pKey), dmg = Math.round(w.damage * dmgMult);
@@ -7306,7 +7306,7 @@ function iceSwordImpact(f, hit) {
 // warning, slowing them and leaving a spike of solid ice. SPECIAL: ten seeking ice
 // arrows at once. SUPER: three arrows; wherever each ends up, spikes spread out
 // from it at great speed. PASSIVE: FROZEN LEGION, your super raises two ice minions.
-const IB_FALL_MS = 650, IB_FALL_R = 34, IB_PILLAR_MS = 3000, IB_VOLLEY_N = 10, IB_VOLLEY_TTL = 2600, IB_MINIONS = 2, IB_MINION_LIFE = 12000;
+const IB_FALL_MS = 550, IB_FALL_R = 42, IB_PILLAR_MS = 3500, IB_VOLLEY_N = 10, IB_VOLLEY_TTL = 3200, IB_MINIONS = 3, IB_MINION_LIFE = 12000;
 function iceBowAttack(p, pKey, w, dmgMult) {
   const f = nearestFoe(p, pKey), inp = room.inputs[pKey] || {};
   let x, y;
