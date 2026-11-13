@@ -6042,7 +6042,8 @@ function throwKey(t) { return t.num ? playerKeyOf(t) : t.id; }
 
 function ghostThrowHit(proj, t) {
   const back = proj.backOf ? proj.backOf.has(throwKey(t)) : hitFromBehind(t, proj.dx);
-  const share = t.boss ? (back ? THROW_BOSS_BACK_SHARE : THROW_BOSS_SHARE) : (back ? THROW_BACK_SHARE : THROW_SHARE);
+  // noShare (the Ice Knight): the dagger still cuts, but takes no share of his health.
+  const share = t.noShare ? 0 : t.boss ? (back ? THROW_BOSS_BACK_SHARE : THROW_BOSS_SHARE) : (back ? THROW_BACK_SHARE : THROW_SHARE);
   const sm = proj.shareMult || 1;
   let dmg = Math.max(Math.round(proj.damage * sm), Math.round((t.maxHp || 0) * share * sm));
   // "At least" means after armour and defense too.
@@ -6059,7 +6060,7 @@ function ghostThrowHit(proj, t) {
 function explodeKnife(f) {
   for (const t of enemyTargets(f.owner)) {
     if (Math.hypot(cx(t) - f.x, cy(t) - f.y) > f.r + t.w / 2) continue;
-    const dmg = t.num ? KNIFE_PVP_DMG : f.dmg + Math.round((t.maxHp || 0) * (t.boss ? 0.015 : 0.1));
+    const dmg = t.num ? KNIFE_PVP_DMG : f.dmg + Math.round((t.maxHp || 0) * (t.noShare ? 0 : t.boss ? 0.015 : 0.1));
     t.invincible = 0;
     applyDamage(t, dmg, f.owner);
   }
@@ -6856,24 +6857,25 @@ const TROPHY_W = 28, TROPHY_H = 36, TROPHY_DELAY_MS = 1000;
 //  6 VOLLEY     ten ice arrows at once, fanning out and then seeking you.
 //  Under a quarter the arena freezes over (you slide), and he adds:
 //  7 MINIONS    ice minions: quick, they shoot, and their blows shove and slow.
-const IK_HP = 140000, IK_FEE = 1000000;
+const IK_HP = 400000, IK_FEE = 1000000;
 const IK_GEAR = ['iceknight_h', 'iceknight_c', 'iceknight_l', 'sh_frostwall', 'icegreatsword', 'icebow'];
 const PAID_MODES = { iceknight: { fee: IK_FEE, name: 'THE ICE KNIGHT' } };
 const IK = {
-  speed: 1.1, reach: 70, gap: 2100, fast: 3,
-  swipeWarn: 2000, swipeR: 150, swipeArc: 1.25, swipeDmg: 62, slow: 2500,
-  bowAim: 700, bowPut: 500, fallMs: 2000, fallR: 44, fallDmg: 95, fallFreeze: 1100, pillarMs: 4000,
-  parryMs: 1400, parryStun: 3000, parryCounter: 45,
-  waveWind: 550, waveDmg: 70, waveSpeed: 6.5,
-  groundWind: 700, groundMs: 2000, groundRuns: 3, groundSpeed: 7, groundDmg: 48, groundTurn: 2.4,
-  volleyWind: 500, volleyN: 10, volleyDmg: 20, volleyTtl: 3200, volleySpeed: 4.6,
-  summonWind: 900, minions: 3, maxMinions: 6, minionHp: 900, minionDmg: 16, minionShot: 13, minionSpeed: 2.3,
+  speed: 1.4, reach: 70, gap: 1500, fast: 3,
+  swipeWarn: 2000, swipeR: 150, swipeArc: 1.25, swipeDmg: 100, slow: 2500,
+  heroSwipe: 62, heroWave: 70,      // what the ICE GREATSWORD does with the same two moves
+  bowAim: 700, bowPut: 500, fallMs: 2000, fallR: 44, fallDmg: 150, fallFreeze: 1100, pillarMs: 4000,
+  parryMs: 1400, parryStun: 3000, parryCounter: 75,
+  waveWind: 550, waveDmg: 112, waveSpeed: 6.5,
+  groundWind: 700, groundMs: 2000, groundRuns: 3, groundSpeed: 7, groundDmg: 78, groundTurn: 2.4,
+  volleyWind: 500, volleyN: 10, volleyDmg: 32, volleyTtl: 3200, volleySpeed: 4.6,
+  summonWind: 900, minions: 4, maxMinions: 8, minionHp: 1800, minionDmg: 26, minionShot: 21, minionSpeed: 2.3,
   fireMult: 2, burnMult: 4,
 };
 const FIRE_WEAPONS = new Set(['fireglove', 'emberstaff', 'ashfeather', 'firespear', 'worldsplitter', 'sunbow']);
 MONSTER_TYPES.iceknight = {
   name: 'ICE KNIGHT', minWave: 1, weight: 0, hp: 1, dmg: 1.6, speed: 1.0, size: 1.9,
-  color: '#8ad8ff', xp: 0, coins: 0, armor: 0.25, boss: true, fixedW: 44, fixedH: 60,
+  color: '#8ad8ff', xp: 0, coins: 0, armor: 0.4, boss: true, fixedW: 44, fixedH: 60,
 };
 MONSTER_TYPES.iceminion = {
   name: 'ICE MINION', minWave: 1, weight: 0, hp: 1.6, dmg: 1.3, speed: 2.1, size: 0.9,
@@ -7034,7 +7036,7 @@ function startIceKnightFight() {
   m.hp = m.maxHp = IK_HP;
   m.speed = IK.speed;
   m.x = ARENA_X + ARENA_W * 0.72 - m.w / 2; m.y = ARENA_Y + ARENA_H * 0.5 - m.h / 2;
-  Object.assign(m, { iceKnight: true, fireWeak: true, phase: 1, act: null, actT: 0, actCd: 1800, lastAct: null, aa: Math.PI, shot: false, stun: 0 });
+  Object.assign(m, { iceKnight: true, fireWeak: true, noShare: true, phase: 1, act: null, actT: 0, actCd: 1800, lastAct: null, aa: Math.PI, shot: false, stun: 0 });
   room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26, text: 'THE ICE KNIGHT AWAITS', color: '#8ad8ff', timer: 3200, max: 3200 });
 }
 function ikEndAct(m) {
@@ -7240,7 +7242,7 @@ function iceSwordAttack(p, pKey, w, dmgMult) {
   const f = nearestFoe(p, pKey), a = nearestTargetAngle(p, pKey), dmg = Math.round(w.damage * dmgMult);
   p.facing = Math.cos(a) < 0 ? -1 : 1;
   if (!f || Math.hypot(cx(f) - cx(p), cy(f) - cy(p)) <= IK.swipeR + f.w / 2) iceSwipe(pKey, p, a, IK.swipeR, dmg);
-  else iceWave(pKey, cx(p), cy(p), a, Math.round(dmg * IK.waveDmg / IK.swipeDmg), { upg: p.upgrades?.[w.id] || null });
+  else iceWave(pKey, cx(p), cy(p), a, Math.round(dmg * IK.heroWave / IK.heroSwipe), { upg: p.upgrades?.[w.id] || null });
 }
 function castIceQuake(p, pKey, dmg) {
   const hit = new Map(), a0 = Math.random() * Math.PI;
