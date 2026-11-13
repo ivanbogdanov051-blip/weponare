@@ -775,6 +775,44 @@ const WEAPON_ART = {
     k.line(22, -8.6, 69, -7.6, 0.5, '#ffffff'); k.line(69, -7.6, 83, -0.2, 0.5, '#ffffff');             // honed edge
     k.r(82.4, -0.5, 1.4, 1, '#ffffff');                                                                 // the point
   }},
+  // The Ice Greatsword (the Ice Knight's): a slab of living ice on a crystal guard,
+  // cracked through with white frost, shards growing off its edges. Longer than you are tall.
+  icegreatsword: { draw(k, wc) {
+    k.circ(-4, 0, 3.4, '#2a6ab0'); k.circ(-4, 0, 1.8, '#e8fcff');                            // pommel: a frozen gem
+    k.r(-1, -2.2, 14, 4.4, '#1a3a6a');                                                       // grip
+    for (let i = 0; i < 5; i++) k.r(0.5 + i * 2.7, -2.2, 1, 4.4, '#8ad8ff');                 // bound in frost
+    k.poly([[13, -4], [15, -13], [19, -16], [18.5, -8], [20, -4], [20, 4], [18.5, 8], [19, 16], [15, 13], [13, 4]], '#3a8ad0');   // the guard: two crystal wings
+    k.poly([[14, -4], [15.8, -11.5], [18, -8], [18.6, -4]], '#c8f0ff');
+    k.poly([[14, 4], [15.8, 11.5], [18, 8], [18.6, 4]], '#1e5a9a');
+    k.poly([[15, 13], [16, 18.5], [17.4, 13.6]], '#e8fcff'); k.poly([[15, -13], [16, -18.5], [17.4, -13.6]], '#e8fcff');   // icicles off their tips
+    k.circ(17, 0, 3.2, '#16467a'); k.circ(17, 0, 2.1, '#8ad8ff'); k.r(16, -1.2, 1, 1, '#ffffff');   // a heart of ice
+    k.glow(50, 0, 12, '#8ad8ff', 0.3);
+    k.poly([[20, -8.5], [66, -7.5], [80, 0], [66, 7.5], [20, 8.5]], '#4aa8e0');               // the blade
+    k.poly([[20, -8.5], [66, -7.5], [80, 0], [66, -2.6], [20, -2.8]], '#b8ecff');             // its lit face
+    k.poly([[20, 8.5], [66, 7.5], [80, 0], [66, 2.6], [20, 2.8]], '#2a6ab0');                 // its shadowed face
+    k.r(21, -1.6, 44, 3.2, '#16467a'); k.r(21, -0.5, 44, 1, '#e8fcff');                       // the fuller: a vein of white frost
+    for (let x = 26; x < 64; x += 8) { k.line(x, -7.6, x + 3, -3, 0.5, '#ffffff'); k.line(x + 4, 3, x + 6, 7.4, 0.5, '#8ad8ff'); }   // cracks in the ice
+    for (const x of [30, 44, 58]) k.poly([[x, -8.2], [x + 1.6, -11.6], [x + 3.2, -8]], '#e8fcff');   // shards growing off the edge
+    for (const x of [36, 52]) k.poly([[x, 8.2], [x + 1.4, 11], [x + 2.8, 8]], '#8ad8ff');
+    k.line(22, -8.2, 65, -7.2, 0.5, '#ffffff'); k.line(65, -7.2, 79, -0.2, 0.5, '#ffffff');   // the honed edge
+    k.r(78.4, -0.5, 1.4, 1, '#ffffff');
+  }},
+  // The Ice Bow (the Ice Knight's): limbs of solid ice hung with icicles, a string of frost.
+  icebow: { draw(k, wc) {
+    const cxA = 2, R = 14, SPAN = Math.PI * 0.44;
+    const tipX = cxA + Math.cos(SPAN) * R, tipY = Math.sin(SPAN) * R;
+    k.ring(cxA, 0, R, 3.2, '#2a6ab0', -SPAN, SPAN);
+    k.ring(cxA, 0, R, 1.8, '#8ad8ff', -SPAN, SPAN);
+    k.ring(cxA, 0, R - 0.5, 0.6, '#e8fcff', -SPAN * 0.8, SPAN * 0.8);
+    for (const sgn of [-1, 1]) for (let i = 0; i < 3; i++) {
+      const a = sgn * (0.4 + i * 0.3), fx = cxA + Math.cos(a) * R, fy = Math.sin(a) * R;
+      k.poly([[fx, fy], [fx + 3 + i * 0.5, fy + sgn * (1.4 + i * 0.8)], [fx + 1, fy + sgn * 0.3]], i % 2 ? '#e8fcff' : '#6ac0f0');
+    }
+    k.poly([[tipX - 1, -tipY - 3], [tipX + 1.2, -tipY], [tipX - 1, -tipY + 0.5]], '#e8fcff'); k.poly([[tipX - 1, tipY + 3], [tipX + 1.2, tipY], [tipX - 1, tipY - 0.5]], '#e8fcff');
+    k.r(tipX - 0.3, -tipY, 0.7, tipY * 2, '#ffffff');
+    k.r(cxA + R - 2.2, -2.6, 3.2, 5.2, '#16467a'); k.r(cxA + R - 1.6, -1.6, 2, 3.2, '#8ad8ff');
+    k.r(cxA + R + 1.5, -0.4, 8, 0.8, '#c8f0ff'); k.poly([[cxA + R + 9.5, -1.6], [cxA + R + 12.5, 0], [cxA + R + 9.5, 1.6]], '#ffffff');
+  }},
   // The Fire Spear (SECRET): a haft of black iron cracked with embers, bound in gold,
   // and a head of living flame, white-hot at its heart.
   firespear: { draw(k, wc) {

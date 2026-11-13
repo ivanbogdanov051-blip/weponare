@@ -761,6 +761,7 @@ const MONSTER_SKIN = {
   runner:   { base: '#c8e04a', eye: '#ff5522', eyes: 1 },
   brute:    { base: '#cc5533', eye: '#ffdd44', eyes: 2 },
   spitter:  { base: '#a65cd0', eye: '#d6ff5c', eyes: 3 },
+  iceminion: { base: '#6ac0f0', eye: '#ffffff', eyes: 2 },   // the Ice Knight's (and the Ice Bow's)
   warden:   { base: '#7f93b8', eye: '#8ee8ff', eyes: 2 },
   behemoth: { base: '#8a3a6a', eye: '#ff4466', eyes: 4 },
   // EXTREME only
@@ -806,6 +807,11 @@ const MONSTER_SHAPE = {
     // Small head above enormous shoulders, tapering to stubby legs.
     body: [[0.30,0.00],[0.70,0.00],[0.76,0.18],[1.00,0.30],[1.00,0.62],[0.82,0.74],[0.18,0.74],[0.00,0.62],[0.00,0.30],[0.24,0.18]],
     legs: [[0.14,0.30],[0.56,0.30]], legTop: 0.72, headV: 0.24,
+  },
+  iceminion: {
+    // A jagged shard of ice on two short legs.
+    body: [[0.50,0.00],[0.66,0.18],[0.90,0.12],[0.82,0.40],[1.00,0.58],[0.78,0.80],[0.22,0.80],[0.00,0.58],[0.18,0.40],[0.10,0.12],[0.34,0.18]],
+    legs: [[0.22,0.20],[0.60,0.20]], legTop: 0.78, headV: 0.38,
   },
   spitter: {
     // Venom sac over a narrow abdomen; the sac is added as a disc.

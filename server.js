@@ -423,6 +423,17 @@ const WEAPONS = [
   // ATK: ten hunting waves in a rapid burst. SPECIAL: swell up, turn to water and
   // ram everything in your way. SUPER: his cyclone, far worse. PASSIVE: ENDLESS
   // TIDE, water wherever you walk and a faster step while you hold it.
+  // ── THE ICE KNIGHT's (see IK_GEAR) ── Never sold: won by beating him. Marked
+  // `secret` like the Fire Spear, so they stay out of every "own all the legendaries"
+  // count and out of bots' hands; `from: 'boss'` is how the shop words them.
+  { id: 'icegreatsword', name: 'ICE GREATSWORD', damage: 62, range: 100, atkSpd: 950, type: 'melee', unlockXp: 0,
+    shopOnly: true, noRequirement: true, secret: true, from: 'boss', price: 0, iceSword: true,
+    special: { kind: 'icequake', dmg: 150, range: 420, cd: 9000 },
+    super:   { kind: 'icethrow', dmg: 260, cd: 24000 } },
+  { id: 'icebow', name: 'ICE BOW', damage: 70, range: 380, atkSpd: 800, type: 'ranged', unlockXp: 0,
+    shopOnly: true, noRequirement: true, secret: true, from: 'boss', price: 0, iceBow: true,
+    special: { kind: 'icevolley', dmg: 32, range: 500, cd: 8000 },
+    super:   { kind: 'icetriple', dmg: 130, cd: 24000 } },
   // ── SECRET ── Never sold: only won in the SECRET BOT event (see EVENTS).
   // THE FIRE SPEAR. ATK: your screen fades red, and your next tap or click on the
   // field TELEPORTS you toward it (press ATK again instead to go toward the mouse or
@@ -435,7 +446,7 @@ const WEAPONS = [
   { id: 'firespear', name: 'FIRE SPEAR', damage: 44, range: 220, atkSpd: 1500, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, secret: true, price: 0, fireSpear: true,
     special: { kind: 'spearthrow', dmg: 110, range: 420, cd: 7000 },
-    super:   { kind: 'spearspin', dmg: 85, cd: 24000 } },
+    super:   { kind: 'spearspin', dmg: 240, cd: 24000 } },
   { id: 'wavestorm', name: 'WAVESTORM', damage: 26, range: 430, atkSpd: 2200, type: 'ranged', unlockXp: 0,
     shopOnly: true, noRequirement: true, mythic: true, price: 600000, waveBurst: true,
     mythicKills: 350, mythicNeeds: ['windwand'], mythicBoss: 'tsunami',
@@ -465,7 +476,7 @@ const WEAPON_COLORS = {
   whip: '#c9a06a', grapple: '#9fb6c8', boomerang: '#d8b070',
   shuriken: '#d8dde6', frostrod: '#8fe0ff', blunderbuss: '#c89a5a', lance: '#e8d8a0', stormtome: '#ffe45a',
   fireglove: '#ff6a1a', vortex: '#7ad8ff', windwand: '#aef5dc', revolver: '#ffb347', portalwand: '#b07aff', infinitybow: '#9a5aff', samuraiblade: '#ff5a5a', endlessscythe: '#7a2aff', darklight: '#e8e8f4', starfall: '#ffe9a0', worldsplitter: '#ff6a1a', soullantern: '#6affc8', ashfeather: '#ff8a3a', chronosedge: '#7ac8ff', hydrafang: '#5ae87a',
-  greatestsword: '#ffe9a8', wavestorm: '#4ac8ff', firespear: '#ff5a1a', ghostdagger: '#a8f0ff', stormhammer: '#7ac8ff', frostscythe: '#bfefff', sunbow: '#ffd24a',
+  greatestsword: '#ffe9a8', wavestorm: '#4ac8ff', firespear: '#ff5a1a', icegreatsword: '#9fe8ff', icebow: '#bfefff', ghostdagger: '#a8f0ff', stormhammer: '#7ac8ff', frostscythe: '#bfefff', sunbow: '#ffd24a',
 };
 
 // ── Weapon upgrades bought with coins from the menu ──
@@ -538,6 +549,8 @@ const WEAPON_UPGRADES = {
   chronosedge: ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   hydrafang:   ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   firespear:   ['dmg', 'spd', 'crit', 'cdr', 'rng'],
+  icegreatsword: ['dmg', 'spd', 'crit', 'cdr', 'rng'],
+  icebow:      ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   ghostdagger: ['dmg', 'spd', 'crit', 'cdr'],
   stormhammer: ['dmg', 'spd', 'crit', 'cdr', 'knock'],
   frostscythe: ['dmg', 'rng', 'chill', 'cdr', 'aoe'],
@@ -578,6 +591,8 @@ const PASSIVES = {
   wavestorm:   { name: 'ENDLESS TIDE', color: '#4ac8ff', desc: 'water pours out wherever you walk, slowing and draining enemies, and you move 25% faster' },
   worldsplitter: { name: 'AFTERSHOCK', color: '#ff6a1a', desc: 'every 3rd swing splits the ground three ways' },
   chronosedge: { name: 'BORROWED TIME', color: '#7ac8ff', desc: 'your special and super recharge 30% faster' },
+  icegreatsword: { name: 'ABSOLUTE ZERO', color: '#9fe8ff', desc: 'when your super lands, the whole arena turns to slippery ice for 3s: your enemies slide about on it' },
+  icebow:      { name: 'FROZEN LEGION', color: '#bfefff', desc: 'your super also raises 2 ice minions that fight at your side' },
   firespear:   { name: 'IGNITION', color: '#ff5a1a', desc: 'every 5 teleports charge your special: the next foe it hits takes 3x damage and is stunned' },
   hydrafang:   { name: 'REGROWTH', color: '#5ae87a', desc: 'drop below 30% health and you regrow 5% of it a second for 4s (every 15s)' },
   ashfeather:  { name: 'REBIRTH', color: '#ff8a3a', desc: 'the first time you would die in a game, you rise again at half health in an explosion of fire' },
@@ -1132,7 +1147,7 @@ function isBossWave(num) {
 // The Portal Mage's minions arrive as tough as a deep EXTREME wave.
 const PORTAL_LEVEL = 15;
 function modeLevel(num) {
-  if (room.gameMode === 'portal' || room.gameMode === 'abyss' || room.gameMode === 'tsunami') return PORTAL_LEVEL;
+  if (room.gameMode === 'portal' || room.gameMode === 'abyss' || room.gameMode === 'tsunami' || room.gameMode === 'iceknight') return PORTAL_LEVEL;
   if (room.gameMode === 'sandbox') return room.sandbox.level;
   return num + (room.gameMode === 'extreme' ? EXTREME_LEVEL_OFFSET : 0);
 }
@@ -1205,7 +1220,8 @@ function progress() {
   if (!d.armor) d.armor = {};              // password -> [piece ids owned]
   if (!d.armorWorn) d.armorWorn = {};      // password -> { head, chest, legs }
   if (!d.armory) d.armory = {};            // password -> { w: 10-minute window, ids: what is on sale }
-  if (!d.events) d.events = {};            // event id -> { start, end } (the last time it was hosted)
+  if (!d.events) d.events = {};            // event id -> { start, end, ed } (the last time it was hosted; ed counts the hostings)
+  if (!d.eventWins) d.eventWins = {};      // password -> { event id: the hosting (ed) it was beaten in }
   return d;
 }
 function markDirty() { progressDirty = true; }
@@ -1260,6 +1276,7 @@ function saveData(pw) {
     forge: d.forge[pw] || {}, lost: d.lostWeapons[pw] || {}, rev: d.saveRev[pw] || 0,
     armor: d.armor[pw] || [], worn: d.armorWorn[pw] || {},
     mythicPick: d.mythicPick[pw] || null,
+    eventWins: d.eventWins[pw] || {},
   });
 }
 function makeSave(pw) {
@@ -1316,6 +1333,7 @@ function restoreBackup(pw, backup) {
     d.armor[pw] = armor;
     d.armorWorn[pw] = cleanWorn(b.worn, armor);
     if (typeof b.mythicPick === 'string' && WEAPON_BY_ID[b.mythicPick]?.mythic) d.mythicPick[pw] = b.mythicPick;
+    d.eventWins[pw] = cleanEventWins(b.eventWins);
     if (b.skin && typeof b.skin === 'object' && d.skins[pw] === undefined) d.skins[pw] = b.skin;
     markDirty();
     return;
@@ -1348,6 +1366,9 @@ function restoreBackup(pw, backup) {
   if (b.tsunamiBeat && !d.tsunamiBeat[pw]) { d.tsunamiBeat[pw] = true; changed = true; }
   // The mythic you take into games: kept from the copy if the server has lost it.
   if (!d.mythicPick[pw] && typeof b.mythicPick === 'string' && WEAPON_BY_ID[b.mythicPick]?.mythic) { d.mythicPick[pw] = b.mythicPick; changed = true; }
+  for (const [id, n] of Object.entries(cleanEventWins(b.eventWins))) {
+    if (n > (d.eventWins[pw]?.[id] || 0)) { d.eventWins[pw] = { ...(d.eventWins[pw] || {}), [id]: n }; changed = true; }
+  }
   if (!staleCopy) for (const [wid, lv] of Object.entries(ups)) {
     const allowed = upgradesFor(wid);
     for (const [k, n] of Object.entries(lv)) {
@@ -1523,7 +1544,7 @@ function forgeCan(w) {
   if (w.special && !(w.special.minCd >= w.special.cd)) can.push('special');   // the Fire Glove's is already at its limit
   if (w.type === 'melee' && !w.swing360 && !w.fireRing && !w.vortexShield && !w.lightDash) can.push('arc');
   const special = w.mindTrap || w.portalShot || w.kunaiOrbit || w.starStaff || w.groundSplit || w.timeBlade || w.fireRing
-    || w.vortexShield || w.lightDash || w.infinityShot || w.grapple || w.fireSpear;
+    || w.vortexShield || w.lightDash || w.infinityShot || w.grapple || w.fireSpear || w.iceSword || w.iceBow;
   if (forgeClass(w) === 'ranged' && !special) {
     const hunts = w.soulWisp || w.phoenixBow || w.hydraBite || w.slashWave || w.waveBurst;   // these shots already find their target
     can.push('shots');
@@ -1868,7 +1889,7 @@ const seatKeys = (r = room) => KEYS.slice(0, r.maxPlayers);
 const rooms = [];
 let room = makeRoom();   // the room being worked on right now
 
-const SOLO_MODES = ['waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom'];
+const SOLO_MODES = ['waves', 'extreme', 'portal', 'abyss', 'tsunami', 'iceknight', 'sandbox', 'sawroom'];
 // XP needed before a mode opens (kept in step with MODE_XP in client.js).
 const MODE_XP = { extreme: 5000, portal: 15000, abyss: 30000, tsunami: 40000 };
 function isSolo() { return SOLO_MODES.includes(room.gameMode); }
@@ -4031,6 +4052,7 @@ function clearField() {
   room.constels = [];
   room.fissures = [];
   room.dangers = [];
+  room.iceRuns = []; room.ice = null;
   room.gcracks = [];
   room.saw = null;
   room.echoes = [];
@@ -4097,10 +4119,11 @@ function startGame() {
   room.wave = emptyWave();
   room.gameState = 'GAMEPLAY';
   room.victory = false;
-  room.bossDrops = null; room.mythicNoDrop = null; room.bossLocked = null;
+  room.bossDrops = null; room.mythicNoDrop = null; room.bossLocked = null; room.ikWin = null;
   if (room.gameMode === 'portal') startMageFight();
   else if (room.gameMode === 'abyss') startAbyssFight();
   else if (room.gameMode === 'tsunami') startTsunamiFight();
+  else if (room.gameMode === 'iceknight') startIceKnightFight();
   else if (room.gameMode === 'sandbox') startSandbox();
   else if (room.gameMode === 'sawroom') startSawRoom();
   else if (room.gameMode !== 'pvp') startWave(START_WAVE);
@@ -4132,6 +4155,14 @@ function applyDamage(target, dmg, attackerKey) {
   }
   if (room.gameMode === 'coop' && target.num && isPKey(attackerKey)) return;
   if (room.event === 'voiddungeon' && attackerKey === 'monster' && target.num) dmg *= VA.dmg;   // the rare Abyss hits much harder
+  if (target.iceKnight) {
+    if (target.act === 'parry' && isPKey(attackerKey)) { ikParried(target, attackerKey); return; }
+    if (target.stun > 0) dmg *= 2;                                 // stumbled after a parry nobody tested: double
+  }
+  if (target.fireWeak && isPKey(attackerKey)) {                    // ice melts: fire weapons hit it twice as hard
+    const fp = room.players[attackerKey];
+    if (fp && FIRE_WEAPONS.has(weapon(fp).id)) dmg *= IK.fireMult;
+  }
   // Weapon upgrades on the attacking player: critical hits, lifesteal, knockback.
   const atk = isPKey(attackerKey) ? room.players[attackerKey] : null;
   const aw = atk && atk !== target ? weapon(atk) : null;
@@ -4244,6 +4275,7 @@ function handleKill(target, attackerKey) {
   if (target.mage) { mageDefeated(target); return; }
   if (target.abyss) { abyssPhase3(target); return; }
   if (target.tsunami) { tsunamiDefeated(target); return; }
+  if (target.iceKnight) { iceKnightDefeated(target); return; }
   // A monster dies once. Blasts set off inside its own death (a bomber, a
   // chain reaction) could otherwise reach it again before it is marked dead.
   if (!target.num) { if (target.dying || target.dead) return; target.dying = true; }
@@ -4428,6 +4460,7 @@ function respawnPlayer(p) {
   p.invincible = 2000;
   p.hitFlash   = 0;
   p.fsArm = 0; p.fsSpin = null; p.sfire = null; p.fsClick = null;
+  p.iceSwordOut = false; p.iceStunT = 0; p.ivx = 0; p.ivy = 0;
   fitShield(p);      // a new life, and the shield is ready
 }
 
@@ -4438,7 +4471,7 @@ function checkRoundEnd() {
   if (isSolo()) {
     if (p1 && p1.dead && p1.lives <= 0) {
       // The boss fight has no leaderboard: you win or you don't.
-      room.lastLeaderboard = room.gameMode === 'portal' || room.gameMode === 'abyss' || room.gameMode === 'tsunami' || room.gameMode === 'sawroom' ? []
+      room.lastLeaderboard = room.gameMode === 'portal' || room.gameMode === 'abyss' || room.gameMode === 'tsunami' || room.gameMode === 'iceknight' || room.gameMode === 'sawroom' ? []
         : addLeaderboardEntry(room.playerNames.p1, room.wave.num, room.gameMode);
       room.gameState      = 'ROUND_OVER';
       room.roundOverTimer = 6000;
@@ -4606,6 +4639,13 @@ function tickRoom(dt) {
       katanaSpinTick(p, key, dt);
     }
 
+    p.slip = slipsOnIce(key);
+    if (p.slip && !(p.kspin > 0)) {
+      const g = Math.min(1, ICE_GLIDE * factor);
+      p.ivx = (p.ivx || 0) + (vx - (p.ivx || 0)) * g; p.ivy = (p.ivy || 0) + (vy - (p.ivy || 0)) * g;
+      vx = p.ivx; vy = p.ivy;
+    } else { p.ivx = 0; p.ivy = 0; }
+
     if (p.bladeDash && !p.controlling) updateBladeDash(p, key, factor, dt);   // a Light Blade dash carries you
     else {
       p.x += vx * factor;
@@ -4724,7 +4764,7 @@ function tickRoom(dt) {
     if (m.burnTimer > 0) {
       m.burnTimer -= dt;
       m.burnAcc = (m.burnAcc || 0) + dt;
-      while (m.burnAcc >= 500 && !m.dead) { m.burnAcc -= 500; dotDamage(m, 4); }
+      while (m.burnAcc >= 500 && !m.dead) { m.burnAcc -= 500; dotDamage(m, m.fireWeak ? 4 * IK.burnMult : 4); }
     }
     if (m.atkCooldown > 0) m.atkCooldown -= dt;
     if (m.hitFlash    > 0) m.hitFlash    -= dt;
@@ -4756,13 +4796,14 @@ function tickRoom(dt) {
         if (m.boss || !m.face || want === m.face) { m.face = want; m.turnT = 0; }
         else if ((m.turnT = (m.turnT || 0) + dt) >= MONSTER_TURN_MS) { m.face = want; m.turnT = 0; }
       }
-      const spd = m.speed * (m.slowTimer > 0 ? 0.4 : 1);
+      const spd = m.speed * (m.slowTimer > 0 ? 0.4 : 1) * (room.ice && room.ice.owner !== 'monster' ? ICE_FLOOR_SLOW : 1);   // (a player's ice: monsters can't skate)
       if (m.shiny && !m.under) rareTick(m, nearest, dist, dx, dy, dt);
 
       if (m.boss) {
         if (m.mage) updateMage(m, nearest, dist, dx, dy, spd, factor, dt);
         else if (m.abyss) updateAbyss(m, nearest, dist, dx, dy, spd, factor, dt);
         else if (m.tsunami) updateTsunami(m, nearest, dist, dx, dy, spd, factor, dt);
+        else if (m.iceKnight) updateIceKnight(m, nearest, dist, dx, dy, spd, factor, dt);
         else updateGiant(m, nearest, dist, dx, dy, spd, factor, dt);
         applyPull(m, dt);
         clampToArena(m);
@@ -4837,12 +4878,13 @@ function tickRoom(dt) {
   updateChronos(dt);
   updateHydra(dt);
   updateFireSpear(dt);
+  updateIce(factor, dt);
   if (room.gameMode === 'sawroom') updateSawRoom(dt);
   updateRareShop(dt);
 
   // ── Wave spawner ── (the Portal Mage fight has no waves: he brings his own;
   // in the sandbox you spawn what you like)
-  if (room.gameMode !== 'pvp' && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'tsunami' && room.gameMode !== 'sandbox' && room.gameMode !== 'sawroom') {
+  if (room.gameMode !== 'pvp' && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'tsunami' && room.gameMode !== 'iceknight' && room.gameMode !== 'sandbox' && room.gameMode !== 'sawroom') {
     if (room.wave.betweenTimer > 0) {
       room.wave.betweenTimer -= dt;
       if (room.wave.betweenTimer <= 0) startWave(room.wave.num + 1);
@@ -4882,7 +4924,7 @@ function tickRoom(dt) {
 
   // ── Traps ── (in the Portal Mage fight only he lays them)
   if (!room.rareShop) room.trapSpawnTimer -= dt;   // nothing new appears while the rare shop is open
-  if (room.trapSpawnTimer <= 0 && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'tsunami' && room.gameMode !== 'sandbox' && room.gameMode !== 'sawroom') {
+  if (room.trapSpawnTimer <= 0 && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'tsunami' && room.gameMode !== 'iceknight' && room.gameMode !== 'sandbox' && room.gameMode !== 'sawroom') {
     if (room.traps.filter(t => !t.owner).length < MAX_TRAPS * mapFill()) spawnTrap();
     room.trapSpawnTimer = (TRAP_SPAWN_MIN + Math.random() * (TRAP_SPAWN_MAX - TRAP_SPAWN_MIN)) / mapFill();
   }
@@ -5136,6 +5178,7 @@ function advanceProjectile(proj, factor, dt) {
       const hx = Math.max(ARENA_X + 2, Math.min(ARENA_X + ARENA_W - 2, proj.x));
       const hy = Math.max(ARENA_Y + 2, Math.min(ARENA_Y + ARENA_H - 2, proj.y));
       if (proj.isAoe) detonateAoe(proj);
+      if (proj.iceBurst) iceBurst(proj.owner, hx, hy, proj.iceBurst);
       if (proj.teleport) doHookTeleport(proj, hx, hy);
       return false;
     }
@@ -5163,6 +5206,7 @@ function advanceProjectile(proj, factor, dt) {
     }
   } else if (proj.traveled >= proj.maxRange) {
     if (proj.isAoe) detonateAoe(proj);
+    if (proj.iceBurst) iceBurst(proj.owner, proj.x, proj.y, proj.iceBurst);
     if (proj.teleport) doHookTeleport(proj, proj.x, proj.y);
     return false;
   }
@@ -5343,6 +5387,7 @@ function armorAuraTick(p, key, dt) {
 }
 // What a projectile does beyond its damage: frost slows, storm arcs onward.
 function onHitExtras(proj, t) {
+  if (proj.iceBurst) iceBurst(proj.owner, proj.x, proj.y, proj.iceBurst);
   if (proj.fgRico > 0) forgeRicochet(proj, t);
   if (proj.fgBlast) forgeBlast(proj, t);
   if (proj.venom && !t.dead) { t.venomT = HY_VENOM_MS; t.venomDmg = Math.max(t.venomDmg && t.venomT > 0 ? t.venomDmg : 0, proj.venom); }
@@ -5451,6 +5496,8 @@ function attackMove(p, pKey) {
   if (w.mindTrap) { placeMindTrap(p, pKey, w, dmgMult); return; }
   if (w.lightDash) { p.swingTimer = 0; bladeAttack(p, pKey, w, dmgMult); return; }
   if (w.fireSpear) { spearAttack(p, pKey, w); return; }
+  if (w.iceSword) { iceSwordAttack(p, pKey, w, dmgMult); return; }
+  if (w.iceBow) { iceBowAttack(p, pKey, w, dmgMult); return; }
   if (w.vortexShield) {
     p.vortexShield = VORTEX_SHIELD_MS;
     room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 22, timer: 300, max: 300, color: WEAPON_COLORS.vortex });
@@ -5626,6 +5673,8 @@ function doSuper(p, pKey) {
     room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 60, timer: 800, max: 800, color: '#ff5a1a', text: 'FIRE SPIN' });
     return;
   }
+  if (su.kind === 'icethrow') { if (p.iceSwordOut) { p.superCooldown = 400; return; } throwIceSword(p, pKey, Math.round(su.dmg * dmgMult)); return; }
+  if (su.kind === 'icetriple') { castIceTriple(p, pKey, Math.round(su.dmg * dmgMult)); return; }
   if (su.kind === 'greatcrack') { castGreatCrack(p, pKey, Math.round(su.dmg * dmgMult)); return; }
   if (su.kind === 'wavecyclone') { castWaveCyclone(p, pKey, Math.round(su.dmg * dmgMult)); return; }
   if (su.kind === 'timestop') { stopTime(p, pKey); return; }
@@ -6081,6 +6130,7 @@ function updateAllies(factor, dt) {
       if (Math.abs(dx) > 2) a.face = dx > 0 ? 1 : -1;
       const reach = a.atkRange + (best.w + best.h) / 4;
       if (dist > reach) { a.x += (dx / dist) * spd * factor; a.y += (dy / dist) * spd * factor; }
+      if (a.type === 'iceminion') iceAllyShoot(a, best, dist, dt);
       if (dist <= reach + 4 && a.atkCooldown <= 0) {
         const tk = playerKeyOf(best);
         if (tk && best.parryTimer > 0) {
@@ -6099,6 +6149,7 @@ function updateAllies(factor, dt) {
         }
         a.atkCooldown = ALLY_ATK_MS;
         a.swing = MONSTER_SWING_MS;
+        if (a.type === 'iceminion' && !best.dead && !(tk && best.parryTimer > 0)) { chillTarget(best, 1500); gsPush(best, cx(a), cy(a), 50); }
       }
     } else {
       // Nothing to fight: stay close to whoever summoned it.
@@ -6301,6 +6352,7 @@ function updateFires(factor, dt) {
       if (f.kind === 'blackhole' && f.boom) collapseSingularity(f);
       if (f.kind === 'abyssmark') openAbyssHole(f);
       if (f.kind === 'abysscharge') launchAbyssOrb(f);
+      if (f.kind === 'icefall') landIceArrow(f);
       return false;
     }
     if (f.kind === 'abyssmark') return true;   // the bolts are still on their way
@@ -6330,6 +6382,9 @@ function updateFires(factor, dt) {
     if (f.kind === 'fsspear') return updateSpearThrow(f, factor);
     if (f.kind === 'fsfire') return updateSpearFire(f, dt);
     if (f.kind === 'fsring') return true;      // the burst itself, only to be seen
+    if (f.kind === 'icerun' || f.kind === 'iceswipe' || f.kind === 'icerift' || f.kind === 'icefall') return true;   // seen; their work is done elsewhere
+    if (f.kind === 'icepillar') return updateIcePillar(f);
+    if (f.kind === 'icesword') return updateIceSword(f, factor);
     if (f.kind === 'drain') return updateDrain(f, factor, dt);
     if (f.kind === 'tornado') return updateTornado(f, factor, dt);
     if (f.kind === 'hurricane') return updateHurricane(f, factor, dt);
@@ -6784,6 +6839,510 @@ const EVENTS = {
 const VA = { hp: 4, size: 1.4, speed: 1.6, rate: 1.6, dmg: 1.9, eclipseRing: 34, eclipseCore: 50 };
 const TROPHY_W = 28, TROPHY_H = 36, TROPHY_DELAY_MS = 1000;
 
+// ─── THE ICE KNIGHT ───────────────────────────────────────────────────────────
+// A boss with his own mode ('iceknight'), and a price: IK_FEE a fight, paid up front
+// for a ticket (see PAID_MODES). A knight of ice with a greatsword, a bow and a shield.
+// Beat him and everything in IK_GEAR that you don't own yet is yours.
+// Everything he does slows. Fire is what hurts him: fire weapons hit him twice as
+// hard, and he burns four times as fast.
+//  1 SWIPE      a wide cut, after 2s of warning.
+//  2 SKY ARROW  he takes out his bow and shoots up; a mark shows where it will land,
+//               and 2s later it does, freezing whoever is there and leaving a spike.
+//  3 PARRY      shield up: hit him and it comes back at you. Leave him be and he
+//               stumbles: stunned for 3s, taking double damage.
+//  4 ICE WAVE   a cut that flies at you (it can be parried).
+//  Under half health he attacks 3 times as often, and adds:
+//  5 FROSTLINE  sword into the ground: lines of spikes race after you for 2s, then shatter.
+//  6 VOLLEY     ten ice arrows at once, fanning out and then seeking you.
+//  Under a quarter the arena freezes over (you slide), and he adds:
+//  7 MINIONS    ice minions: quick, they shoot, and their blows shove and slow.
+const IK_HP = 140000, IK_FEE = 1000000;
+const IK_GEAR = ['iceknight_h', 'iceknight_c', 'iceknight_l', 'sh_frostwall', 'icegreatsword', 'icebow'];
+const PAID_MODES = { iceknight: { fee: IK_FEE, name: 'THE ICE KNIGHT' } };
+const IK = {
+  speed: 1.1, reach: 70, gap: 2100, fast: 3,
+  swipeWarn: 2000, swipeR: 150, swipeArc: 1.25, swipeDmg: 62, slow: 2500,
+  bowAim: 700, bowPut: 500, fallMs: 2000, fallR: 44, fallDmg: 95, fallFreeze: 1100, pillarMs: 4000,
+  parryMs: 1400, parryStun: 3000, parryCounter: 45,
+  waveWind: 550, waveDmg: 70, waveSpeed: 6.5,
+  groundWind: 700, groundMs: 2000, groundRuns: 3, groundSpeed: 7, groundDmg: 48, groundTurn: 2.4,
+  volleyWind: 500, volleyN: 10, volleyDmg: 20, volleyTtl: 3200, volleySpeed: 4.6,
+  summonWind: 900, minions: 3, maxMinions: 6, minionHp: 900, minionDmg: 16, minionShot: 13, minionSpeed: 2.3,
+  fireMult: 2, burnMult: 4,
+};
+const FIRE_WEAPONS = new Set(['fireglove', 'emberstaff', 'ashfeather', 'firespear', 'worldsplitter', 'sunbow']);
+MONSTER_TYPES.iceknight = {
+  name: 'ICE KNIGHT', minWave: 1, weight: 0, hp: 1, dmg: 1.6, speed: 1.0, size: 1.9,
+  color: '#8ad8ff', xp: 0, coins: 0, armor: 0.25, boss: true, fixedW: 44, fixedH: 60,
+};
+MONSTER_TYPES.iceminion = {
+  name: 'ICE MINION', minWave: 1, weight: 0, hp: 1.6, dmg: 1.3, speed: 2.1, size: 0.9,
+  color: '#8ad8ff', xp: 0.3, coins: 0.2, minion: true, ai: 'iceminion',
+};
+
+// ── Ice, shared by the knight and the gear he drops ──
+const ICE_SEG_LEN = 64, ICE_RUN_R = 13, ICE_GLIDE = 0.045, ICE_FLOOR_SLOW = 0.55;
+// A line of ice spikes racing along the floor. It can't be parried, only dodged:
+// whoever its tip reaches is hurt and slowed (once per `rehit` for the whole cast,
+// through the shared `hit` map). `turn` makes it chase the nearest foe; `die` makes
+// every spike shatter the moment it stops, instead of standing for `linger`.
+function iceRun(owner, x, y, a, o) {
+  if (!room.iceRuns) room.iceRuns = [];
+  room.iceRuns.push({ owner, x, y, a, speed: o.speed, left: o.ms, dmg: o.dmg, r: o.r || ICE_RUN_R, hit: o.hit || new Map(),
+                      turn: o.turn || 0, linger: o.linger || 900, die: !!o.die, chill: o.chill || 2000, rehit: o.rehit || 450, seg: null });
+}
+function updateIceRuns(factor, dt) {
+  if (!room.iceRuns || !room.iceRuns.length) return;
+  const now = Date.now();
+  room.iceRuns = room.iceRuns.filter(q => {
+    q.left -= dt;
+    if (q.turn) {
+      let best = null, bd = Infinity;
+      for (const t of enemyTargets(q.owner)) { const d = Math.hypot(cx(t) - q.x, cy(t) - q.y); if (d < bd) { bd = d; best = t; } }
+      if (best) q.a = turnToward(q.a, Math.atan2(cy(best) - q.y, cx(best) - q.x), q.turn * dt / 1000);
+    }
+    // The stretch of spikes being laid grows; a bend (or a full stretch) starts the next.
+    if (!q.seg || (q.turn && q.seg.v >= ICE_SEG_LEN) || Math.abs(Math.atan2(Math.sin(q.a - q.seg.a), Math.cos(q.a - q.seg.a))) > 0.1) {
+      q.seg = { id: nextId(), kind: 'icerun', owner: q.owner, x: q.x, y: q.y, a: q.a, v: 0.1, r: q.r, t: 0,
+                life: q.die ? Math.max(200, q.left + 150) : q.linger + (q.turn ? ICE_SEG_LEN / q.speed * 17 : Math.max(0, q.left)) };
+      room.fires.push(q.seg);
+    }
+    const step = q.speed * factor;
+    q.x += Math.cos(q.a) * step; q.y += Math.sin(q.a) * step; q.seg.v += step;
+    for (const t of enemyTargets(q.owner)) {
+      if (Math.hypot(cx(t) - q.x, cy(t) - q.y) > q.r + t.w / 2) continue;
+      const last = q.hit.get(t);
+      if (last && now - last < q.rehit) continue;
+      if (t.num && t.invincible > 0) continue;
+      q.hit.set(t, now);
+      if (!t.num) t.invincible = 0;
+      applyDamage(t, q.dmg, q.owner);
+      if (!t.dead) chillTarget(t, q.chill);
+    }
+    const out = q.x < ARENA_X + 2 || q.x > ARENA_X + ARENA_W - 2 || q.y < ARENA_Y + 2 || q.y > ARENA_Y + ARENA_H - 2;
+    return q.left > 0 && !out;
+  });
+}
+// Spikes bursting out in every direction from one spot.
+function iceBurst(owner, x, y, dmg, o = {}) {
+  const at = arenaClamp(x, y, 4), hit = o.hit || new Map(), n = o.n || 8, a0 = o.a0 ?? Math.random() * Math.PI;
+  for (let i = 0; i < n; i++) iceRun(owner, at.x, at.y, a0 + i * Math.PI * 2 / n, { speed: o.speed || 11, ms: o.ms || 420, dmg, hit, linger: o.linger || 900 });
+  room.particles.push({ type: 'shockwave', x: at.x, y: at.y, maxR: 40, timer: 320, max: 320, color: '#bfefff' });
+}
+
+// An arrow shot into the sky: a mark shows where it will come down. When it does it
+// hurts, slows (and, the knight's, freezes) whoever is on the mark, and leaves a
+// spike of solid ice standing there.
+function iceFall(owner, x, y, o) {
+  room.fires.push({ id: nextId(), kind: 'icefall', owner, x: Math.round(x), y: Math.round(y), r: o.r, t: 0, life: o.ms,
+                    dmg: o.dmg, freeze: o.freeze || 0, chill: o.chill || 2500, pillar: o.pillar || 3500 });
+}
+function landIceArrow(f) {
+  room.particles.push({ type: 'shockwave', x: f.x, y: f.y, maxR: f.r, timer: 380, max: 380, color: '#bfefff' });
+  for (const t of enemyTargets(f.owner).slice()) {
+    if (Math.hypot(cx(t) - f.x, cy(t) - f.y) > f.r + t.w / 2) continue;
+    if (!t.num) t.invincible = 0;
+    strikeTarget(t, f.dmg, f.owner);
+    if (t.dead || (t.num && t.parryTimer > 0)) continue;
+    chillTarget(t, f.chill);
+    if (f.freeze) { stunTarget(t, f.freeze); t.iceStunT = f.freeze; }
+  }
+  room.fires.push({ id: nextId(), kind: 'icepillar', owner: f.owner, x: f.x, y: f.y, r: Math.round(f.r * 0.5), t: 0, life: f.pillar });
+}
+// The spike it leaves is solid: the other side can't walk through it, and (a
+// player's) it stops their shots.
+function updateIcePillar(f) {
+  for (const t of enemyTargets(f.owner)) {
+    if (t.boss) continue;
+    let dx = cx(t) - f.x, dy = cy(t) - f.y;
+    if (Math.abs(dx) + Math.abs(dy) < 0.5) { dx = t.facing === -1 ? 1 : -1; dy = 0; }   // stood right where it landed: out the back
+    const d = Math.hypot(dx, dy), min = f.r + t.w / 2 - 2;
+    if (d >= min) continue;
+    t.x += dx / d * (min - d); t.y += dy / d * (min - d);
+    clampToArena(t, 2);
+    chillTarget(t, 500);
+  }
+  if (f.owner !== 'monster') {
+    room.projectiles = room.projectiles.filter(pr => {
+      const hostile = pr.owner === 'monster' || (room.gameMode === 'pvp' && pr.owner !== f.owner);
+      if (!hostile || Math.hypot(pr.x - f.x, pr.y - f.y) > f.r) return true;
+      room.particles.push({ type: 'parry', x: pr.x, y: pr.y, timer: 200, max: 200 });
+      return false;
+    });
+  }
+  return true;
+}
+
+// A cut of ice that flies. Like the samurai's wave it can be parried.
+function iceWave(owner, x, y, a, dmg, o = {}) {
+  const sp = o.speed || IK.waveSpeed;
+  room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * sp, dy: Math.sin(a) * sp, damage: dmg, owner, traveled: 0, maxRange: o.range || 760,
+    weaponId: 'icewave', isAoe: false, aoeRadius: 0, pierce: false, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: null,
+    hitR: owner === 'monster' ? 10 : 16, chill: o.chill || IK.slow, ...(o.upg ? { upg: o.upg } : {}) });
+}
+// An ice arrow. `homing` ones seek, and melt away after `ttl`; `burst` ones throw
+// out spreading spikes wherever they end up.
+function iceArrow(owner, x, y, a, dmg, o = {}) {
+  const sp = o.speed || 6;
+  room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * sp, dy: Math.sin(a) * sp, damage: dmg, owner, traveled: 0, maxRange: o.range || 3000,
+    weaponId: 'icearrow', isAoe: false, aoeRadius: 0, pierce: false, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: null,
+    hitR: 5, chill: 1800, ...(o.homing ? { homing: true, turn: o.turn || 2.8, seekR: 1200 } : {}), ...(o.ttl ? { ttl: o.ttl } : {}),
+    ...(o.burst ? { iceBurst: o.burst } : {}), ...(o.big ? { big: o.big } : {}) });
+}
+
+// The floor, frozen: everyone the owner fights slides about on it (monsters, who
+// can't skate, are slowed instead).
+function freezeFloor(owner, ms) {
+  room.ice = { owner, t: ms };
+  room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26, text: 'THE ARENA FREEZES OVER', color: '#bfefff', timer: 2200, max: 2200 });
+}
+function slipsOnIce(key) {
+  return !!room.ice && (room.ice.owner === 'monster' || (room.gameMode === 'pvp' && room.ice.owner !== key));
+}
+function updateIce(factor, dt) {
+  if (room.ice && Number.isFinite(room.ice.t)) { room.ice.t -= dt; if (room.ice.t <= 0) room.ice = null; }
+  updateIceRuns(factor, dt);
+  for (const t of [...allPlayers(), ...room.monsters]) if (t && t.iceStunT > 0) t.iceStunT -= dt;
+}
+
+// A wide cut in front: everything inside the arc is struck and slowed.
+function iceSwipe(owner, src, a, r, dmg) {
+  room.fires.push({ id: nextId(), kind: 'iceswipe', owner, x: cx(src), y: cy(src), a, r, t: 0, life: 300 });
+  for (const t of enemyTargets(owner).slice()) {
+    const d = Math.hypot(cx(t) - cx(src), cy(t) - cy(src));
+    if (d > r + t.w / 2) continue;
+    const diff = Math.abs(Math.atan2(Math.sin(Math.atan2(cy(t) - cy(src), cx(t) - cx(src)) - a), Math.cos(Math.atan2(cy(t) - cy(src), cx(t) - cx(src)) - a)));
+    if (diff > IK.swipeArc && d > 30) continue;
+    if (t.num && t.parryTimer > 0) {
+      spawnParrySpark(cx(t), cy(t));
+      if (src.hp !== undefined && !src.num) applyDamage(src, Math.round(dmg * reflectOf(t)) + 10, playerKeyOf(t));
+      else { const op = room.players[owner]; if (op) applyDamage(op, Math.round(dmg * reflectOf(t)), playerKeyOf(t)); }
+      continue;
+    }
+    if (!t.num) t.invincible = 0;
+    applyDamage(t, dmg, owner);
+    if (!t.dead) chillTarget(t, IK.slow);
+  }
+}
+
+// ── The fight ──
+function startIceKnightFight() {
+  room.wave = { num: 1, monstersLeft: 1, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 };
+  room.waveHpMult = 1; room.waveSpeedMult = 1;
+  spawnMonster('iceknight', { noRare: true });
+  const m = room.monsters[room.monsters.length - 1];
+  m.hp = m.maxHp = IK_HP;
+  m.speed = IK.speed;
+  m.x = ARENA_X + ARENA_W * 0.72 - m.w / 2; m.y = ARENA_Y + ARENA_H * 0.5 - m.h / 2;
+  Object.assign(m, { iceKnight: true, fireWeak: true, phase: 1, act: null, actT: 0, actCd: 1800, lastAct: null, aa: Math.PI, shot: false, stun: 0 });
+  room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26, text: 'THE ICE KNIGHT AWAITS', color: '#8ad8ff', timer: 3200, max: 3200 });
+}
+function ikEndAct(m) {
+  m.act = null; m.shot = false;
+  m.actCd = IK.gap / (m.phase >= 2 ? IK.fast : 1);
+}
+function ikMinions() { return room.monsters.filter(o => o.iceMinion && !o.dead).length; }
+function updateIceKnight(m, target, dist, dx, dy, spd, factor, dt) {
+  // Half health: three times as quick, two more attacks. A quarter: the floor freezes.
+  if (m.phase === 1 && m.hp <= m.maxHp * 0.5) {
+    m.phase = 2; m.invincible = 900; m.speed = IK.speed * 1.3;
+    room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 170, timer: 800, max: 800, color: '#8ad8ff' });
+    room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26, text: 'THE ICE KNIGHT QUICKENS', color: '#8ad8ff', timer: 2600, max: 2600 });
+  }
+  if (m.phase === 2 && m.hp <= m.maxHp * 0.25) {
+    m.phase = 3; m.invincible = 900;
+    room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 320, timer: 1100, max: 1100, color: '#e8fcff' });
+    freezeFloor('monster', Infinity);
+  }
+  if (m.stun > 0) { m.stun -= dt; return; }
+  const aim = Math.atan2(dy, dx);
+  if (m.act) {
+    m.actT += dt;
+    if (m.act === 'swipe') {
+      if (m.actT < IK.swipeWarn * 0.7) m.aa = turnToward(m.aa, aim, 2.4 * dt / 1000);   // follows you, then commits
+      if (m.actT >= IK.swipeWarn) { m.swing = MONSTER_SWING_MS; iceSwipe('monster', m, m.aa, IK.swipeR, IK.swipeDmg); ikEndAct(m); }
+    } else if (m.act === 'bow') {
+      if (!m.shot && m.actT >= IK.bowAim) {
+        m.shot = true;
+        const n = m.phase >= 2 ? 3 : 1;
+        for (let i = 0; i < n; i++) {
+          const off = i ? 60 + Math.random() * 60 : 0, oa = Math.random() * Math.PI * 2;
+          const at = arenaClamp(cx(target) + Math.cos(oa) * off, cy(target) + Math.sin(oa) * off, 12);
+          iceFall('monster', at.x, at.y, { ms: IK.fallMs, r: IK.fallR, dmg: IK.fallDmg, freeze: IK.fallFreeze, chill: IK.slow + 500, pillar: IK.pillarMs });
+        }
+        room.particles.push({ type: 'bolt', x: cx(m), y: m.y, x2: cx(m), y2: ARENA_Y, timer: 260, max: 260, color: '#bfefff' });
+      }
+      if (m.actT >= IK.bowAim + IK.bowPut) ikEndAct(m);
+    } else if (m.act === 'parry') {
+      if (m.actT >= IK.parryMs) {           // nobody struck: he stumbles
+        ikEndAct(m);
+        m.stun = IK.parryStun;
+        room.particles.push({ type: 'crit', x: cx(m), y: m.y - 12, text: 'STUNNED: DOUBLE DAMAGE', timer: 1200, max: 1200 });
+      }
+    } else if (m.act === 'wave') {
+      if (m.actT < IK.waveWind) m.aa = aim;
+      else {
+        const n = m.phase >= 2 ? 3 : 1;
+        for (let i = 0; i < n; i++) iceWave('monster', cx(m), cy(m), m.aa + (i - (n - 1) / 2) * 0.3, IK.waveDmg);
+        m.swing = MONSTER_SWING_MS;
+        ikEndAct(m);
+      }
+    } else if (m.act === 'ground') {
+      if (!m.shot && m.actT >= IK.groundWind) {
+        m.shot = true;
+        const hit = new Map();
+        for (let i = 0; i < IK.groundRuns; i++) {
+          iceRun('monster', cx(m), m.y + m.h * 0.8, aim + (i - (IK.groundRuns - 1) / 2) * 0.55,
+                 { speed: IK.groundSpeed, ms: IK.groundMs, dmg: IK.groundDmg, turn: IK.groundTurn, die: true, hit, chill: IK.slow });
+        }
+        room.particles.push({ type: 'shockwave', x: cx(m), y: m.y + m.h * 0.8, maxR: 60, timer: 400, max: 400, color: '#bfefff' });
+      }
+      if (m.actT >= IK.groundWind + IK.groundMs) ikEndAct(m);
+    } else if (m.act === 'volley') {
+      if (m.actT >= IK.volleyWind) {
+        for (let i = 0; i < IK.volleyN; i++) {
+          iceArrow('monster', cx(m), cy(m) - m.h * 0.2, aim + (i - (IK.volleyN - 1) / 2) * 0.26, IK.volleyDmg,
+                   { homing: true, turn: 2.6, ttl: IK.volleyTtl, speed: IK.volleySpeed });
+        }
+        ikEndAct(m);
+      }
+    } else if (m.act === 'summon') {
+      if (m.actT >= IK.summonWind) {
+        const n = Math.min(IK.minions, IK.maxMinions - ikMinions());
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * Math.PI * 2, at = arenaClamp(cx(m) + Math.cos(a) * 60, cy(m) + Math.sin(a) * 60, 16);
+          spawnIceMinion(at.x, at.y);
+        }
+        ikEndAct(m);
+      }
+    }
+    return;
+  }
+  if (dist > IK.reach) { m.x += dx / dist * spd * factor; m.y += dy / dist * spd * factor; }
+  if (m.actCd > 0) { m.actCd -= dt; return; }
+  const pool = ['bow', 'parry', 'wave'];
+  if (dist < 230) pool.push('swipe', 'swipe');
+  if (m.phase >= 2) pool.push('ground', 'volley');
+  if (m.phase >= 3 && ikMinions() < IK.maxMinions - 1) pool.push('summon');
+  let pick = pool[Math.floor(Math.random() * pool.length)];
+  if (pick === m.lastAct) pick = pool[Math.floor(Math.random() * pool.length)];
+  m.lastAct = pick;
+  m.act = pick; m.actT = 0; m.shot = false; m.aa = aim;
+}
+// Struck while his shield was up: the blow is turned and comes back.
+function ikParried(m, key) {
+  const p = room.players[key];
+  ikEndAct(m);
+  m.actCd *= 0.6;
+  m.hitFlash = 90; m.invincible = 350;
+  spawnParrySpark(cx(m), cy(m));
+  room.particles.push({ type: 'crit', x: cx(m), y: m.y - 12, text: 'PARRIED', timer: 800, max: 800 });
+  if (!p || p.dead) return;
+  const a = Math.atan2(cy(p) - cy(m), cx(p) - cx(m));
+  if (Math.hypot(cx(p) - cx(m), cy(p) - cy(m)) < 130) {
+    applyDamage(p, IK.parryCounter, 'monster');
+    if (!p.dead) { chillTarget(p, IK.slow); gsPush(p, cx(m), cy(m), 110); }
+  } else iceWave('monster', cx(m), cy(m), a, IK.parryCounter, { speed: 9 });
+}
+function iceKnightDefeated(m) {
+  if (m.dead) return;
+  m.dead = true;
+  for (const o of room.monsters) {
+    o.dead = true;
+    room.particles.push({ type: 'teleport', x: cx(o), y: cy(o), timer: 420, max: 420, color: '#bfefff' });
+  }
+  room.monsters = [];
+  room.wave.monstersLeft = 0;
+  room.projectiles = room.projectiles.filter(pr => pr.owner !== 'monster');
+  room.fires = room.fires.filter(f => f.owner !== 'monster');
+  room.iceRuns = (room.iceRuns || []).filter(q => q.owner !== 'monster');
+  room.dangers = [];
+  if (room.ice && room.ice.owner === 'monster') room.ice = null;
+  room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 260, timer: 1000, max: 1000, color: '#bfefff' });
+  room.particles.push({ type: 'waveclear', x: CANVAS_W / 2, y: CANVAS_H / 2 - 10, text: 'THE ICE KNIGHT SHATTERS!', timer: 4000 });
+  if (room.gameMode === 'sandbox') return;
+  // His gear: whatever of it you don't have yet (whatever you fought him with).
+  for (const key of KEYS) {
+    const p = room.players[key];
+    if (!p) continue;
+    const pw = room.passwords[key], fresh = [];
+    if (pw && !isAdminPw(pw)) {
+      const d = progress(), arm = d.armor[pw] || [], have = (d.weapons[pw] || []).slice();
+      for (const id of IK_GEAR) {
+        if (WEAPON_BY_ID[id]) { if (!have.includes(id)) { have.push(id); fresh.push(id); } }
+        else if (Armor.BY_ID[id] && !arm.includes(id)) { arm.push(id); fresh.push(id); }
+      }
+      d.armor[pw] = arm; d.weapons[pw] = sortWeaponIds(have);
+      markDirty();
+    }
+    room.ikWin = { ...(room.ikWin || {}), [key]: fresh };
+    room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 46, text: fresh.length ? 'HIS ARMOUR, SHIELD AND WEAPONS ARE YOURS!' : 'YOU ALREADY OWN ALL HIS GEAR',
+                          color: '#bfefff', timer: 4500, max: 4500 });
+  }
+  room.victory = true;
+  room.gameState = 'ROUND_OVER';
+  room.roundOverTimer = 8000;
+}
+
+// ── Ice minions ── quick; they shoot shards on the way in, and up close their
+// blows shove and slow.
+function spawnIceMinion(x, y) {
+  spawnMonster('iceminion', { at: { x, y }, noRare: true });
+  const q = room.monsters[room.monsters.length - 1];
+  q.hp = q.maxHp = IK.minionHp; q.atkDamage = IK.minionDmg;
+  q.speed = IK.minionSpeed;
+  q.iceMinion = true; q.fireWeak = true; q.shotCd = 600 + Math.random() * 800;
+  room.wave.monstersLeft++;
+  room.particles.push({ type: 'teleport', x, y, timer: 380, max: 380, color: '#bfefff' });
+}
+function iceShard(owner, x, y, a, dmg) {
+  room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * 5, dy: Math.sin(a) * 5, damage: dmg, owner, traveled: 0, maxRange: 300,
+    weaponId: 'iceshard', isAoe: false, aoeRadius: 0, pierce: false, grapple: false, boomerang: false, returning: false, life: 0, hitTargets: null,
+    hitR: 4, chill: 1500 });
+}
+function aiIceMinion(m, t, dist, dx, dy, spd, factor, dt) {
+  const reach = m.atkRange + (t.w + t.h) / 4;
+  m.shotCd = (m.shotCd ?? 900) - dt;
+  if (dist > reach) { m.x += dx / dist * spd * factor; m.y += dy / dist * spd * factor; }
+  if (dist > reach + 30 && dist < 270 && m.shotCd <= 0) {
+    m.shotCd = 1700;
+    iceShard('monster', cx(m), cy(m), Math.atan2(dy, dx), IK.minionShot);
+    m.swing = MONSTER_SWING_MS;
+  }
+  if (dist <= reach && m.atkCooldown <= 0) {
+    const parried = t.parryTimer > 0;
+    monsterMelee(m, t);
+    if (!parried && !t.dead) { chillTarget(t, 1500); gsPush(t, cx(m), cy(m), 70); }
+  }
+  return true;
+}
+MONSTER_AI.iceminion = aiIceMinion;
+// On your side (the Ice Bow's passive): the same, for your enemies.
+function iceAllyShoot(a, t, dist, dt) {
+  a.shotCd = (a.shotCd ?? 500) - dt;
+  if (a.shotCd > 0 || dist < a.atkRange + 30 || dist > 270) return;
+  a.shotCd = 1500;
+  iceShard(a.owner, cx(a), cy(a), Math.atan2(cy(t) - cy(a), cx(t) - cx(a)), Math.max(4, Math.round(a.atkDamage * 0.8)));
+  a.swing = MONSTER_SWING_MS;
+}
+
+// ── THE ICE GREATSWORD ── (won from the Ice Knight)
+// ATK: a foe close by gets the knight's own swipe; a foe far off, his ice wave.
+// SPECIAL: strike the ground: lines of spikes race out in every direction (can't be
+// parried). SUPER: throw the sword, spinning: where it lands the ground rifts,
+// everyone there is stunned 3s and flung, the one it struck takes a critical hit;
+// then it flies back to you. PASSIVE: ABSOLUTE ZERO, after it lands the arena is
+// slippery ice for 3s.
+const IS_QUAKE_RUNS = 20, IS_QUAKE_R = 16, IS_QUAKE_SPEED = 13, IS_QUAKE_MS = 520;
+const IS_THROW_SPEED = 8, IS_THROW_RANGE = 540, IS_BACK_SPEED = 10, IS_RIFT_R = 90, IS_STUN = 3000, IS_FLOOR_MS = 3000;
+function iceSwordAttack(p, pKey, w, dmgMult) {
+  if (p.iceSwordOut) { p.atkCooldown = 200; p.swingTimer = 0; return; }   // it's still in the air
+  const f = nearestFoe(p, pKey), a = nearestTargetAngle(p, pKey), dmg = Math.round(w.damage * dmgMult);
+  p.facing = Math.cos(a) < 0 ? -1 : 1;
+  if (!f || Math.hypot(cx(f) - cx(p), cy(f) - cy(p)) <= IK.swipeR + f.w / 2) iceSwipe(pKey, p, a, IK.swipeR, dmg);
+  else iceWave(pKey, cx(p), cy(p), a, Math.round(dmg * IK.waveDmg / IK.swipeDmg), { upg: p.upgrades?.[w.id] || null });
+}
+function castIceQuake(p, pKey, dmg) {
+  const hit = new Map(), a0 = Math.random() * Math.PI;
+  for (let i = 0; i < IS_QUAKE_RUNS; i++) {
+    iceRun(pKey, cx(p), cy(p), a0 + i * Math.PI * 2 / IS_QUAKE_RUNS, { speed: IS_QUAKE_SPEED, ms: IS_QUAKE_MS, dmg, hit, linger: 1000, chill: IK.slow, r: IS_QUAKE_R });
+  }
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 70, timer: 700, max: 700, color: '#bfefff', text: 'FROSTQUAKE' });
+}
+function throwIceSword(p, key, dmg) {
+  const a = nearestTargetAngle(p, key);
+  p.facing = Math.cos(a) < 0 ? -1 : 1;
+  p.iceSwordOut = true;
+  room.fires.push({ id: nextId(), kind: 'icesword', owner: key, x: cx(p), y: cy(p), a, vx: Math.cos(a) * IS_THROW_SPEED, vy: Math.sin(a) * IS_THROW_SPEED,
+                    r: 16, t: 0, life: 60000, left: IS_THROW_RANGE, dmg, back: false });
+}
+function updateIceSword(f, factor) {
+  const o = room.players[f.owner];
+  if (!o) return false;
+  if (f.back) {
+    if (o.dead) { o.iceSwordOut = false; return false; }
+    const dx = cx(o) - f.x, dy = cy(o) - f.y, d = Math.hypot(dx, dy) || 1, step = IS_BACK_SPEED * factor;
+    if (d <= step + 12) { o.iceSwordOut = false; return false; }
+    f.x += dx / d * step; f.y += dy / d * step;
+    return true;
+  }
+  f.x += f.vx * factor; f.y += f.vy * factor; f.left -= IS_THROW_SPEED * factor;
+  for (const t of enemyTargets(f.owner)) {
+    if (Math.hypot(cx(t) - f.x, cy(t) - f.y) > f.r + t.w / 2) continue;
+    iceSwordImpact(f, t);
+    return true;
+  }
+  const out = f.x < ARENA_X + 4 || f.x > ARENA_X + ARENA_W - 4 || f.y < ARENA_Y + 4 || f.y > ARENA_Y + ARENA_H - 4;
+  if (out || f.left <= 0) iceSwordImpact(f, null);
+  return true;
+}
+function iceSwordImpact(f, hit) {
+  const o = room.players[f.owner];
+  const at = hit ? { x: cx(hit), y: cy(hit) } : arenaClamp(f.x, f.y, 6);
+  f.back = true; f.x = at.x; f.y = at.y;
+  room.fires.push({ id: nextId(), kind: 'icerift', owner: f.owner, x: Math.round(at.x), y: Math.round(at.y), r: IS_RIFT_R, a: f.a, t: 0, life: 900 });
+  room.particles.push({ type: 'trapburst', x: at.x, y: at.y, maxR: IS_RIFT_R, timer: 800, max: 800, color: '#bfefff', text: 'RIFT' });
+  const shared = new Map(), now = Date.now();
+  for (const t of enemyTargets(f.owner).slice()) {
+    const direct = t === hit;
+    if (!direct && Math.hypot(cx(t) - at.x, cy(t) - at.y) > IS_RIFT_R + t.w / 2) continue;
+    shared.set(t, now);
+    if (!t.num || t.invincible <= 500) t.invincible = 0;
+    applyDamage(t, direct ? f.dmg * 2 : f.dmg, f.owner);            // the one it struck: a critical hit
+    if (direct) room.particles.push({ type: 'crit', x: cx(t), y: t.y - 6, text: 'CRITICAL', timer: 700, max: 700 });
+    if (t.dead) continue;
+    stunTarget(t, IS_STUN); t.iceStunT = IS_STUN;
+    chillTarget(t, IS_STUN + 1500);
+    hurlToWall(t, direct ? f.a : Math.atan2(cy(t) - at.y, cx(t) - at.x));
+  }
+  iceBurst(f.owner, at.x, at.y, Math.round(f.dmg * 0.4), { n: 6, a0: f.a + 0.3, speed: 10, ms: 380, linger: 1100, hit: shared });
+  if (o && o.passive === 'icegreatsword') freezeFloor(f.owner, IS_FLOOR_MS);
+}
+
+// ── THE ICE BOW ── (won from the Ice Knight)
+// ATK: the knight's sky arrow: shot up, it comes down on your foe after a short
+// warning, slowing them and leaving a spike of solid ice. SPECIAL: ten seeking ice
+// arrows at once. SUPER: three arrows; wherever each ends up, spikes spread out
+// from it at great speed. PASSIVE: FROZEN LEGION, your super raises two ice minions.
+const IB_FALL_MS = 650, IB_FALL_R = 34, IB_PILLAR_MS = 3000, IB_VOLLEY_N = 10, IB_VOLLEY_TTL = 2600, IB_MINIONS = 2, IB_MINION_LIFE = 12000;
+function iceBowAttack(p, pKey, w, dmgMult) {
+  const f = nearestFoe(p, pKey), inp = room.inputs[pKey] || {};
+  let x, y;
+  if (f) { x = cx(f); y = cy(f); }
+  else if (inp.aimX != null && inp.aimY != null) { x = inp.aimX; y = inp.aimY; }
+  else { x = cx(p) + (p.facing || 1) * 160; y = cy(p); }
+  const dx = x - cx(p), dy = y - cy(p), d = Math.hypot(dx, dy) || 1, max = w.range * 1.6;
+  if (d > max) { x = cx(p) + dx / d * max; y = cy(p) + dy / d * max; }
+  if (Math.abs(dx) > 2) p.facing = dx < 0 ? -1 : 1;
+  const at = arenaClamp(x, y, 8);
+  room.particles.push({ type: 'bolt', x: cx(p), y: p.y, x2: cx(p), y2: Math.max(ARENA_Y, p.y - 120), timer: 200, max: 200, color: '#bfefff' });
+  iceFall(pKey, at.x, at.y, { ms: IB_FALL_MS, r: IB_FALL_R, dmg: Math.round(w.damage * dmgMult), chill: IK.slow, pillar: IB_PILLAR_MS });
+}
+function castIceVolley(p, pKey, dmg) {
+  const a = nearestTargetAngle(p, pKey);
+  p.facing = Math.cos(a) < 0 ? -1 : 1;
+  for (let i = 0; i < IB_VOLLEY_N; i++) {
+    iceArrow(pKey, cx(p), cy(p), a + (i - (IB_VOLLEY_N - 1) / 2) * 0.22, dmg, { homing: true, turn: 3.4, ttl: IB_VOLLEY_TTL, speed: 6 });
+  }
+}
+function castIceTriple(p, pKey, dmg) {
+  const a = nearestTargetAngle(p, pKey);
+  p.facing = Math.cos(a) < 0 ? -1 : 1;
+  for (let i = 0; i < 3; i++) iceArrow(pKey, cx(p), cy(p), a + (i - 1) * 0.17, dmg, { speed: 8.5, range: 620, burst: dmg, big: 1.6 });
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 50, timer: 700, max: 700, color: '#bfefff', text: 'GLACIER SHOT' });
+  if (p.passive === 'icebow') {                                    // FROZEN LEGION
+    for (let i = 0; i < IB_MINIONS; i++) {
+      spawnAlly(pKey, cx(p) + (i ? 26 : -26), cy(p) + 10, weapon(p).damage, { type: 'iceminion', hp: 260, life: IB_MINION_LIFE, force: true });
+      room.particles.push({ type: 'teleport', x: cx(p) + (i ? 26 : -26), y: cy(p) + 10, timer: 380, max: 380, color: '#bfefff' });
+    }
+  }
+}
+// FROSTWALL (the knight's shield): switching it on sends spikes out all round you.
+SHIELD_ON.icespikes = function (p, key, v, m) {
+  iceBurst(key, cx(p), cy(p), Math.round(v * m), { n: 10, speed: 9, ms: 480 });
+};
+
+
 // ── Endless Scythe ──
 const HORIZON_STUN_MS = 450;
 const VOIDBEAM_MS = 2000, VOIDBEAM_SPIN = Math.PI * 3, VOIDBEAM_W = 12, VOIDBEAM_TICK = 110, VOIDBEAM_PULL_R = 240, VOIDBEAM_HOLD = 50;
@@ -7170,6 +7729,7 @@ function claimEventPrize(key) {
       } else if (Armor.BY_ID[id] && !own.includes(id)) { own.push(id); fresh.push(id); }
     }
     d.armor[pw] = own;
+    d.eventWins[pw] = { ...(d.eventWins[pw] || {}), [room.event]: d.events[room.event]?.ed || 1 };   // beaten: it leaves their list
     markDirty();
   }
   room.eventWin = { coins, gear: ev.gear, fresh };
@@ -8572,7 +9132,7 @@ const FS_THROW_SPEED = 7.5, FS_HIT_R = 12, FS_TRAIL_GAP = 18, FS_TRAIL_R = 15, F
 const FS_RING_R = 170, FS_RING_MS = 750, FS_RING_SHARE = 0.6;
 const FS_BURN_TICK = 300, FS_BURN_DMG = 5, FS_BURN_LINGER = 1500, FS_BURN_RING = 3000, FS_BURN_LAND = 1200;
 const FS_CHARGE_N = 5, FS_CHARGE_MULT = 3, FS_CHARGE_STUN = 1500;
-const FS_SPIN_MS = 1100, FS_SPIN_R = 170, FS_SPIN_TICK = 220, FS_SPIN_SHARE = 0.35, FS_CHAIN_GAP = 280, FS_CHAIN_IFRAME = 500;
+const FS_SPIN_MS = 1100, FS_SPIN_R = 170, FS_SPIN_TICK = 220, FS_SPIN_SHARE = 0.2, FS_CHAIN_GAP = 280, FS_CHAIN_IFRAME = 500;
 
 // STRONG FIRE: an ordinary burn, and on top of it FS_BURN_DMG every FS_BURN_TICK
 // for as long as it lasts (it keeps going a moment after you step out of the fire).
@@ -8724,7 +9284,7 @@ function updateFireSpear(dt) {
     if (t.dead) { t.sfire = null; continue; }
     const s = t.sfire;
     s.left -= dt; s.acc += dt;
-    while (s.acc >= FS_BURN_TICK && !t.dead) { s.acc -= FS_BURN_TICK; dotDamage(t, FS_BURN_DMG, s.owner); }
+    while (s.acc >= FS_BURN_TICK && !t.dead) { s.acc -= FS_BURN_TICK; dotDamage(t, FS_BURN_DMG * (t.fireWeak ? IK.burnMult : 1), s.owner); }
     if (s.left <= 0 || t.dead) t.sfire = null;
   }
 }
@@ -9607,6 +10167,8 @@ function doSpecial(p, pKey) {
   }
   if (sp.kind === 'kunaistorm') { darklightStorm(p, pKey, spDmg); return; }
   if (sp.kind === 'spearthrow') { throwSpear(p, pKey, sp, spDmg); return; }
+  if (sp.kind === 'icequake') { if (p.iceSwordOut) { p.specialCooldown = 400; return; } castIceQuake(p, pKey, spDmg); return; }
+  if (sp.kind === 'icevolley') { castIceVolley(p, pKey, spDmg); return; }
   if (sp.kind === 'tectonic') { castTectonic(p, pKey, sp, spDmg); return; }
   if (sp.kind === 'leapslam') { startLeapSlam(p, pKey, spDmg); return; }
   if (sp.kind === 'tidalram') { startTidalRam(p, pKey, spDmg); return; }
@@ -9945,6 +10507,7 @@ function playerView(p) {
     ...(w.fireSpear && p.passive === 'firespear' ? { fsCh: p.fsCharged ? FS_CHARGE_N : (p.fsCount || 0) } : {}),
     ...(p.fsSpin && !p.fsSpin.chain ? { fspin: 1 } : {}),
     ...(p.sfire ? { sfire: 1 } : {}), ...(p.fsStunT > 0 ? { fstun: 1 } : {}),
+    ...(p.slip ? { slip: 1 } : {}), ...(p.iceStunT > 0 ? { frz: 1 } : {}), ...(p.iceSwordOut ? { isw: 1 } : {}),
     ...(p.mirrorT > 0 ? { mirror: true } : {}),
     ...(p.venomT > 0 ? { venom: true } : {}),
     ...(p.regrowT > 0 ? { regrow: true } : {}),
@@ -9966,6 +10529,8 @@ function buildStateMsg(playerNum) {
     myNum: playerNum,
     gameState: room.gameState,
     gameMode: room.gameMode,
+    ...(room.ice ? { ice: { o: room.ice.owner, left: Number.isFinite(room.ice.t) ? Math.round(room.ice.t) : -1 } } : {}),
+    ...(room.ikWin ? { ikWin: room.ikWin[key] || [] } : {}),
     ...(room.event ? { event: room.event } : {}), ...(room.trophy ? { trophy: room.trophy } : {}), ...(room.eventWin ? { eventWin: room.eventWin } : {}),
     world: { size: room.mapSize, w: CANVAS_W, h: CANVAS_H },
     maxPlayers: room.maxPlayers,
@@ -10005,6 +10570,8 @@ function buildStateMsg(playerNum) {
                   ...(m.boss ? { boss: true, wind: m.windup > 0 ? m.wind : null, windup: Math.max(0, Math.round(m.windup)), stun: Math.max(0, Math.round(m.stun)) } : {}),
                   ...(m.mage ? { mage: true, hidden: !!m.hidden, phase: m.phase, cast: m.tpT > 0 ? 'teleport' : m.castT > 0 ? m.cast : null } : {}),
                   ...(m.tsunami ? { tsunami: true, phase: m.phase, act: m.act || null } : {}),
+                  ...(m.iceKnight ? { ik: true, phase: m.phase, act: m.act || null, actT: Math.round(m.actT || 0), aa: Math.round((m.aa || 0) * 100) / 100 } : {}),
+                  ...(m.iceStunT > 0 ? { frz: 1 } : {}),
                   ...(m.evK ? { evK: m.evK } : {}),
                   ...(m.abyss ? { abyss: true, phase: m.phase, act: m.rapid > 0 ? 'rapid' : m.act, actT: Math.round(m.actT || 0),
                                   ...(m.act === 'slash' ? { sa: Math.round(m.slashA * 100) / 100 } : {}),
@@ -10153,7 +10720,7 @@ function weaponCatalog() {
     needMind: !!w.needMind,
     needLight: !!w.needLight,
     needSamurai: !!w.needSamurai,
-    bossReward: !!w.bossReward, secret: !!w.secret,
+    bossReward: !!w.bossReward, secret: !!w.secret, from: w.from || null,
     special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd } : null,
     super: w.super ? { kind: w.super.kind, dmg: w.super.dmg, cd: w.super.cd } : null,
     upgrades: upgradesFor(w.id),
@@ -10386,7 +10953,7 @@ function setupBot() {
 
 // The best shield in the game: the mythic that takes the most.
 function bestShieldId() {
-  return Armor.PIECES.filter(a => a.slot === 'shield').sort((a, b) => b.rarity - a.rarity || b.guard - a.guard)[0].id;
+  return Armor.PIECES.filter(a => a.slot === 'shield' && !a.event).sort((a, b) => b.rarity - a.rarity || b.guard - a.guard)[0].id;
 }
 
 // Hold a random weapon from what it owns.
@@ -10827,7 +11394,7 @@ app.post('/api/buy_weapon', (req, res) => {
   const def = WEAPON_BY_ID[weaponId];
   if (!def || !def.shopOnly) return res.status(400).json({ error: 'That weapon is not for sale.' });
   if (def.mythic) return res.status(400).json({ error: 'Mythics are only sold in the rare shop that opens after a Giant wave.' });
-  if (def.secret) return res.status(400).json({ error: 'A secret weapon: only won in the SECRET BOT event.' });
+  if (def.secret) return res.status(400).json({ error: def.from === 'boss' ? 'Only won by defeating the Ice Knight.' : 'A secret weapon: only won in the SECRET BOT event.' });
   if (def.bossReward) return res.status(400).json({ error: def.id === 'infinitybow' ? 'Only won by defeating the Abyss.' : def.id === 'endlessscythe' ? 'Only won by defeating the Abyss a second time.' : 'Only won by defeating the Portal Mage.' });
   if (def.needAll) {
     const prof0 = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });
@@ -11295,15 +11862,15 @@ wss.on('connection', (ws) => {
       if (msg.type === 'join' && !ws.room) {
         // An event: only with the ticket its entry fee bought. The Void Dungeon is the
         // Abyss's own fight, made rare, on a giant map.
-        let evId = null;
-        if (EVENTS[msg.mode]) {
+        let evId = null, paid = null;
+        if (EVENTS[msg.mode] || PAID_MODES[msg.mode]) {
           const tk = String(msg.ticket || ''), t = eventTickets.get(tk);
-          if (!t || t.id !== msg.mode || t.pw !== sanitizeText(msg.password, 32)) { ws.send(JSON.stringify({ type: 'event_denied', reason: 'Enter it from the EVENTS menu first.' })); return; }
+          if (!t || t.id !== msg.mode || t.pw !== sanitizeText(msg.password, 32)) { ws.send(JSON.stringify({ type: 'event_denied', reason: PAID_MODES[msg.mode] ? 'Pay for the fight from the menu first.' : 'Enter it from the EVENTS menu first.' })); return; }
           eventTickets.delete(tk);
-          evId = t.id;
+          if (EVENTS[t.id]) evId = t.id; else paid = t.id;
         }
-        const mode = evId ? (evId === 'secretbot' ? 'bot' : 'abyss') : ['pvp', 'coop', 'waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom', 'bot', 'create', 'joinroom'].includes(msg.mode) ? msg.mode : 'pvp';
-        const size = evId ? (evId === 'secretbot' ? 'big' : mapSizeFor('abyss', 'giant')) : mapSizeFor(mode, msg.size);
+        const mode = paid ? paid : evId ? (evId === 'secretbot' ? 'bot' : 'abyss') : ['pvp', 'coop', 'waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom', 'bot', 'create', 'joinroom'].includes(msg.mode) ? msg.mode : 'pvp';
+        const size = paid ? 'big' : evId ? (evId === 'secretbot' ? 'big' : mapSizeFor('abyss', 'giant')) : mapSizeFor(mode, msg.size);
         // EXTREME and the PORTAL MAGE open up with XP (admins skip the wait). An event ticket is its own way in.
         if (MODE_XP[mode] && !evId) {
           const pw = sanitizeText(msg.password, 32);
@@ -11490,8 +12057,21 @@ const EVENT_TICKET_MS = 90 * 1000;
 const eventTickets = new Map();     // ticket -> { pw, id, at, paid }
 function hostEvent(id, ms) {
   const now = Date.now();
-  progress().events[id] = { start: now, end: now + (ms || EVENTS[id].lasts), plus5: true };   // (plus5: already its full length)
+  const was = progress().events[id];
+  // (plus5: already its full length. ed: which hosting this is; a win only hides the hosting it was won in)
+  progress().events[id] = { start: now, end: now + (ms || EVENTS[id].lasts), plus5: true, ed: (was ? was.ed || 1 : 0) + 1 };
   markDirty();
+}
+// Beaten already (in this hosting)? Then it's gone from that player's list.
+function eventBeaten(pw, id) {
+  if (!pw || isAdminPw(pw)) return false;
+  const won = progress().eventWins[pw]?.[id];
+  return !!won && won >= (progress().events[id]?.ed || 1);
+}
+function cleanEventWins(w) {
+  const o = {};
+  if (w && typeof w === 'object') for (const id of Object.keys(EVENTS)) { const n = Math.floor(Number(w[id]) || 0); if (n > 0) o[id] = n; }
+  return o;
 }
 function eventInfo(id) {
   const ev = EVENTS[id], h = progress().events[id], now = Date.now();
@@ -11514,8 +12094,11 @@ setInterval(() => {
 }, 10 * 1000).unref?.();
 app.post('/api/events', (req, res) => {
   const pw = sanitizeText(req.body?.password, 32);
-  const prof = pw ? profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup }) : null;
-  res.json({ events: Object.keys(EVENTS).map(eventInfo), admin: isAdminPw(pw), coins: prof ? prof.coins : 0, owned: prof ? [...prof.armor, ...prof.weapons] : [] });
+  // (`badge`: the menu only asks what is on, so the save is left untouched)
+  const prof = pw && !req.body?.badge ? profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup }) : null;
+  const open = Object.keys(EVENTS).filter(id => !eventBeaten(pw, id));
+  res.json({ events: open.map(eventInfo), beaten: Object.keys(EVENTS).filter(id => !open.includes(id)).map(id => EVENTS[id].name),
+             admin: isAdminPw(pw), coins: prof ? prof.coins : 0, owned: prof ? [...prof.armor, ...prof.weapons] : [] });
 });
 // The admin hosts an event (for its full length, from now), or ends it early.
 app.post('/api/events/host', (req, res) => {
@@ -11531,6 +12114,7 @@ app.post('/api/events/enter', (req, res) => {
   if (!pw) return res.status(400).json({ error: 'Set a password first: the prize is saved against it.' });
   const ev = EVENTS[id];
   if (!ev || !eventInfo(id).live) return res.status(400).json({ error: 'That event is not running right now.' });
+  if (eventBeaten(pw, id)) return res.status(400).json({ error: 'You have already beaten this event.' });
   const admin = isAdminPw(pw);
   const prof = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });
   if (!admin && prof.coins < ev.fee) return res.status(400).json({ error: `You need ${ev.fee.toLocaleString()} coins to enter.` });
@@ -11542,6 +12126,27 @@ app.post('/api/events/enter', (req, res) => {
   }
   const ticket = crypto.randomBytes(12).toString('hex');
   eventTickets.set(ticket, { pw, id, at: Date.now(), paid: admin ? 0 : ev.fee });
+  const after = profileFor(pw, {});
+  res.json({ ticket, coins: after.coins, save: after.save });
+});
+// A boss with a price (the Ice Knight): the fee, up front, for a ticket to one fight.
+// Nothing comes back, win or lose; a ticket never used is refunded like an event's.
+app.post('/api/boss/enter', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32), id = sanitizeText(req.body?.id, 24);
+  if (!pw) return res.status(400).json({ error: 'Set a password first: what he drops is saved against it.' });
+  const pm = PAID_MODES[id];
+  if (!pm) return res.status(400).json({ error: 'No such fight.' });
+  const admin = isAdminPw(pw);
+  const prof = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });
+  if (!admin && prof.coins < pm.fee) return res.status(400).json({ error: `You need ${pm.fee.toLocaleString()} coins to fight him.` });
+  const d = progress();
+  if (!admin) {
+    d.coins[pw] = prof.coins - pm.fee;
+    markDirty();
+    for (const [r, key] of liveSeats(pw)) r.playerCoins[key] = d.coins[pw];
+  }
+  const ticket = crypto.randomBytes(12).toString('hex');
+  eventTickets.set(ticket, { pw, id, at: Date.now(), paid: admin ? 0 : pm.fee });
   const after = profileFor(pw, {});
   res.json({ ticket, coins: after.coins, save: after.save });
 });

@@ -106,6 +106,10 @@
       [{ reap: 0.1, killHeal: 0.1, warpath: 0.03 }, { lives: 1, armor: 0.18, thorns: 0.2, stunRes: 0.6 }, { knock: 25, speed: 0.3, splash: 0.3, magnet: 80 }]],
     ['eternalsun', 'ETERNAL SUN', 5, ['#8a3a06', '#ff9a0a', '#ffe04a', '#ffffff'], 'circlet', 'wings', 'plate', 'greaves', 'sun', [110, 180, 125],
       [{ burn: 3000, echo: 0.15, regen: 5 }, { ward: 1, aura: 20, armor: 0.16 }, { speed: 0.45, killSpeed: 2500, nth: 6, killCoins: 0.5 }]],
+    // ── THE ICE KNIGHT's ── never sold: won by beating him. The best armour there is.
+    ['iceknight', 'ICE KNIGHT', 5, ['#16467a', '#4aa8e0', '#b8ecff', '#ffffff'], 'great', 'spikes', 'plate', 'greaves', 'snow', [240, 320, 260],
+      [{ dmg: 0.3, crit: 0.2, chill: 2500, spCd: 0.3, suCd: 0.3 }, { armor: 0.3, thorns: 0.3, undying: 1, regen: 6, ward: 1 },
+       { speed: 0.45, dodge: 0.2, stunRes: 0.8, lives: 1 }]],
   ];
 
   const roundPrice = n => { const step = n >= 100000 ? 5000 : n >= 10000 ? 500 : 100; return Math.round(n / step) * step; };
@@ -127,7 +131,7 @@
   // SHIELD_CD_MS after the press. COMMON ones only soak; rarer ones do more: 0 to 4
   // abilities, 0 or 1 passive.
   // [id, name, rarity, [dark, mid, light, accent], shape, trim, emblem, guard, on, passive]
-  const SHIELD_UP_MS = 5000, SHIELD_CD_MS = 15000;
+  const SHIELD_UP_MS = 5000, SHIELD_CD_MS = 10000;
   const SHIELDS = [
     // ── COMMON: a plain block ──
     ['sh_oak', 'OAK BUCKLER', 0, ['#3a2410', '#7a5228', '#a87a40', '#d8b070'], 'buckler', 'plain', '', 36],
@@ -196,6 +200,8 @@
     ['sh_celestial', 'CELESTIAL MIRROR', 5, ['#8a3a06', '#ff9a0a', '#ffe04a', '#ffffff'], 'heater', 'split', 'sun', 270, { reflect: 1.2, stun: 1400, refresh: 3000, brace: 800 }, { regen: 2 }],
     ['sh_stormheart', 'STORMHEART', 5, ['#0a0a3a', '#2a2ae8', '#5ac0ff', '#fff07a'], 'kite', 'spikes', 'bolt', 255, { chain: 70, frost: 1500, fury: 3000, haste: 2500 }, { speed: 0.1 }],
     ['sh_crown', 'CROWN OF THORNS', 5, ['#140606', '#4a1a12', '#8a3a1a', '#ff7a1a'], 'tall', 'spikes', 'crown', 270, { spines: 5000, shards: 30, venom: 8, pull: 160 }, { thorns: 0.15 }],
+    // The Ice Knight's own: never sold, won by beating him.
+    ['sh_frostwall', 'FROSTWALL', 5, ['#0e2a4a', '#3a8ad0', '#a8e4ff', '#ffffff'], 'tower', 'spikes', 'snow', 330, { icespikes: 70, frost: 2000, harden: 5000, heal: 0.12 }, { armor: 0.12 }],
   ];
   const inRarity = [0, 0, 0, 0, 0, 0], ofRarity = r => SHIELDS.filter(s => s[2] === r).length;
   for (const [id, name, rarity, pal, shape, trim, motif, guard, on, fx] of SHIELDS) {
@@ -206,6 +212,8 @@
   const BY_ID = Object.fromEntries(PIECES.map(p => [p.id, p]));
   // Event gear: won in an event and never sold in the armoury (still tradeable).
   BY_ID.sh_voidgate.event = 'VOID DUNGEON';
+  // The Ice Knight's gear: the same "never sold", but a boss's reward (`boss`), not an event's.
+  for (const id of ['iceknight_h', 'iceknight_c', 'iceknight_l', 'sh_frostwall']) { BY_ID[id].event = 'ICE KNIGHT'; BY_ID[id].boss = true; }
 
   // The strongest a full suit can stack, whatever is worn: `max` keys don't add up
   // (two "every 6th hit" pieces are not "every 12th"), and the rest are capped so
@@ -261,6 +269,7 @@
     haste: v => `Move faster for ${secs(v)}s`, fury: v => `Deal 80% more damage for ${secs(v)}s`, harden: v => `Take 50% less damage for ${secs(v)}s`,
     vanish: v => `Turn invisible for ${secs(v)}s`, leech: v => `Heal 25% of the damage you deal for ${secs(v)}s`,
     spines: v => `Hits on you bounce back for ${secs(v)}s`, refresh: v => `${secs(v)}s off your special and super`,
+    icespikes: v => `Ice spikes race out all round you for ${v}, slowing what they hit`,
     bulk: v => `The shield takes ${pct(v)}% more this time`, brace: v => `Nothing wears the shield for ${secs(v)}s`,
   };
   const onLines = a => Object.entries(a?.on || {}).map(([k, v]) => (ON_TEXT[k] ? ON_TEXT[k](v) : k));

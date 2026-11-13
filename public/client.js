@@ -51,7 +51,7 @@ let WEAPON_COLOR = {
   glaive:'#b0d8c0', katana:'#eef0ff', chakram:'#66e0c0', cannon:'#9a90a8',
   reaper:'#cc66aa', whip:'#c9a06a', grapple:'#9fb6c8', boomerang:'#d8b070',
   shuriken:'#d8dde6', frostrod:'#8fe0ff', blunderbuss:'#c89a5a', lance:'#e8d8a0', stormtome:'#ffe45a',
-  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff', samuraiblade:'#ff5a5a', darklight:'#e8e8f4', starfall:'#ffe9a0', worldsplitter:'#ff6a1a', soullantern:'#6affc8', ashfeather:'#ff8a3a', chronosedge:'#7ac8ff', hydrafang:'#5ae87a', firespear:'#ff5a1a',
+  fireglove:'#ff6a1a', vortex:'#7ad8ff', windwand:'#aef5dc', revolver:'#ffb347', portalwand:'#b07aff', infinitybow:'#9a5aff', endlessscythe:'#7a2aff', samuraiblade:'#ff5a5a', darklight:'#e8e8f4', starfall:'#ffe9a0', worldsplitter:'#ff6a1a', soullantern:'#6affc8', ashfeather:'#ff8a3a', chronosedge:'#7ac8ff', hydrafang:'#5ae87a', firespear:'#ff5a1a', icegreatsword:'#9fe8ff', icebow:'#bfefff',
   greatestsword:'#ffe9a8', wavestorm:'#4ac8ff', ghostdagger:'#a8f0ff', stormhammer:'#7ac8ff', frostscythe:'#bfefff', sunbow:'#ffd24a',
   scimitar:'#e8e0c8', slingshot:'#b08a5a', mace:'#9aa4b0', javelin:'#d8c8a0', claws:'#e0e4ec',
   emberstaff:'#ff7a2a', halberd:'#c0c8d8', frostbow:'#9fe8ff', chronostaff:'#e8c87a', voidblade:'#9a5aff',
@@ -87,6 +87,8 @@ const WEAPON_DESC = {
   chronosedge:"MYTHIC. A sword of gold and azure with a clock beating in its guard",
   hydrafang:"MYTHIC. A trident whose three prongs are living serpent heads",
   firespear:"SECRET. A spear of living fire, only ever won in the SECRET BOT event",
+  icegreatsword:"BOSS REWARD. The Ice Knight's own greatsword: a slab of living ice, taller than you are",
+  icebow:"BOSS REWARD. The Ice Knight's bow: its arrows fall out of the sky",
   ghostdagger:'The rarest weapon of all: turn invisible, throw a deadly dagger, and make it rain knives. Does half damage to bosses',
   stormhammer:'A war hammer full of lightning that comes back when you throw it',
   frostscythe:'A sweeping scythe of ice that freezes whatever it keeps cutting',
@@ -974,6 +976,11 @@ function connect() {
     }
     // The server seats us once we've picked a mode: solo modes get a room of
     // their own; PvP / co-op pair us with someone who picked the same mode.
+    if (msg.type === 'event_denied' && pendingMode === 'iceknight') {
+      leaveGame();
+      const lm = document.getElementById('lockMsg'); if (lm) lm.textContent = (msg.reason || 'Could not start the fight.').toUpperCase();
+      return;
+    }
     if (msg.type === 'event_denied') {
       leaveGame();
       openEvents().then(() => setEvMsg(msg.reason || 'Could not enter the event.', true));
@@ -1031,7 +1038,7 @@ function connect() {
         if (msg.myCoins !== undefined && msg.myCoins !== lastSavedCoins) { lastSavedCoins = msg.myCoins; saveLocalCoins(pendingPass, msg.myCoins); }
       }
       applyWorld(msg.world);
-      const solo = ['waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom'].includes(msg.gameMode);   // nobody to talk to in the solo modes
+      const solo = ['waves', 'extreme', 'portal', 'abyss', 'tsunami', 'iceknight', 'sandbox', 'sawroom'].includes(msg.gameMode);   // nobody to talk to in the solo modes
       if (solo !== chatSolo) {
         chatSolo = solo;
         const chatBtn = document.getElementById('chatBtn');
@@ -1232,6 +1239,11 @@ function updatePrediction(frameDt, now) {
     pred.kvx = (pred.kvx || 0) + (vx - (pred.kvx || 0)) * g; pred.kvy = (pred.kvy || 0) + (vy - (pred.kvy || 0)) * g;
     vx = pred.kvx; vy = pred.kvy;
   } else { pred.kvx = 0; pred.kvy = 0; }
+  if (me.slip && !(me.kspin > 0)) {   // a frozen floor: slow to get going, slow to stop (mirrors the server)
+    const g = Math.min(1, 0.045 * f);
+    pred.ivx = (pred.ivx || 0) + (vx - (pred.ivx || 0)) * g; pred.ivy = (pred.ivy || 0) + (vy - (pred.ivy || 0)) * g;
+    vx = pred.ivx; vy = pred.ivy;
+  } else { pred.ivx = 0; pred.ivy = 0; }
   pred.x = Math.max(ARENA_X + 2, Math.min(ARENA_X + ARENA_W - me.w - 2, pred.x + vx * f));
   pred.y = Math.max(ARENA_Y + 2, Math.min(ARENA_Y + ARENA_H - me.h - 2, pred.y + vy * f));
   if (me.dlc) {   // chained by Darklight: can't stray from the stake
@@ -1329,7 +1341,7 @@ const ATTACK_ANIM = {
   stormhammer: 'chop', frostscythe: 'spin', sunbow: 'draw',
   scimitar: 'slash', slingshot: 'draw', mace: 'chop', javelin: 'throw', claws: 'stab',
   emberstaff: 'cast', halberd: 'sweep', frostbow: 'draw', chronostaff: 'cast', voidblade: 'slash', mindtome: 'tome',
-  lightblade: 'slash', darklight: 'throw', starfall: 'cast', worldsplitter: 'heavy', greatestsword: 'doublechop', wavestorm: 'cast', soullantern: 'cast', ashfeather: 'draw', chronosedge: 'slash', hydrafang: 'stab', firespear: 'stab',
+  lightblade: 'slash', darklight: 'throw', starfall: 'cast', worldsplitter: 'heavy', greatestsword: 'doublechop', wavestorm: 'cast', soullantern: 'cast', ashfeather: 'draw', chronosedge: 'slash', hydrafang: 'stab', firespear: 'stab', icegreatsword: 'chop', icebow: 'draw',
 };
 const ANIM_MS = { slash: 190, stab: 170, chop: 280, sweep: 250, spin: 320, draw: 260, recoil: 180,
                   heavy: 300, doublechop: 700, cast: 270, flick: 150, tome: 300, throw: 230, punch: 240, shieldup: 320 };
@@ -2167,6 +2179,12 @@ function drawFireRings(fires) {
     if (f.kind === 'fsspear') { drawThrownSpear(f, now); continue; }
     if (f.kind === 'fsfire') { drawSpearFire(f, now); continue; }
     if (f.kind === 'fsring') { drawSpearRing(f, now); continue; }
+    if (f.kind === 'icefall') { drawIceFall(f, now); continue; }
+    if (f.kind === 'icepillar') { drawIcePillar(f, now); continue; }
+    if (f.kind === 'icerun') { drawIceRun(f, now); continue; }
+    if (f.kind === 'iceswipe') { drawIceSwipe(f); continue; }
+    if (f.kind === 'icesword') { drawIceSwordFlying(f, now); continue; }
+    if (f.kind === 'icerift') { drawIceRift(f, now); continue; }
     if (f.kind === 'blizzard') { drawBlizzard(f, now); continue; }
     if (f.kind === 'sunorb') { drawSunorb(f, now); continue; }
     if (f.kind === 'sunbeam') { drawSunbeam(f, now); continue; }
@@ -3111,7 +3129,8 @@ function renderEvents() {
       <div class="ev-fee">ENTRY ◆ ${e.fee.toLocaleString()} &middot; <b>lose and it's gone</b></div>
       ${btn}${host}
     </div>`;
-  }).join('') || '<div class="arm-none">No events yet.</div>';
+  }).join('') || `<div class="arm-none">${(d.beaten || []).length ? 'You have beaten every event that is running.' : 'No events yet.'}</div>`;
+  if ((d.beaten || []).length) list.innerHTML += `<div class="ev-beaten">BEATEN: ${d.beaten.map(escapeHtml).join(', ')}. A beaten event leaves your list until it is hosted again.</div>`;
   drawForgeIcons(list);
   drawShopIcons(list);
   evClock();
@@ -3158,7 +3177,7 @@ async function refreshEventBadge(force) {
   if (!force && performance.now() - evs.badgeAt < 30000) return;
   evs.badgeAt = performance.now();
   try {
-    const d = await (await fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
+    const d = await (await fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: (document.getElementById('passInput')?.value || '').trim(), badge: true }) })).json();
     const live = (d.events || []).filter(e => e.live);
     document.getElementById('evLive')?.classList.toggle('hidden', !live.length);
     document.getElementById('evDot')?.classList.toggle('hidden', !live.length);
@@ -3272,7 +3291,7 @@ function armoryCard(a, sale) {
   const action = worn ? '<button class="arm-act on" disabled>WORN</button>'
     : owned ? `<button class="arm-act wear" onclick="armoryWear('${a.id}')">WEAR</button>`
     : sale ? `<button class="arm-act buy" ${poor ? 'disabled' : ''} onclick="armoryBuy('${a.id}')">◆ ${a.price.toLocaleString()}</button>`
-    : a.event ? `<span class="arm-price ev">EVENT ONLY: ${a.event}</span>`
+    : a.event ? `<span class="arm-price ev">${a.boss ? 'BOSS REWARD' : 'EVENT ONLY'}: ${a.event}</span>`
     : `<span class="arm-price">◆ ${a.price.toLocaleString()}</span>`;
   return `<div class="arm-card${a.rarity === 5 ? ' mythic' : ''}" style="--rc:${R.color}">
     <div class="arm-top"><canvas data-armor="${a.id}" width="68" height="68"></canvas>
@@ -3803,6 +3822,13 @@ const LEGEND_MOVES = {
              + ' REWIND: snap back to where you were 3s ago, with the health you had then, cutting everything on the way ·'
              + ' <b>SUPER</b> TIME STOP: for 4s every enemy and every enemy shot is frozen while you move.'
              + ' Only one mythic goes into a game, and a mythic never earns you another weapon.',
+  icegreatsword: '<b>ATK</b> a foe close by gets the Ice Knight\'s own wide swipe; a foe far off gets his flying ice wave. Both slow ·'
+               + ' <b>SPECIAL</b> strike the ground: lines of ice spikes race out in every direction at great speed. They can\'t be parried,'
+               + ' only dodged · <b>SUPER</b> throw the sword, spinning: where it lands the ground rifts, everyone there is stunned for 3s and'
+               + ' flung away, and the one it struck takes a critical hit. Then it flies back to you.',
+  icebow: '<b>ATK</b> shoot into the sky: a mark shows on your enemy, and a moment later the arrow comes down on it, slowing them and'
+        + ' leaving a spike of solid ice they can\'t walk or shoot through · <b>SPECIAL</b> ten ice arrows at once that seek your enemies'
+        + ' and melt away if they miss · <b>SUPER</b> three arrows: wherever each one ends up, ice spikes spread out from it at great speed.',
   firespear: '<b>ATK</b> your screen fades red: tap or click where to TELEPORT (any distance) and land there in a burst of fire (or press ATK'
            + ' again to go toward the mouse or the nearest foe) · <b>SPECIAL</b> throw the spear: it leaves a trail of strong fire'
            + ' that keeps burning you a moment after you step out, and bursts on what it hits into a big ring of fire that sets everyone'
@@ -3913,16 +3939,17 @@ function legendaryCards(weapons, coins) {
     const afford = coins >= w.price;
     const col = WEAPON_COLOR[w.id] || '#ff6a1a';
     if (w.secret) {
-      return `<div class="shop-row legendary secret-row">
+      const boss = w.from === 'boss';
+      return `<div class="shop-row legendary ${boss ? 'ice-row' : 'secret-row'}">
         <div class="shop-head">
           <canvas class="shop-ic" data-weapon="${w.id}" width="56" height="32"></canvas>
           <span class="shop-name" style="color:${col}">${w.name}</span>
-          <span class="legend-tag secret-tag">SECRET</span>
+          ${boss ? '<span class="legend-tag ice-tag">BOSS REWARD</span>' : '<span class="legend-tag secret-tag">SECRET</span>'}
         </div>
         <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>${legendPassive(w.id)}
         <div class="legend-buy">
-          <button class="buy-weapon poor" disabled>EVENT ONLY</button>
-          <span class="legend-need">Beat the SECRET BOT in the EVENTS menu to win it</span>
+          <button class="buy-weapon poor" disabled>${boss ? 'BOSS REWARD' : 'EVENT ONLY'}</button>
+          <span class="legend-need">${boss ? 'Beat the ICE KNIGHT (BOSSES tab, ◆ 1,000,000 a fight) to win it' : 'Beat the SECRET BOT in the EVENTS menu to win it'}</span>
         </div>
       </div>`;
     }
@@ -4689,6 +4716,7 @@ const LOAD_MODES = {
   voiddungeon: { a: '#12002a', b: '#ff3aff', name: 'VOID DUNGEON', boss: 'abyss' },
   secretbot: { a: '#2a0400', b: '#ff5a1a', name: 'SECRET BOT', rival: 'robot' },
   tsunami:  { a: '#1a6ae8', b: '#8ad8ff', name: 'TSUNAMI',      boss: 'tsunami' },
+  iceknight: { a: '#0e2a4a', b: '#8ad8ff', name: 'ICE KNIGHT',  boss: 'iceknight' },
   sawroom:  { a: '#b0102a', b: '#ff5a2a', name: 'THE SAWS',     boss: 'saw' },
   sandbox:  { a: '#1ab85a', b: '#4aee9a', name: 'PRACTICE',     foes: [['grunt', 23, 27]] },
   tutorial: { a: '#14c88a', b: '#7affc8', name: 'FIRST FIGHT',  foes: [['grunt', 23, 27]] },
@@ -4727,7 +4755,8 @@ function loadBoss(g, kind, x, y, t) {
       g.translate(x, y); g.scale(1.45, 1.45);
       const m = kind === 'abyss' ? { x: -28, y: -84, w: 56, h: 84, abyss: true, phase: 1, hitFlash: 0 }
                                  : { x: -36, y: -86, w: 72, h: 86, tsunami: true, phase: 1, hitFlash: 0 };
-      if (kind === 'abyss') drawAbyss(m); else drawTsunami(m);
+      if (kind === 'iceknight') drawIceKnight({ x: -31, y: -86, w: 62, h: 86, ik: true, phase: 1, hitFlash: 0, face: -1, act: null, actT: 0, stun: 0 });
+      else if (kind === 'abyss') drawAbyss(m); else drawTsunami(m);
     }
   } catch {} finally { ctx = main; g.restore(); }
 }
@@ -4947,6 +4976,7 @@ function soloLobbyMsg(mode) {
     case 'voiddungeon': return ABYSS_LOBBY;
     case 'secretbot': return line('#ff7a3a', 'SECRET BOT', 'EVENT · AN INSANE BOT WITH A SECRET WEAPON');
     case 'tsunami':  return TSUNAMI_LOBBY;
+    case 'iceknight': return line('#8ad8ff', 'THE ICE KNIGHT', 'BOSS FIGHT · ◆ 1,000,000 PAID · FIRE HURTS HIM MOST');
     case 'bot':      return BOT_LOBBY();
     default:         return null;
   }
@@ -5241,6 +5271,17 @@ function updateScreens(state) {
           + (ab ? (ab.p3 ? `ONLY <span style="color:#ff7ad8">${ab.p3}s</span> LEFT TO SURVIVE<br>`
                  : `HE HAD <span style="color:#c8a0ff">${Math.ceil(ab.hp).toLocaleString()}</span> HP LEFT (PHASE ${ab.phase || 1})<br>`) : '')
           + `XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`;
+    } else if (state.gameMode === 'iceknight') {
+      lb.classList.add('hidden');
+      hint.textContent = 'RETURNING TO MENU...';
+      const ik = (state.monsters || []).find(m => m.ik), got = state.ikWin || [];
+      const nm = id => escapeHtml((WEAPON_META[id] || Armor.BY_ID[id])?.name || id);
+      document.getElementById('roundTitle').innerHTML = state.victory
+        ? '<span style="color:#bfefff">THE ICE KNIGHT SHATTERS!</span>' : '<span style="color:#ff5a6a">FROZEN SOLID</span>';
+      document.getElementById('roundStats').innerHTML = state.victory
+        ? (got.length ? 'HIS GEAR IS YOURS:<br>' + got.map(id => `<span style="color:#8ad8ff">${nm(id)}</span>`).join(' &middot; ') + '<br>PUT THE ARMOUR AND SHIELD ON IN THE ARMOURY'
+                      : 'YOU ALREADY OWN ALL HIS GEAR') + `<br><span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`
+        : `YOUR 1,000,000 IS GONE<br>${ik ? `HE HAD <span style="color:#8ad8ff">${Math.ceil(ik.hp).toLocaleString()}</span> HP LEFT (PHASE ${ik.phase || 1})<br>` : ''}<span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`;
     } else if (state.gameMode === 'tsunami') {
       lb.classList.add('hidden');
       hint.textContent = 'RETURNING TO MENU...';
@@ -5376,6 +5417,7 @@ function draw(state) {
   ctx.save();
   ctx.translate(0, -CAM_Y);
   drawArena();
+  drawIceFloor(state.ice);
   if (state.gameMode === 'sawroom') drawSawTint();
   drawTraps(state.traps || []);
   drawTrapElements(state.traps || []);
@@ -5462,6 +5504,7 @@ function drawArena() {
 }
 
 function paintArena(g) {
+  if (arenaEvent === 'iceknight') { paintArenaScene(g, CANVAS_W, CANVAS_H, ARENA_X, ARENA_Y, ICE_ARENA); paintIceDecor(g); return; }
   if (arenaEvent === 'secretbot') { paintArenaScene(g, CANVAS_W, CANVAS_H, ARENA_X, ARENA_Y, FIRE_ARENA); paintFireDecor(g); return; }
   if (arenaEvent === 'voiddungeon') { paintArenaScene(g, CANVAS_W, CANVAS_H, ARENA_X, ARENA_Y, VOID_ARENA); paintVoidDecor(g); return; }
   paintArenaScene(g, CANVAS_W, CANVAS_H, ARENA_X, ARENA_Y, arenaPick);
@@ -5472,7 +5515,7 @@ function paintArena(g) {
 const VOID_ARENA = { theme: 'void', floor: 'stars', wall: 'crystal' };
 let arenaEvent = null;
 function syncEventArena(state) {
-  const ev = state.event || null;
+  const ev = state.event || (state.gameMode === 'iceknight' ? 'iceknight' : null);
   if (ev !== arenaEvent) { arenaEvent = ev; arenaCache = null; }
 }
 function paintVoidDecor(g) {
@@ -6176,7 +6219,7 @@ function drawPlayerBody(p, baseColor, label, key) {
 
   Cosmetics.nameTag(ctx, x + p.w / 2, y - 13, label, skinCol, fx.nameBg, now);
   if (key === 'p2' && currState?.bot && currState.botReward) drawBounty(x + p.w / 2, y - 25, currState.botReward);
-  if (!(p.kspin > 0) && !p.fspin) drawWeaponSprite(p, x, y, key);
+  if (!(p.kspin > 0) && !p.fspin && !p.isw) drawWeaponSprite(p, x, y, key);
   if (p.weaponId === 'infinitybow' && !p.dead) drawInfinityFloaters(p, x, y);
   if (p.weaponId === 'endlessscythe' && !p.dead) drawEndlessFloaters(p, x, y, key);
   if (p.kspin > 0 && !p.dead) drawKatanaSpin(p, x, y);
@@ -6191,6 +6234,7 @@ function drawPlayerBody(p, baseColor, label, key) {
   if (p.fspin && !p.dead) drawSpearSpin(p, x, y);
   if (p.sfire && !p.dead) drawStrongFire(x, y, p.w, p.h);
   if (p.fstun && !p.dead) drawFireStun(p);
+  if (p.frz && !p.dead) drawIceBlock(x, y, p.w, p.h);
   if (p.mirror && !p.dead) drawMirrorShield(p, x, y);
   if (p.venom && !p.dead) drawVenomDrip(p, x, y);
   if (p.regrow && !p.dead) drawRegrow(p, x, y);
@@ -6516,6 +6560,7 @@ function drawMonster(m) {
     drawAbyss(m); drawEnemyBars(m, Math.round(m.x), Math.round(m.y)); return;
   }
   if (m.tsunami) { drawTsunami(m); drawEnemyBars(m, Math.round(m.x), Math.round(m.y)); return; }
+  if (m.ik) { drawIceKnight(m); drawEnemyBars(m, Math.round(m.x), Math.round(m.y)); return; }
   const type = m.type || 'grunt';
   const state = m.hitFlash > 0 ? 'flash' : monsterBodyState(m);
   const x = Math.round(m.x), y = Math.round(m.y);
@@ -7419,6 +7464,8 @@ function drawBossBar(monsters) {
   // The Portal Mage's bar, or — while he hides — his giants'.
   const ab = ms.find(m => m.abyss);
   if (ab) { drawOneBossBar(ab, 0); return; }
+  const ik = ms.find(m => m.ik);
+  if (ik) { drawOneBossBar(ik, 0); return; }
   const ts = ms.find(m => m.tsunami);
   if (ts) { drawOneBossBar(ts, 0); return; }
   const mage = ms.find(m => m.mage);
@@ -7441,10 +7488,10 @@ function drawOneBossBar(b, row) {
   ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.strokeRect(x, y, w, h);
   for (let i = 1; i < 10; i++) { ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(x + Math.round(w * i / 10), y, 1, h); }
   ctx.font = 'bold 8px "Courier New",monospace'; ctx.textBaseline = 'bottom';
-  const label = b.tsunami ? 'TSUNAMI' + (b.phase === 2 ? ' - THE TIDE RISES' : '') : b.abyss ? 'THE ABYSS' + (b.p3 ? ' - SURVIVE!' : b.phase === 2 ? ' - PHASE 2' : '')
+  const label = b.ik ? 'THE ICE KNIGHT' + (b.phase === 3 ? ' - THE ARENA IS ICE' : b.phase === 2 ? ' - 3X AS FAST' : '') : b.tsunami ? 'TSUNAMI' + (b.phase === 2 ? ' - THE TIDE RISES' : '') : b.abyss ? 'THE ABYSS' + (b.p3 ? ' - SURVIVE!' : b.phase === 2 ? ' - PHASE 2' : '')
     : b.mage ? 'THE PORTAL MAGE' + (b.phase === 2 ? ' - PHASE 2' : '') : 'THE GIANT';
   ctx.textAlign = 'left';  ctx.fillStyle = '#000'; ctx.fillText(label, x + 1, y - 1);
-  ctx.fillStyle = b.tsunami ? '#7ad8ff' : b.abyss ? (b.p3 ? '#ff7ad8' : '#b07aff') : b.mage ? (b.phase === 2 ? '#ff7aaa' : '#c8a0ff') : '#c8e07a'; ctx.fillText(label, x, y - 2);
+  ctx.fillStyle = b.ik ? '#bfefff' : b.tsunami ? '#7ad8ff' : b.abyss ? (b.p3 ? '#ff7ad8' : '#b07aff') : b.mage ? (b.phase === 2 ? '#ff7aaa' : '#c8a0ff') : '#c8e07a'; ctx.fillText(label, x, y - 2);
   ctx.textAlign = 'right'; ctx.fillStyle = b.stun > 0 ? '#ffd84a' : '#ccc';
   ctx.fillText(b.p3 ? b.p3 + 's LEFT' : b.stun > 0 ? 'STUNNED!' : Math.ceil(b.hp).toLocaleString() + ' / ' + b.maxHp.toLocaleString(), x + w, y - 2);
   ctx.restore();
@@ -7573,6 +7620,9 @@ function drawProjectiles(projs) {
     if (pr.weaponId === 'tsorb') { drawTsOrb(pr, now); continue; }
     if (pr.weaponId === 'samwave') { drawSlashWave(pr, ang, now, pr.special ? '#ff5a5a' : (pr.owner === 'monster' ? '#ff4a5a' : '#ff8a8a')); continue; }
     if (pr.weaponId === 'samdashwave') { drawDashWave(pr, ang, now); continue; }
+    if (pr.weaponId === 'icewave') { drawIceWave(pr, ang, now); continue; }
+    if (pr.weaponId === 'icearrow') { drawIceArrow(pr, ang, now); continue; }
+    if (pr.weaponId === 'iceshard') { drawIceShard(pr, ang); continue; }
     if (pr.weaponId === 'hydrabite' || pr.weaponId === 'hydrabolt') { drawVenomShot(pr, ang, now); continue; }
     if (pr.weaponId === 'snipe') { drawSnipeShot(pr); continue; }
     if (pr.weaponId === 'sentrybolt') { drawSentryBolt(pr); continue; }
@@ -8213,6 +8263,14 @@ function drawHUD(state) {
     ctx.fillStyle = '#9fffd0'; ctx.fillText(t, HUD_W/2, 2);
     ctx.font = '8px "Courier New",monospace';
     ctx.fillStyle = '#999'; ctx.fillText(sub, HUD_W/2, 15);
+    ctx.font = '10px "Courier New",monospace';
+  } else if (state.gameMode === 'iceknight') {
+    const ik = (state.monsters || []).find(m => m.ik);
+    const t = 'THE ICE KNIGHT', sub = !ik ? '' : ik.stun > 0 ? 'STUNNED: HIT HIM NOW' : ik.act === 'parry' ? "SHIELD UP: DON'T HIT HIM" : 'PHASE ' + (ik.phase || 1) + ' · FIRE HURTS HIM MOST';
+    ctx.fillStyle = '#000'; ctx.fillText(t, HUD_W/2 + 1, 3);
+    ctx.fillStyle = '#8ad8ff'; ctx.fillText(t, HUD_W/2, 2);
+    ctx.font = '8px "Courier New",monospace';
+    ctx.fillStyle = ik && ik.stun > 0 ? '#ffd84a' : '#999'; ctx.fillText(sub, HUD_W/2, 15);
     ctx.font = '10px "Courier New",monospace';
   } else if (state.gameMode === 'abyss') {
     const ab = (state.monsters || []).find(m => m.abyss);
@@ -9498,7 +9556,7 @@ function drawRegrow(p, x, y) {
 // ─── THE FIRE SPEAR ──────────────────────────────────────────────────────────
 // The SECRET BOT event's secret weapon. ATK arms it (the screen fades red) and the
 // next tap or click on the field is where you teleport.
-const EVENT_IDS = ['voiddungeon', 'secretbot'];
+const EVENT_IDS = ['voiddungeon', 'secretbot', 'iceknight'];   // every mode you enter with a ticket (the Ice Knight's is paid for too)
 function trySpearTp(clientX, clientY) {
   if (!currState || currState.gameState !== 'GAMEPLAY' || !myNum || !ws || ws.readyState !== 1) return false;
   const me = currState.players?.['p' + myNum];
@@ -9641,7 +9699,7 @@ function drawSpearFire(f, now) {
   ctx.globalAlpha = 0.28 * Math.min(1, left * 2); ctx.fillStyle = '#ff3a1a';
   ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, Math.PI * 2); ctx.fill();
   for (let i = 0; i < 4; i++) {
-    const t = ((now * 1.6) + i / 4 + f.id * 0.17) % 1, fx = f.x + Math.sin(f.id * 3 + i * 2.1) * r * 0.6, fy = f.y + r * 0.3 - t * r * 1.4;
+    const t = ((now * 1.6) + i / 4 + idSeed(f.id) * 0.17) % 1, fx = f.x + Math.sin(idSeed(f.id) * 3 + i * 2.1) * r * 0.6, fy = f.y + r * 0.3 - t * r * 1.4;
     ctx.globalAlpha = Math.min(1, left * 2) * (1 - t);
     ctx.fillStyle = t < 0.35 ? '#ffd84a' : t < 0.7 ? '#ff7a1a' : '#ff2a1a';
     const s = 3.5 * (1 - t) + 1.5;
@@ -9713,4 +9771,375 @@ function drawSecretBanner(g, W, H, now) {
   g.restore();
   g.font = 'bold 22px "Courier New", monospace'; g.textAlign = 'left'; g.fillStyle = '#ffd84a'; g.strokeStyle = '#2a0400'; g.lineWidth = 4;
   g.strokeText('?', W / 2 - 60, 34 + bob); g.fillText('?', W / 2 - 60, 34 + bob);
+}
+
+
+// ─── THE ICE KNIGHT ──────────────────────────────────────────────────────────
+// A boss on the BOSSES tab with a price: ◆ 1,000,000 a fight, paid for a ticket.
+// The numbers in his warnings (the swipe's reach, arc and 2 seconds) mirror IK in server.js.
+const ICE_C = ['#16467a', '#3a8ad0', '#8ad8ff', '#e8fcff'];
+function iceGrad(g, x0, y0, x1, y1) {
+  const gr = g.createLinearGradient(x0, y0, x1, y1);
+  gr.addColorStop(0, ICE_C[3]); gr.addColorStop(0.35, ICE_C[2]); gr.addColorStop(0.75, ICE_C[1]); gr.addColorStop(1, ICE_C[0]);
+  return gr;
+}
+// Two taps: the first says what it costs, the second pays and goes in.
+let ikAsk = 0;
+async function askIceKnight() {
+  readCredentials();
+  const msg = document.getElementById('lockMsg'), sub = document.getElementById('ikSub');
+  const say = t => { if (!msg) return; msg.textContent = t; msg.classList.remove('flash'); void msg.offsetWidth; msg.classList.add('flash'); };
+  if (!pendingPass) { say('SET A PASSWORD FIRST: WHAT HE DROPS IS SAVED AGAINST IT'); return; }
+  if (performance.now() - ikAsk > 4000) {
+    ikAsk = performance.now();
+    say('THE ICE KNIGHT COSTS ◆ 1,000,000 A FIGHT, WIN OR LOSE. TAP AGAIN TO PAY');
+    if (sub) sub.textContent = 'TAP AGAIN: PAY ◆ 1,000,000';
+    setTimeout(() => { if (sub && performance.now() - ikAsk >= 3900) sub.textContent = '◆ 1,000,000 to fight'; }, 4000);
+    return;
+  }
+  ikAsk = 0;
+  if (sub) sub.textContent = '◆ 1,000,000 to fight';
+  try {
+    const r = await abilPost('/api/boss/enter', { id: 'iceknight' });
+    if (r.save) storeBackup(pendingPass, r.save);
+    pendingRoom = { ticket: r.ticket };
+    if (msg) msg.textContent = '';
+    joinGame('iceknight');
+  } catch (e) { say(String(e.message || 'Could not reach the server.').toUpperCase()); }
+}
+
+function drawIceKnight(m) {
+  const now = performance.now(), x = Math.round(m.x), y = Math.round(m.y), w = m.w, h = m.h;
+  const mx = x + w / 2, s = h / 60, face = m.face === -1 ? -1 : 1, flash = m.hitFlash > 0;
+  const act = m.stun > 0 ? 'stun' : (m.act || 'idle'), t = m.actT || 0;
+  // The swipe's warning: the arc it will cut, filling up as the two seconds run out.
+  if (act === 'swipe') {
+    const k = Math.min(1, t / 2000), a = m.aa || 0, R = 150, cy0 = y + h / 2;
+    ctx.save();
+    ctx.globalAlpha = 0.10 + 0.16 * k; ctx.fillStyle = '#8ad8ff';
+    ctx.beginPath(); ctx.moveTo(mx, cy0); ctx.arc(mx, cy0, R, a - 1.25, a + 1.25); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 0.22 + 0.33 * k; ctx.fillStyle = '#e8fcff';
+    ctx.beginPath(); ctx.moveTo(mx, cy0); ctx.arc(mx, cy0, R * k, a - 1.25, a + 1.25); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 0.9; ctx.strokeStyle = k > 0.7 ? '#ffffff' : '#bfefff'; ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]); ctx.lineDashOffset = -now / 40;
+    ctx.beginPath(); ctx.moveTo(mx, cy0); ctx.arc(mx, cy0, R, a - 1.25, a + 1.25); ctx.closePath(); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+  ctx.save();
+  const pulse = 0.5 + 0.5 * Math.sin(now / 280);
+  ctx.globalAlpha = (m.phase >= 2 ? 0.26 : 0.16) + 0.08 * pulse; ctx.fillStyle = m.phase >= 3 ? '#e8fcff' : '#8ad8ff';
+  ctx.beginPath(); ctx.ellipse(mx, y + h / 2, w * 0.95 + pulse * 3, h * 0.72 + pulse * 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.3; ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(mx, y + h + 1, w * 0.5, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  // From here on: his own space. Feet at (0,0), the top of his helm at y = -60, facing +x.
+  ctx.translate(mx, y + h); ctx.scale(face * s, s);
+  if (act === 'stun') ctx.rotate(0.14);
+  const P = (pts, fill) => { ctx.fillStyle = fill; ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.closePath(); ctx.fill(); };
+  const body = flash ? '#ffffff' : iceGrad(ctx, 0, -62, 0, 2), edge = flash ? '#ffffff' : '#0e2a4a';
+  const drawBlade = (L) => {
+    P([[-7, -1.7], [4, -1.7], [4, 1.7], [-7, 1.7]], '#1a3a6a');
+    ctx.fillStyle = '#8ad8ff'; for (let i = 0; i < 3; i++) ctx.fillRect(-5.5 + i * 3.2, -1.7, 1, 3.4);
+    P([[4, -7.5], [7.5, -7.5], [7.5, 7.5], [4, 7.5]], flash ? '#ffffff' : '#3a8ad0');
+    P([[4, -7.5], [5.7, -11], [7.5, -7.5]], '#e8fcff'); P([[4, 7.5], [5.7, 11], [7.5, 7.5]], '#e8fcff');
+    const gr = ctx.createLinearGradient(7, 0, L, 0); gr.addColorStop(0, '#3a8ad0'); gr.addColorStop(0.55, '#8ad8ff'); gr.addColorStop(1, '#ffffff');
+    P([[7.5, -5.4], [L - 11, -4.6], [L, 0], [L - 11, 4.6], [7.5, 5.4]], edge);
+    P([[8, -4.6], [L - 11, -3.9], [L - 1.5, 0], [L - 11, 3.9], [8, 4.6]], flash ? '#ffffff' : gr);
+    P([[8, -4.6], [L - 11, -3.9], [L - 1.5, 0], [L - 11, -1.1], [8, -1.3]], 'rgba(255,255,255,0.45)');
+    P([[8, 4.6], [L - 11, 3.9], [L - 1.5, 0], [L - 11, 1.1], [8, 1.3]], 'rgba(10,50,110,0.35)');
+    ctx.fillStyle = '#e8fcff'; ctx.fillRect(10, -0.4, L - 24, 0.8);
+    for (let i = 0; i < 3; i++) P([[17 + i * 12, -4.5], [18.6 + i * 12, -8], [20.2 + i * 12, -4.3]], '#e8fcff');
+    for (let i = 0; i < 2; i++) P([[23 + i * 13, 4.4], [24.4 + i * 13, 7.4], [25.8 + i * 13, 4.2]], '#8ad8ff');
+  };
+  const drawBow = () => {
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#16467a'; ctx.lineWidth = 3.6; ctx.beginPath(); ctx.arc(0, 0, 15, -1.2, 1.2); ctx.stroke();
+    ctx.strokeStyle = '#8ad8ff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 15, -1.2, 1.2); ctx.stroke();
+    ctx.strokeStyle = '#e8fcff'; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.arc(0, 0, 14.4, -0.9, 0.9); ctx.stroke();
+    const tx = Math.cos(1.2) * 15, ty = Math.sin(1.2) * 15;
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(tx, -ty); ctx.lineTo(-3, 0); ctx.lineTo(tx, ty); ctx.stroke();
+    ctx.fillStyle = '#c8f0ff'; ctx.fillRect(-3, -0.5, 22, 1);
+    P([[19, -2], [23, 0], [19, 2]], '#ffffff');
+  };
+  const drawShield = (sx, sy, k) => {
+    ctx.save(); ctx.translate(sx, sy); ctx.scale(k, k);
+    P([[-9, -13], [9, -13], [10, 4], [0, 15], [-10, 4]], edge);
+    P([[-7.6, -11.6], [7.6, -11.6], [8.5, 3.4], [0, 13], [-8.5, 3.4]], flash ? '#ffffff' : iceGrad(ctx, -8, -12, 8, 13));
+    P([[-7.6, -11.6], [0, -11.6], [0, 13], [-8.5, 3.4]], 'rgba(255,255,255,0.18)');
+    for (const px of [-6, 0, 6]) P([[px - 1.6, -13], [px, -17], [px + 1.6, -13]], '#e8fcff');
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 0.9;
+    for (let i = 0; i < 3; i++) { const a = i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(Math.cos(a) * -4.5, Math.sin(a) * -4.5 - 1); ctx.lineTo(Math.cos(a) * 4.5, Math.sin(a) * 4.5 - 1); ctx.stroke(); }
+    ctx.restore();
+  };
+  let swordA = -1.15 + Math.sin(now / 500) * 0.04, hand = [12, -30], bow = null, planted = false, shieldFront = false;
+  if (act === 'swipe') { const k = Math.min(1, t / 2000); swordA = -1.2 - 1.5 * k; hand = [9, -35]; }
+  else if (act === 'wave') { const k = Math.min(1, t / 550); swordA = -1.2 - 1.3 * k; hand = [9, -35]; }
+  else if (act === 'ground') { swordA = 1.5; hand = [13, -31]; planted = true; }
+  else if (act === 'bow') bow = -1.45;
+  else if (act === 'volley') bow = -0.1;
+  else if (act === 'parry') { swordA = 0.75; hand = [5, -24]; shieldFront = true; }
+  else if (act === 'summon') { swordA = -1.57; hand = [10, -40]; }
+  else if (act === 'stun') { swordA = 1.25; hand = [12, -19]; }
+  else if (m.swing > 0) swordA = 0.35;
+  const step = act === 'idle' ? Math.sin(now / 160) * 3 : 0;
+
+  if (bow !== null) { ctx.save(); ctx.translate(-7, -41); ctx.rotate(-2.05); drawBlade(52); ctx.restore(); }   // the sword, across his back
+  if (!shieldFront) drawShield(-13, -29, 0.95);
+  // legs, greaves and boots
+  for (const [lx, o] of [[-9, step], [2, -step]]) {
+    P([[lx + o * 0.4, -23], [lx + 8 + o * 0.4, -23], [lx + 8 + o, 0], [lx + o, 0]], edge);
+    P([[lx + 1 + o * 0.4, -22], [lx + 7 + o * 0.4, -22], [lx + 7 + o, -1], [lx + 1 + o, -1]], body);
+    P([[lx + o - 1, -3], [lx + 10 + o, -3], [lx + 10 + o, 0], [lx + o - 1, 0]], flash ? '#ffffff' : '#16467a');
+    ctx.fillStyle = '#e8fcff'; ctx.fillRect(lx + 1.5 + o * 0.7, -13, 5, 1.2);
+    P([[lx + 2 + o * 0.6, -13], [lx + 4 + o * 0.6, -17], [lx + 6 + o * 0.6, -13]], '#e8fcff');
+  }
+  P([[-13, -27], [13, -27], [15.5, -16], [-15.5, -16]], edge);                          // tassets
+  P([[-11.8, -26], [11.8, -26], [14, -17], [-14, -17]], body);
+  ctx.fillStyle = 'rgba(14,42,74,0.55)'; for (const tx of [-7, 0, 7]) ctx.fillRect(tx - 0.4, -26, 0.8, 9);
+  P([[-14, -46], [14, -46], [12, -25], [-12, -25]], edge);                               // cuirass
+  P([[-12.6, -45], [12.6, -45], [10.8, -26], [-10.8, -26]], body);
+  P([[-12.6, -45], [0, -45], [0, -26], [-10.8, -26]], 'rgba(255,255,255,0.16)');
+  ctx.fillStyle = 'rgba(14,42,74,0.6)'; ctx.fillRect(-0.4, -45, 0.8, 19); ctx.fillRect(-11, -33.5, 22, 0.8);
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 0.9;                                      // a snowflake on his chest
+  for (let i = 0; i < 3; i++) { const a = i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(Math.cos(a) * -4, -39 + Math.sin(a) * -4); ctx.lineTo(Math.cos(a) * 4, -39 + Math.sin(a) * 4); ctx.stroke(); }
+  for (const sx of [-15, 15]) {                                                          // pauldrons, spiked
+    ctx.fillStyle = edge; ctx.beginPath(); ctx.ellipse(sx, -44, 7.6, 5.6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(sx, -44, 6.4, 4.4, 0, 0, Math.PI * 2); ctx.fill();
+    P([[sx - 3, -47.5], [sx + (sx < 0 ? -2 : 2), -55], [sx + 3, -47.5]], '#e8fcff');
+  }
+  P([[-9, -44], [-9.6, -55], [-5.5, -61], [5.5, -61], [9.6, -55], [9, -44]], edge);       // the greathelm
+  P([[-7.8, -45], [-8.3, -54.6], [-5, -59.8], [5, -59.8], [8.3, -54.6], [7.8, -45]], body);
+  P([[-7.8, -45], [-8.3, -54.6], [-5, -59.8], [0, -59.8], [0, -45]], 'rgba(255,255,255,0.18)');
+  ctx.fillStyle = 'rgba(190,240,255,0.5)'; ctx.fillRect(-1.5, -55.2, 10.5, 4);
+  ctx.fillStyle = act === 'stun' ? '#3a8ad0' : '#ffffff'; ctx.fillRect(-0.5, -54.2, 9, 2);            // the visor's glow
+  ctx.fillStyle = edge; ctx.fillRect(3.4, -54.4, 0.9, 2.4);
+  ctx.fillStyle = 'rgba(14,42,74,0.7)'; for (let i = 0; i < 3; i++) ctx.fillRect(2 + i * 2, -49.5, 0.9, 2.6);
+  P([[-5, -60], [-3.4, -67], [-1.6, -60]], '#bfefff'); P([[-1.4, -60.4], [1, -71], [3.4, -60.4]], '#e8fcff'); P([[3, -60], [4.8, -66], [6.2, -59.6]], '#bfefff');
+  // the arm in front, and what it holds
+  if (bow !== null) {
+    P([[9, -42], [14, -42], [17, -34], [12, -33]], body);
+    ctx.save(); ctx.translate(16, -35); ctx.rotate(bow); drawBow(); ctx.restore();
+  } else {
+    P([[9, -43], [14.5, -42], [hand[0] + 3, hand[1] + 1], [hand[0] - 2.5, hand[1] + 2]], edge);
+    P([[10, -42], [13.5, -41.4], [hand[0] + 2, hand[1]], [hand[0] - 1.5, hand[1] + 1]], body);
+    ctx.save();
+    if (planted) { ctx.beginPath(); ctx.rect(-60, -90, 120, 91); ctx.clip(); }
+    ctx.translate(hand[0], hand[1]); ctx.rotate(swordA); drawBlade(58);
+    ctx.restore();
+    if (planted) {
+      const g2 = 0.5 + 0.5 * Math.sin(now / 90);
+      ctx.globalAlpha = 0.5 + 0.3 * g2; ctx.fillStyle = '#e8fcff';
+      ctx.beginPath(); ctx.ellipse(hand[0] + 2, 0, 12 + g2 * 4, 3, 0, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+    }
+  }
+  if (shieldFront) {
+    drawShield(13, -30, 1.3);
+    ctx.globalAlpha = 0.5 + 0.4 * Math.sin(now / 70); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(13, -30, 21, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  if (act === 'summon') {
+    ctx.fillStyle = '#e8fcff';
+    for (let i = 0; i < 10; i++) { const a = now / 200 + i * 0.63, r = 24 + (i % 3) * 5; ctx.fillRect(Math.cos(a) * r - 1, -30 + Math.sin(a) * r * 0.9 - 1, 2, 2); }
+  }
+  ctx.restore();
+  // Over his head, the right way round.
+  ctx.save();
+  ctx.font = 'bold 7px "Courier New",monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  const tag = (txt, col) => { ctx.fillStyle = '#000'; ctx.fillText(txt, mx + 1, y - 13); ctx.fillStyle = col; ctx.fillText(txt, mx, y - 14); };
+  if (act === 'stun') {
+    tag('STUNNED: DOUBLE DAMAGE', '#ffd84a');
+    ctx.fillStyle = '#ffd84a';
+    for (let i = 0; i < 3; i++) { const a = now / 170 + i * Math.PI * 2 / 3, sx = Math.round(mx + Math.cos(a) * 12), sy = Math.round(y - 6 + Math.sin(a) * 3); ctx.fillRect(sx - 1, sy - 2, 2, 4); ctx.fillRect(sx - 2, sy - 1, 4, 2); }
+  } else if (act === 'parry') tag("DON'T HIT HIM!", '#ffffff');
+  ctx.restore();
+}
+
+// ── his ice, and yours ──
+// A mark where the sky arrow will come down, and the arrow on its way.
+function drawIceFall(f, now) {
+  const k = Math.min(1, f.k || 0);
+  ctx.save(); ctx.translate(f.x, f.y);
+  ctx.globalAlpha = 0.14 + 0.2 * k; ctx.fillStyle = '#8ad8ff';
+  ctx.beginPath(); ctx.arc(0, 0, f.r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.3 + 0.3 * k; ctx.fillStyle = '#e8fcff';
+  ctx.beginPath(); ctx.arc(0, 0, f.r * k, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.95; ctx.strokeStyle = k > 0.75 ? '#ffffff' : '#bfefff'; ctx.lineWidth = 2;
+  ctx.setLineDash([5, 4]); ctx.lineDashOffset = -now * 26;
+  ctx.beginPath(); ctx.arc(0, 0, f.r, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(-0.6, -7, 1.2, 14); ctx.fillRect(-7, -0.6, 14, 1.2);
+  if (k > 0.45) {                                 // the arrow, falling
+    const u = (k - 0.45) / 0.55, ay = -340 * (1 - u * u);
+    ctx.globalAlpha = 0.5; ctx.fillStyle = '#bfefff'; ctx.fillRect(-1.5, ay - 46, 3, 40);
+    ctx.globalAlpha = 1; ctx.fillStyle = '#c8f0ff'; ctx.fillRect(-1, ay - 22, 2, 20);
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(0, ay + 4); ctx.lineTo(-3.4, ay - 4); ctx.lineTo(3.4, ay - 4); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+// The spike it leaves: solid ice, standing a while, then cracking apart.
+function drawIcePillar(f, now) {
+  const k = Math.min(1, f.k || 0), grow = Math.min(1, k * 14), gone = k > 0.88 ? (1 - k) / 0.12 : 1, r = f.r, H = r * 2.9 * grow;
+  ctx.save(); ctx.translate(f.x, f.y + r * 0.35);
+  ctx.globalAlpha = 0.35 * gone; ctx.fillStyle = '#0a2a4a';
+  ctx.beginPath(); ctx.ellipse(0, 1, r * 1.1, r * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = gone;
+  const spike = (ox, hw, hh, lean) => {
+    ctx.fillStyle = '#0e2a4a'; ctx.beginPath(); ctx.moveTo(ox - hw - 1, 1); ctx.lineTo(ox + lean, -hh - 2); ctx.lineTo(ox + hw + 1, 1); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = iceGrad(ctx, 0, -hh, 0, 2); ctx.beginPath(); ctx.moveTo(ox - hw, 0); ctx.lineTo(ox + lean, -hh); ctx.lineTo(ox + hw, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.beginPath(); ctx.moveTo(ox - hw, 0); ctx.lineTo(ox + lean, -hh); ctx.lineTo(ox - hw * 0.15, 0); ctx.closePath(); ctx.fill();
+  };
+  spike(-r * 0.62, r * 0.36, H * 0.52, -3); spike(r * 0.66, r * 0.34, H * 0.46, 3); spike(-r * 0.18, r * 0.3, H * 0.7, -1);
+  spike(0, r * 0.52, H, 0); spike(r * 0.28, r * 0.26, H * 0.6, 2);
+  if (Math.sin(now * 5 + idSeed(f.id)) > 0.55) { ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(-r * 0.2), Math.round(-H * 0.75), 2, 2); }
+  ctx.restore();
+}
+// An id (a short text code) as a number, for giving each thing its own look.
+const idSeed = id => (parseInt(id, 36) || 0) % 9973;
+// A line of spikes racing along the floor: f.v is how far it has got.
+const iceRunSeen = new Map();     // id -> how long it was when last seen, and when it last grew
+function drawIceRun(f, now) {
+  const k = Math.min(1, f.k || 0), gone = k > 0.8 ? (1 - k) / 0.2 : 1, len = f.v || 0, c = Math.cos(f.a), s = Math.sin(f.a), seed = idSeed(f.id);
+  let st = iceRunSeen.get(f.id);
+  if (!st) { if (iceRunSeen.size > 600) iceRunSeen.clear(); st = { len: 0, at: now }; iceRunSeen.set(f.id, st); }
+  if (len > st.len + 0.5) { st.len = len; st.at = now; }
+  const settle = (now - st.at) * 5;            // once a stretch stops growing, its last spikes finish rising
+  ctx.save();
+  ctx.globalAlpha = 0.15 * gone; ctx.strokeStyle = '#8ad8ff'; ctx.lineWidth = f.r * 1.4;
+  ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.x + c * len, f.y + s * len); ctx.stroke();
+  ctx.globalAlpha = gone;
+  for (let d = 4, i = 0; d < len; d += 10, i++) {
+    const sd = Math.sin(seed * 12.9 + i * 7.3), jit = sd * f.r * 0.5;
+    const px = f.x + c * d - s * jit, py = f.y + s * d + c * jit;
+    const fresh = Math.min(1, (len - d) / 26 + settle), hh = (10 + (i % 3) * 4 + Math.abs(sd) * 5) * (0.3 + 0.7 * fresh) * (0.6 + 0.4 * gone), hw = 3.2 + (i % 2);
+    ctx.fillStyle = '#0e2a4a'; ctx.beginPath(); ctx.moveTo(px - hw - 1, py + 2); ctx.lineTo(px + sd * 2, py - hh - 1); ctx.lineTo(px + hw + 1, py + 2); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = i % 2 ? '#8ad8ff' : '#6ac0f0'; ctx.beginPath(); ctx.moveTo(px - hw, py + 1); ctx.lineTo(px + sd * 2, py - hh); ctx.lineTo(px + hw, py + 1); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#e8fcff'; ctx.beginPath(); ctx.moveTo(px - hw, py + 1); ctx.lineTo(px + sd * 2, py - hh); ctx.lineTo(px - hw * 0.2, py + 1); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+// The flash of a swipe: a wide arc of frost.
+function drawIceSwipe(f) {
+  const k = Math.min(1, f.k || 0);
+  ctx.save(); ctx.translate(f.x, f.y);
+  ctx.globalAlpha = 0.35 * (1 - k); ctx.fillStyle = '#bfefff';
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, f.r, f.a - 1.25, f.a + 1.25); ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 1 - k; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 7 * (1 - k) + 2; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(0, 0, f.r * (0.7 + 0.3 * k), f.a - 1.25 + k * 0.3, f.a + 1.25); ctx.stroke();
+  ctx.strokeStyle = '#8ad8ff'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(0, 0, f.r * (0.5 + 0.3 * k), f.a - 1.1 + k * 0.3, f.a + 1.1); ctx.stroke();
+  ctx.restore();
+}
+// The Ice Greatsword in flight, spinning.
+function drawIceSwordFlying(f, now) {
+  ctx.save(); ctx.translate(f.x, f.y);
+  ctx.globalAlpha = 0.3; ctx.fillStyle = '#8ad8ff'; ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1; ctx.rotate(now * 17);
+  ctx.translate(-30, 0); drawWeaponPixels(ctx, 'icegreatsword', 0.78, WEAPON_COLOR.icegreatsword);
+  ctx.restore();
+}
+// Where it lands: the ground rifts.
+function drawIceRift(f, now) {
+  const k = Math.min(1, f.k || 0), out = Math.min(1, k * 3.5), fade = 1 - k;
+  ctx.save(); ctx.translate(f.x, f.y);
+  ctx.globalAlpha = 0.3 * fade; ctx.fillStyle = '#bfefff'; ctx.beginPath(); ctx.arc(0, 0, f.r * out, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = fade; ctx.lineCap = 'round';
+  for (let i = 0; i < 7; i++) {
+    const a = f.a + 0.3 + i * Math.PI * 2 / 7;
+    let px = 0, py = 0;
+    for (const [lw, col] of [[4, '#0e2a4a'], [2, '#e8fcff']]) {
+      px = 0; py = 0; ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath(); ctx.moveTo(0, 0);
+      for (let sgm = 1; sgm <= 4; sgm++) { const aa = a + (sgm % 2 ? 0.35 : -0.35), d = f.r * out / 4; px += Math.cos(aa) * d; py += Math.sin(aa) * d; ctx.lineTo(px, py); }
+      ctx.stroke();
+    }
+  }
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3 * fade + 1; ctx.beginPath(); ctx.arc(0, 0, f.r * out, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+function drawIceArrow(pr, ang, now) {
+  const b = pr.big || 1;
+  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang); ctx.scale(b, b);
+  ctx.globalAlpha = 0.35; ctx.fillStyle = '#8ad8ff'; ctx.fillRect(-20, -1.6, 13, 3.2);
+  ctx.globalAlpha = 1; ctx.fillStyle = '#c8f0ff'; ctx.fillRect(-11, -0.8, 14, 1.6);
+  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(2, -3); ctx.lineTo(2, 3); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#8ad8ff'; ctx.beginPath(); ctx.moveTo(-11, 0); ctx.lineTo(-14, -2.6); ctx.lineTo(-9, 0); ctx.lineTo(-14, 2.6); ctx.closePath(); ctx.fill();
+  if (b > 1) { ctx.globalAlpha = 0.3 + 0.2 * Math.sin(now / 60); ctx.fillStyle = '#e8fcff'; ctx.beginPath(); ctx.arc(2, 0, 6, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
+}
+function drawIceShard(pr, ang) {
+  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+  ctx.globalAlpha = 0.35; ctx.fillStyle = '#8ad8ff'; ctx.fillRect(-9, -1.4, 7, 2.8);
+  ctx.globalAlpha = 1; ctx.fillStyle = '#8ad8ff'; ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(0, -3); ctx.lineTo(-5, 0); ctx.lineTo(0, 3); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(0, -3); ctx.lineTo(-1, 0); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+// The ice wave: the samurai's cut, in ice, with shards flying off it.
+function drawIceWave(pr, ang, now) {
+  drawSlashWave(pr, ang, now, '#bfefff');
+  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang); ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < 4; i++) { const t = ((now / 260) + i / 4) % 1; ctx.globalAlpha = 1 - t; ctx.fillRect(-6 - t * 22, Math.sin(i * 2.4) * 14, 2, 2); }
+  ctx.restore();
+}
+// Frozen solid: a block of ice round whoever it is.
+function drawIceBlock(x, y, w, h) {
+  ctx.save();
+  ctx.globalAlpha = 0.55; ctx.fillStyle = '#8ad8ff'; ctx.fillRect(x - 4, y - 5, w + 8, h + 8);
+  ctx.globalAlpha = 0.8; ctx.strokeStyle = '#e8fcff'; ctx.lineWidth = 1.5; ctx.strokeRect(x - 4, y - 5, w + 8, h + 8);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(x - 2, y - 3, 3, h * 0.5); ctx.fillRect(x + 2, y - 3, w * 0.5, 2);
+  ctx.beginPath(); ctx.moveTo(x - 4, y - 5); ctx.lineTo(x, y - 11); ctx.lineTo(x + 4, y - 5); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x + w - 2, y - 5); ctx.lineTo(x + w + 1, y - 10); ctx.lineTo(x + w + 4, y - 5); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+// The floor, frozen over: it spreads out from the middle, shines, and melts away.
+let iceFx = null;
+function drawIceFloor(ice) {
+  const now = performance.now();
+  if (ice && (!iceFx || iceFx.out)) iceFx = { t0: now, out: 0 };
+  if (!ice && iceFx && !iceFx.out) iceFx.out = now;
+  if (!iceFx) return;
+  const fade = iceFx.out ? 1 - (now - iceFx.out) / 500 : 1;
+  if (fade <= 0) { iceFx = null; return; }
+  const ax = ARENA_X, ay = ARENA_Y, aw = CANVAS_W - ax * 2, ah = CANVAS_H - ay * 2, cx0 = ax + aw / 2, cy0 = ay + ah / 2;
+  const k = Math.min(1, (now - iceFx.t0) / 900), R = Math.hypot(aw, ah) / 2 * (1 - (1 - k) * (1 - k));
+  ctx.save();
+  ctx.beginPath(); ctx.rect(ax, ay, aw, ah); ctx.clip();
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx0, cy0, R, 0, Math.PI * 2); ctx.clip();
+  ctx.globalAlpha = 0.32 * fade; ctx.fillStyle = '#a8e0ff'; ctx.fillRect(ax, ay, aw, ah);
+  ctx.globalAlpha = 0.15 * fade; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4;
+  for (let i = -8; i < 26; i++) { const x0 = ax + i * 96 + ((now / 70) % 96); ctx.beginPath(); ctx.moveTo(x0, ay); ctx.lineTo(x0 - ah * 0.6, ay + ah); ctx.stroke(); }
+  ctx.globalAlpha = 0.3 * fade; ctx.strokeStyle = '#e8fcff'; ctx.lineWidth = 1;
+  for (let i = 0; i < 14; i++) {                    // cracks in it
+    const sx = ax + (i * 173.3 + 40) % aw, sy = ay + (i * 97.7 + 30) % ah, a = i * 1.9;
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + Math.cos(a) * 22, sy + Math.sin(a) * 22); ctx.lineTo(sx + Math.cos(a + 0.8) * 40, sy + Math.sin(a + 0.8) * 40); ctx.stroke();
+  }
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < 46; i++) {
+    const tw = Math.sin(now / 300 + i * 1.7);
+    if (tw > 0.55) { ctx.globalAlpha = (tw - 0.55) * 2 * fade; ctx.fillRect(Math.round(ax + (i * 211.7) % aw), Math.round(ay + (i * 131.3) % ah), 2, 2); }
+  }
+  ctx.restore();
+  if (k < 1) { ctx.globalAlpha = (1 - k) * 0.9; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(cx0, cy0, R, 0, Math.PI * 2); ctx.stroke(); }
+  ctx.restore();
+}
+// ── his arena ── ice underfoot, crystal walls, a great snowflake cut into the floor.
+const ICE_ARENA = { theme: 'ice', floor: 'diamonds', wall: 'crystal' };
+function paintIceDecor(g) {
+  const ax = ARENA_X, ay = ARENA_Y, aw = CANVAS_W - ax * 2, ah = CANVAS_H - ay * 2;
+  const cx0 = ax + aw / 2, cy0 = ay + ah / 2, R = Math.min(aw, ah) * 0.32;
+  g.save();
+  const glow = g.createRadialGradient(cx0, cy0, 0, cx0, cy0, R * 1.7);
+  glow.addColorStop(0, 'rgba(170,225,255,0.20)'); glow.addColorStop(1, 'rgba(170,225,255,0)');
+  g.fillStyle = glow; g.fillRect(ax, ay, aw, ah);
+  g.strokeStyle = 'rgba(200,240,255,0.32)'; g.lineWidth = 3; g.lineCap = 'round';
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3;
+    g.beginPath(); g.moveTo(cx0, cy0); g.lineTo(cx0 + Math.cos(a) * R, cy0 + Math.sin(a) * R); g.stroke();
+    for (const d of [0.45, 0.7]) for (const sgn of [-1, 1]) {
+      const bx = cx0 + Math.cos(a) * R * d, by = cy0 + Math.sin(a) * R * d;
+      g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + Math.cos(a + sgn * 0.9) * R * 0.2, by + Math.sin(a + sgn * 0.9) * R * 0.2); g.stroke();
+    }
+  }
+  g.strokeStyle = 'rgba(200,240,255,0.2)'; g.lineWidth = 2;
+  g.beginPath(); g.arc(cx0, cy0, R * 1.12, 0, Math.PI * 2); g.stroke();
+  g.restore();
 }
