@@ -1946,3 +1946,70 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 .legend-tag.ice-tag { color: #06243e; border-color: #e8fcff; background: linear-gradient(90deg, #e8fcff, #8ad8ff); }
 .shop-row.ice-row { border-color: #8ad8ff; box-shadow: 0 0 10px rgba(138, 216, 255, 0.35); }
 .ev-beaten { grid-column: 1 / -1; margin-top: 8px; padding: 8px 10px; border: 1px dashed #6a5a8a; border-radius: 8px; color: #b8a8d8; font-size: 11px; text-align: center; }
+
+/* ── Popups (tutorial reward, friend / trade / challenge requests) ── */
+.wp-pop { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(4,4,14,0.66); padding: 16px; }
+.wp-pop.hidden { display: none; }
+.wp-pop-box { background: #14142c; border: 3px solid #ffd84a; box-shadow: 0 0 0 3px #05050b, 0 8px 30px rgba(0,0,0,0.6); padding: 18px 16px 14px; max-width: 380px; width: 100%; text-align: center; font-family: 'Courier New', monospace; }
+.wp-pop-box.req { border-color: #7affc8; }
+.wp-pop-title { color: #ffd84a; font-weight: bold; font-size: 17px; letter-spacing: 1px; margin-bottom: 10px; }
+.wp-pop-box.req .wp-pop-title { color: #7affc8; }
+.wp-pop-art { display: block; margin: 4px auto 8px; image-rendering: pixelated; }
+.wp-pop-body { color: #d8d8ec; font-size: 13px; line-height: 1.5; margin-bottom: 12px; }
+.wp-pop-btns { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.wp-pop-btns .mode-btn { flex: 1 1 100px; margin: 0; min-width: 0; font-size: 12px; padding: 8px 6px; }
+.unc-tag { background: #2a6a3a !important; color: #b8ffc8 !important; }
+.unc-row { border-color: #4ab86a !important; }
+
+/* ── Friends, challenges, toasts ── */
+.btn-friends { background: linear-gradient(180deg, #2a8a6a, #156a4a) !important; }
+.btn-challenge { background: linear-gradient(180deg, #c8303a, #8a1a2a) !important; }
+.fr-on { background: #2ac86a !important; color: #04140a !important; }
+.fr-title { color: #7affc8; }
+.fr-ask { margin: 6px 0 10px; }
+.fr-list { max-height: 46vh; overflow-y: auto; text-align: left; margin-bottom: 8px; }
+.fr-head { color: #8a8aa8; font-size: 11px; letter-spacing: 1px; margin: 8px 2px 4px; }
+.fr-row { display: flex; align-items: center; gap: 8px; padding: 7px 8px; margin-bottom: 4px; background: #1a1a34; border: 1px solid #2a2a4a; color: #c8c8dc; font-size: 13px; }
+.fr-row b { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fr-row.on { border-color: #2ac86a; }
+.fr-dot { width: 9px; height: 9px; border-radius: 50%; background: #4a4a5a; flex: none; }
+.fr-row.on .fr-dot { background: #2ae86a; box-shadow: 0 0 6px #2ae86a; }
+.fr-dot.ask { background: #ffd84a; }
+.fr-st { color: #6a6a88; font-size: 10px; flex: none; }
+.fr-row.on .fr-st { color: #5ae88a; }
+.fr-btn { flex: none; font-family: inherit; font-size: 10px; font-weight: bold; padding: 4px 7px; border: 2px solid #05050b; cursor: pointer; color: #fff; }
+.fr-btn.ch { background: #b8283a; } .fr-btn.tr { background: #2a6ab8; } .fr-btn.x { background: #3a3a4a; }
+.fr-none { color: #7a7a98; font-size: 12px; padding: 10px 4px; }
+.tr-byname { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dashed #2a2a4a; }
+.wp-toasts { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 70; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; width: min(92vw, 460px); }
+.wp-toast { background: #14142c; border: 2px solid #7affc8; color: #e8fff4; font: bold 12px 'Courier New', monospace; padding: 7px 12px; box-shadow: 0 0 0 2px #05050b; transition: opacity .5s, transform .5s; text-align: center; }
+.wp-toast.out { opacity: 0; transform: translateY(-8px); }
+
+/* ── Minigames ── */
+.mg-card { border-color: #2ac88a !important; }
+.mg-banner { background: linear-gradient(135deg, #0a3a2a, #0a6a4a 60%, #1a8a6a); padding: 10px 10px 8px; position: relative; min-height: 64px; }
+.mg-banner .ev-name { position: static; margin-top: 18px; color: #e8fff4; }
+.mg-goal { color: #ffd84a; font-size: 12px; font-weight: bold; margin-top: 4px; }
+.mg-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px; }
+.mg-it { display: flex; align-items: center; gap: 4px; background: #14142c; border: 1px solid #2a2a4a; padding: 2px 6px 2px 2px; font-size: 10px; color: #c8c8dc; }
+.mg-it canvas { image-rendering: pixelated; }
+.mg-next { color: #7a7a98; font-size: 11px; margin-top: 8px; text-align: center; }
+.mg-next b { color: #9fffd0; }
+
+/* ── The menu's FRIENDS, CHALLENGE and MINIGAMES buttons, dressed like their neighbours ── */
+.btn-friends::before { content: '👥'; }  .btn-challenge::before { content: '⚔️'; }
+.menu-box .mode-btn.btn-friends {
+  border-radius: 22px; border: 2px solid #9affd8;
+  background: radial-gradient(circle at 30% 20%, #5affc0, #1aa87a 55%, #0a6a5a) !important;
+  box-shadow: 0 0 12px rgba(80, 255, 190, 0.55);
+}
+.menu-box .mode-btn.btn-challenge {
+  background: linear-gradient(115deg, #3a0a14 0 8%, #ff2a4a 8% 46%, #fff 46% 48%, #ff7a1a 48% 92%, #3a0a14 92%) !important;
+  clip-path: polygon(0 50%, 8% 0, 92% 0, 100% 50%, 92% 100%, 8% 100%);
+}
+.menu-box .mode-btn.btn-friends .fr-on { position: absolute; top: 6px; right: 10px; }
+.btn-minigame::before { content: '🎮'; }
+.menu-box .mode-btn.btn-minigame {
+  border-radius: 8px; border: 2px dashed #b8ffe0;
+  background: linear-gradient(160deg, #0a8a5a, #2ac88a 50%, #0a5a6a) !important;
+}

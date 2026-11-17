@@ -56,6 +56,9 @@ let WEAPON_COLOR = {
   scimitar:'#e8e0c8', slingshot:'#b08a5a', mace:'#9aa4b0', javelin:'#d8c8a0', claws:'#e0e4ec',
   emberstaff:'#ff7a2a', halberd:'#c0c8d8', frostbow:'#9fe8ff', chronostaff:'#e8c87a', voidblade:'#9a5aff',
   mindtome:'#ff5ad8', lightblade:'#fff27a',
+  trident:'#5ad8c8', nunchaku:'#c89a5a', musket:'#a8a090',
+  gladius:'#e8d8b0', warpike:'#c8d0dc', morningstar:'#b8c0cc', twinblades:'#f0f4ff', longbow:'#c8a060',
+  handcannon:'#8a8aa0', thunderrod:'#ffe45a', frostfang:'#a8ecff', cinderbow:'#ff8a3a', sawdisc:'#d8dde6',
 };
 const WEAPON_DESC = {
   sword:'Balanced blade', dagger:'Fast, low damage', axe:'Slow, heavy hit',
@@ -96,6 +99,12 @@ const WEAPON_DESC = {
   scimitar:'Quick curved cuts, dash special', slingshot:'Stones that knock foes back',
   mace:'Heavy blows that stun', javelin:'Piercing long throw', claws:'Rapid slashes that heal you',
   emberstaff:'Fiery blasts that burn', halberd:'Huge reach, knockback, dash special', frostbow:'Piercing ice arrows that slow',
+  trident:'Long thrusts that shove foes, a piercing throw', nunchaku:'Very fast spinning strikes all round you', musket:'One slow, very heavy shot',
+  gladius:'UNCOMMON. A short heavy blade that heals you, dash special', warpike:'UNCOMMON. The longest reach, shoves hard, piercing throw',
+  morningstar:'UNCOMMON. Spiked blows all round you that stun', twinblades:'UNCOMMON. Two blades, the fastest cuts there are, and they heal you',
+  longbow:'UNCOMMON. Very long piercing arrows, a five-arrow volley', handcannon:'UNCOMMON. Huge exploding shells',
+  thunderrod:'UNCOMMON. Lightning that jumps to 3 more foes, a storm special', frostfang:'UNCOMMON. Piercing ice shards that slow, a ring of twelve',
+  cinderbow:'UNCOMMON. Burning arrows, a four-arrow volley', sawdisc:'UNCOMMON. Spinning saws that cut through and fly back',
   chronostaff:'Bend time: freeze foes in place and rewind your own wounds',
   voidblade:'A blade of the void: waves on every swing, rift steps and a SUPER singularity',
   mindtome:'A book of mind power: set traps under your enemies, lock their minds, and take one over',
@@ -291,6 +300,7 @@ async function refreshSavedBanner0() {
   if (!el) return;
   const pw = (document.getElementById('passInput')?.value || '').trim();
   if (!pw) {
+    if (lsGet(TUT_REWARD_KEY) === '1' && !tutRewardTold) { tutRewardTold = true; popup({ title: 'TUTORIAL COMPLETE!', html: 'Your reward is waiting: <b>a random weapon</b> and <b style="color:var(--c-gold)">◆ 2,000</b>.<br>Type a <b>password</b> on the menu (it saves your progress) to collect it.', buttons: [{ label: 'OK' }] }); }
     menuXp = 0; syncModeLocks();
     el.innerHTML = '<span style="color:#555">No password — progress will not be saved</span>';
     return;
@@ -309,6 +319,7 @@ async function refreshSavedBanner0() {
     saveLocalCoins(pw, d.coins);
     saveLocalXp(pw, d.xp);
     menuXp = d.xp || 0; syncModeLocks();
+    if (lsGet(TUT_REWARD_KEY) === '1') claimTutorialReward(pw);
     const upgCount = Object.values(d.upgrades || {})
       .reduce((n, lv) => n + Object.values(lv).reduce((a, b) => a + b, 0), 0);
     el.innerHTML = `<span style="color:#6a6a80">SAVE:</span> `
@@ -324,7 +335,7 @@ async function refreshSavedBanner0() {
 }
 
 function joinGame(mode) {
-  if (mode !== 'create' && mode !== 'joinroom' && !EVENT_IDS.includes(mode)) pendingRoom = {};
+  if (mode !== 'create' && mode !== 'joinroom' && mode !== 'challenge' && !EVENT_IDS.includes(mode)) pendingRoom = {};
   if (window.GameAudio) { GameAudio.init(); GameAudio.resume(); }
   readCredentials();
   pendingMode = mode;
@@ -506,8 +517,9 @@ function startTutorial() {
   pendingRoom = {};
   joinGame('sandbox');
 }
-function finishTutorial() {
+function finishTutorial(done) {
   markTutorialDone();
+  if (done === true) lsSet(TUT_REWARD_KEY, '1');   // played to the end: a reward is owed
   pendingTutorial = false;
   tut.on = false;
   document.getElementById('tutPanel')?.classList.add('hidden');
@@ -517,7 +529,7 @@ function finishTutorial() {
 function skipTutorial() { finishTutorial(); }
 function tutorialNext() {
   const st = TUT_STEPS[tut.i];
-  if (st && st.last) { finishTutorial(); return; }
+  if (st && st.last) { finishTutorial(true); return; }
   tut.i++; tut.entered = false;
 }
 let tutRendered = '';
@@ -994,6 +1006,7 @@ function connect() {
       return;
     }
     if (msg.type === 'rareshop') { showRareShop(msg); return; }
+    if (msg.type === 'room_gone' && pendingMode === 'challenge') { leaveGame(); popup({ title: 'CHALLENGE', html: 'That challenge has run out. Send a new one.' }); return; }
     if (msg.type === 'room_gone') {
       setLobbyMsg('That room is full or has already started.');
       setTimeout(() => { leaveGame(); openRoomBrowser(); }, 1600);
@@ -1038,7 +1051,7 @@ function connect() {
         if (msg.myCoins !== undefined && msg.myCoins !== lastSavedCoins) { lastSavedCoins = msg.myCoins; saveLocalCoins(pendingPass, msg.myCoins); }
       }
       applyWorld(msg.world);
-      const solo = ['waves', 'extreme', 'portal', 'abyss', 'tsunami', 'iceknight', 'sandbox', 'sawroom'].includes(msg.gameMode);   // nobody to talk to in the solo modes
+      const solo = ['waves', 'extreme', 'portal', 'abyss', 'tsunami', 'iceknight', 'sandbox', 'sawroom', 'minigame'].includes(msg.gameMode);   // nobody to talk to in the solo modes
       if (solo !== chatSolo) {
         chatSolo = solo;
         const chatBtn = document.getElementById('chatBtn');
@@ -1340,6 +1353,9 @@ const ATTACK_ANIM = {
   fireglove: 'punch', vortex: 'shieldup', windwand: 'flick', revolver: 'recoil', portalwand: 'cast', infinitybow: 'recoil', endlessscythe: 'sweep', samuraiblade: 'slash', ghostdagger: 'stab',
   stormhammer: 'chop', frostscythe: 'spin', sunbow: 'draw',
   scimitar: 'slash', slingshot: 'draw', mace: 'chop', javelin: 'throw', claws: 'stab',
+  trident: 'stab', nunchaku: 'spin', musket: 'heavy',
+  gladius: 'slash', warpike: 'stab', morningstar: 'spin', twinblades: 'slash', longbow: 'draw', handcannon: 'heavy',
+  thunderrod: 'cast', frostfang: 'recoil', cinderbow: 'draw', sawdisc: 'throw',
   emberstaff: 'cast', halberd: 'sweep', frostbow: 'draw', chronostaff: 'cast', voidblade: 'slash', mindtome: 'tome',
   lightblade: 'slash', darklight: 'throw', starfall: 'cast', worldsplitter: 'heavy', greatestsword: 'doublechop', wavestorm: 'cast', soullantern: 'cast', ashfeather: 'draw', chronosedge: 'slash', hydrafang: 'stab', firespear: 'stab', icegreatsword: 'chop', icebow: 'draw',
 };
@@ -2700,6 +2716,7 @@ function handleCanvasTap(clientX, clientY) {
 canvas.addEventListener('pointerdown', (e) => {
   if (handleCanvasTap(e.clientX, e.clientY)) { e.preventDefault(); return; }
   if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (tryVentGo(e.clientX, e.clientY)) { e.preventDefault(); return; }
   if (trySpearTp(e.clientX, e.clientY)) { e.preventDefault(); return; }
   if (tapMove && e.pointerType === 'mouse' && currState && currState.gameState === 'GAMEPLAY') {
     const r = canvas.getBoundingClientRect();
@@ -3082,7 +3099,7 @@ async function openEvents() {
   setEvMsg('');
   evs.confirm = null;
   const loading = custLoadStart('events');
-  try { evTake(await abilPost('/api/events', {})); } catch (e) { setEvMsg(e.message || 'Could not reach the server.', true); }
+  try { await mgFetch(); evTake(await abilPost('/api/events', {})); } catch (e) { setEvMsg(e.message || 'Could not reach the server.', true); renderEvents(); }
   finally { custLoadEnd(loading); }
   clearInterval(evs.timer);
   evs.timer = setInterval(evClock, 1000);
@@ -3096,14 +3113,19 @@ const evLeft = ms => { const s = Math.max(0, Math.floor(ms / 1000)), dd = Math.f
 function evClock() {
   if (document.getElementById('eventsScreen').classList.contains('hidden')) { clearInterval(evs.timer); return; }
   const since = performance.now() - evs.ends;
+  for (const el of document.querySelectorAll('[data-mg-end]')) {
+    const left = +el.dataset.mgEnd - since;
+    el.textContent = left > 0 ? 'CHANGES IN ' + evLeft(left) : 'CHANGING...';
+    if (left <= -1500 && !mgs.busy) mgFetch().then(renderEvents);
+  }
   for (const el of document.querySelectorAll('[data-ev-end]')) {
     const left = +el.dataset.evEnd - since;
     el.textContent = left > 0 ? 'ENDS IN ' + evLeft(left) : 'ENDED';
   }
 }
 function renderEvents() {
-  const d = evs.data, list = document.getElementById('evList');
-  if (!d || !list) return;
+  const d = evs.data || { events: [], coins: 0 }, list = document.getElementById('evList');
+  if (!list) return;
   document.getElementById('evCoins').innerHTML = `◆ ${(d.coins || 0).toLocaleString()}`;
   list.innerHTML = d.events.map(e => {
     const poor = !d.admin && (d.coins || 0) < e.fee, confirm = evs.confirm === e.id;
@@ -3130,9 +3152,11 @@ function renderEvents() {
       ${btn}${host}
     </div>`;
   }).join('') || `<div class="arm-none">${(d.beaten || []).length ? 'You have beaten every event that is running.' : 'No events yet.'}</div>`;
+  list.innerHTML = mgCardHtml() + list.innerHTML;
   if ((d.beaten || []).length) list.innerHTML += `<div class="ev-beaten">BEATEN: ${d.beaten.map(escapeHtml).join(', ')}. A beaten event leaves your list until it is hosted again.</div>`;
   drawForgeIcons(list);
   drawShopIcons(list);
+  drawTrapIcons(list);
   evClock();
 }
 function askEnterEvent(id) { evs.confirm = id; renderEvents(); setTimeout(() => { if (evs.confirm === id) { evs.confirm = null; renderEvents(); } }, 4000); }
@@ -3620,7 +3644,11 @@ function renderTrade() {
   if (!top) return;
   if (!v) {
     table.classList.add('hidden'); foot.innerHTML = '';
-    top.innerHTML = pendingPass ? `<div class="tr-start">
+    top.innerHTML = pendingPass ? `<div class="tr-byname"><div class="tr-wait">TRADE WITH A FRIEND: TYPE THEIR NAME</div>
+      <div class="tr-join"><input id="tradeNameIn" maxlength="12" placeholder="THEIR NAME" autocomplete="off" spellcheck="false" aria-label="Their name">
+        <button class="mode-btn btn-trade" onclick="tradeAskName()">ASK</button></div>
+      <div class="tr-wait" style="color:#888">They get a message and answer YES, NO or DON'T NOTIFY TODAY. Or use a code:</div></div>
+      <div class="tr-start">
       <button class="mode-btn btn-trade" onclick="tradeStart()">START A TRADE<small>get a code for your friend</small></button>
       <div class="tr-join"><input id="tradeCodeIn" maxlength="5" placeholder="CODE" autocomplete="off" aria-label="Trade code">
         <button class="mode-btn btn-trade" onclick="tradeJoin()">JOIN</button></div></div>
@@ -3938,6 +3966,20 @@ function legendaryCards(weapons, coins) {
     const ready = legendOk && (w.noRequirement || have >= xpIds.length);
     const afford = coins >= w.price;
     const col = WEAPON_COLOR[w.id] || '#ff6a1a';
+    if (w.uncommon) {
+      return `<div class="shop-row legendary unc-row">
+        <div class="shop-head">
+          <canvas class="shop-ic" data-weapon="${w.id}" width="56" height="32"></canvas>
+          <span class="shop-name" style="color:${col}">${w.name}</span>
+          <span class="legend-tag unc-tag">UNCOMMON</span>
+        </div>
+        <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. Better than a common: it has a special, but no super.</div>
+        <div class="legend-buy">
+          <button class="buy-weapon poor" disabled>MINIGAME PRIZE</button>
+          <span class="legend-need">Win a <b>MINIGAME</b> (EVENTS tab, a new one every 10 minutes): its prize is an uncommon weapon you don't have yet, picked at random</span>
+        </div>
+      </div>`;
+    }
     if (w.secret) {
       const boss = w.from === 'boss';
       return `<div class="shop-row legendary ${boss ? 'ice-row' : 'secret-row'}">
@@ -3949,7 +3991,7 @@ function legendaryCards(weapons, coins) {
         <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. ${LEGEND_MOVES[w.id] || ''}</div>${legendPassive(w.id)}
         <div class="legend-buy">
           <button class="buy-weapon poor" disabled>${boss ? 'BOSS REWARD' : 'EVENT ONLY'}</button>
-          <span class="legend-need">${boss ? 'Beat the ICE KNIGHT (BOSSES tab, ◆ 1,000,000 a fight) to win it' : 'Beat the SECRET BOT in the EVENTS menu to win it'}</span>
+          <span class="legend-need">${boss ? 'Beat the ICE KNIGHT (BOSSES tab, ◆ 2,000,000 a fight) to win it' : 'Beat the SECRET BOT in the EVENTS menu to win it'}</span>
         </div>
       </div>`;
     }
@@ -4665,7 +4707,7 @@ const ABILITY_ICONS = {
   },
 };
 
-const SCREENS = ['settingsScreen', 'startScreen','lobbyScreen','pickScreen','armoryScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','legendScreen','eventsScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen','forgeScreen','tradeScreen'];
+const SCREENS = ['friendsScreen', 'settingsScreen', 'startScreen','lobbyScreen','pickScreen','armoryScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','legendScreen','eventsScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen','forgeScreen','tradeScreen'];
 // The main menu is shrunk to whatever the screen allows (never below 45%), so the
 // name and password fields and the mode buttons are all in view on small phones
 // and short windows. Re-measured on resize / rotation / when it is shown.
@@ -4717,6 +4759,7 @@ const LOAD_MODES = {
   secretbot: { a: '#2a0400', b: '#ff5a1a', name: 'SECRET BOT', rival: 'robot' },
   tsunami:  { a: '#1a6ae8', b: '#8ad8ff', name: 'TSUNAMI',      boss: 'tsunami' },
   iceknight: { a: '#0e2a4a', b: '#8ad8ff', name: 'ICE KNIGHT',  boss: 'iceknight' },
+  minigame:  { a: '#0a6a4a', b: '#7affc8', name: 'MINIGAME',    foes: [['spitter', 24, 28], ['samurai', 26, 30], ['bomber', 22, 24]] },
   sawroom:  { a: '#b0102a', b: '#ff5a2a', name: 'THE SAWS',     boss: 'saw' },
   sandbox:  { a: '#1ab85a', b: '#4aee9a', name: 'PRACTICE',     foes: [['grunt', 23, 27]] },
   tutorial: { a: '#14c88a', b: '#7affc8', name: 'FIRST FIGHT',  foes: [['grunt', 23, 27]] },
@@ -4976,7 +5019,8 @@ function soloLobbyMsg(mode) {
     case 'voiddungeon': return ABYSS_LOBBY;
     case 'secretbot': return line('#ff7a3a', 'SECRET BOT', 'EVENT · AN INSANE BOT WITH A SECRET WEAPON');
     case 'tsunami':  return TSUNAMI_LOBBY;
-    case 'iceknight': return line('#8ad8ff', 'THE ICE KNIGHT', 'BOSS FIGHT · ◆ 1,000,000 PAID · FIRE HURTS HIM MOST');
+    case 'iceknight': return line('#8ad8ff', 'THE ICE KNIGHT', 'BOSS FIGHT · ◆ 2,000,000 PAID · FIRE HURTS HIM MOST');
+    case 'minigame': return line('#7affc8', mgs.data ? mgs.data.now.name : 'MINIGAME', mgs.data ? mgs.data.now.goal : 'BEAT THE CLOCK');
     case 'bot':      return BOT_LOBBY();
     default:         return null;
   }
@@ -5271,6 +5315,17 @@ function updateScreens(state) {
           + (ab ? (ab.p3 ? `ONLY <span style="color:#ff7ad8">${ab.p3}s</span> LEFT TO SURVIVE<br>`
                  : `HE HAD <span style="color:#c8a0ff">${Math.ceil(ab.hp).toLocaleString()}</span> HP LEFT (PHASE ${ab.phase || 1})<br>`) : '')
           + `XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`;
+    } else if (state.gameMode === 'minigame') {
+      lb.classList.add('hidden');
+      hint.textContent = 'RETURNING TO MENU...';
+      const w = state.mgWin || {}, g = state.mg || {};
+      document.getElementById('roundTitle').innerHTML = state.victory ? '<span style="color:#7affc8">MINIGAME WON!</span>' : '<span style="color:#ff5a6a">' + (g.left > 0 ? 'KNOCKED OUT' : "TIME'S UP") + '</span>';
+      document.getElementById('roundStats').innerHTML = !state.victory
+        ? (g.survive ? 'YOU DIDN\'T LAST' : escapeHtml(String(g.kills || 0)) + ' OF ' + escapeHtml(String(g.need || 0))) + '<br>TRY AGAIN: IT CHANGES EVERY 10 MINUTES'
+        : w.weapon ? 'YOU WON AN UNCOMMON WEAPON:<br><span style="color:' + (WEAPON_COLOR[w.weapon.id] || '#7affc8') + ';font-size:1.2em">' + escapeHtml(w.weapon.name) + '</span><br>IT IS IN YOUR WEAPONS NOW'
+        : w.coins ? 'YOU HAVE EVERY UNCOMMON WEAPON:<br><span style="color:' + PAL.coin + '">+' + w.coins.toLocaleString() + ' COINS</span>'
+        : w.again ? 'YOU ALREADY WON THIS ONE\'S PRIZE.<br>A NEW MINIGAME COMES EVERY 10 MINUTES'
+        : w.nopass ? 'SET A PASSWORD ON THE MENU TO KEEP YOUR PRIZES' : 'WELL PLAYED';
     } else if (state.gameMode === 'iceknight') {
       lb.classList.add('hidden');
       hint.textContent = 'RETURNING TO MENU...';
@@ -5281,7 +5336,7 @@ function updateScreens(state) {
       document.getElementById('roundStats').innerHTML = state.victory
         ? (got.length ? 'HIS GEAR IS YOURS:<br>' + got.map(id => `<span style="color:#8ad8ff">${nm(id)}</span>`).join(' &middot; ') + '<br>PUT THE ARMOUR AND SHIELD ON IN THE ARMOURY'
                       : 'YOU ALREADY OWN ALL HIS GEAR') + `<br><span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`
-        : `YOUR 1,000,000 IS GONE<br>${ik ? `HE HAD <span style="color:#8ad8ff">${Math.ceil(ik.hp).toLocaleString()}</span> HP LEFT (PHASE ${ik.phase || 1})<br>` : ''}<span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`;
+        : `YOUR 2,000,000 IS GONE<br>${ik ? `HE HAD <span style="color:#8ad8ff">${Math.ceil(ik.hp).toLocaleString()}</span> HP LEFT (PHASE ${ik.phase || 1})<br>` : ''}<span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`;
     } else if (state.gameMode === 'tsunami') {
       lb.classList.add('hidden');
       hint.textContent = 'RETURNING TO MENU...';
@@ -5457,6 +5512,8 @@ function draw(state) {
   syncAbilityButtons(meP);
   syncShieldButton(meP);
   drawParticles(state.particles || []);
+  if (meP && !meP.dead && meP.vent) drawVentView(state, meP);
+  if (meP && !meP.dead && meP.effects && meP.effects.blind > 0) drawBlind(meP);
   ctx.restore();
   ctx.save();
   ctx.scale(HUD_SCALE, HUD_SCALE);
@@ -5466,6 +5523,7 @@ function draw(state) {
   drawWeaponPanel(state);
   drawPickupBanners(state.particles);
   if (meP && meP.fsArm > 0 && !meP.dead) drawSpearArmTint(meP);
+  if (meP && meP.vent && !meP.dead) drawVentHud(meP);
   if (tutAim && tutAim.pt && pendingTutorial) drawTutorialArrow();
   ctx.restore();
   if (netOverlay) drawNetOverlay();
@@ -5651,6 +5709,49 @@ function drawTraps(traps) {
       ctx.beginPath(); ctx.arc(cx, cy, tr.radius, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
       ctx.restore();
       if (cv0) ctx.drawImage(cv0, Math.round(tr.x) - 2, Math.round(tr.y) - 2);
+      continue;
+    }
+    if (tr.state === 'firing' && (tr.type === 'tar' || tr.type === 'oil')) {
+      const t = performance.now() / 1000;
+      ctx.save();
+      ctx.globalAlpha = 0.55; ctx.fillStyle = tr.type === 'tar' ? '#1a1420' : '#1a1608';
+      ctx.beginPath(); ctx.ellipse(cx, cy, tr.radius, tr.radius * 0.82, 0, 0, Math.PI * 2); ctx.fill();
+      if (tr.type === 'oil') {                              // a rainbow sheen sliding over it
+        for (const [c, o] of [['#c8a8ff', 0], ['#8ad8c8', 2], ['#ffd84a', 4]]) {
+          ctx.globalAlpha = 0.25; ctx.strokeStyle = c; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.ellipse(cx + Math.sin(t + o) * 8, cy + Math.cos(t * 0.7 + o) * 5, tr.radius * 0.45, tr.radius * 0.2, t * 0.3 + o, 0, Math.PI * 2); ctx.stroke();
+        }
+      } else {                                              // bubbles rising and popping
+        ctx.strokeStyle = '#7a6a8a'; ctx.lineWidth = 1;
+        for (let i = 0; i < 7; i++) {
+          const k = (t * 0.8 + i * 0.37) % 1, a = i * 2.3, rr = tr.radius * 0.6 * ((i * 41 % 100) / 100);
+          ctx.globalAlpha = 0.7 * (1 - k); ctx.beginPath(); ctx.arc(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr * 0.8, 1.5 + k * 3, 0, Math.PI * 2); ctx.stroke();
+        }
+      }
+      ctx.globalAlpha = 0.5; ctx.strokeStyle = tr.color; ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.ellipse(cx, cy, tr.radius, tr.radius * 0.82, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      ctx.restore();
+      continue;
+    }
+    if (tr.type === 'mortar' && tr.bl) {
+      ctx.save();
+      for (const [bx, by, left] of tr.bl) {
+        const k = Math.max(0, Math.min(1, 1 - left / 900));
+        ctx.globalAlpha = 0.18 + k * 0.25; ctx.fillStyle = '#ff7a3a';
+        ctx.beginPath(); ctx.arc(bx, by, 36, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.9; ctx.strokeStyle = '#ffb07a'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(bx, by, 36, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); ctx.stroke();
+        // the shell itself, dropping in
+        ctx.fillStyle = '#3a3a46'; ctx.beginPath(); ctx.arc(bx, by - (1 - k) * 60, 3, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+      const cv1 = trapSprite(tr.type, tr.w, true);
+      if (cv1) ctx.drawImage(cv1, Math.round(tr.x) - 2, Math.round(tr.y) - 2);
+      continue;
+    }
+    if (tr.type === 'vent') {                               // a grate, not a danger: no footprint
+      const cv1 = trapSprite('vent', tr.w, false);
+      if (cv1) ctx.drawImage(cv1, Math.round(tr.x) - 2, Math.round(tr.y) - 2);
       continue;
     }
     if (tr.state === 'firing' && tr.type === 'poison') {
@@ -5947,7 +6048,8 @@ function drawPlayer(p, baseColor, label, key) {
   if (p.dead) return;
   if (p.controlling) { if (key === 'p' + myNum) drawMindHome(p); return; }
   // VANISH / ghost cloak: gone for everyone else; a faint shimmer for you.
-  const unseen = p.effects && (p.effects.vanish > 0 || p.effects.ghost > 0);
+  if (p.vent && key !== 'p' + myNum) return;               // down in a vent
+  const unseen = (p.effects && (p.effects.vanish > 0 || p.effects.ghost > 0)) || !!p.vent;
   if (unseen && key !== 'p' + myNum) return;
   if (p.sky) p = skyfallPose(p);
   if (unseen) { ctx.save(); ctx.globalAlpha = 0.35 + 0.1 * Math.sin(performance.now() / 120); }
@@ -6572,7 +6674,8 @@ function drawMonster(m) {
   ctx.fillRect(x + 1, y + m.h, m.w - 2, 2);
 
   const cv = monsterSprite(type, m.w, m.h, state);
-  if (type === 'light' && cv) drawLightTrail(m, cv);
+  if ((type === 'light' || type === 'elitelight') && cv) drawLightTrail(m, cv);
+  if (ELITES.has(type)) drawEliteMark(m, x, y);
   if (cv) {
     const pad = monsterPad(m.w, m.h);
     ctx.drawImage(cv, x - pad, y - pad);
@@ -7521,6 +7624,9 @@ const MONSTER_ARMS = {
   samurai:     { art: 'katana',      color: '#e8eef8', size: 0.72, rest: -0.35, move: 'chop'   },
   sniper:      { art: 'blunderbuss',  color: '#8a6a4a', size: 0.62, rest: -0.15, move: 'stab'   },
   elitesniper: { art: 'blunderbuss',  color: '#c81a2a', size: 0.68, rest: -0.15, move: 'stab'   },
+  elitesamurai: { art: 'samuraiblade', color: '#ff5a5a', size: 0.74, rest: -0.35, move: 'chop' },
+  elitelight:  { art: 'm_scythe',     color: '#ffd84a', size: 0.84, rest: -0.6,  move: 'chop'   },
+  eliteknight: { art: 'm_pike',       color: '#ffe9a8', size: 0.66, rest: -0.85, move: 'thrust', shield: '#ffe9a8' },
   mirrorknight: { art: 'm_shiv',      color: '#dff0ff', size: 0.86, rest:  0.2,  move: 'stab', shield: '#dff0ff' },
   hexer:       { art: 'm_bonestaff',  color: '#e07aff', size: 0.66, rest: -1.1,  move: 'cast'   },
   sentry:      { art: 'blunderbuss',  color: '#aab8c8', size: 0.6,  rest: -0.1,  move: 'stab'   },
@@ -7615,6 +7721,7 @@ function drawProjectiles(projs) {
     const ang = Math.atan2(pr.dy, pr.dx);
     const u = upgScale(pr.upg);
 
+    if (NEW_SHOTS[pr.weaponId]) { NEW_SHOTS[pr.weaponId](pr, ang, now, u); continue; }
     if (pr.weaponId === 'abyssbolt' || pr.weaponId === 'infinitybow') { drawVoidBolt(pr, ang); continue; }
     if (pr.weaponId === 'tswave' || pr.weaponId === 'tswide' || pr.weaponId === 'wavestorm') { drawTsWave(pr, ang, now, pr.weaponId === 'tswide'); continue; }
     if (pr.weaponId === 'tsorb') { drawTsOrb(pr, now); continue; }
@@ -8263,6 +8370,14 @@ function drawHUD(state) {
     ctx.fillStyle = '#9fffd0'; ctx.fillText(t, HUD_W/2, 2);
     ctx.font = '8px "Courier New",monospace';
     ctx.fillStyle = '#999'; ctx.fillText(sub, HUD_W/2, 15);
+    ctx.font = '10px "Courier New",monospace';
+  } else if (state.gameMode === 'minigame' && state.mg) {
+    const g = state.mg, s = Math.ceil(g.left / 1000), t = g.name;
+    const sub = (g.survive ? 'SURVIVE' : g.kills + ' / ' + g.need) + ' · ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+    ctx.fillStyle = '#000'; ctx.fillText(t, HUD_W/2 + 1, 3);
+    ctx.fillStyle = '#7affc8'; ctx.fillText(t, HUD_W/2, 2);
+    ctx.font = 'bold 9px "Courier New",monospace';
+    ctx.fillStyle = s <= 10 && Math.floor(performance.now() / 300) % 2 ? '#ff5a5a' : '#ffd84a'; ctx.fillText(sub, HUD_W/2, 14);
     ctx.font = '10px "Courier New",monospace';
   } else if (state.gameMode === 'iceknight') {
     const ik = (state.monsters || []).find(m => m.ik);
@@ -9775,7 +9890,7 @@ function drawSecretBanner(g, W, H, now) {
 
 
 // ─── THE ICE KNIGHT ──────────────────────────────────────────────────────────
-// A boss on the BOSSES tab with a price: ◆ 1,000,000 a fight, paid for a ticket.
+// A boss on the BOSSES tab with a price: ◆ 2,000,000 a fight, paid for a ticket.
 // The numbers in his warnings (the swipe's reach, arc and 2 seconds) mirror IK in server.js.
 const ICE_C = ['#16467a', '#3a8ad0', '#8ad8ff', '#e8fcff'];
 function iceGrad(g, x0, y0, x1, y1) {
@@ -9792,9 +9907,9 @@ async function askIceKnight() {
   if (!pendingPass) { say('SET A PASSWORD FIRST: WHAT HE DROPS IS SAVED AGAINST IT'); return; }
   if (performance.now() - ikAsk > 4000) {
     ikAsk = performance.now();
-    say('THE ICE KNIGHT COSTS ◆ 1,000,000 A FIGHT, WIN OR LOSE. TAP AGAIN TO PAY');
+    say('THE ICE KNIGHT COSTS ◆ 2,000,000 A FIGHT, WIN OR LOSE. TAP AGAIN TO PAY');
     if (sub) sub.textContent = 'TAP AGAIN: PAY ◆ 1,000,000';
-    setTimeout(() => { if (sub && performance.now() - ikAsk >= 3900) sub.textContent = '◆ 1,000,000 to fight'; }, 4000);
+    setTimeout(() => { if (sub && performance.now() - ikAsk >= 3900) sub.textContent = '◆ 2,000,000 to fight'; }, 4000);
     return;
   }
   ikAsk = 0;
@@ -10142,4 +10257,444 @@ function paintIceDecor(g) {
   g.strokeStyle = 'rgba(200,240,255,0.2)'; g.lineWidth = 2;
   g.beginPath(); g.arc(cx0, cy0, R * 1.12, 0, Math.PI * 2); g.stroke();
   g.restore();
+}
+
+
+// ── Shots of the new common and uncommon weapons ─────────────────────────────
+function shotArrow(pr, ang, shaft, head, fl) {
+  ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+  ctx.fillStyle = shaft; ctx.fillRect(-12, -0.7, 14, 1.4);
+  ctx.fillStyle = head; ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(1, -2.4); ctx.lineTo(1, 2.4); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = fl; ctx.fillRect(-12, -2.2, 3, 1.4); ctx.fillRect(-12, 0.8, 3, 1.4);
+  ctx.restore();
+}
+const NEW_SHOTS = {
+  musket(pr, ang) {                                     // a lead ball with a smoke trail
+    ctx.save();
+    ctx.globalAlpha = 0.3; ctx.fillStyle = '#c8c8c8';
+    for (let i = 1; i <= 3; i++) { ctx.beginPath(); ctx.arc(pr.x - pr.dx * i * 0.8, pr.y - pr.dy * i * 0.8, 1.5 + i * 0.6, 0, Math.PI * 2); ctx.fill(); }
+    ctx.globalAlpha = 1; ctx.fillStyle = '#5a5a64'; ctx.beginPath(); ctx.arc(pr.x, pr.y, 2.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#d8d8e0'; ctx.fillRect(Math.round(pr.x) - 1, Math.round(pr.y) - 1, 1, 1);
+    ctx.restore();
+  },
+  trident(pr, ang) {                                    // the thrown trident
+    ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+    ctx.fillStyle = '#6b4326'; ctx.fillRect(-18, -0.8, 18, 1.6);
+    ctx.fillStyle = '#5ad8c8'; ctx.fillRect(-1, -4, 1.6, 8);
+    for (const y of [-3.6, 0, 3.6]) { ctx.beginPath(); ctx.moveTo(y ? 5 : 7, y); ctx.lineTo(0, y - 1); ctx.lineTo(0, y + 1); ctx.closePath(); ctx.fill(); }
+    ctx.restore();
+  },
+  warpike(pr, ang) {
+    ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+    ctx.fillStyle = '#6b4326'; ctx.fillRect(-22, -0.8, 22, 1.6);
+    ctx.fillStyle = '#c8d0dc'; ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(0, -2); ctx.lineTo(0, 2); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  },
+  longbow(pr, ang) { shotArrow(pr, ang, '#8a6438', '#e8eef8', '#c83a3a'); },
+  cinderbow(pr, ang, now) {
+    ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#ff6a1a';
+    ctx.beginPath(); ctx.arc(pr.x - pr.dx * 1.4, pr.y - pr.dy * 1.4, 4 + Math.sin(now / 60), 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    shotArrow(pr, ang, '#3a2418', '#ffd84a', '#ff6a1a');
+  },
+  frostfang(pr, ang) {
+    ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(ang);
+    ctx.globalAlpha = 0.35; ctx.fillStyle = '#bfefff'; ctx.fillRect(-12, -1.5, 9, 3);
+    ctx.globalAlpha = 1; ctx.fillStyle = '#a8ecff';
+    ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-3, -2.6); ctx.lineTo(-1, 0); ctx.lineTo(-3, 2.6); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(-1, -0.6, 6, 1.2);
+    ctx.restore();
+  },
+  handcannon(pr) {                                      // an iron shell with a lit fuse
+    ctx.save();
+    ctx.globalAlpha = 0.3; ctx.fillStyle = '#ff8a3a'; ctx.beginPath(); ctx.arc(pr.x - pr.dx, pr.y - pr.dy, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1; ctx.fillStyle = '#3a3a46'; ctx.beginPath(); ctx.arc(pr.x, pr.y, pr.special ? 6 : 4.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#8a8aa0'; ctx.fillRect(Math.round(pr.x) - 2, Math.round(pr.y) - 2, 2, 2);
+    ctx.fillStyle = '#ffd84a'; ctx.fillRect(Math.round(pr.x) + 2, Math.round(pr.y) - 4, 1.5, 1.5);
+    ctx.restore();
+  },
+  thunderrod(pr, ang, now) {                            // a crackling ball of lightning
+    ctx.save();
+    ctx.globalAlpha = 0.35; ctx.fillStyle = '#ffe45a'; ctx.beginPath(); ctx.arc(pr.x, pr.y, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1; ctx.fillStyle = '#fff6c0'; ctx.beginPath(); ctx.arc(pr.x, pr.y, 2.6, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#ffe45a'; ctx.lineWidth = 0.8;
+    for (let i = 0; i < 3; i++) { const a = now / 90 + i * 2.1; ctx.beginPath(); ctx.moveTo(pr.x, pr.y); ctx.lineTo(pr.x + Math.cos(a) * 6, pr.y + Math.sin(a) * 6); ctx.lineTo(pr.x + Math.cos(a + 0.5) * 8, pr.y + Math.sin(a + 0.5) * 8); ctx.stroke(); }
+    ctx.restore();
+  },
+  sawdisc(pr, ang, now) {                               // a whirling saw
+    ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(now / 35);
+    ctx.fillStyle = '#6a7482'; ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#d8dde6';
+    for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(Math.cos(a) * 4, Math.sin(a) * 4); ctx.lineTo(Math.cos(a + 0.25) * 7, Math.sin(a + 0.25) * 7); ctx.lineTo(Math.cos(a + 0.5) * 4, Math.sin(a + 0.5) * 4); ctx.fill(); }
+    ctx.fillStyle = '#464c56'; ctx.beginPath(); ctx.arc(0, 0, 1.6, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  },
+};
+
+
+// ── Popups ── One at a time, on top of everything: a title, a message and buttons.
+// Each button may run a function; any button closes it.
+var popQueue = [];
+function popup(o) {
+  popQueue.push(o);
+  if (popQueue.length === 1) popShow();
+}
+function popShow() {
+  const o = popQueue[0];
+  if (!o) return;
+  let el = document.getElementById('wpPop');
+  if (!el) { el = document.createElement('div'); el.id = 'wpPop'; el.className = 'wp-pop'; document.body.appendChild(el); }
+  el.innerHTML = '<div class="wp-pop-box' + (o.cls ? ' ' + o.cls : '') + '"><div class="wp-pop-title">' + o.title + '</div>'
+    + (o.art ? '<canvas class="shop-ic wp-pop-art" data-weapon="' + o.art + '" width="112" height="64"></canvas>' : '')
+    + '<div class="wp-pop-body">' + (o.html || '') + '</div><div class="wp-pop-btns">'
+    + (o.buttons || [{ label: 'OK' }]).map((b, i) => '<button class="mode-btn ' + (b.cls || '') + '" data-i="' + i + '">' + b.label + '</button>').join('') + '</div></div>';
+  el.classList.remove('hidden');
+  if (o.art && typeof drawShopIcons === 'function') drawShopIcons(el);
+  el.querySelectorAll('button[data-i]').forEach(btn => btn.onclick = () => {
+    const b = (o.buttons || [{}])[+btn.dataset.i];
+    popClose(o);
+    try { b && b.fn && b.fn(); } catch {}
+  });
+  if (o.timeout) o.timer = setTimeout(() => { if (popQueue[0] === o) { popClose(o); o.onTimeout && o.onTimeout(); } }, o.timeout);
+}
+function popClose(o) {
+  clearTimeout(o.timer);
+  const i = popQueue.indexOf(o);
+  if (i < 0) return;
+  popQueue.splice(i, 1);
+  if (i === 0) { document.getElementById('wpPop')?.classList.add('hidden'); popShow(); }
+}
+
+// ── The tutorial's reward ── Play it to the end and the next password you use gets a
+// random common weapon and ◆ 2,000 (once per password: the server keeps count).
+var TUT_REWARD_KEY = 'weponare_tut_reward';   // var: the menu may ask before this line has run
+var tutRewardTold = false, tutClaiming = false;
+async function claimTutorialReward(pw) {
+  if (tutClaiming || !pw) return;
+  tutClaiming = true;
+  try {
+    const res = await fetch('/api/tutorial/reward', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw, backup: loadBackup(pw) }) });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { if (d.done) lsSet(TUT_REWARD_KEY, '0'); return; }
+    lsSet(TUT_REWARD_KEY, '0');
+    if (d.save) storeBackup(pw, d.save);
+    if (typeof d.total === 'number') saveLocalCoins(pw, d.total);
+    popup({ title: 'TUTORIAL COMPLETE!', art: d.weapon ? d.weapon.id : null,
+      html: (d.weapon ? 'You got a new weapon: <b style="color:' + (WEAPON_COLOR[d.weapon.id] || '#fff') + '">' + escapeHtml(d.weapon.name) + '</b><br>' : '')
+        + 'and <b style="color:var(--c-gold)">◆ ' + (d.coins || 0).toLocaleString() + ' COINS</b>. Good luck out there!',
+      buttons: [{ label: '&#10003; AWESOME', cls: 'btn-sandbox' }] });
+    refreshSavedBanner();
+  } catch {} finally { tutClaiming = false; }
+}
+
+
+// ── VENTS ── Down a vent the arena goes dark but for the vents you can reach:
+// tap (or click) one to travel there. Anything else you press climbs you out.
+function ventsOf(state, me) { return (state.traps || []).filter(t => t.type === 'vent' && t.net === me.vnet); }
+function tryVentGo(clientX, clientY) {
+  if (!currState || currState.gameState !== 'GAMEPLAY' || !myNum || !ws || ws.readyState !== 1) return false;
+  const me = currState.players?.['p' + myNum];
+  if (!me || me.dead || !me.vent) return false;
+  const r = canvas.getBoundingClientRect();
+  if (!r.width || !r.height) return false;
+  const x = (clientX - r.left) * VIEW_W / r.width, y = (clientY - r.top) * VIEW_H / r.height + CAM_Y;
+  let best = null, bd = 46;
+  for (const v of ventsOf(currState, me)) {
+    if (v.id === me.vent) continue;
+    const d = Math.hypot(v.x + v.w / 2 - x, v.y + v.h / 2 - y);
+    if (d < bd) { bd = d; best = v; }
+  }
+  if (!best) return true;                                   // a tap that misses does nothing (it doesn't climb you out)
+  ws.send(JSON.stringify({ type: 'vent_go', id: best.id }));
+  if (window.GameAudio) GameAudio.sfx.swing();
+  return true;
+}
+function drawVentView(state, me) {
+  const now = performance.now(), vents = ventsOf(state, me);
+  ctx.save();
+  // Darkness everywhere, with a hole over each vent of this network.
+  ctx.beginPath();
+  ctx.rect(0, CAM_Y - 40, VIEW_W, VIEW_H + 80);
+  for (const v of vents) { const c = { x: v.x + v.w / 2, y: v.y + v.h / 2 }; ctx.moveTo(c.x + 30, c.y); ctx.arc(c.x, c.y, 30, 0, Math.PI * 2, true); }
+  ctx.fillStyle = 'rgba(4,6,12,0.72)'; ctx.fill('evenodd');
+  // Ducts joining them.
+  ctx.strokeStyle = 'rgba(154,164,176,0.35)'; ctx.lineWidth = 6; ctx.setLineDash([8, 6]);
+  for (let i = 0; i < vents.length; i++) for (let j = i + 1; j < vents.length; j++) {
+    ctx.beginPath(); ctx.moveTo(vents[i].x + vents[i].w / 2, vents[i].y + vents[i].h / 2); ctx.lineTo(vents[j].x + vents[j].w / 2, vents[j].y + vents[j].h / 2); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  for (const v of vents) {
+    const c = { x: v.x + v.w / 2, y: v.y + v.h / 2 }, mine = v.id === me.vent, pulse = 0.5 + 0.5 * Math.sin(now / 160);
+    ctx.globalAlpha = 1; ctx.strokeStyle = mine ? '#ffffff' : '#7affc8'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(c.x, c.y, 20 + (mine ? 0 : pulse * 4), 0, Math.PI * 2); ctx.stroke();
+    if (!mine) {
+      ctx.font = 'bold 8px "Courier New",monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(14,14,32,0.9)'; ctx.fillRect(c.x - 15, c.y - 38, 30, 11);
+      ctx.fillStyle = '#7affc8'; ctx.fillText(touchUi() ? 'TAP' : 'CLICK', c.x, c.y - 32);
+    }
+  }
+  ctx.restore();
+}
+function drawVentHud(me) {
+  const secs = Math.floor((me.vin || 0) / 1000), dmg = 6 + 4 * secs;
+  ctx.save();
+  ctx.font = 'bold 8px "Courier New",monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const msg = 'IN A VENT · ' + (touchUi() ? 'TAP' : 'CLICK') + ' ANOTHER VENT TO GO THERE · ANYTHING ELSE CLIMBS OUT';
+  const w = ctx.measureText(msg).width + 14, y = HUD_H - 40;
+  ctx.fillStyle = 'rgba(14,14,32,0.9)'; ctx.fillRect(HUD_W / 2 - w / 2, y - 8, w, 16);
+  ctx.strokeStyle = '#9aa4b0'; ctx.lineWidth = 1; ctx.strokeRect(HUD_W / 2 - w / 2 + 0.5, y - 7.5, w - 1, 15);
+  ctx.fillStyle = '#e8eef8'; ctx.fillText(msg, HUD_W / 2, y);
+  ctx.fillStyle = secs >= 2 ? '#ff5a5a' : '#ffb07a';
+  ctx.fillText('IT HURTS: -' + dmg + ' HP NEXT SECOND', HUD_W / 2, y + 14);
+  ctx.restore();
+}
+// FLASHBANG: all but a small circle round you is white glare, fading as it wears off.
+function drawBlind(me) {
+  const k = Math.min(1, me.effects.blind / 1400), x = (pred ? pred.x : me.x) + me.w / 2, y = (pred ? pred.y : me.y) + me.h / 2;
+  ctx.save();
+  const g = ctx.createRadialGradient(x, y, 26, x, y, 120);
+  g.addColorStop(0, 'rgba(255,250,230,0)'); g.addColorStop(1, 'rgba(255,250,230,' + (0.94 * k) + ')');
+  ctx.fillStyle = g; ctx.fillRect(0, CAM_Y - 40, VIEW_W, VIEW_H + 80);
+  ctx.restore();
+}
+
+
+// ── ELITES ── A thin gold crown over the head and a slow halo, so they read as
+// something more than their plain cousins.
+const ELITES = new Set(['elitesniper', 'elitesamurai', 'elitelight', 'eliteknight']);
+function drawEliteMark(m, x, y) {
+  const now = performance.now(), cx0 = x + m.w / 2, top = y - 6 + Math.sin(now / 300) * 1;
+  ctx.save();
+  ctx.globalAlpha = 0.22 + 0.08 * Math.sin(now / 260);
+  ctx.strokeStyle = '#ffd84a'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.ellipse(cx0, y + m.h - 1, m.w * 0.8, m.w * 0.28, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.globalAlpha = 1; ctx.fillStyle = '#ffd84a';
+  ctx.beginPath(); ctx.moveTo(cx0 - 5, top); ctx.lineTo(cx0 - 5, top - 4); ctx.lineTo(cx0 - 2.5, top - 2); ctx.lineTo(cx0, top - 5); ctx.lineTo(cx0 + 2.5, top - 2); ctx.lineTo(cx0 + 5, top - 4); ctx.lineTo(cx0 + 5, top); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ff3a4a'; ctx.fillRect(Math.round(cx0) - 1, Math.round(top) - 2, 2, 1.5);
+  if (m.judge) {                                            // ELITE LIGHT calling JUDGMENT: a beam up from him
+    ctx.globalAlpha = 0.4; ctx.fillStyle = '#fff6a0'; ctx.fillRect(cx0 - 3, CAM_Y, 6, y - CAM_Y);
+  }
+  ctx.restore();
+}
+
+
+// ─── FRIENDS, TRADE REQUESTS AND CHALLENGES ──────────────────────────────────
+// While a password is set the page checks in every few seconds: that keeps you
+// "online", and brings anything waiting for you (a request to answer, a trade
+// that opened, a challenge to join).
+var social = { friends: [], asks: [], shown: new Set(), told: new Set(), acted: new Set(), later: null, timer: null, busy: false, sentBackup: false, mode: 'friend' };
+const SOCIAL_MS = 3500;
+const ASK_WORD = { friend: 'BE FRIENDS', trade: 'TRADE', challenge: 'FIGHT' };
+async function socialPost(path, body) {
+  const pw = (document.getElementById('passInput')?.value || '').trim();
+  const name = ((document.getElementById('nameInput')?.value || '').trim().toUpperCase()) || 'PLAYER';
+  const res = await fetch('/api/social/' + path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pw, name, tz: new Date().getTimezoneOffset(), ...body }) });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d.error || 'Something went wrong.');
+  return d;
+}
+function inAMatch() { return !!(ws && ws.readyState === 1 && currState && currState.gameState && currState.gameState !== 'LOBBY'); }
+async function socialPoll() {
+  const pw = (document.getElementById('passInput')?.value || '').trim();
+  if (!pw || social.busy || document.hidden) return;
+  social.busy = true;
+  try {
+    const d = await socialPost('poll', social.sentBackup ? {} : { backup: loadBackup(pw) });
+    social.sentBackup = true;
+    social.friends = d.friends || []; social.asks = d.asks || [];
+    const on = social.friends.filter(f => f.online).length, badge = document.getElementById('frOnline');
+    if (badge) { badge.textContent = on; badge.classList.toggle('hidden', !on); }
+    for (const q of social.asks) socialHandle(q);
+    if (document.getElementById('friendsScreen')?.classList.contains('active')) renderFriends();
+  } catch {} finally { social.busy = false; }
+}
+setInterval(socialPoll, SOCIAL_MS);
+setTimeout(socialPoll, 1500);
+// One request or answer, seen for the first time (or something to act on).
+function socialHandle(q) {
+  if (!q.mine && q.state === 'pending' && !social.shown.has(q.id)) {
+    social.shown.add(q.id);
+    const what = q.kind === 'friend' ? 'wants to be your <b>FRIEND</b>' : q.kind === 'trade' ? 'wants to <b>TRADE</b> with you' : 'challenges you to a <b>FIGHT</b>';
+    const o = { title: q.kind === 'friend' ? 'FRIEND REQUEST' : q.kind === 'trade' ? 'TRADE REQUEST' : 'CHALLENGE!', cls: 'req',
+      html: '<b style="color:#7affc8">' + escapeHtml(q.name) + '</b> ' + what + '.',
+      timeout: Math.max(3000, q.left - 1500), onTimeout: () => {},
+      buttons: [{ label: 'YES', cls: 'btn-sandbox', fn: () => socialAnswer(q, 'yes') }, { label: 'NO', cls: 'exit-btn', fn: () => socialAnswer(q, 'no') },
+                { label: "DON'T NOTIFY TODAY", fn: () => socialAnswer(q, 'mute') }] };
+    popup(o);
+    if (window.GameAudio) try { GameAudio.sfx.pickup(); } catch {}
+  }
+  if (q.mine && !social.told.has(q.id + q.state)) {
+    social.told.add(q.id + q.state);
+    if (q.state === 'no') toast(q.name + ' SAID NO' + (q.kind === 'friend' ? ' TO BEING FRIENDS' : q.kind === 'trade' ? ' TO A TRADE' : ' TO A FIGHT'));
+    if (q.state === 'muted') toast(q.name + " DOESN'T WANT TO BE NOTIFIED TODAY");
+    if (q.state === 'gone') toast(q.name + ' DID NOT ANSWER');
+    if (q.state === 'yes' && q.kind === 'friend') toast(q.name + ' IS YOUR FRIEND NOW!');
+  }
+  if (q.go && !social.acted.has(q.id + q.go.kind)) socialGo(q);
+}
+async function socialAnswer(q, answer) {
+  try {
+    const r = await socialPost('answer', { id: q.id, answer });
+    if (answer === 'yes' && q.kind === 'friend') toast('YOU AND ' + q.name + ' ARE FRIENDS NOW!');
+    if (answer === 'mute') toast("YOU WON'T HEAR FROM " + q.name + ' AGAIN TODAY');
+    if (r.go) socialGo({ ...q, go: r.go, mine: false });
+  } catch (e) { toast(e.message.toUpperCase()); }
+}
+// What a YES leads to: a trade opens, a map is chosen, a fight begins.
+async function socialGo(q) {
+  const g = q.go, key = q.id + g.kind;
+  if (social.acted.has(key)) return;
+  if (g.kind === 'waitmap') { social.acted.add(key); toast('WAITING FOR ' + q.name + ' TO PICK THE MAP...'); return; }
+  if (g.kind === 'pickmap') {
+    social.acted.add(key);
+    const pick = size => socialPost('challenge/map', { id: q.id, size }).then(r => socialGo({ ...q, go: r.go })).catch(e => toast(e.message.toUpperCase()));
+    popup({ title: q.name + ' ACCEPTED!', cls: 'req', html: 'Pick the map for your fight:', timeout: 40000,
+      buttons: ['small', 'medium', 'big', 'giant', 'duel'].map(s => ({ label: s.toUpperCase(), cls: 'btn-pvp', fn: () => pick(s) })) });
+    return;
+  }
+  if (g.kind === 'trade') {
+    if (inAMatch()) {
+      social.acted.add(key);
+      popup({ title: 'TRADE READY', cls: 'req', html: 'Your trade with <b>' + escapeHtml(q.name) + '</b> is open. Leave this game and trade now?',
+        buttons: [{ label: 'TRADE NOW', cls: 'btn-trade', fn: () => { leaveGame(); openTradeCode(g.code, q.id); } }, { label: 'LATER', fn: () => { social.later = { code: g.code, id: q.id }; toast('IT OPENS WHEN YOU ARE BACK ON THE MENU'); } }] });
+      return;
+    }
+    social.acted.add(key);
+    openTradeCode(g.code, q.id);
+    return;
+  }
+  if (g.kind === 'challenge') {
+    social.acted.add(key);
+    socialPost('seen', { id: q.id }).catch(() => {});
+    if (inAMatch()) leaveGame();
+    popClear();
+    readCredentials();
+    pendingRoom = { challenge: q.id };
+    toast('FIGHT! VS ' + q.name);
+    setTimeout(() => joinGame('challenge'), 300);
+  }
+}
+async function openTradeCode(code, id) {
+  readCredentials();
+  if (id) socialPost('seen', { id }).catch(() => {});
+  tradeView = null; tradeCode = code;
+  showScreen('tradeScreen'); setTradeMsg('');
+  try { takeTradeView(await tradePost('state', {})); startTradePoll(); } catch (e) { setTradeMsg(e.message, true); renderTrade(); }
+}
+// Back on the menu with a trade left for later: open it.
+setInterval(() => {
+  if (social.later && document.getElementById('startScreen')?.classList.contains('active')) { const l = social.later; social.later = null; openTradeCode(l.code, l.id); }
+}, 1000);
+function popClear() { while (popQueue.length) popClose(popQueue[0]); }
+async function socialAsk(kind, name) {
+  name = String(name || '').trim().toUpperCase();
+  if (!name) throw new Error("Type your friend's name.");
+  const r = await socialPost('ask', { kind, to: name });
+  return r;
+}
+async function tradeAskName() {
+  const el = document.getElementById('tradeNameIn');
+  try { await socialAsk('trade', el?.value); setTradeMsg('Asked ' + (el.value || '').toUpperCase() + '. The trade opens here as soon as they say YES.'); if (el) el.value = ''; }
+  catch (e) { setTradeMsg(e.message, true); }
+}
+
+// ── The FRIENDS screen (also the CHALLENGE screen: same list, another button) ──
+function openFriends(mode) {
+  readCredentials();
+  social.mode = mode === 'challenge' ? 'challenge' : 'friend';
+  const ch = social.mode === 'challenge';
+  document.getElementById('frTitle').textContent = ch ? 'CHALLENGE' : 'FRIENDS';
+  document.getElementById('frEm').textContent = ch ? '⚔️' : '👥';
+  document.getElementById('frSub').textContent = ch ? 'TYPE A NAME TO CHALLENGE THEM · IF THEY SAY YES, YOU PICK THE MAP' : 'TYPE A NAME TO ADD A FRIEND · SEE WHO IS ONLINE';
+  document.getElementById('frGo').textContent = ch ? 'CHALLENGE' : 'ADD';
+  setFrMsg(pendingPass ? '' : 'Enter a password on the title screen first. Friends are kept against it.', !pendingPass);
+  showScreen('friendsScreen');
+  renderFriends();
+  socialPoll();
+}
+function closeFriends() { showScreen('startScreen'); refreshSavedBanner(); }
+function setFrMsg(t, bad) { const el = document.getElementById('frMsg'); if (el) { el.textContent = t || ''; el.style.color = bad ? '#ff7a7a' : '#8fd8a0'; } }
+async function friendsAsk(kind, name) {
+  const el = document.getElementById('frName');
+  kind = kind || social.mode; name = name || el?.value;
+  try {
+    await socialAsk(kind, name);
+    setFrMsg('Sent to ' + String(name).toUpperCase() + (kind === 'challenge' ? '. If they say YES you pick the map.' : kind === 'trade' ? '. The trade opens when they say YES.' : '. They get a message now.'));
+    if (el && !arguments[1]) el.value = '';
+  } catch (e) { setFrMsg(e.message, true); }
+}
+async function unfriend(id, name) {
+  if (!confirm('Remove ' + name + ' from your friends?')) return;
+  try { await socialPost('unfriend', { id }); social.friends = social.friends.filter(f => f.id !== id); renderFriends(); setFrMsg(name + ' is no longer your friend.'); }
+  catch (e) { setFrMsg(e.message, true); }
+}
+function renderFriends() {
+  const list = document.getElementById('frList');
+  if (!list) return;
+  const fs = social.friends || [], on = fs.filter(f => f.online).length;
+  const out = social.asks.filter(q => q.mine && (q.state === 'pending' || q.state === 'pick')).map(q =>
+    '<div class="fr-row wait"><span class="fr-dot ask"></span><b>' + escapeHtml(q.name) + '</b><span class="fr-st">ASKED TO ' + ASK_WORD[q.kind] + ' · ' + Math.ceil(q.left / 1000) + 's</span></div>').join('');
+  list.innerHTML = (out ? '<div class="fr-head">WAITING FOR AN ANSWER</div>' + out : '')
+    + '<div class="fr-head">YOUR FRIENDS (' + fs.length + ') · ' + on + ' ONLINE</div>'
+    + (fs.length ? fs.map(f => {
+      const n = escapeHtml(f.name), js = JSON.stringify(f.name).replace(/"/g, '&quot;');
+      return '<div class="fr-row' + (f.online ? ' on' : '') + '"><span class="fr-dot"></span><b>' + n + '</b><span class="fr-st">' + (f.online ? 'ONLINE' : 'OFFLINE') + '</span>'
+        + (f.online ? '<button class="fr-btn ch" onclick="friendsAsk(\'challenge\',' + js + ')">FIGHT</button><button class="fr-btn tr" onclick="friendsAsk(\'trade\',' + js + ')">TRADE</button>' : '')
+        + '<button class="fr-btn x" title="Remove" onclick="unfriend(\'' + f.id + '\',' + js + ')">&#10005;</button></div>';
+    }).join('') : '<div class="fr-none">No friends yet. Type a name above: they have to have the game open to get your message.</div>');
+}
+
+// ── Toasts: a line that drops in from the top and goes by itself ──
+function toast(text) {
+  let box = document.getElementById('wpToasts');
+  if (!box) { box = document.createElement('div'); box.id = 'wpToasts'; box.className = 'wp-toasts'; document.body.appendChild(box); }
+  const el = document.createElement('div'); el.className = 'wp-toast'; el.textContent = text;
+  box.appendChild(el);
+  setTimeout(() => el.classList.add('out'), 3600);
+  setTimeout(() => el.remove(), 4200);
+}
+
+
+// ─── MINIGAMES (in the EVENTS menu) ──────────────────────────────────────────
+var mgs = { data: null, at: 0, busy: false };
+async function mgFetch() {
+  mgs.busy = true;
+  try {
+    const r = await fetch('/api/minigame', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: (document.getElementById('passInput')?.value || '').trim() }) });
+    mgs.data = await r.json(); mgs.at = performance.now();
+    if (evs.data) evs.ends = performance.now();
+  } catch {} finally { mgs.busy = false; }
+}
+function mgCardHtml() {
+  const d = mgs.data;
+  if (!d || !d.now) return '';
+  const m = d.now, since = performance.now() - mgs.at;
+  const weapons = m.weapons.map(w => '<div class="mg-it"><canvas class="shop-ic" data-weapon="' + w.id + '" width="48" height="28"></canvas><span>' + escapeHtml(w.name) + '</span></div>').join('');
+  const armor = m.armor.map(a => '<div class="mg-it"><canvas data-armor="' + a.id + '" width="28" height="28"></canvas><span style="color:' + Armor.RARITIES[a.rarity].color + '">' + escapeHtml(a.name) + '</span></div>').join('');
+  const traps = m.traps.map(t => '<div class="mg-it"><canvas data-trap="' + t.id + '" width="28" height="28"></canvas><span style="color:' + t.color + '">' + escapeHtml(t.name) + '</span></div>').join('');
+  const prize = d.won ? '<b>YOU WON THIS ONE</b><span>The next minigame brings a new prize</span>'
+    : d.owned >= d.uncommon ? '<b>◆ 50,000 COINS</b><span>you have every uncommon weapon</span>'
+    : '<b>A RANDOM UNCOMMON WEAPON</b><span>one you don\'t have yet · you have ' + d.owned + ' of ' + d.uncommon + '</span>';
+  return '<div class="ev-card live mg-card"><div class="mg-banner"><div class="ev-tags"><span class="ev-tag on">MINIGAME</span><span class="ev-time" data-mg-end="' + Math.round(d.endsIn - since) + '"></span></div>'
+    + '<div class="ev-name">' + escapeHtml(m.name) + '</div><div class="mg-goal">' + escapeHtml(m.goal) + '</div></div>'
+    + '<div class="ev-sub">YOU FIGHT WITH</div><div class="mg-row">' + weapons + '</div>'
+    + '<div class="ev-sub">YOU WEAR</div><div class="mg-row">' + armor + '</div>'
+    + '<div class="ev-sub">TRAPS</div><div class="mg-row">' + traps + '</div>'
+    + '<div class="ev-desc" style="margin-top:6px">Your own weapons, armour and abilities stay at home. One life. Free to play, as often as you like.</div>'
+    + '<div class="ev-sub">PRIZE</div><div class="ev-prize"><canvas class="shop-ic" data-weapon="longbow" width="56" height="32"></canvas><div>' + prize + '</div></div>'
+    + '<button class="ev-enter go" onclick="playMinigame()">&#9654; PLAY ' + escapeHtml(m.name) + '</button>'
+    + (d.next ? '<div class="mg-next">NEXT UP: <b>' + escapeHtml(d.next.name) + '</b> &middot; ' + escapeHtml(d.next.goal) + '</div>' : '')
+    + '</div>';
+}
+function drawTrapIcons(host) {
+  for (const cv of host.querySelectorAll('canvas[data-trap]')) {
+    const g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height); g.imageSmoothingEnabled = false;
+    const sp = trapSprite(cv.dataset.trap, 24, false);
+    if (sp) g.drawImage(sp, (cv.width - sp.width) / 2, (cv.height - sp.height) / 2);
+  }
+}
+function playMinigame() {
+  clearInterval(evs.timer); cancelAnimationFrame(evs.raf);
+  joinGame('minigame');
 }

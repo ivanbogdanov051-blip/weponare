@@ -105,7 +105,33 @@ const TRAP_TYPES = {
   arrow:  { mode: 'delayed', armTime: 500, size: 32, radius: 40, damage: 18, effect: 'arrows', count: 10, color: '#c8a070', name: 'ARROW VOLLEY' },
   // Hums and marks a wide circle; a long beat later lightning hits everything in it.
   rod:    { mode: 'delayed', armTime: 1400, size: 30, radius: 85, damage: 42, effect: 'rod', color: '#ffe45a', name: 'LIGHTNING ROD' },
+  // ── Ten more ──
+  // VENT (common: it turns up the most): always VENT_NET of them at once, joined under
+  // the floor. Step onto one and you drop inside, out of sight and out of reach. Tap
+  // another vent to travel to it; do anything else to climb out. Every second inside
+  // hurts, and more each second, so nobody can hide in there for long.
+  vent:   { mode: 'vent',                 size: 30, radius: 16, color: '#9aa4b0', name: 'VENT', weight: 3 },
+  // Thick tar: you wade through it at a crawl.
+  tar:    { mode: 'instant',              size: 34, radius: 62, effect: 'tar', linger: 4500, tick: 300, color: '#5a4a6a', name: 'TAR PIT' },
+  // Snaps shut on your leg: a bite and you can't move for 2s.
+  beartrap:{ mode: 'instant',             size: 26, radius: 26, damage: 24, effect: 'root', dur: 2000, color: '#b8b8c4', name: 'BEAR TRAP' },
+  // A jolt that stuns everyone standing on it.
+  shock:  { mode: 'instant',              size: 32, radius: 54, damage: 14, effect: 'stun', dur: 900, color: '#7ad8ff', name: 'SHOCK PLATE' },
+  // Ticks, then a blinding flash: players can hardly see, monsters reel.
+  flash:  { mode: 'delayed', armTime: 700, size: 28, radius: 130, effect: 'blind', dur: 2800, color: '#fff6c0', name: 'FLASHBANG' },
+  // Fires shells into the air; a moment later they come down all round it.
+  mortar: { mode: 'delayed', armTime: 500, size: 32, radius: 150, damage: 30, effect: 'mortar', count: 6, color: '#ff7a3a', name: 'MORTAR' },
+  // A great fan: one huge gust blows everything near it across the arena.
+  gust:   { mode: 'instant',              size: 32, radius: 150, damage: 4, effect: 'gust', force: 190, color: '#d8f4ff', name: 'WIND FAN' },
+  // A piston overhead: a long warning, then it slams down for a huge hit and a stun.
+  crusher:{ mode: 'delayed', armTime: 900, size: 36, radius: 46, damage: 70, effect: 'crush', dur: 800, color: '#a8a8b8', name: 'CRUSHER' },
+  // A slick of oil: you slide about on it like ice.
+  oil:    { mode: 'instant',              size: 36, radius: 70, effect: 'slick', linger: 5500, tick: 200, color: '#8a7a3a', name: 'OIL SLICK' },
+  // Rumbles, then blasts scalding steam: it hurts, throws you and burns.
+  geyser: { mode: 'delayed', armTime: 700, size: 30, radius: 52, damage: 22, effect: 'geyser', force: 120, dur: 1500, color: '#e8f8ff', name: 'STEAM GEYSER' },
 };
+const VENT_NET = 3, VENT_LIFE = 30000, VENT_GAP = 150, VENT_DMG = 6, VENT_DMG_RISE = 4, VENT_CD = 1200, VENT_HOP_MS = 220;
+const MORTAR_FALL = 900, MORTAR_R = 36, TAR_SLOW = 600, OIL_SLIP = 600, FLASH_STAGGER = 1100;
 
 // Dev hook: limit which traps spawn (comma list). Unset in production.
 const TRAP_POOL = (() => {
@@ -198,6 +224,27 @@ const WEAPONS = [
   { id: 'emberstaff',  name: 'EMBER STAFF', damage: 22, range: 250, atkSpd: 650,  type: 'ranged', unlockXp: 17500, burn: 2000, aoeRadius: 30, special: { kind: 'aoeshot', dmg: 95, range: 280, cd: 7500, aoe: 90 } },
   { id: 'halberd',     name: 'HALBERD',     damage: 48, range: 100, atkSpd: 900,  type: 'melee',  unlockXp: 23000, knock: 10, special: { kind: 'dash', dmg: 90, range: 160, cd: 7000 } },
   { id: 'frostbow',    name: 'FROST BOW',   damage: 24, range: 320, atkSpd: 560,  type: 'ranged', unlockXp: 25500, pierce: true, chill: 1200, projSpeed: 6.5, special: { kind: 'spread', dmg: 30, range: 320, cd: 6500, count: 5 } },
+  // ── Three more common weapons ──
+  // TRIDENT: a long three-pronged thrust that shoves foes back; special: throw it straight through a line.
+  // NUNCHAKU: very quick spinning strikes all round you; special: a whirl that hits everything close.
+  // MUSKET: one slow, heavy, very fast ball; special: a piercing shot through everything in line.
+  { id: 'trident',     name: 'TRIDENT',     damage: 23, range: 74,  atkSpd: 540,  type: 'melee',  unlockXp: 3600,  knock: 6, special: { kind: 'pierce', dmg: 58, range: 270, cd: 5500 } },
+  { id: 'nunchaku',    name: 'NUNCHAKU',    damage: 11, range: 46,  atkSpd: 190,  type: 'melee',  unlockXp: 6800,  swing360: true, special: { kind: 'slam', dmg: 40, range: 70, cd: 4000 } },
+  { id: 'musket',      name: 'MUSKET',      damage: 48, range: 360, atkSpd: 1150, type: 'ranged', unlockXp: 14500, projSpeed: 9.5, special: { kind: 'pierce', dmg: 95, range: 420, cd: 6500 } },
+  // ── UNCOMMON ── Better than a common, with a special but no super. Never sold and
+  // never unlocked by XP: each is a MINIGAME prize (see MINIGAMES), dealt at random.
+  ...[
+    { id: 'gladius',     name: 'GLADIUS',      damage: 30, range: 54,  atkSpd: 320, type: 'melee',  lifesteal: 0.05, special: { kind: 'dash', dmg: 75, range: 150, cd: 4500 } },
+    { id: 'warpike',     name: 'WAR PIKE',     damage: 36, range: 96,  atkSpd: 600, type: 'melee',  knock: 12, special: { kind: 'pierce', dmg: 90, range: 300, cd: 5500 } },
+    { id: 'morningstar', name: 'MORNING STAR', damage: 42, range: 62,  atkSpd: 720, type: 'melee',  swing360: true, stunHit: 400, special: { kind: 'slam', dmg: 115, range: 96, cd: 7000 } },
+    { id: 'twinblades',  name: 'TWIN BLADES',  damage: 17, range: 46,  atkSpd: 140, type: 'melee',  lifesteal: 0.04, special: { kind: 'slam', dmg: 60, range: 82, cd: 3500 } },
+    { id: 'longbow',     name: 'LONGBOW',      damage: 32, range: 400, atkSpd: 560, type: 'ranged', pierce: true, projSpeed: 7.5, special: { kind: 'spread', dmg: 38, range: 400, cd: 5500, count: 5 } },
+    { id: 'handcannon',  name: 'HAND CANNON',  damage: 58, range: 290, atkSpd: 950, type: 'ranged', aoeRadius: 42, special: { kind: 'aoeshot', dmg: 175, range: 300, cd: 8000, aoe: 112 } },
+    { id: 'thunderrod',  name: 'THUNDER ROD',  damage: 27, range: 280, atkSpd: 580, type: 'ranged', chain: 3, special: { kind: 'storm', dmg: 85, range: 300, cd: 7500, count: 6 } },
+    { id: 'frostfang',   name: 'FROST FANG',   damage: 25, range: 310, atkSpd: 420, type: 'ranged', pierce: true, chill: 1600, projSpeed: 7, special: { kind: 'ring', dmg: 32, range: 260, cd: 6000, count: 12 } },
+    { id: 'cinderbow',   name: 'CINDER BOW',   damage: 29, range: 330, atkSpd: 520, type: 'ranged', burn: 2500, projSpeed: 6.5, special: { kind: 'spread', dmg: 36, range: 330, cd: 6000, count: 4 } },
+    { id: 'sawdisc',     name: 'SAW DISC',     damage: 31, range: 260, atkSpd: 500, type: 'ranged', pierce: true, boomerang: true, special: { kind: 'spread', dmg: 42, range: 270, cd: 6000, count: 3, boomerang: true } },
+  ].map(w => ({ ...w, unlockXp: 0, shopOnly: true, noRequirement: true, secret: true, uncommon: true, from: 'minigame', price: 0 })),
   // Shop-only: never unlocked by XP. Bought for `price` coins once every other
   // weapon is unlocked. Attack = a growing ring of fire (range = its final
   // radius), special = a homing hand of fire, and it alone has a SUPER.
@@ -469,6 +516,9 @@ const WEAPON_COLORS = {
   scimitar: '#e8e0c8', slingshot: '#b08a5a', mace: '#9aa4b0', javelin: '#d8c8a0', claws: '#e0e4ec',
   emberstaff: '#ff7a2a', halberd: '#c0c8d8', frostbow: '#9fe8ff', chronostaff: '#e8c87a', voidblade: '#9a5aff',
   mindtome: '#ff5ad8', lightblade: '#fff27a',
+  trident: '#5ad8c8', nunchaku: '#c89a5a', musket: '#a8a090',
+  gladius: '#e8d8b0', warpike: '#c8d0dc', morningstar: '#b8c0cc', twinblades: '#f0f4ff', longbow: '#c8a060',
+  handcannon: '#8a8aa0', thunderrod: '#ffe45a', frostfang: '#a8ecff', cinderbow: '#ff8a3a', sawdisc: '#d8dde6',
   sword: '#c8d8e8', dagger: '#d4e8b0', axe: '#e8a040', spear: '#c0c8d0',
   bow: '#b89060', staff: '#cc66ff', hammer: '#aab0b8', wand: '#88ddff',
   crossbow: '#cc8844', flail: '#dd4444', greatsword: '#ddeeff',
@@ -563,6 +613,19 @@ const WEAPON_UPGRADES = {
   emberstaff:  ['dmg', 'aoe', 'cdr'],
   halberd:     ['dmg', 'rng', 'knock'],
   frostbow:    ['dmg', 'chill', 'multi'],
+  trident:     ['dmg', 'rng', 'knock'],
+  nunchaku:    ['spd', 'dmg', 'crit'],
+  musket:      ['dmg', 'crit', 'rng'],
+  gladius:     ['dmg', 'spd', 'life', 'cdr'],
+  warpike:     ['dmg', 'rng', 'knock', 'cdr'],
+  morningstar: ['dmg', 'knock', 'aoe', 'cdr'],
+  twinblades:  ['spd', 'crit', 'life', 'cdr'],
+  longbow:     ['dmg', 'rng', 'multi', 'crit'],
+  handcannon:  ['dmg', 'aoe', 'knock', 'cdr'],
+  thunderrod:  ['chain', 'dmg', 'spd', 'cdr'],
+  frostfang:   ['chill', 'dmg', 'spd', 'multi'],
+  cinderbow:   ['dmg', 'spd', 'multi', 'crit'],
+  sawdisc:     ['dmg', 'multi', 'rng', 'spd'],
   chronostaff: ['dmg', 'spd', 'chill', 'cdr'],
   voidblade:   ['dmg', 'spd', 'crit', 'cdr', 'rng'],
   mindtome:    ['dmg', 'spd', 'cdr', 'rng'],   // no SPD or MLT: its portals come fast enough
@@ -1030,6 +1093,26 @@ const MONSTER_TYPES = {
     name: 'ELITE SNIPER', minWave: 12, weight: 2, hp: 1.3, dmg: 1.2, speed: 0.8, size: 1.05,
     color: '#c81a2a', xp: 2.6, coins: 3.0, ai: 'elitesniper', noMelee: true,
   },
+  // ── Three more elites, each with a handful of moves (see aiEliteSamurai and the rest) ──
+  // A master swordsman: fans of three slash waves, the flash-step wave far more often,
+  // and a SHADOW STEP that puts him right beside you before he cuts through.
+  elitesamurai: {
+    name: 'ELITE SAMURAI', minWave: 13, weight: 2, hp: 1.9, dmg: 1.35, speed: 1.3, size: 1.1,
+    color: '#ff2a4a', xp: 3.2, coins: 3.6, armor: 0.15, ai: 'elitesamurai',
+  },
+  // Light at full strength, and he no longer comes alone by chance: longer dash chains,
+  // a NOVA of light bolts every time he blinks away, and JUDGMENT, pillars of light
+  // that fall on and around you.
+  elitelight: {
+    name: 'ELITE LIGHT', minWave: 15, weight: 1.5, hp: 3.6, dmg: 1.5, speed: 3.0, size: 1.1,
+    color: '#fffbe0', xp: 4.2, coins: 4.6, ai: 'elitelight',
+  },
+  // A knight in gleaming plate: his shield sends your shots back, he charges behind it,
+  // slams the ground so it throws you, and at half health calls two mirror knights.
+  eliteknight: {
+    name: 'ELITE KNIGHT', minWave: 14, weight: 2, hp: 3.6, dmg: 1.55, speed: 0.85, size: 1.3,
+    color: '#e8f0ff', xp: 3.6, coins: 4.0, armor: 0.4, ai: 'eliteknight',
+  },
   // A knight with a polished shield. While it's raised your shots come straight
   // back at you, so hit him up close or wait for it to drop.
   mirrorknight: {
@@ -1123,7 +1206,8 @@ const MONSTER_TYPES = {
 // normal run (EXTREME_LEVEL_OFFSET waves in) and pays far more.
 const EXTREME_ROSTER = { brute: 2, warden: 3, behemoth: 3, titan: 2, wraith: 4, infernal: 3,
                          bomber: 2, shaman: 2, splitter: 2, charger: 3, necromancer: 2, samurai: 8,
-                         sniper: 3, golem: 3, elitesniper: 3, mirrorknight: 3, hexer: 3, burrower: 3, sentry: 2 };
+                         sniper: 3, golem: 3, elitesniper: 3, mirrorknight: 3, hexer: 3, burrower: 3, sentry: 2,
+                         elitesamurai: 3, elitelight: 2, eliteknight: 3 };
 const EXTREME_LEVEL_OFFSET = 9;
 const EXTREME_COIN_MULT = 3;        // on top of the normal kill payout
 const EXTREME_WAVE_BONUS = 120;     // coins per wave number, paid on every clear
@@ -1147,6 +1231,7 @@ function isBossWave(num) {
 // The Portal Mage's minions arrive as tough as a deep EXTREME wave.
 const PORTAL_LEVEL = 15;
 function modeLevel(num) {
+  if (room.gameMode === 'minigame') return (room.mg && room.mg.level) || MG_BY_ID[room.mgId]?.level || 2;
   if (room.gameMode === 'portal' || room.gameMode === 'abyss' || room.gameMode === 'tsunami' || room.gameMode === 'iceknight') return PORTAL_LEVEL;
   if (room.gameMode === 'sandbox') return room.sandbox.level;
   return num + (room.gameMode === 'extreme' ? EXTREME_LEVEL_OFFSET : 0);
@@ -1222,6 +1307,11 @@ function progress() {
   if (!d.armory) d.armory = {};            // password -> { w: 10-minute window, ids: what is on sale }
   if (!d.events) d.events = {};            // event id -> { start, end, ed } (the last time it was hosted; ed counts the hostings)
   if (!d.eventWins) d.eventWins = {};      // password -> { event id: the hosting (ed) it was beaten in }
+  if (!d.tutReward) d.tutReward = {};      // password -> the weapon the tutorial gave them
+  if (!d.friends) d.friends = {};          // password -> [friend ids] (a friend id is a hash: no password ever leaves the server)
+  if (!d.pidOf) d.pidOf = {};              // friend id -> password, learnt as players come online
+  if (!d.names) d.names = {};              // password -> the name last played under
+  if (!d.mgWins) d.mgWins = {};            // password -> the 10-minute minigame window they last won a prize in
   return d;
 }
 function markDirty() { progressDirty = true; }
@@ -1277,6 +1367,8 @@ function saveData(pw) {
     armor: d.armor[pw] || [], worn: d.armorWorn[pw] || {},
     mythicPick: d.mythicPick[pw] || null,
     eventWins: d.eventWins[pw] || {},
+    tut: d.tutReward[pw] || null,
+    friends: d.friends[pw] || [],
   });
 }
 function makeSave(pw) {
@@ -1334,6 +1426,8 @@ function restoreBackup(pw, backup) {
     d.armorWorn[pw] = cleanWorn(b.worn, armor);
     if (typeof b.mythicPick === 'string' && WEAPON_BY_ID[b.mythicPick]?.mythic) d.mythicPick[pw] = b.mythicPick;
     d.eventWins[pw] = cleanEventWins(b.eventWins);
+    if (typeof b.tut === 'string') d.tutReward[pw] = b.tut;
+    d.friends[pw] = cleanFriends(b.friends);
     if (b.skin && typeof b.skin === 'object' && d.skins[pw] === undefined) d.skins[pw] = b.skin;
     markDirty();
     return;
@@ -1366,6 +1460,8 @@ function restoreBackup(pw, backup) {
   if (b.tsunamiBeat && !d.tsunamiBeat[pw]) { d.tsunamiBeat[pw] = true; changed = true; }
   // The mythic you take into games: kept from the copy if the server has lost it.
   if (!d.mythicPick[pw] && typeof b.mythicPick === 'string' && WEAPON_BY_ID[b.mythicPick]?.mythic) { d.mythicPick[pw] = b.mythicPick; changed = true; }
+  if (!d.tutReward[pw] && typeof b.tut === 'string') { d.tutReward[pw] = b.tut; changed = true; }
+  if (!staleCopy) for (const f of cleanFriends(b.friends)) if (!(d.friends[pw] || []).includes(f)) { d.friends[pw] = [...(d.friends[pw] || []), f]; changed = true; }
   for (const [id, n] of Object.entries(cleanEventWins(b.eventWins))) {
     if (n > (d.eventWins[pw]?.[id] || 0)) { d.eventWins[pw] = { ...(d.eventWins[pw] || {}), [id]: n }; changed = true; }
   }
@@ -1889,7 +1985,7 @@ const seatKeys = (r = room) => KEYS.slice(0, r.maxPlayers);
 const rooms = [];
 let room = makeRoom();   // the room being worked on right now
 
-const SOLO_MODES = ['waves', 'extreme', 'portal', 'abyss', 'tsunami', 'iceknight', 'sandbox', 'sawroom'];
+const SOLO_MODES = ['waves', 'extreme', 'portal', 'abyss', 'tsunami', 'iceknight', 'sandbox', 'sawroom', 'minigame'];
 // XP needed before a mode opens (kept in step with MODE_XP in client.js).
 const MODE_XP = { extreme: 5000, portal: 15000, abyss: 30000, tsunami: 40000 };
 function isSolo() { return SOLO_MODES.includes(room.gameMode); }
@@ -1927,7 +2023,7 @@ function playerKeyOf(t) {
 // Everything `pKey` is allowed to hit. In co-op the other player is an ally, so
 // they are neither a target nor an obstacle for attacks and auto-aim.
 // VANISH or a ghost cloak: nobody can see (or aim at) this player.
-function unseen(p) { return hasEffect(p, 'vanish') || hasEffect(p, 'ghost') || !!p.controlling; }
+function unseen(p) { return hasEffect(p, 'vanish') || hasEffect(p, 'ghost') || !!p.controlling || !!p.vent; }
 
 function enemyTargets(pKey) {
   const out = [];
@@ -2008,9 +2104,36 @@ function overlapsAny(list, box, pad = 4) {
 }
 
 // ── Traps ──
-function spawnTrap() {
-  const types = TRAP_POOL;
-  const type = types[Math.floor(Math.random() * types.length)];
+function makeTrap(type, x, y, extra = {}) {
+  const def = TRAP_TYPES[type];
+  return { id: nextId(), type, x, y, w: def.size, h: def.size, state: 'idle', armTimer: 0, fireTimer: 0,
+           mode: def.mode, radius: def.radius, damage: def.damage || 0, effect: def.effect || null, dur: def.dur || 0, color: def.color, ...extra };
+}
+// VENT_NET vents at once, well apart, sharing one network id.
+function spawnVents(near) {
+  const net = nextId(), size = TRAP_TYPES.vent.size, spots = [];
+  for (let i = 0; i < VENT_NET; i++) {
+    let pos = null;
+    for (let k = 0; k < 30; k++) {
+      const c = near && i === 0 ? arenaClamp(near.x + (Math.random() - 0.5) * 120, near.y + (Math.random() - 0.5) * 120, size) : null;
+      const q = c ? { x: c.x - size / 2, y: c.y - size / 2 } : randArenaPos(size, size, 14);
+      const box = { x: q.x, y: q.y, w: size, h: size };
+      pos = q;
+      if (spots.every(s => Math.hypot(s.x - q.x, s.y - q.y) > VENT_GAP) && !overlapsAny(room.traps, box, 10)
+          && (near || !tooCloseToPlayers(q.x + size / 2, q.y + size / 2, 40))) break;
+    }
+    spots.push(pos);
+    room.traps.push(makeTrap('vent', pos.x, pos.y, { net, ventLife: VENT_LIFE }));
+  }
+}
+function pickTrapType(list = TRAP_POOL) {
+  let roll = Math.random() * list.reduce((s, t) => s + (TRAP_TYPES[t].weight || 1), 0);
+  for (const t of list) { roll -= TRAP_TYPES[t].weight || 1; if (roll <= 0) return t; }
+  return list[0];
+}
+function spawnTrap(only) {
+  const type = pickTrapType(only || TRAP_POOL);
+  if (type === 'vent') { if (!room.traps.some(t => t.type === 'vent')) spawnVents(); return; }
   const def = TRAP_TYPES[type];
   const size = def.size;
   let pos = randArenaPos(size, size);
@@ -2036,13 +2159,36 @@ function fireTrap(tr, trigger) {
   tr.fireTimer = 280;
   const tx = tr.x + tr.w / 2, ty = tr.y + tr.h / 2;
   const targets = tr.owner ? enemyTargets(tr.owner)
-    : [...allPlayers(), ...room.monsters].filter(t => t && !t.dead && !t.controlling);
+    : [...allPlayers(), ...room.monsters].filter(t => t && !t.dead && !t.controlling && !t.vent);
   const inRange = targets.filter(t => Math.hypot(cx(t) - tx, cy(t) - ty) <= tr.radius);
   const by = tr.owner || 'trap';   // a mind trap's kills are its owner's
   room.particles.push({ type: 'trapburst', x: tx, y: ty, maxR: tr.radius, timer: 340, max: 340, color: tr.color, text: def.name });
 
   if (tr.effect === 'warp') {
     if (trigger && !trigger.dead) warpPlayer(trigger);
+    return;
+  }
+  if (tr.effect === 'mortar') {
+    // Shells go up; each lands somewhere round the trap a moment later.
+    tr.blasts = [];
+    for (let i = 0; i < (def.count || 6); i++) {
+      const a = Math.random() * Math.PI * 2, d = 20 + Math.random() * (tr.radius - 20);
+      const at = arenaClamp(tx + Math.cos(a) * d, ty + Math.sin(a) * d, 10);
+      tr.blasts.push({ x: at.x, y: at.y, t: MORTAR_FALL + i * 140 });
+    }
+    tr.fireTimer = MORTAR_FALL + (def.count || 6) * 140 + 60;
+    return;
+  }
+  if (tr.effect === 'gust') {
+    // One huge gust, all the same way.
+    const a = Math.random() * Math.PI * 2, PULL = 380;
+    tr.gustA = a;
+    for (const t of inRange) {
+      applyDamage(t, tr.damage, by);
+      if (t.boss || t.dead) continue;
+      t.pull = { vx: Math.cos(a) * def.force / PULL, vy: Math.sin(a) * def.force / PULL, timer: PULL, from: null };
+    }
+    room.particles.push({ type: 'streak', x: tx, y: ty, x2: tx + Math.cos(a) * 120, y2: ty + Math.sin(a) * 120, timer: 400, max: 400, color: tr.color });
     return;
   }
   if (tr.effect === 'arrows') {
@@ -2081,6 +2227,8 @@ function fireTrap(tr, trigger) {
     } else if (tr.effect === 'freeze') {
       if (t.num) chillTarget(t, tr.dur * 1.4); else stagger(t, tr.dur, 'ice');
     } else if (tr.effect === 'root') {
+      if (tr.damage) applyDamage(t, tr.damage, by);
+      if (t.dead) continue;
       if (t.num) applyEffect(t, 'root', tr.dur); else stagger(t, tr.dur, 'root');
     } else if (tr.effect === 'confuse') {
       if (t.num) applyEffect(t, 'confuse', tr.dur); else chillTarget(t, tr.dur);
@@ -2093,6 +2241,22 @@ function fireTrap(tr, trigger) {
       room.particles.push({ type: 'bolt', x: cx(t) + (Math.random() - 0.5) * 10, y: ARENA_Y + 2, x2: cx(t), y2: cy(t), timer: 400, max: 400, color: tr.color });
       applyDamage(t, tr.damage, by);
       if (!t.dead) stagger(t, 700, 'shock');
+    } else if (tr.effect === 'stun') {
+      applyDamage(t, tr.damage, by);
+      if (!t.dead) stunTarget(t, tr.dur);
+    } else if (tr.effect === 'crush') {
+      t.invincible = 0;
+      applyDamage(t, tr.damage, by);
+      if (!t.dead) stunTarget(t, tr.dur);
+    } else if (tr.effect === 'blind') {
+      if (t.num) applyEffect(t, 'blind', tr.dur); else stagger(t, FLASH_STAGGER, 'stun');
+    } else if (tr.effect === 'geyser') {
+      applyDamage(t, tr.damage, by);
+      if (t.dead) continue;
+      ignite(t, tr.dur);
+      let dx = cx(t) - tx, dy = cy(t) - ty, d = Math.hypot(dx, dy);
+      if (d < 1) { const a = Math.random() * Math.PI * 2; dx = Math.cos(a); dy = Math.sin(a); d = 1; }
+      if (!t.boss) t.pull = { vx: (dx / d) * def.force / 300, vy: (dy / d) * def.force / 300, timer: 300, from: null };
     } else if (tr.effect === 'keg' || tr.effect === 'launch') {
       applyDamage(t, tr.damage, by);
       let dx = cx(t) - tx, dy = cy(t) - ty, d = Math.hypot(dx, dy);
@@ -2104,6 +2268,73 @@ function fireTrap(tr, trigger) {
       if (tr.effect === 'burn') ignite(t, tr.dur);
     }
   }
+}
+
+// ── VENTS ──
+const VENT_KEYS = ['up', 'down', 'left', 'right', 'attack', 'special', 'super', 'parry', 'swap', 'swapPrev', 'block', 'ab1', 'ab2', 'ab3', 'ab4', 'ab5', 'ab6', 'ab7'];
+const ventSnap = inp => { const o = {}; for (const k of VENT_KEYS) o[k] = !!inp[k]; o.joy = inp.ang != null; return o; };
+// A vent that's idle waits for a player to step on it. It goes when its time is up
+// (with anyone inside thrown out first).
+function ventTrapTick(tr, dt) {
+  tr.ventLife -= dt;
+  if (tr.ventLife <= 0) {
+    for (const p of allPlayers()) if (p && p.vent && p.vent.net === tr.net) exitVent(p);
+    room.particles.push({ type: 'teleport', x: tr.x + tr.w / 2, y: tr.y + tr.h / 2, timer: 300, max: 300, color: tr.color });
+    return false;
+  }
+  for (const key of KEYS) {
+    const p = room.players[key];
+    if (!p || p.dead || p.vent || p.controlling || p.mindControlledBy || p.sky || p.wsRam || p.bladeDash || p.ventCd > 0) continue;
+    if (p.ventOff === tr.id) { if (!aabb(p, tr)) p.ventOff = null; continue; }   // step off the one you came out of first
+    if (aabb(p, tr)) enterVent(p, key, tr);
+  }
+  return true;
+}
+function enterVent(p, key, tr) {
+  p.vent = { id: tr.id, net: tr.net, t: 0, acc: 0, n: 0, prev: ventSnap(room.inputs[key] || {}), hop: 0 };
+  p.pull = null; p.ivx = 0; p.ivy = 0;
+  placeInVent(p, tr);
+  room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 300, max: 300, color: tr.color });
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p) - 6, maxR: 18, timer: 500, max: 500, color: tr.color, text: 'VENT' });
+}
+function placeInVent(p, tr) { p.x = tr.x + tr.w / 2 - p.w / 2; p.y = tr.y + tr.h / 2 - p.h / 2; }
+function ventHop(p, to) {
+  room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 260, max: 260, color: TRAP_TYPES.vent.color });
+  p.vent.id = to.id; p.vent.hop = VENT_HOP_MS;
+  placeInVent(p, to);
+  room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 260, max: 260, color: '#ffffff' });
+}
+function exitVent(p) {
+  if (!p.vent) return;
+  const tr = room.traps.find(t => t.id === p.vent.id);
+  p.vent = null;
+  p.ventCd = VENT_CD;
+  if (tr) { placeInVent(p, tr); p.ventOff = tr.id; }
+  clampToArena(p, 2);
+  p.invincible = Math.max(p.invincible || 0, 250);   // a beat to get your bearings
+  room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 340, max: 340, color: '#ffffff' });
+}
+// Each tick inside: it hurts (more every second), and any new press climbs out.
+// Returns true while still inside.
+function ventPlayerTick(p, key, inp, dt) {
+  const v = p.vent;
+  const now = ventSnap(inp || {});
+  const pressed = VENT_KEYS.some(k => now[k] && !v.prev[k]) || (now.joy && !v.prev.joy);
+  v.prev = now;
+  if (pressed) { exitVent(p); return false; }
+  const tr = room.traps.find(t => t.id === v.id);
+  if (!tr) { exitVent(p); return false; }
+  placeInVent(p, tr);
+  if (v.hop > 0) v.hop -= dt;
+  v.t += dt; v.acc += dt;
+  while (v.acc >= 1000 && p.vent) {
+    v.acc -= 1000;
+    const dmg = VENT_DMG + VENT_DMG_RISE * v.n++;
+    p.hp -= dmg; p.hitFlash = 120;
+    room.particles.push({ type: 'crit', x: cx(p), y: p.y - 6, text: '-' + dmg, timer: 600, max: 600 });
+    if (p.hp <= 0) { p.vent = null; p.ventCd = VENT_CD; handleKill(p, 'trap'); return false; }
+  }
+  return true;
 }
 
 // Somewhere random on the map, away from monsters.
@@ -2293,7 +2524,7 @@ const RARE_ABILITY = {
   grunt: 'dash', runner: 'blink', brute: 'quake', spitter: 'nova', warden: 'guard', behemoth: 'quake', bomber: 'flame',
   shaman: 'guard', splitter: 'summon', charger: 'flame', necromancer: 'frost', samurai: 'blink', sniper: 'hexes', golem: 'nova',
   light: 'nova', titan: 'quake', wraith: 'frost', infernal: 'flame', elitesniper: 'frost', mirrorknight: 'dash', hexer: 'summon',
-  burrower: 'quake', sentry: 'guard',
+  burrower: 'quake', sentry: 'guard', elitesamurai: 'frost', elitelight: 'guard', eliteknight: 'nova',
 };
 const RARE_ABILITY_DEF = {
   dash:   { name: 'LUNGE',       cd: 3500 },
@@ -3334,7 +3565,7 @@ function updateLantern(dt) {
 const SAW_PAY = 200000, SAW_PAY_MS = 60000, SAW_MAX_TRAPS = 24, SAW_DMG_MULT = 4, SAW_MOVE_CHANCE = 0.7;
 const SAW_START_TRAPS = 7, SAW_WALL_STEP = 24, SAW_MAX_HUNTERS = 6;
 const SAW_ELEMENTS = ['fire', 'ice', 'poison', 'shock', 'void'];
-const SAW_TRAP_TYPES = Object.keys(TRAP_TYPES).filter(t => t !== 'healspring' && t !== 'warp');
+const SAW_TRAP_TYPES = Object.keys(TRAP_TYPES).filter(t => t !== 'healspring' && t !== 'warp' && t !== 'vent');
 function startSawRoom() {
   room.saw = { t: 0, payT: SAW_PAY_MS, trapT: 600, projT: 900, wallT: 4000, huntT: 3000, earned: 0 };
   room.wave = { num: 1, monstersLeft: 0, spawnQueue: 0, spawnTimer: 0, betweenTimer: 0 };
@@ -3824,7 +4055,7 @@ function monsterSearch(m, spd, factor, dt) {
 
 const MONSTER_AI = { bomber: aiBomber, shaman: aiShaman, charger: aiCharger, necro: aiNecro, light: aiLight, samurai: aiSamurai,
                      sniper: aiSniper, golem: aiGolem, elitesniper: aiEliteSniper, mirror: aiMirrorKnight, hexer: aiHexer,
-                     burrower: aiBurrower, sentry: aiSentry };
+                     burrower: aiBurrower, sentry: aiSentry, elitesamurai: aiEliteSamurai, elitelight: aiEliteLight, eliteknight: aiEliteKnight };
 // SNIPER: hold a firing line, aim a laser (tracking, then locked), fire.
 const SNIPE_AIM = 1300, SNIPE_LOCK = 0.7, SNIPE_CD = 3200, SNIPE_SPEED = 11, SNIPE_MULT = 2.4, SNIPE_RANGE = 440;
 function aiSniper(m, t, dist, dx, dy, spd, factor, dt) {
@@ -3891,6 +4122,90 @@ function eliteFire(m) {
   m.x = pos.x; m.y = pos.y;
   room.particles.push({ type: 'teleport', x: cx(m), y: cy(m), timer: 340, max: 340, color: '#ff3a4a' });
 }
+// ── ELITES ──
+// ELITE SAMURAI: the samurai's moves, sharper, plus the SHADOW STEP.
+const ESAM_CD = 1500, ESAM_DASH_CHANCE = 0.45, ESAM_FAN = 0.28, ESAM_STEP_CD = 5200, ESAM_STEP_WIND = 380, ESAM_STEP_R = 70;
+function aiEliteSamurai(m, t, dist, dx, dy, spd, factor, dt) {
+  m.stepCd = (m.stepCd ?? 3200) - dt;
+  if (m.stepWind > 0) {                         // just appeared beside you: a beat, then through you
+    m.stepWind -= dt; m.face = dx > 0 ? 1 : -1;
+    if (m.stepWind <= 0) {
+      const a = Math.atan2(dy, dx);
+      m.samDash = { a, left: Math.hypot(dx, dy) + 70, hit: new Set(), sx: cx(m), sy: cy(m) };
+    }
+    return true;
+  }
+  const busy = m.dazed > 0 || m.samDash || m.samWind > 0;
+  if (!busy && m.stepCd <= 0 && dist < 460) {
+    m.stepCd = ESAM_STEP_CD;
+    room.particles.push({ type: 'teleport', x: cx(m), y: cy(m), timer: 340, max: 340, color: '#ff2a4a' });
+    const a = Math.random() * Math.PI * 2;
+    m.x = cx(t) + Math.cos(a) * ESAM_STEP_R - m.w / 2; m.y = cy(t) + Math.sin(a) * ESAM_STEP_R - m.h / 2;
+    clampToArena(m);
+    room.particles.push({ type: 'teleport', x: cx(m), y: cy(m), timer: 340, max: 340, color: '#ffffff' });
+    room.particles.push({ type: 'crit', x: cx(m), y: m.y - 8, text: 'SHADOW STEP', timer: 700, max: 700 });
+    m.stepWind = ESAM_STEP_WIND; m.swing = MONSTER_SWING_MS;
+    return true;
+  }
+  // The fan: two more waves either side of the one the samurai throws.
+  const fanNow = m.samWind > 0 && m.samWind - dt <= 0 && m.samNext === 'wave';
+  if (fanNow) {
+    const a = Math.atan2(dy, dx), dmg = Math.round(m.atkDamage * SAM_WAVE_MULT);
+    for (const s of [-1, 1]) slashWave('monster', cx(m), cy(m), a + s * ESAM_FAN, dmg);
+  }
+  const wasWinding = m.samWind > 0;
+  const r = aiSamurai(m, t, dist, dx, dy, spd, factor, dt);
+  if (!wasWinding && m.samWind > 0) m.samNext = Math.random() < ESAM_DASH_CHANCE ? 'dash' : 'wave';
+  if (m.samCd > ESAM_CD) m.samCd = ESAM_CD;
+  return r;
+}
+// ELITE LIGHT: Light's sweep and dash chains, longer, with a NOVA and JUDGMENT.
+const ELIGHT_DASHES = 6, ELIGHT_NOVA = 12, ELIGHT_JUDGE_CD = 6500, ELIGHT_JUDGE_DELAY = 950, ELIGHT_JUDGE_R = 38;
+function aiEliteLight(m, t, dist, dx, dy, spd, factor, dt) {
+  const had = !!m.sweep;
+  m.judgeCd = (m.judgeCd ?? 3500) - dt;
+  if (m.judgeT > 0) m.judgeT -= dt;
+  const r = aiLight(m, t, dist, dx, dy, spd, factor, dt);
+  if (m.dashes && !m.dashes.elite) { m.dashes.n = ELIGHT_DASHES; m.dashes.elite = true; }   // a longer chain (once per chain)
+  if (had && !m.sweep && !(m.dazed > 0)) {                                         // blinked away: NOVA
+    const off = Math.random() * Math.PI;
+    for (let i = 0; i < ELIGHT_NOVA; i++) rareShot(m, off + i * Math.PI * 2 / ELIGHT_NOVA, 4.2, Math.max(4, Math.round(m.atkDamage * 0.8)), 340);
+    room.particles.push({ type: 'shockwave', x: cx(m), y: cy(m), maxR: 46, timer: 380, max: 380, color: '#fff6a0' });
+  }
+  if (m.judgeCd <= 0 && !m.sweep && !m.dashes && dist < 520) {                     // JUDGMENT
+    m.judgeCd = ELIGHT_JUDGE_CD; m.judgeT = 600;
+    const dmg = Math.round(m.atkDamage * 1.6), a = Math.random() * Math.PI * 2;
+    addDanger(cx(t), cy(t), ELIGHT_JUDGE_R, ELIGHT_JUDGE_DELAY, dmg, { color: 'gold', stun: 600 });
+    for (let i = 0; i < 3; i++) addDanger(cx(t) + Math.cos(a + i * 2.1) * 72, cy(t) + Math.sin(a + i * 2.1) * 72, ELIGHT_JUDGE_R, ELIGHT_JUDGE_DELAY + 150, dmg, { color: 'gold', stun: 600 });
+    room.particles.push({ type: 'crit', x: cx(m), y: m.y - 8, text: 'JUDGMENT', timer: 800, max: 800 });
+  }
+  return r;
+}
+// ELITE KNIGHT: mirror shield, shield charge, ground slam, and a call for help.
+const EKN_SLAM_CD = 5200, EKN_SLAM_WIND = 650, EKN_SLAM_R = 92, EKN_SLAM_PUSH = 90, EKN_CALL = 2;
+function aiEliteKnight(m, t, dist, dx, dy, spd, factor, dt) {
+  if (!m.called && m.hp < m.maxHp * 0.5 && room.monsters.length < 30) {           // half health: CALL TO ARMS
+    m.called = true;
+    for (const s of [-1, 1]) calledIn('mirrorknight', cx(m) + s * 36, cy(m));
+    room.particles.push({ type: 'crit', x: cx(m), y: m.y - 10, text: 'TO ARMS!', timer: 900, max: 900 });
+  }
+  if (m.slamWind > 0) {
+    m.slamWind -= dt;
+    if (m.slamWind <= 0) { m.slamCd = EKN_SLAM_CD; m.swing = MONSTER_SWING_MS; }
+    return true;
+  }
+  m.slamCd = (m.slamCd ?? 2600) - dt;
+  if (!m.charge && !(m.dazed > 0) && m.slamCd <= 0 && dist < EKN_SLAM_R + 20) {   // GROUND SLAM
+    m.slamWind = EKN_SLAM_WIND;
+    addDanger(cx(m), cy(m), EKN_SLAM_R, EKN_SLAM_WIND, Math.round(m.atkDamage * 1.7), { color: 'dirt', push: EKN_SLAM_PUSH, stun: 400 });
+    return true;
+  }
+  if (m.charge || m.dazed > 0) return aiCharger(m, t, dist, dx, dy, spd, factor, dt);   // SHIELD CHARGE in progress
+  aiMirrorKnight(m, t, dist, dx, dy, spd, factor, dt);                              // MIRROR SHIELD
+  if (m.mirrorUp > 0) return false;                                                // walks in behind it
+  return aiCharger(m, t, dist, dx, dy, spd, factor, dt);
+}
+
 // MIRROR KNIGHT: walks in like anyone else, shield up every few seconds.
 const MIRROR_UP = 1800, MIRROR_CD = 5000;
 function aiMirrorKnight(m, t, dist, dx, dy, spd, factor, dt) {
@@ -4124,6 +4439,7 @@ function startGame() {
   else if (room.gameMode === 'abyss') startAbyssFight();
   else if (room.gameMode === 'tsunami') startTsunamiFight();
   else if (room.gameMode === 'iceknight') startIceKnightFight();
+  else if (room.gameMode === 'minigame') startMinigame();
   else if (room.gameMode === 'sandbox') startSandbox();
   else if (room.gameMode === 'sawroom') startSawRoom();
   else if (room.gameMode !== 'pvp') startWave(START_WAVE);
@@ -4147,7 +4463,7 @@ function resetToLobby() {
 
 const GHOST_BOSS_MULT = 0.5;
 function applyDamage(target, dmg, attackerKey) {
-  if (target.dead || target.dying || target.invincible > 0 || target.hidden || target.p3 || target.wsRam) return;
+  if (target.dead || target.dying || target.invincible > 0 || target.hidden || target.p3 || target.wsRam || target.vent) return;
   if (target.sguard > 0) { target.hitFlash = 80; return; }   // a rare monster's GOLD GUARD
   if (target.num && hasEffect(target, 'shield')) {  // shield item: ignore all incoming damage
     target.hitFlash = 80;
@@ -4268,6 +4584,7 @@ function applyDamage(target, dmg, attackerKey) {
 }
 
 function handleKill(target, attackerKey) {
+  if (room.mg && !target.num && !target.ally && !target.dying && !target.dead) mgKill(target);
   if (target.controlledBy) {
     const ctrl = room.players[target.controlledBy];
     if (ctrl && ctrl.controlling) endMindControl(ctrl, target.controlledBy);
@@ -4471,7 +4788,8 @@ function checkRoundEnd() {
   if (isSolo()) {
     if (p1 && p1.dead && p1.lives <= 0) {
       // The boss fight has no leaderboard: you win or you don't.
-      room.lastLeaderboard = room.gameMode === 'portal' || room.gameMode === 'abyss' || room.gameMode === 'tsunami' || room.gameMode === 'iceknight' || room.gameMode === 'sawroom' ? []
+      if (room.mg && !room.mg.over) mgFinish(false);
+      room.lastLeaderboard = room.gameMode === 'portal' || room.gameMode === 'abyss' || room.gameMode === 'tsunami' || room.gameMode === 'iceknight' || room.gameMode === 'sawroom' || room.gameMode === 'minigame' ? []
         : addLeaderboardEntry(room.playerNames.p1, room.wave.num, room.gameMode);
       room.gameState      = 'ROUND_OVER';
       room.roundOverTimer = 6000;
@@ -4609,7 +4927,10 @@ function tickRoom(dt) {
     // In someone's head: you stand still (hidden) and drive them instead.
     if (p.controlling) tickMindControl(p, key, dt, factor);
     const inp = p.controlling ? {} : p.mindControlledBy ? room.inputs[p.mindControlledBy] : room.inputs[key];
-    const spd = effectiveSpeed(p);
+    if (p.oilT > 0) p.oilT -= dt;
+    if (p.ventCd > 0) p.ventCd -= dt;
+    const vented = !!p.vent && ventPlayerTick(p, key, inp, dt);
+    const spd = vented ? 0 : effectiveSpeed(p);
     let vx = 0, vy = 0;
     if (inp.ang != null) {                       // the joystick: any direction at all
       vx = Math.cos(inp.ang) * spd; vy = Math.sin(inp.ang) * spd;
@@ -4707,6 +5028,7 @@ function tickRoom(dt) {
       continue;
     }
 
+    if (p.vent) continue;                                        // in a vent: nothing until you climb out
     if (p.wsRam) { wsRamTick(p, key, factor, dt); continue; }   // the ram is all you do while it lasts
     if (p.gsStun > 0) continue;   // stunned: nothing at all
     // The katana's spin (and the Worldsplitter's leap) is all you do while it lasts — only parry gets through.
@@ -4884,7 +5206,8 @@ function tickRoom(dt) {
 
   // ── Wave spawner ── (the Portal Mage fight has no waves: he brings his own;
   // in the sandbox you spawn what you like)
-  if (room.gameMode !== 'pvp' && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'tsunami' && room.gameMode !== 'iceknight' && room.gameMode !== 'sandbox' && room.gameMode !== 'sawroom') {
+  if (room.gameMode === 'minigame') updateMinigame(dt);
+  if (room.gameMode !== 'pvp' && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'tsunami' && room.gameMode !== 'iceknight' && room.gameMode !== 'sandbox' && room.gameMode !== 'sawroom' && room.gameMode !== 'minigame') {
     if (room.wave.betweenTimer > 0) {
       room.wave.betweenTimer -= dt;
       if (room.wave.betweenTimer <= 0) startWave(room.wave.num + 1);
@@ -4924,7 +5247,7 @@ function tickRoom(dt) {
 
   // ── Traps ── (in the Portal Mage fight only he lays them)
   if (!room.rareShop) room.trapSpawnTimer -= dt;   // nothing new appears while the rare shop is open
-  if (room.trapSpawnTimer <= 0 && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'tsunami' && room.gameMode !== 'iceknight' && room.gameMode !== 'sandbox' && room.gameMode !== 'sawroom') {
+  if (room.trapSpawnTimer <= 0 && room.gameMode !== 'portal' && room.gameMode !== 'abyss' && room.gameMode !== 'tsunami' && room.gameMode !== 'iceknight' && room.gameMode !== 'sandbox' && room.gameMode !== 'sawroom' && room.gameMode !== 'minigame') {
     if (room.traps.filter(t => !t.owner).length < MAX_TRAPS * mapFill()) spawnTrap();
     room.trapSpawnTimer = (TRAP_SPAWN_MIN + Math.random() * (TRAP_SPAWN_MAX - TRAP_SPAWN_MIN)) / mapFill();
   }
@@ -4940,6 +5263,20 @@ function tickRoom(dt) {
       if (tr.expire <= 0) {
         room.particles.push({ type: 'teleport', x: tr.x + tr.w / 2, y: tr.y + tr.h / 2, timer: 300, max: 300, color: '#b07aff' });
         return false;
+      }
+    }
+    if (tr.type === 'vent') return ventTrapTick(tr, dt);
+    if (tr.blasts) {
+      for (const b of tr.blasts) {
+        if (b.done) continue;
+        b.t -= dt;
+        if (b.t > 0) continue;
+        b.done = true;
+        for (const t of [...allPlayers(), ...room.monsters].filter(o => o && !o.dead && !o.controlling && !o.vent)) {
+          if (Math.hypot(cx(t) - b.x, cy(t) - b.y) > MORTAR_R + t.w / 2) continue;
+          applyDamage(t, tr.damage, tr.owner || 'trap');
+        }
+        room.particles.push({ type: 'aoe', x: b.x, y: b.y, maxR: MORTAR_R, timer: 380, max: 380, color: tr.color });
       }
     }
     if (tr.state === 'idle') {
@@ -4976,7 +5313,7 @@ function tickRoom(dt) {
       if (ldef.linger) {
         const tx = tr.x + tr.w / 2, ty = tr.y + tr.h / 2;
         const inside = (tr.owner ? enemyTargets(tr.owner) : [...allPlayers(), ...room.monsters])
-          .filter(t => t && !t.dead && !t.controlling && Math.hypot(cx(t) - tx, cy(t) - ty) <= tr.radius);
+          .filter(t => t && !t.dead && !t.controlling && !t.vent && Math.hypot(cx(t) - tx, cy(t) - ty) <= tr.radius);
         // The gravity well drags all the time, not just on its ticks.
         if (tr.effect === 'gravity') {
           for (const t of inside) {
@@ -4991,7 +5328,9 @@ function tickRoom(dt) {
         if (tr.tickTimer <= 0) {
           tr.tickTimer = ldef.tick;
           for (const t of inside) {
-            if (tr.effect === 'poison') { dotDamage(t, tr.damage); if (t.num) applyEffect(t, 'poison', 500); }
+            if (tr.effect === 'tar') { if (t.num) applyEffect(t, 'slow', TAR_SLOW); else chillTarget(t, TAR_SLOW, 'tar'); }
+            else if (tr.effect === 'slick') { if (t.num) t.oilT = OIL_SLIP; else chillTarget(t, 300, 'oil'); }
+            else if (tr.effect === 'poison') { dotDamage(t, tr.damage); if (t.num) applyEffect(t, 'poison', 500); }
             else if (tr.effect === 'healspring') t.hp = Math.min(t.maxHp, t.hp + tr.damage);
             else dotDamage(t, tr.damage);
           }
@@ -5332,7 +5671,7 @@ function dotDamage(t, dmg, killer = 'trap') {
   if (t.armor) dmg = Math.max(1, Math.round(dmg * (1 - t.armor)));
   if (t.num && t.defense) dmg = Math.max(1, Math.round(dmg * (1 - t.defense)));
   if (t.num && t.vortexShield > 0) { bankVortex(t, dmg); return; }   // blocked, but banked
-  if (t.hidden || t.p3) return;
+  if (t.hidden || t.p3 || t.vent) return;
   if (t.num) dmg = shieldSoak(t, dmg, false);
   t.hp -= dmg;
   if (t.mage) mageFloor(t);
@@ -6857,7 +7196,7 @@ const TROPHY_W = 28, TROPHY_H = 36, TROPHY_DELAY_MS = 1000;
 //  6 VOLLEY     ten ice arrows at once, fanning out and then seeking you.
 //  Under a quarter the arena freezes over (you slide), and he adds:
 //  7 MINIONS    ice minions: quick, they shoot, and their blows shove and slow.
-const IK_HP = 400000, IK_FEE = 1000000;
+const IK_HP = 400000, IK_FEE = 2000000;
 const IK_GEAR = ['iceknight_h', 'iceknight_c', 'iceknight_l', 'sh_frostwall', 'icegreatsword', 'icebow'];
 const PAID_MODES = { iceknight: { fee: IK_FEE, name: 'THE ICE KNIGHT' } };
 const IK = {
@@ -6999,6 +7338,7 @@ function freezeFloor(owner, ms) {
   room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26, text: 'THE ARENA FREEZES OVER', color: '#bfefff', timer: 2200, max: 2200 });
 }
 function slipsOnIce(key) {
+  if (room.players[key]?.oilT > 0) return true;                   // OIL SLICK
   return !!room.ice && (room.ice.owner === 'monster' || (room.gameMode === 'pvp' && room.ice.owner !== key));
 }
 function updateIce(factor, dt) {
@@ -7936,6 +8276,7 @@ function sandboxAction(key, msg) {
     const type = String(msg.what || '');
     const def = TRAP_TYPES[type];
     if (!def || room.traps.length >= 30) return;
+    if (type === 'vent') { spawnVents({ x: cx(p) + 60, y: cy(p) }); return; }
     const at = sandboxSpot(p, 70, def.size);
     room.traps.push({ id: nextId(), type, x: at.x, y: at.y, w: def.size, h: def.size,
                       state: 'idle', armTimer: 0, fireTimer: 0, mode: def.mode, radius: def.radius,
@@ -10510,6 +10851,7 @@ function playerView(p) {
     ...(p.fsSpin && !p.fsSpin.chain ? { fspin: 1 } : {}),
     ...(p.sfire ? { sfire: 1 } : {}), ...(p.fsStunT > 0 ? { fstun: 1 } : {}),
     ...(p.slip ? { slip: 1 } : {}), ...(p.iceStunT > 0 ? { frz: 1 } : {}), ...(p.iceSwordOut ? { isw: 1 } : {}),
+    ...(p.vent ? { vent: p.vent.id, vnet: p.vent.net, vin: Math.round(p.vent.t) } : {}),
     ...(p.mirrorT > 0 ? { mirror: true } : {}),
     ...(p.venomT > 0 ? { venom: true } : {}),
     ...(p.regrowT > 0 ? { regrow: true } : {}),
@@ -10533,6 +10875,8 @@ function buildStateMsg(playerNum) {
     gameMode: room.gameMode,
     ...(room.ice ? { ice: { o: room.ice.owner, left: Number.isFinite(room.ice.t) ? Math.round(room.ice.t) : -1 } } : {}),
     ...(room.ikWin ? { ikWin: room.ikWin[key] || [] } : {}),
+    ...(room.mg ? { mg: { id: room.mg.id, name: room.mg.name, left: Math.max(0, Math.round(room.mg.t)), time: room.mg.time, kills: room.mg.kills, need: room.mg.need, survive: !!room.mg.survive, goal: room.mg.goal } } : {}),
+    ...(room.mgWin ? { mgWin: room.mgWin } : {}),
     ...(room.event ? { event: room.event } : {}), ...(room.trophy ? { trophy: room.trophy } : {}), ...(room.eventWin ? { eventWin: room.eventWin } : {}),
     world: { size: room.mapSize, w: CANVAS_W, h: CANVAS_H },
     maxPlayers: room.maxPlayers,
@@ -10563,7 +10907,8 @@ function buildStateMsg(playerNum) {
                   ...(m.mirrorUp > 0 ? { mirror: 1 } : {}), ...(m.under ? { under: 1 } : {}),
                   ...(m.gwind > 0 ? { gwind: true } : {}),
                   ...(m.venomT > 0 ? { venom: true } : {}),
-                  ...(m.samWind > 0 ? { samWind: m.samNext === 'dash' ? 'dash' : 'wave' } : {}),
+                  ...(m.samWind > 0 ? { samWind: m.samNext === 'dash' ? 'dash' : 'wave' } : {}), ...(m.stepWind > 0 ? { samWind: 'dash' } : {}),
+                  ...(m.slamWind > 0 ? { gwind: true } : {}), ...(m.judgeT > 0 ? { judge: 1 } : {}),
                   ...(m.samDash ? { samDash: Math.round(m.samDash.a * 100) / 100 } : {}),
                   ...(m.sweep ? { lsweep: { a: Math.round(m.sweep.a * 100) / 100, wind: m.sweep.wind > 0 } } : {}),
                   ...(m.dashes ? { ldash: { a: Math.round(m.dashes.a * 100) / 100, wind: m.dashes.wind > 0, n: m.dashes.n } } : {}),
@@ -10591,6 +10936,8 @@ function buildStateMsg(playerNum) {
                                     ...(RIDES_OWNER.has(f.kind) ? { fo: f.owner } : {}) })),
     chains:      buildChains().map(c => ({ x1: r1(c.x1), y1: r1(c.y1), x2: r1(c.x2), y2: r1(c.y2), kind: c.kind, o: c.o })),
     traps:       room.traps.map(tr => ({ x: r1(tr.x), y: r1(tr.y), w: tr.w, h: tr.h, type: tr.type, state: tr.state, radius: tr.radius, color: tr.color, o: tr.owner || null,
+                  ...(tr.net ? { id: tr.id, net: tr.net } : {}), ...(tr.gustA !== undefined ? { ga: Math.round(tr.gustA * 100) / 100 } : {}),
+                  ...(tr.blasts ? { bl: tr.blasts.filter(b => !b.done).map(b => [Math.round(b.x), Math.round(b.y), Math.round(b.t)]) } : {}),
                   ...(tr.element ? { el: tr.element } : {}), ...(tr.vx || tr.vy ? { mv: 1 } : {}),
                   armRatio: tr.state === 'arming' ? r1(1 - tr.armTimer / (TRAP_TYPES[tr.type].armTime || 1)) : 0 })),
     items:       room.items.map(it => ({ x: r1(it.x), y: r1(it.y), w: it.w, h: it.h, type: it.type, color: ITEM_TYPES[it.type].color })),
@@ -10722,7 +11069,7 @@ function weaponCatalog() {
     needMind: !!w.needMind,
     needLight: !!w.needLight,
     needSamurai: !!w.needSamurai,
-    bossReward: !!w.bossReward, secret: !!w.secret, from: w.from || null,
+    bossReward: !!w.bossReward, secret: !!w.secret, from: w.from || null, uncommon: !!w.uncommon,
     special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd } : null,
     super: w.super ? { kind: w.super.kind, dmg: w.super.dmg, cd: w.super.cd } : null,
     upgrades: upgradesFor(w.id),
@@ -10831,6 +11178,7 @@ function cleanSkin(raw, owned) {
 // Use the item in inventory slot `index` (a player's 1-4 keys, or the bot).
 function useInventorySlot(myKey, index) {
   const p = room.players[myKey];
+  if (p && p.vent) { exitVent(p); return; }
   if (p && !p.dead && Array.isArray(p.inventory)) {
     const idx = Number(index);
     if (Number.isInteger(idx) && idx >= 0 && idx < p.inventory.length) {
@@ -11134,6 +11482,29 @@ app.use(express.json({ limit: '64kb' }));
 // Open custom rooms, for the JOIN A ROOM list.
 app.get('/api/rooms', (_req, res) => { res.json({ rooms: openRoomList() }); });
 
+// ── The tutorial's reward ── Finish it once and the password gets a random common
+// weapon it doesn't have yet (never a legendary, mythic, secret or uncommon one) and
+// TUT_COINS. Once per password, for good.
+const TUT_COINS = 2000;
+const TUT_POOL = WEAPONS.filter(w => !w.shopOnly && !w.mythic && !w.secret && !w.uncommon && w.unlockXp > 0).map(w => w.id);
+app.post('/api/tutorial/reward', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'Set a password to collect the reward.' });
+  if (isAdminPw(pw)) return res.status(400).json({ error: 'The admin account already owns everything.', done: true });
+  const prof = profileFor(pw, { backup: req.body?.backup });
+  const d = progress();
+  if (d.tutReward[pw]) return res.status(400).json({ error: 'This password already got its tutorial reward.', done: true });
+  const left = TUT_POOL.filter(id => !prof.weapons.includes(id));
+  const id = left.length ? left[crypto.randomInt(left.length)] : null;
+  if (id) d.weapons[pw] = sortWeaponIds([...(d.weapons[pw] || []), id]);
+  d.coins[pw] = (d.coins[pw] || 0) + TUT_COINS;
+  d.tutReward[pw] = id || 'coins';
+  markDirty();
+  syncLive(pw);
+  const p = profileFor(pw, {});
+  res.json({ weapon: id ? { id, name: WEAPON_BY_ID[id].name } : null, coins: TUT_COINS, total: p.coins, save: p.save });
+});
+
 app.get('/api/catalog', (_req, res) => {
   res.json({ catalog: weaponCatalog(), perks: PERK_UPGRADES, upgradeDefs: UPGRADE_STATS, costs: costTable(), colors: WEAPON_COLORS, skinShop: SKIN_SHOP, fxShop: FX_SHOP, abilityDefs: ABILITY_DEFS_ALL });
 });
@@ -11396,7 +11767,7 @@ app.post('/api/buy_weapon', (req, res) => {
   const def = WEAPON_BY_ID[weaponId];
   if (!def || !def.shopOnly) return res.status(400).json({ error: 'That weapon is not for sale.' });
   if (def.mythic) return res.status(400).json({ error: 'Mythics are only sold in the rare shop that opens after a Giant wave.' });
-  if (def.secret) return res.status(400).json({ error: def.from === 'boss' ? 'Only won by defeating the Ice Knight.' : 'A secret weapon: only won in the SECRET BOT event.' });
+  if (def.secret) return res.status(400).json({ error: def.from === 'boss' ? 'Only won by defeating the Ice Knight.' : def.uncommon ? 'An uncommon weapon: only won in a MINIGAME (EVENTS menu).' : 'A secret weapon: only won in the SECRET BOT event.' });
   if (def.bossReward) return res.status(400).json({ error: def.id === 'infinitybow' ? 'Only won by defeating the Abyss.' : def.id === 'endlessscythe' ? 'Only won by defeating the Abyss a second time.' : 'Only won by defeating the Portal Mage.' });
   if (def.needAll) {
     const prof0 = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });
@@ -11751,6 +12122,293 @@ setInterval(() => {
   for (const [code, s] of trades) if (now - s.seen > TRADE_IDLE_MS) trades.delete(code);
 }, 60000).unref?.();
 
+// ─── MINIGAMES ───────────────────────────────────────────────────────────────
+// In the EVENTS menu. One is on at a time and it changes every MG_ROTATE_MS. Each
+// has its own traps, gives you its own weapons and armour (yours stay at home, and
+// abilities are off), and a goal against the clock. Beat it and you win an UNCOMMON
+// weapon you don't have yet, picked at random: one prize per player per minigame.
+const MG_ROTATE_MS = 10 * 60000, MG_ALL_COINS = 50000, MG_TRAP_EVERY = 2600, MG_TRAP_MAX = 7;
+const set3 = s => [s + '_h', s + '_c', s + '_l'];
+const MINIGAMES = [
+  { id: 'spitters', name: 'SPITTER HUNT', goal: 'KILL 30 SPITTERS (LEVEL 2) IN 60 SECONDS', time: 60000, kill: ['spitter'], need: 30, level: 2,
+    spawn: ['spitter'], max: 9, every: 650, traps: ['spike', 'snare'], weapons: ['bow', 'crossbow', 'sword'], armor: set3('leather') },
+  { id: 'bladestorm', name: 'BLADE STORM', goal: 'CUT DOWN 12 SAMURAI IN 75 SECONDS', time: 75000, kill: ['samurai'], need: 12, level: 3,
+    spawn: ['samurai'], max: 4, every: 1100, traps: ['root', 'mirror', 'beartrap'], weapons: ['katana', 'scimitar'], armor: set3('shadow') },
+  { id: 'ventrun', name: 'VENT RUNNER', goal: 'SURVIVE 50 SECONDS: THE VENTS ARE YOUR ONLY WAY OUT', time: 50000, survive: true, level: 4,
+    spawn: ['runner', 'bomber'], max: 12, every: 520, traps: ['vent', 'mine', 'keg'], trapEvery: 1800, weapons: ['dagger', 'claws'], armor: set3('assassin') },
+  { id: 'gauntlet', name: 'TRAP GAUNTLET', goal: 'KILL 25 MONSTERS IN 70 SECONDS WHILE THE FLOOR FILLS WITH TRAPS', time: 70000, need: 25, level: 3,
+    spawn: ['grunt', 'brute', 'runner'], max: 8, every: 800, traps: ['spike', 'fire', 'lava', 'crusher', 'mortar', 'tesla'], trapEvery: 1200, trapMax: 11, weapons: ['spear', 'glaive'], armor: set3('steel') },
+  { id: 'iceage', name: 'ICE AGE', goal: 'KILL 20 MONSTERS WITH FROST, ON A FLOOR OF OIL AND ICE, IN 70 SECONDS', time: 70000, need: 20, level: 3,
+    spawn: ['grunt', 'warden', 'runner'], max: 7, every: 850, traps: ['ice', 'oil', 'flash'], weapons: ['frostrod', 'frostbow'], armor: set3('frostbite') },
+  { id: 'bruteforce', name: 'BRUTE FORCE', goal: 'SMASH 10 BRUTES (LEVEL 4) IN 75 SECONDS', time: 75000, kill: ['brute'], need: 10, level: 4,
+    spawn: ['brute'], max: 4, every: 1300, traps: ['quake', 'gust', 'geyser'], weapons: ['hammer', 'mace'], armor: set3('iron') },
+  { id: 'snipers', name: 'SNIPER ALLEY', goal: 'TAKE OUT 8 SNIPERS IN 75 SECONDS', time: 75000, kill: ['sniper'], need: 8, level: 3,
+    spawn: ['sniper', 'grunt'], max: 6, every: 900, traps: ['flash', 'gust', 'shock'], weapons: ['javelin', 'musket'], armor: set3('hunter') },
+  { id: 'bombsquad', name: 'BOMB SQUAD', goal: 'POP 25 BOMBERS IN 60 SECONDS', time: 60000, kill: ['bomber'], need: 25, level: 3,
+    spawn: ['bomber'], max: 8, every: 600, traps: ['spring', 'gust', 'tar'], weapons: ['whip', 'trident'], armor: set3('ember') },
+  { id: 'elitetrial', name: 'ELITE TRIAL', goal: 'BEAT 3 ELITE KNIGHTS IN 100 SECONDS', time: 100000, kill: ['eliteknight'], need: 3, level: 3,
+    spawn: ['eliteknight'], max: 2, every: 2500, traps: ['beartrap', 'crusher'], weapons: ['halberd', 'greatsword'], armor: set3('paladin') },
+  { id: 'bones', name: 'NIGHT OF BONES', goal: 'BREAK 40 SKELETONS IN 60 SECONDS', time: 60000, kill: ['skeleton'], need: 40, level: 2,
+    spawn: ['skeleton', 'skeleton', 'skeleton', 'necromancer'], max: 12, every: 420, traps: ['poison', 'tar'], weapons: ['flail', 'nunchaku'], armor: set3('bone') },
+];
+const MG_BY_ID = Object.fromEntries(MINIGAMES.map(m => [m.id, m]));
+const UNCOMMON_IDS = WEAPONS.filter(w => w.uncommon).map(w => w.id);
+const mgWindow = (t = Date.now()) => Math.floor(t / MG_ROTATE_MS);
+// Every one comes round in turn (7 and 10 share no factor), so the next is never the same.
+const minigameAt = win => MINIGAMES[((win * 7) % MINIGAMES.length + MINIGAMES.length) % MINIGAMES.length];
+const currentMinigame = () => minigameAt(mgWindow());
+function mgCard(m) {
+  const tr = id => ({ id, name: TRAP_TYPES[id].name, color: TRAP_TYPES[id].color });
+  return { id: m.id, name: m.name, goal: m.goal, time: m.time, level: m.level, survive: !!m.survive,
+           weapons: m.weapons.map(id => ({ id, name: WEAPON_BY_ID[id].name })), traps: m.traps.map(tr),
+           armor: m.armor.map(id => ({ id, name: Armor.BY_ID[id]?.name || id, rarity: Armor.BY_ID[id]?.rarity || 0 })) };
+}
+function startMinigame() {
+  const m = MG_BY_ID[room.mgId] || currentMinigame();
+  room.mg = { id: m.id, name: m.name, goal: m.goal, level: m.level, time: m.time, t: m.time, kills: 0, need: m.need || 0, survive: !!m.survive,
+              kill: m.kill || null, spawnT: 600, trapT: 900, over: false };
+  room.mgWin = null;
+  room.wave = { num: m.level, monstersLeft: 1e6, spawnQueue: 0, spawnTimer: 1e9, betweenTimer: 0 };
+  room.waveHpMult = 1; room.waveSpeedMult = 1;
+  const p = room.players.p1;
+  if (p) { p.lives = 1; p.abilities = p.abilities.map(() => null); }
+  if (m.traps.includes('vent')) spawnVents();      // the vents are there from the start
+  room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 26, text: m.name, color: '#7affc8', timer: 2600, max: 2600 });
+  room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 44, text: m.goal, color: '#ffd84a', timer: 3600, max: 3600 });
+}
+function updateMinigame(dt) {
+  const g = room.mg, m = MG_BY_ID[g.id];
+  if (!g || g.over) return;
+  g.t -= dt;
+  if (g.t <= 0) { mgFinish(!!g.survive); return; }
+  g.spawnT -= dt;
+  if (g.spawnT <= 0) {
+    g.spawnT = m.every;
+    if (room.monsters.length < m.max) spawnMonster(m.spawn[Math.floor(Math.random() * m.spawn.length)], { noRare: true });
+  }
+  g.trapT -= dt;
+  if (g.trapT <= 0) {
+    g.trapT = m.trapEvery || MG_TRAP_EVERY;
+    if (room.traps.length < (m.trapMax || MG_TRAP_MAX)) spawnTrap(m.traps);
+  }
+}
+function mgKill(target) {
+  const g = room.mg;
+  if (!g || g.over || g.survive) return;
+  if (g.kill && !g.kill.includes(target.type)) return;
+  g.kills++;
+  if (g.kills >= g.need) mgFinish(true);
+}
+// Over, one way or the other. A win pays once per player per minigame.
+function mgFinish(won) {
+  const g = room.mg;
+  if (!g || g.over) return;
+  g.over = true;
+  room.victory = !!won;
+  room.gameState = 'ROUND_OVER';
+  room.roundOverTimer = 7000;
+  room.mgWin = { won: !!won };
+  if (!won) return;
+  const pw = room.passwords.p1, d = progress();
+  if (!pw) { room.mgWin.nopass = true; return; }
+  if (isAdminPw(pw)) { room.mgWin.admin = true; return; }
+  const win = room.mgWindow ?? mgWindow();
+  if (d.mgWins[pw] === win) { room.mgWin.again = true; return; }
+  d.mgWins[pw] = win;
+  const have = profileFor(pw, {}).weapons;
+  const left = UNCOMMON_IDS.filter(id => !have.includes(id));
+  if (left.length) {
+    const id = left[crypto.randomInt(left.length)];
+    d.weapons[pw] = sortWeaponIds([...(d.weapons[pw] || []), id]);
+    room.mgWin.weapon = { id, name: WEAPON_BY_ID[id].name };
+  } else {
+    d.coins[pw] = (d.coins[pw] || 0) + MG_ALL_COINS;
+    room.playerCoins.p1 = d.coins[pw];
+    room.mgWin.coins = MG_ALL_COINS;
+  }
+  markDirty(); flushProgress(); syncLive(pw);
+}
+app.post('/api/minigame', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32), win = mgWindow();
+  res.json({ now: mgCard(minigameAt(win)), next: mgCard(minigameAt(win + 1)), endsIn: (win + 1) * MG_ROTATE_MS - Date.now(),
+             won: !!pw && progress().mgWins[pw] === win, uncommon: UNCOMMON_IDS.length,
+             owned: pw ? UNCOMMON_IDS.filter(id => (progress().weapons[pw] || []).includes(id)).length : 0 });
+});
+
+// ─── FRIENDS, TRADE REQUESTS AND CHALLENGES ───────────────────────────────────
+// Every open page checks in (POST /api/social/poll) every few seconds: that is how
+// the server knows who is playing, under what name, and how it hands them what is
+// waiting. You ask someone by typing the name they play under; they get a message
+// and answer YES, NO or DON'T NOTIFY TODAY. YES to a friend request makes you
+// friends (you see each other online); to a trade, opens a trade between you; to a
+// challenge, the challenger picks the map and you are both sent into a private room.
+// A friend id is a hash of a password, so a save (which the device can read) never
+// holds anyone else's password.
+const ONLINE_MS = 12000, ASK_MS = 45000, ASK_GAP_MS = 4000, FRIENDS_MAX = 60;
+const ASK_KINDS = { friend: 'FRIEND', trade: 'TRADE', challenge: 'CHALLENGE' };
+const online = new Map();          // password -> { name, seen, tz }
+const asks = new Map();            // id -> a request
+const mutes = new Map();           // password -> Map(from password -> muted until)
+const pidOf = pw => crypto.createHash('sha256').update(SAVE_SECRET + '|friend|' + pw).digest('hex').slice(0, 16);
+function cleanFriends(list) { return Array.isArray(list) ? [...new Set(list.filter(x => typeof x === 'string' && /^[0-9a-f]{16}$/.test(x)))].slice(0, FRIENDS_MAX) : []; }
+const isOnline = pw => { const o = online.get(pw); return !!o && Date.now() - o.seen < ONLINE_MS; };
+const nameOf = pw => online.get(pw)?.name || progress().names[pw] || 'PLAYER';
+// The end of the day where the person is (tz = their getTimezoneOffset, in minutes).
+function endOfDay(tz) {
+  const off = Number.isFinite(tz) ? Math.max(-900, Math.min(900, tz)) : 0;
+  const local = Date.now() - off * 60000, day = 86400000;
+  return Math.floor(local / day) * day + day + off * 60000;
+}
+function mutedBy(to, from) { const m = mutes.get(to); const until = m && m.get(from); return !!until && until > Date.now(); }
+// Who is online right now under this name (not you).
+function findOnline(name, me) {
+  const want = sanitizeText(name, 12).toUpperCase();
+  if (!want) return [];
+  const out = [];
+  for (const [pw, o] of online) if (pw !== me && o.name === want && Date.now() - o.seen < ONLINE_MS) out.push(pw);
+  return out;
+}
+function friendIds(pw) { return progress().friends[pw] || (progress().friends[pw] = []); }
+function areFriends(a, b) { return friendIds(a).includes(pidOf(b)); }
+function makeFriends(a, b) {
+  const d = progress();
+  for (const [x, y] of [[a, b], [b, a]]) {
+    const ids = friendIds(x), id = pidOf(y);
+    if (!ids.includes(id)) d.friends[x] = [...ids, id].slice(-FRIENDS_MAX);
+  }
+  markDirty();
+}
+function askView(q, me) {
+  const mine = q.from === me;
+  return { id: q.id, kind: q.kind, state: q.state, name: mine ? q.toName : q.fromName, mine, left: Math.max(0, Math.round(q.until - Date.now())),
+           ...(q.size ? { size: q.size } : {}), ...(q.go && !q.done?.has(me) ? { go: q.go[mine ? 'from' : 'to'] } : {}) };
+}
+function socialPw(req, res) {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) { res.status(400).json({ error: 'Set a password on the menu first: friends, trades and challenges are kept against it.' }); return null; }
+  if (isAdminPw(pw)) { res.status(400).json({ error: 'The admin account can not do that.' }); return null; }
+  return pw;
+}
+app.post('/api/social/poll', (req, res) => {
+  const pw = socialPw(req, res);
+  if (!pw) return;
+  const name = sanitizeText(req.body?.name, 12).toUpperCase() || 'PLAYER';
+  const tz = Math.floor(Number(req.body?.tz));
+  online.set(pw, { name, seen: Date.now(), tz: Number.isFinite(tz) ? tz : 0 });
+  const d = progress();
+  if (d.names[pw] !== name) { d.names[pw] = name; markDirty(); }
+  const id = pidOf(pw);
+  if (d.pidOf[id] !== pw) { d.pidOf[id] = pw; markDirty(); }
+  if (!d.friends[pw] && req.body?.backup) profileFor(pw, { backup: req.body.backup });   // a wiped server learns your friends back
+  const now = Date.now(), mine = [];
+  for (const q of asks.values()) {
+    if (q.to !== pw && q.from !== pw) continue;
+    if (q.state === 'pending' && q.until < now) q.state = 'gone';
+    mine.push(askView(q, pw));
+  }
+  const friends = friendIds(pw).map(fid => { const fpw = d.pidOf[fid]; return { id: fid, name: fpw ? nameOf(fpw) : '?', online: !!fpw && isOnline(fpw) }; })
+    .sort((a, b) => (b.online - a.online) || a.name.localeCompare(b.name));
+  res.json({ name, asks: mine, friends });
+});
+app.post('/api/social/ask', (req, res) => {
+  const pw = socialPw(req, res);
+  if (!pw) return;
+  const kind = ASK_KINDS[req.body?.kind] ? req.body.kind : null;
+  if (!kind) return res.status(400).json({ error: 'Unknown request.' });
+  const toName = sanitizeText(req.body?.to, 12).toUpperCase();
+  if (!toName) return res.status(400).json({ error: 'Type your friend\'s name.' });
+  online.set(pw, { ...(online.get(pw) || { tz: 0 }), name: sanitizeText(req.body?.name, 12).toUpperCase() || online.get(pw)?.name || 'PLAYER', seen: Date.now() });
+  const found = findOnline(toName, pw);
+  if (!found.length) return res.status(404).json({ error: 'Nobody called ' + toName + ' is playing right now. They have to have the game open.' });
+  if (found.length > 1) return res.status(409).json({ error: found.length + ' players called ' + toName + ' are on right now. Ask yours to play under a name of their own.' });
+  const to = found[0];
+  if (kind === 'friend' && areFriends(pw, to)) return res.status(400).json({ error: toName + ' is already your friend.' });
+  if (kind === 'friend' && friendIds(pw).length >= FRIENDS_MAX) return res.status(400).json({ error: 'You have the most friends there can be (' + FRIENDS_MAX + ').' });
+  if (mutedBy(to, pw)) return res.status(403).json({ error: toName + ' asked not to be notified again today.' });
+  const now = Date.now();
+  for (const q of asks.values()) {
+    if (q.from === pw && q.to === to && q.kind === kind && q.state === 'pending' && q.until > now) return res.status(400).json({ error: 'You already asked. Wait for ' + toName + ' to answer.' });
+  }
+  const last = [...asks.values()].filter(q => q.from === pw).reduce((m, q) => Math.max(m, q.at), 0);
+  if (now - last < ASK_GAP_MS) return res.status(429).json({ error: 'Slow down a little.' });
+  const q = { id: crypto.randomBytes(6).toString('hex'), kind, from: pw, fromName: nameOf(pw), to, toName: nameOf(to), at: now, until: now + ASK_MS, state: 'pending', done: new Set() };
+  asks.set(q.id, q);
+  res.json({ ok: true, ask: askView(q, pw) });
+});
+app.post('/api/social/answer', (req, res) => {
+  const pw = socialPw(req, res);
+  if (!pw) return;
+  const q = asks.get(sanitizeText(req.body?.id, 16));
+  if (!q || q.to !== pw) return res.status(404).json({ error: 'That request has gone.' });
+  if (q.state !== 'pending' || q.until < Date.now()) return res.status(400).json({ error: 'Too late: that request has run out.' });
+  const ans = req.body?.answer;
+  if (ans === 'mute') {
+    if (!mutes.has(pw)) mutes.set(pw, new Map());
+    mutes.get(pw).set(q.from, endOfDay(online.get(pw)?.tz));
+    for (const o of asks.values()) if (o.to === pw && o.from === q.from && o.state === 'pending') o.state = 'muted';
+    return res.json({ ok: true, state: 'muted' });
+  }
+  if (ans !== 'yes') { q.state = 'no'; return res.json({ ok: true, state: 'no' }); }
+  q.state = 'yes';
+  if (q.kind === 'friend') makeFriends(q.from, q.to);
+  if (q.kind === 'trade') {
+    // The trade opens with both already seated.
+    profileFor(q.from, {}); profileFor(q.to, {});
+    const code = tradeCode();
+    trades.set(code, { code, rev: 1, seen: Date.now(), a: { pw: q.from, name: q.fromName, offer: blankOffer(), agreed: false },
+                       b: { pw: q.to, name: q.toName, offer: blankOffer(), agreed: false } });
+    q.go = { from: { kind: 'trade', code }, to: { kind: 'trade', code } };
+  }
+  if (q.kind === 'challenge') {
+    q.state = 'pick';                  // the challenger chooses the map
+    q.until = Date.now() + ASK_MS;
+    q.go = { from: { kind: 'pickmap' }, to: { kind: 'waitmap' } };
+  }
+  res.json({ ok: true, state: q.state, ...(q.go ? { go: q.go.to } : {}) });
+});
+// The challenger's map: then both are sent in.
+const CHALLENGE_SIZES = ['small', 'medium', 'big', 'giant', 'duel'];
+app.post('/api/social/challenge/map', (req, res) => {
+  const pw = socialPw(req, res);
+  if (!pw) return;
+  const q = asks.get(sanitizeText(req.body?.id, 16));
+  if (!q || q.kind !== 'challenge' || q.from !== pw || q.state !== 'pick') return res.status(404).json({ error: 'That challenge has gone.' });
+  const size = CHALLENGE_SIZES.includes(req.body?.size) ? req.body.size : 'medium';
+  q.size = size; q.state = 'ready'; q.until = Date.now() + ASK_MS * 2; q.done = new Set();
+  q.go = { from: { kind: 'challenge', id: q.id, size }, to: { kind: 'challenge', id: q.id, size } };
+  res.json({ ok: true, go: q.go.from });
+});
+// A device has acted on what it was handed (opened the trade, joined the fight).
+app.post('/api/social/seen', (req, res) => {
+  const pw = socialPw(req, res);
+  if (!pw) return;
+  const q = asks.get(sanitizeText(req.body?.id, 16));
+  if (q && (q.from === pw || q.to === pw)) q.done.add(pw);
+  res.json({ ok: true });
+});
+app.post('/api/social/unfriend', (req, res) => {
+  const pw = socialPw(req, res);
+  if (!pw) return;
+  const fid = sanitizeText(req.body?.id, 16), d = progress();
+  d.friends[pw] = friendIds(pw).filter(x => x !== fid);
+  const other = d.pidOf[fid];
+  if (other) d.friends[other] = friendIds(other).filter(x => x !== pidOf(pw));
+  bumpRev(pw); if (other) bumpRev(other);
+  markDirty();
+  res.json({ ok: true });
+});
+// Who may join this challenge's room: its two players, once the map is picked.
+function challengeFor(id, pw) {
+  const q = asks.get(id);
+  return q && q.kind === 'challenge' && q.state === 'ready' && (q.from === pw || q.to === pw) ? q : null;
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, q] of asks) if (now - q.at > 10 * 60000) asks.delete(id);
+  for (const [pw, o] of online) if (now - o.seen > 10 * 60000) online.delete(pw);
+  for (const [pw, m] of mutes) { for (const [f, until] of m) if (until < now) m.delete(f); if (!m.size) mutes.delete(pw); }
+}, 60000).unref?.();
+
 // ─── WebSocket Connections ────────────────────────────────────────────────────
 
 function clearSlot(key) {
@@ -11813,7 +12471,7 @@ function createRoom(opts) {
   return [r, 'p1'];
 }
 function openRoomList() {
-  return rooms.filter(r => r.custom && r.gameState === 'LOBBY' && KEYS.some(k => r[k]) && seatKeys(r).some(k => !r[k]))
+  return rooms.filter(r => r.custom && !r.challengeId && r.gameState === 'LOBBY' && KEYS.some(k => r[k]) && seatKeys(r).some(k => !r[k]))
     .map(r => ({ id: r.id, name: r.custom.name, host: r.custom.host, size: r.mapSize, maxPlayers: r.maxPlayers,
                  players: seatKeys(r).filter(k => r[k]).length, names: seatKeys(r).filter(k => r[k]).map(k => r.playerNames[k]) }));
 }
@@ -11871,7 +12529,7 @@ wss.on('connection', (ws) => {
           eventTickets.delete(tk);
           if (EVENTS[t.id]) evId = t.id; else paid = t.id;
         }
-        const mode = paid ? paid : evId ? (evId === 'secretbot' ? 'bot' : 'abyss') : ['pvp', 'coop', 'waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom', 'bot', 'create', 'joinroom'].includes(msg.mode) ? msg.mode : 'pvp';
+        const mode = paid ? paid : evId ? (evId === 'secretbot' ? 'bot' : 'abyss') : ['pvp', 'coop', 'waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom', 'minigame', 'bot', 'create', 'joinroom'].includes(msg.mode) ? msg.mode : 'pvp';
         const size = paid ? 'big' : evId ? (evId === 'secretbot' ? 'big' : mapSizeFor('abyss', 'giant')) : mapSizeFor(mode, msg.size);
         // EXTREME and the PORTAL MAGE open up with XP (admins skip the wait). An event ticket is its own way in.
         if (MODE_XP[mode] && !evId) {
@@ -11882,6 +12540,13 @@ wss.on('connection', (ws) => {
         }
         reapRooms();
         let seat = null;
+        if (msg.mode === 'challenge') {
+          const c = challengeFor(sanitizeText(msg.challenge, 16), sanitizeText(msg.password, 32));
+          if (!c) { ws.send(JSON.stringify({ type: 'room_gone' })); return; }
+          let r = rooms.find(o => o.challengeId === c.id && o.gameState === 'LOBBY');
+          if (r) { const free = seatKeys(r).find(k => !r[k]); if (!free) { ws.send(JSON.stringify({ type: 'room_gone' })); return; } seat = [r, free]; }
+          else { const made = createRoom({ size: c.size, roomName: 'CHALLENGE', name: msg.name, maxPlayers: 2 }); made[0].challengeId = c.id; seat = made; }
+        }
         if (mode === 'joinroom') {
           // A listed room: take its first free seat, if it is still open.
           const r = rooms.find(o => o.id === msg.roomId && o.custom && o.gameState === 'LOBBY');
@@ -11895,6 +12560,7 @@ wss.on('connection', (ws) => {
         ws.room = r; ws.key = key;
         if (evId) r.event = evId;
         if (mode === 'sandbox' && msg.tutorial) r.tutorial = true;
+        if (mode === 'minigame') { r.mgId = currentMinigame().id; r.mgWindow = mgWindow(); }
         r[key] = ws;
         ws.send(JSON.stringify({ type: 'seat', num: KEYS.indexOf(key) + 1, mode, maxPlayers: r.maxPlayers, roomName: r.custom ? r.custom.name : null }));
       }
@@ -11921,6 +12587,10 @@ wss.on('connection', (ws) => {
         room.playerForge[myKey] = prof.forge || null;
         room.playerAbilities[myKey] = prof.abilitySlots || [null, null];
         room.playerArmor[myKey] = Object.values(prof.armorWorn || {});
+        if (room.gameMode === 'minigame') {          // a minigame hands out its own kit: these weapons, this armour, no abilities
+          const mg = MG_BY_ID[room.mgId];
+          room.playerUnlocks[myKey] = mg.weapons.slice(); room.playerArmor[myKey] = mg.armor.slice(); room.playerAbilities[myKey] = [null, null];
+        }
 
         // Skin: if the user explicitly changed it this session, save the new skin;
         // otherwise restore whatever this password had saved.
@@ -11986,6 +12656,11 @@ wss.on('connection', (ws) => {
         if (p && !p.dead && weapon(p).fireSpear && p.fsArm > 0) p.fsClick = { x: msg.x, y: msg.y, at: Date.now() };
       }
 
+      if (msg.type === 'vent_go') {
+        const p = room.players[myKey], to = room.traps.find(t => t.type === 'vent' && t.id === msg.id);
+        if (p && p.vent && to && to.net === p.vent.net && to.id !== p.vent.id) ventHop(p, to);
+      }
+
       // Light Blade: a click or tap on the field is an attack aimed at that spot.
       if (msg.type === 'blade_dash' && Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
         const p = room.players[myKey];
@@ -12000,6 +12675,7 @@ wss.on('connection', (ws) => {
 
       if (msg.type === 'select_weapon') {
         const p = room.players[myKey];
+        if (p && p.vent) exitVent(p);
         if (p && !p.dead && Array.isArray(p.unlockedWeapons)) {
           const idx = Number(msg.index);
           if (Number.isInteger(idx) && idx >= 0 && idx < p.unlockedWeapons.length) {

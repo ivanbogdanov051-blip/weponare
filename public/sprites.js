@@ -781,6 +781,9 @@ const MONSTER_SKIN = {
   sniper:      { base: '#4a6a3a', eye: '#ff3a3a', eyes: 1 },
   golem:       { base: '#4a3428', eye: '#ff8a1a', eyes: 2 },
   elitesniper:  { base: '#3a1a24', eye: '#ff1a2a', eyes: 1 },
+  elitesamurai: { base: '#3a0a18', eye: '#ff3a4a', eyes: 2 },
+  elitelight:   { base: '#fffbe0', eye: '#ff9a1a', eyes: 2 },
+  eliteknight:  { base: '#d8e4f4', eye: '#ffd84a', eyes: 2 },
   mirrorknight: { base: '#a8bcd4', eye: '#2a5aff', eyes: 2 },
   hexer:        { base: '#6a2a9a', eye: '#ffe04a', eyes: 2 },
   burrower:     { base: '#8a6438', eye: '#ffb03a', eyes: 2 },
@@ -793,6 +796,7 @@ const MONSTER_SKIN = {
 // Body outlines in normalised 0..1 space, scaled to whatever size the wave asks
 // for. Giving each type its own silhouette is what makes them tell apart at a
 // glance — colour alone reads poorly once several are on screen.
+const MONSTER_LOOK = { elitesamurai: 'samurai', elitelight: 'light', eliteknight: 'mirrorknight' };
 const MONSTER_SHAPE = {
   grunt: {
     body: [[0.14,0.10],[0.30,0.00],[0.70,0.00],[0.86,0.10],[0.96,0.38],[0.92,0.76],[0.72,0.86],[0.28,0.86],[0.08,0.76],[0.04,0.38]],
@@ -963,6 +967,7 @@ function monsterPad(w, h) {
 
 function monsterBuf(type, w, h) {
   const skin = MONSTER_SKIN[type] || MONSTER_SKIN.grunt;
+  type = MONSTER_LOOK[type] || type;
   const shp = MONSTER_SHAPE[type] || MONSTER_SHAPE.grunt;
   const c = ramp(skin.base);
   const M = monsterPad(w, h);
@@ -1652,6 +1657,86 @@ function trapBuf(type, size, armed) {
       if (armed) setPx(b, cx2 + Math.cos(a) * s * 0.3, cy2 + Math.sin(a) * s * 0.3, '#e8d8b0');
     }
     disc(b, cx2, cy2, 2.2, armed ? '#ffd84a' : '#8a6a4a');
+  } else if (type === 'vent') {
+    // A square floor grate over a dark shaft.
+    const cx2 = o + s / 2, cy2 = o + s / 2, st = MAT5.iron;
+    rect(b, o + 1, o + 1, s - 2, s - 2, st[2]);
+    rect(b, o + 3, o + 3, s - 6, s - 6, '#0a0a12');
+    for (let x = o + 5; x < o + s - 4; x += 4) rect(b, x, o + 3, 2, s - 6, st[3]);
+    rect(b, o + 1, o + 1, s - 2, 1, st[4]); rect(b, o + 1, o + s - 2, s - 2, 1, st[1]);
+    for (const [qx, qy] of [[o + 2, o + 2], [o + s - 4, o + 2], [o + 2, o + s - 4], [o + s - 4, o + s - 4]]) rect(b, qx, qy, 2, 2, st[4]);
+    if (armed) disc(b, cx2, cy2, 2, '#ffffff');
+  } else if (type === 'tar') {
+    // A bubbling black-purple pool.
+    const cx2 = o + s / 2, cy2 = o + s / 2;
+    disc(b, cx2, cy2, s * 0.47, '#1a1420');
+    ditherRect(b, cx2 - s * 0.36, cy2 - s * 0.36, s * 0.72, s * 0.72, '#1a1420', '#2a2034', 'sparse');
+    for (const [dx, dy, r] of [[-0.18, -0.1, 0.09], [0.14, 0.08, 0.07], [0.02, 0.2, 0.05]]) ringPx(b, cx2 + dx * s, cy2 + dy * s, r * s, 1, armed ? '#c8a8ff' : '#5a4a6a');
+  } else if (type === 'beartrap') {
+    // Steel jaws, open, around a pressure plate.
+    const cx2 = o + s / 2, cy2 = o + s / 2;
+    ringPx(b, cx2, cy2, s * 0.44, 1.6, MAT5.iron[3]);
+    for (let i = 0; i < 10; i++) {
+      const a = i * Math.PI / 5;
+      line(b, cx2 + Math.cos(a) * s * 0.44, cy2 + Math.sin(a) * s * 0.44, cx2 + Math.cos(a) * s * 0.28, cy2 + Math.sin(a) * s * 0.28, '#e8eef8');
+    }
+    disc(b, cx2, cy2, s * 0.16, armed ? '#ff5a5a' : MAT5.iron[2]);
+    rect(b, cx2 - 1, o, 2, s * 0.1, MAT5.iron[2]);
+  } else if (type === 'shock') {
+    // A metal plate with a yellow lightning bolt.
+    const cx2 = o + s / 2, cy2 = o + s / 2;
+    rect(b, o, o, s, s, MAT5.iron[1]);
+    ditherRect(b, o + 1, o + 1, s - 2, s - 2, MAT5.iron[1], MAT5.iron[2], 'checker');
+    poly(b, [[cx2 + 2, o + 3], [cx2 - 5, cy2 + 1], [cx2, cy2 + 1], [cx2 - 2, o + s - 3], [cx2 + 5, cy2 - 1], [cx2, cy2 - 1]], armed ? '#ffffff' : '#7ad8ff');
+  } else if (type === 'flash') {
+    // A round grenade with a pin and a white cap.
+    const cx2 = o + s / 2, cy2 = o + s / 2 + 1;
+    disc(b, cx2, cy2, s * 0.34, '#4a5a3a');
+    ditherRect(b, cx2 - s * 0.3, cy2 - s * 0.3, s * 0.6, s * 0.6, '#4a5a3a', '#5a6a4a', 'checker');
+    rect(b, cx2 - 3, cy2 - s * 0.42, 6, 4, '#d8d8e0');
+    ringPx(b, cx2 + 5, cy2 - s * 0.4, 2.2, 1, '#c8c8d0');
+    if (armed) disc(b, cx2, cy2, s * 0.14, '#fff6c0');
+  } else if (type === 'mortar') {
+    // A short fat barrel pointing up, on a base plate.
+    const cx2 = o + s / 2, cy2 = o + s / 2;
+    disc(b, cx2, cy2 + 2, s * 0.44, MAT5.iron[1]);
+    disc(b, cx2, cy2, s * 0.3, MAT5.iron[3]);
+    disc(b, cx2, cy2, s * 0.2, '#0a0a12');
+    ringPx(b, cx2, cy2, s * 0.3, 1, MAT5.iron[4]);
+    if (armed) disc(b, cx2, cy2, s * 0.12, '#ff7a3a');
+  } else if (type === 'gust') {
+    // A fan in a round cage.
+    const cx2 = o + s / 2, cy2 = o + s / 2;
+    disc(b, cx2, cy2, s * 0.46, '#2a3a4a');
+    ringPx(b, cx2, cy2, s * 0.44, 1.4, '#a8c8d8');
+    for (let i = 0; i < 4; i++) {
+      const a = i * Math.PI / 2 + 0.4;
+      poly(b, [[cx2, cy2], [cx2 + Math.cos(a) * s * 0.38, cy2 + Math.sin(a) * s * 0.38], [cx2 + Math.cos(a + 0.7) * s * 0.3, cy2 + Math.sin(a + 0.7) * s * 0.3]], armed ? '#ffffff' : '#d8f4ff');
+    }
+    disc(b, cx2, cy2, 2, '#5a6a7a');
+  } else if (type === 'crusher') {
+    // A heavy piston plate with warning stripes round it.
+    const cx2 = o + s / 2, cy2 = o + s / 2;
+    rect(b, o, o, s, s, '#2a2a30');
+    for (let i = 0; i < s; i += 6) { line(b, o + i, o, o + i + 3, o + 3, '#ffd84a'); line(b, o + i, o + s - 3, o + i + 3, o + s, '#ffd84a'); }
+    rect(b, o + 5, o + 5, s - 10, s - 10, MAT5.iron[2]);
+    ditherRect(b, o + 6, o + 6, s - 12, s - 12, MAT5.iron[2], MAT5.iron[3], 'checker');
+    disc(b, cx2, cy2, s * 0.12, armed ? '#ff3a3a' : MAT5.iron[4]);
+  } else if (type === 'oil') {
+    // A dark shiny puddle with a rainbow sheen.
+    const cx2 = o + s / 2, cy2 = o + s / 2;
+    disc(b, cx2, cy2, s * 0.46, '#1a1608');
+    disc(b, cx2 - 3, cy2 - 3, s * 0.2, '#3a3418');
+    line(b, cx2 - 6, cy2 - 6, cx2 - 1, cy2 - 8, armed ? '#ffffff' : '#c8a8ff');
+    line(b, cx2 - 2, cy2 - 5, cx2 + 3, cy2 - 6, '#8ad8c8');
+  } else if (type === 'geyser') {
+    // A cracked stone vent with steam curling up.
+    const cx2 = o + s / 2, cy2 = o + s / 2, st = MAT5.stone;
+    disc(b, cx2, cy2, s * 0.46, st[1]);
+    ditherRect(b, cx2 - s * 0.36, cy2 - s * 0.36, s * 0.72, s * 0.72, st[1], st[2], 'sparse');
+    disc(b, cx2, cy2, s * 0.18, '#1a2a3a');
+    for (const dx of [-3, 2]) { setPx(b, cx2 + dx, cy2 - 6, '#e8f8ff'); setPx(b, cx2 + dx + 1, cy2 - 8, '#e8f8ff'); }
+    if (armed) disc(b, cx2, cy2, s * 0.12, '#ffffff');
   } else if (type === 'rod') {
     // An iron plate with a copper rod wound in coil, crackling when armed.
     const cx2 = o + s / 2, cy2 = o + s / 2;

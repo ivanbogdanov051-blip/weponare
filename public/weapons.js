@@ -586,6 +586,39 @@ const WEAPON_ART = {
     k.poly([[28, -1], [35, 0], [28, 1]], wc);
   }},
 
+  // ── Three more commons ──
+  trident: { draw(k, wc) {
+    // A long shaft ending in three barbed sea-green prongs.
+    haft(k, 22, 2);
+    collar(k, 21, 3.4);
+    k.r(22.6, -5.6, 1.8, 11.2, wc);                       // the crossbar the prongs grow from
+    for (const y of [-5, 0, 5]) k.poly([[24, y - 1], [y ? 30 : 33, y], [24, y + 1]], wc);
+    k.poly([[29, -5.2], [27.4, -7.2], [27, -5]], MAT.steelLight);   // barbs
+    k.poly([[29, 5.2], [27.4, 7.2], [27, 5]], MAT.steelLight);
+    k.r(24, -0.4, 7, 0.8, MAT.steelLight);
+  }},
+
+  nunchaku: { draw(k, wc) {
+    // Two short wooden batons on a chain, the far one swinging out.
+    k.r(-1, -1.5, 9, 3, MAT.woodDark); k.r(-1, -1.5, 9, 1, MAT.woodLight);
+    k.r(1.5, -1.6, 0.8, 3.2, wc); k.r(4.5, -1.6, 0.8, 3.2, wc);
+    for (let i = 0; i < 4; i++) k.ring(9.4 + i * 1.6, -i * 0.9, 0.8, 0.5, MAT.ironLight);
+    k.poly([[15, -4.2], [24, -9.6], [25.4, -7.4], [16.4, -2]], MAT.woodDark);
+    k.poly([[15, -4.2], [24, -9.6], [24.5, -8.8], [15.5, -3.4]], MAT.woodLight);
+    k.r(18.6, -6.6, 0.8, 2.4, wc); k.r(21.6, -8.4, 0.8, 2.4, wc);
+  }},
+
+  musket: { draw(k, wc) {
+    // A long flintlock: a wooden stock, a brass lock and a long iron barrel.
+    k.poly([[-4, -1], [5, -2.2], [6, 2.6], [-4, 3.2]], MAT.wood);
+    k.r(-4, -1, 2, 4.2, MAT.woodDark);
+    k.r(5, -2.6, 24, 2.2, MAT.iron); k.r(5, -2.6, 24, 0.7, MAT.ironLight);
+    k.r(5, -0.4, 14, 1.4, MAT.wood);                       // the fore-stock under the barrel
+    k.r(6, -3.8, 3, 1.4, MAT.gold); k.r(7, -4.8, 1, 1.2, MAT.iron);   // lock and hammer
+    for (const x of [12, 18]) k.r(x, -2.8, 1, 3.8, MAT.gold);
+    k.r(28.4, -3.2, 0.9, 1, wc);                           // the bead sight
+  }},
+
   frostbow: { draw(k, wc) {
     // A pale bow of blue ice with an icicle arrow nocked.
     const cxA = -9, R = 11.5, SPAN = Math.PI * 0.44;
@@ -599,6 +632,118 @@ const WEAPON_ART = {
     k.r(tipX, -0.55, 18, 1.1, '#9fe8ff');
     k.poly([[12, -2.2], [17, 0], [12, 2.2]], '#ffffff');
     k.glow(15, 0, 5, wc, 0.35);
+  }},
+
+  // ── UNCOMMON ── (minigame prizes)
+  gladius: { draw(k, wc) {
+    // A short, broad legionary blade with a round bronze pommel.
+    grip(k, 4.5, MAT.woodDark, MAT.wood, 2);
+    k.circ(-1, 0, 2.4, MAT.gold); k.circ(-1.4, -0.6, 1, MAT.goldLight);
+    k.r(4.5, -4.2, 2, 8.4, MAT.gold);
+    k.poly([[6.5, -3], [17, -3.2], [21, 0], [17, 3.2], [6.5, 3]], wc);
+    k.poly([[6.5, -3], [17, -3.2], [20, -0.6], [6.5, -0.6]], MAT.steelLight);
+    k.r(7, -0.35, 9, 0.7, MAT.steelDark);
+  }},
+
+  warpike: { draw(k, wc) {
+    // A very long pike with a spike, a hooked fluke and a red tassel.
+    haft(k, 28, 2);
+    collar(k, 27, 3.6);
+    k.poly([[28.6, -1.6], [38, 0], [28.6, 1.6]], wc);
+    k.poly([[28.6, -1.6], [38, 0], [29, -0.2]], MAT.steelLight);
+    k.poly([[29, 1.2], [32, 6], [30.4, 1.2]], MAT.steelDark);
+    k.line(26.6, 1.6, 24.6, 5.2, 0.9, '#c83a3a'); k.line(27.2, 1.6, 26.2, 5.6, 0.7, '#e85a5a');
+  }},
+
+  morningstar: { draw(k, wc) {
+    // A chain from a short handle to a spiked iron ball.
+    grip(k, 7, MAT.leather, MAT.leatherLt, 3);
+    collar(k, 7, 3.4);
+    for (let i = 0; i < 4; i++) k.ring(10.4 + i * 1.8, Math.sin(i) * 0.6, 0.9, 0.6, MAT.ironLight);
+    k.circ(21, 0, 4.4, MAT.iron);
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      k.poly([[21 + Math.cos(a - 0.35) * 3.8, Math.sin(a - 0.35) * 3.8], [21 + Math.cos(a) * 7.4, Math.sin(a) * 7.4], [21 + Math.cos(a + 0.35) * 3.8, Math.sin(a + 0.35) * 3.8]], wc);
+    }
+    k.circ(20, -1.4, 1.6, MAT.ironLight);
+  }},
+
+  twinblades: { draw(k, wc) {
+    // Two slim blades crossed at the guard, held as one.
+    grip(k, 4.5, MAT.leather, MAT.leatherLt, 2);
+    k.r(4.5, -3.6, 1.6, 7.2, MAT.gold);
+    k.poly([[6, -1.8], [19, -5.6], [21, -5.4], [7, -0.2]], wc);
+    k.poly([[6, 1.8], [19, 5.6], [21, 5.4], [7, 0.2]], wc);
+    k.line(7, -1.2, 19, -5, 0.4, MAT.steelLight); k.line(7, 1.2, 19, 5, 0.4, MAT.steelLight);
+  }},
+
+  longbow: { draw(k, wc) {
+    // A tall yew bow, taller than the archer's arm, with a long arrow nocked.
+    const cxA = -12, R = 15, SPAN = Math.PI * 0.46;
+    const tipX = cxA + Math.cos(SPAN) * R, tipY = Math.sin(SPAN) * R;
+    k.ring(cxA, 0, R, 2.4, MAT.woodDark, -SPAN, SPAN);
+    k.ring(cxA, 0, R - 0.7, 1, MAT.woodLight, -SPAN * 0.96, SPAN * 0.96);
+    k.line(tipX, -tipY, tipX, tipY, 0.8, MAT.rope);
+    k.r(1.2, -4, 3, 8, MAT.leather);
+    k.r(tipX, -0.55, 24, 1.1, MAT.wood);
+    k.poly([[tipX + 22, -2], [tipX + 27, 0], [tipX + 22, 2]], wc);
+    k.poly([[tipX, -2.6], [tipX + 4, -0.7], [tipX, 0]], '#c83a3a');
+    k.poly([[tipX, 2.6], [tipX + 4, 0.7], [tipX, 0]], '#c83a3a');
+  }},
+
+  handcannon: { draw(k, wc) {
+    // A stubby bronze-banded cannon on a pistol grip.
+    k.poly([[-1, -1], [5, -1.4], [4, 6], [0, 6.4]], MAT.wood);
+    k.r(0, 4.8, 4, 1.6, MAT.woodDark);
+    k.r(3, -4.4, 17, 7, MAT.iron); k.r(3, -4.4, 17, 2, MAT.ironLight);
+    k.r(19, -5.2, 2.6, 8.6, wc);                          // the flared muzzle
+    for (const x of [7, 13]) k.r(x, -4.8, 1.4, 7.8, MAT.gold);
+    k.circ(4, -5, 1.2, '#ff8a3a');                          // a lit touch-hole
+  }},
+
+  thunderrod: { draw(k, wc) {
+    // An iron rod wound in copper, a crackling ball of lightning at its tip.
+    k.r(0, -1.3, 18, 2.6, MAT.iron); k.r(0, -1.3, 18, 0.8, MAT.ironLight);
+    for (let x = 3; x < 17; x += 2.6) k.r(x, -1.8, 1, 3.6, '#c87a3a');
+    k.poly([[17, -2.4], [20, -4.6], [21, -3.6], [19, -1.6]], MAT.ironLight);
+    k.poly([[17, 2.4], [20, 4.6], [21, 3.6], [19, 1.6]], MAT.ironLight);
+    k.glow(22.5, 0, 7, wc, 0.45);
+    k.circ(22.5, 0, 3.2, wc); k.circ(22, -0.8, 1.4, '#ffffff');
+    k.line(24.5, -1, 27.5, -3.6, 0.6, wc); k.line(24.6, 1.2, 27, 3.8, 0.6, wc);
+  }},
+
+  frostfang: { draw(k, wc) {
+    // A crossbow-like launcher of blue ice that fires shards like fangs.
+    k.r(-2, -1.6, 16, 3.2, '#2a4a5a'); k.r(-2, -1.6, 16, 1, '#5aa8d0');
+    k.ring(14, 0, 7, 2, '#5aa8d0', -Math.PI * 0.5, Math.PI * 0.5);
+    k.ring(14, 0, 6.2, 0.8, '#e8faff', -Math.PI * 0.46, Math.PI * 0.46);
+    k.poly([[14, -0.9], [24, 0], [14, 0.9]], wc);
+    k.poly([[20, -0.6], [25.5, 0], [20, 0.6]], '#ffffff');
+    k.glow(22, 0, 5, wc, 0.35);
+  }},
+
+  cinderbow: { draw(k, wc) {
+    // A charred black bow, its limbs glowing like embers, a burning arrow nocked.
+    const cxA = -9, R = 11.5, SPAN = Math.PI * 0.44;
+    const tipX = cxA + Math.cos(SPAN) * R, tipY = Math.sin(SPAN) * R;
+    k.ring(cxA, 0, R, 2.6, '#2a1a14', -SPAN, SPAN);
+    k.ring(cxA, 0, R - 0.8, 0.8, '#ff6a1a', -SPAN * 0.9, SPAN * 0.9);
+    k.line(tipX, -tipY - 1, tipX, tipY + 1, 0.8, '#c8a070');
+    k.r(0.4, -4, 3, 8, MAT.leather);
+    k.r(tipX, -0.55, 19, 1.1, '#3a2418');
+    k.glow(16, 0, 5, wc, 0.5);
+    k.poly([[12.5, -2.2], [17, 0], [12.5, 2.2]], wc); k.circ(15, 0, 1, '#ffd84a');
+  }},
+
+  sawdisc: { draw(k, wc) {
+    // A toothed steel disc on a throwing grip.
+    grip(k, 5, MAT.leather, MAT.leatherLt, 2);
+    k.circ(13, 0, 7, MAT.steelDark);
+    for (let i = 0; i < 12; i++) {
+      const a = i * Math.PI / 6;
+      k.poly([[13 + Math.cos(a) * 6.4, Math.sin(a) * 6.4], [13 + Math.cos(a + 0.2) * 9, Math.sin(a + 0.2) * 9], [13 + Math.cos(a + 0.45) * 6.4, Math.sin(a + 0.45) * 6.4]], wc);
+    }
+    k.circ(13, 0, 5, wc); k.circ(13, 0, 2, MAT.iron); k.circ(12, -1.6, 1.2, MAT.steelLight);
   }},
 
   chronostaff: { draw(k, wc) {
