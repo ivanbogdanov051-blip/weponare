@@ -33,12 +33,13 @@ function applyWorld(world) {
   arenaCache = null;
   pred = null;
 }
-const KEYS = ['p1', 'p2', 'p3', 'p4'];
+const KEYS = Array.from({ length: 12 }, (_, i) => 'p' + (i + 1));   // FREE FOR ALL seats twelve
 const myKeyOf = () => (myNum ? 'p' + myNum : null);
 
 const PAL = {
   bg:'#0a0a14', arena:'#1a1a2e', wall:'#2a2a4a',
-  p1:'#4488ff', p2:'#ff6644', p3:'#44dd66', p4:'#ffcc33', monster:'#44cc44',
+  p1:'#4488ff', p2:'#ff6644', p3:'#44dd66', p4:'#ffcc33', p5:'#ff5ad8', p6:'#5ae8ff', p7:'#b07aff', p8:'#ff9a3a',
+  p9:'#9aff5a', p10:'#ff5a7a', p11:'#5a8aff', p12:'#e8e8f4', monster:'#44cc44',
   xp:'#ffcc00', coin:'#ffd24a', hp:'#ff3333', hpBg:'#330000',
   text:'#e8e8e8', white:'#ffffff',
 };
@@ -993,6 +994,15 @@ function connect() {
       const lm = document.getElementById('lockMsg'); if (lm) lm.textContent = (msg.reason || 'Could not start the fight.').toUpperCase();
       return;
     }
+    if (msg.type === 'ffa_wait' || msg.type === 'ffa_full') {
+      leaveGame();
+      pickMenuTab('pvp');
+      const lm = document.getElementById('lockMsg');
+      if (lm) lm.textContent = msg.type === 'ffa_full' ? 'FREE FOR ALL IS FULL (' + msg.max + ' PLAYERS). TRY AGAIN SOON.'
+        : 'YOU LEFT FREE FOR ALL: YOU CAN JOIN AGAIN IN ' + Math.ceil(msg.ms / 1000) + ' SECONDS.';
+      ffaRefresh();
+      return;
+    }
     if (msg.type === 'event_denied') {
       leaveGame();
       openEvents().then(() => setEvMsg(msg.reason || 'Could not enter the event.', true));
@@ -1016,7 +1026,7 @@ function connect() {
       invite = null;
       const mode = msg.mode || pendingMode;
       if (loadCard.mode !== 'tutorial' && !EVENT_IDS.includes(loadCard.mode)) loadCard.mode = mode;
-      const modeLabel = mode === 'coop' ? 'CO-OP' : (msg.maxPlayers || 2) > 2 ? 'LAST ONE STANDING' : 'PvP';
+      const modeLabel = mode === 'ffa' ? 'FREE FOR ALL' : mode === 'coop' ? 'CO-OP' : (msg.maxPlayers || 2) > 2 ? 'LAST ONE STANDING' : 'PvP';
       const soloMsg = soloLobbyMsg(loadCard.mode);
       if (soloMsg) {
         setLobbyMsg(soloMsg);
@@ -3137,7 +3147,7 @@ function renderEvents() {
     const btn = !e.live ? '<button class="ev-enter" disabled>NOT RUNNING</button>'
       : !pendingPass ? '<button class="ev-enter" disabled>SET A PASSWORD FIRST</button>'
       : poor ? `<button class="ev-enter" disabled>NEED ◆ ${e.fee.toLocaleString()}</button>`
-      : confirm ? `<button class="ev-enter go" onclick="enterEvent('${e.id}')">TAP AGAIN: PAY ◆ ${e.fee.toLocaleString()}</button>`
+      : confirm ? `<button class="ev-enter go" onclick="enterEvent('${e.id}')">TAP AGAIN: PAY ◆ ${e.fee.toLocaleString()} (YOUR ONE GO)</button>`
       : `<button class="ev-enter" onclick="askEnterEvent('${e.id}')">ENTER ◆ ${e.fee.toLocaleString()}</button>`;
     const host = d.admin ? `<div class="ev-admin"><button onclick="hostEvent('${e.id}')">${e.live ? 'HOST AGAIN (' + Math.round(e.lasts / 86400000) + ' DAYS FROM NOW)' : 'HOST FOR ' + Math.round(e.lasts / 86400000) + ' DAYS'}</button>${e.live ? `<button onclick="hostEvent('${e.id}', true)">END NOW</button>` : ''}</div>` : '';
     return `<div class="ev-card${e.live ? ' live' : ''}">
@@ -3148,12 +3158,13 @@ function renderEvents() {
       <div class="ev-sub">PRIZES</div>
       ${gear}
       <div class="ev-prize coins"><i>◆</i><div><b>${e.prize.toLocaleString()} COINS</b><span>and your ${e.fee.toLocaleString()} entry back</span></div></div>
-      <div class="ev-fee">ENTRY ◆ ${e.fee.toLocaleString()} &middot; <b>lose and it's gone</b></div>
+      <div class="ev-fee">ENTRY ◆ ${e.fee.toLocaleString()} &middot; <b>ONE GO ONLY: win or lose, you can't play it again</b></div>
       ${btn}${host}
     </div>`;
-  }).join('') || `<div class="arm-none">${(d.beaten || []).length ? 'You have beaten every event that is running.' : 'No events yet.'}</div>`;
+  }).join('') || `<div class="arm-none">${(d.beaten || []).length || (d.played || []).length ? 'You have had your go at every event that is running.' : 'No events yet.'}</div>`;
   list.innerHTML = mgCardHtml() + list.innerHTML;
   if ((d.beaten || []).length) list.innerHTML += `<div class="ev-beaten">BEATEN: ${d.beaten.map(escapeHtml).join(', ')}. A beaten event leaves your list until it is hosted again.</div>`;
+  if ((d.played || []).length) list.innerHTML += `<div class="ev-beaten">PLAYED: ${d.played.map(escapeHtml).join(', ')}. Each event is one go, win or lose: it comes back when it is hosted again.</div>`;
   drawForgeIcons(list);
   drawShopIcons(list);
   drawTrapIcons(list);
@@ -3720,6 +3731,8 @@ function setShopMsg(text, isError) {
 
 // The upgrades screen and the legendary weapon SHOP share one profile and one set of messages.
 async function openLegendShop() { return openShop('legendScreen'); }
+// The shop is zoomed out to show many cards at once, so long descriptions are cut short: a tap opens one.
+document.addEventListener('click', e => { const d = e.target.closest && e.target.closest('.shop-box .shop-desc, .shop-box .shop-passive, .ev-card .ev-desc'); if (d && d.scrollHeight > d.clientHeight + 2 || d && d.classList.contains('open')) d.classList.toggle('open'); });
 async function openShop(screen = 'shopScreen') {
   readCredentials();
   showScreen(screen);
@@ -3976,7 +3989,7 @@ function legendaryCards(weapons, coins) {
         <div class="shop-desc">${WEAPON_DESC[w.id] || ''}. Better than a common: it has a special, but no super.</div>
         <div class="legend-buy">
           <button class="buy-weapon poor" disabled>MINIGAME PRIZE</button>
-          <span class="legend-need">Win a <b>MINIGAME</b> (EVENTS tab, a new one every 10 minutes): its prize is an uncommon weapon you don't have yet, picked at random</span>
+          <span class="legend-need">Win it in a <b>MINIGAME</b> (EVENTS tab)</span>
         </div>
       </div>`;
     }
@@ -4766,6 +4779,7 @@ const LOAD_MODES = {
   bot:      { a: '#e8701a', b: '#ffa53a', name: 'BOT',          rival: 'robot' },
   pvp:      { a: '#ff2a4a', b: '#ff8a1a', name: '???',          rival: '' },
   coop:     { a: '#2a5aff', b: '#1ac8e8', name: 'THE HORDE',    foes: [['grunt', 23, 27], ['brute', 30, 34]], ally: true },
+  ffa:      { a: '#e8a01a', b: '#ff3a5a', name: 'FREE FOR ALL', rival: '' },
 };
 const loadCard = { mode: 'pvp', foeName: null, t0: 0, raf: 0, floor: null, floorKey: '', tipAt: 0, weapons: null };
 
@@ -5240,6 +5254,12 @@ function updateScreens(state) {
     if (soloMsg) {
       setLobbyMsg(soloMsg);
     } else {
+      if (state.ffa) {
+        const n = state.seated || 1, need = state.ffa.need || 2;
+        setLobbyMsg('<span style="color:#ffd84a">FREE FOR ALL</span><br>GIANT MAP &middot; UP TO ' + (state.maxPlayers || 12) + ' PLAYERS &middot; YOU NEVER RUN OUT OF LIVES<br>'
+          + 'Waiting for ' + Math.max(1, need - n) + ' more player' + (need - n > 1 ? 's' : '') + ' to start... ' + n + '/' + need);
+        return;
+      }
       const modeStr = state.gameMode === 'coop' ? 'CO-OP MODE' : state.maxPlayers > 2 ? 'LAST ONE STANDING' : 'PvP MODE';
       const k = myKeyOf();
       if (state.roomId && state.gameState === 'LOBBY') invite = { id: state.roomId, name: state.roomName };
@@ -8302,8 +8322,9 @@ function drawParticles(particles) {
 // ─── HUD (drawn in 480×270 space) ─────────────────────────────────────────────
 
 function drawHUD(state) {
-  const p1 = state.players.p1, p2 = state.players.p2;
-  const names = state.playerNames || {};
+  const ffa = !!state.ffa, meK = myKeyOf();
+  const p1 = ffa ? state.players[meK] : state.players.p1, p2 = ffa ? null : state.players.p2;
+  const names = ffa ? { ...(state.playerNames || {}), p1: (state.playerNames || {})[meK] } : state.playerNames || {};
   // The right-hand readout stops short of the music / leave buttons.
   let RX = HUD_W;
   for (const z of hudTouchZones()) if (z.y < 40 && z.x > HUD_W / 2) RX = Math.min(RX, Math.max(HUD_W - 120, z.x - 2));
@@ -8321,7 +8342,7 @@ function drawHUD(state) {
     ctx.fillStyle = col;    ctx.fillText(names.p1 || 'P1', 4, 2);
     drawHpBar(4, 15, 74, 5, p1.hp / p1.maxHp, col, '#330000');
     drawShieldStrip(4, 13, 74, p1);
-    for (let i = 0; i < (p1.lives || 0); i++) { ctx.fillStyle = col; ctx.fillRect(4 + i*7, 21, 5, 3); }
+    if (!ffa) for (let i = 0; i < (p1.lives || 0); i++) { ctx.fillStyle = col; ctx.fillRect(4 + i*7, 21, 5, 3); }
   }
 
   if (p2) {
@@ -8335,7 +8356,7 @@ function drawHUD(state) {
     for (let i = 0; i < (p2.lives || 0); i++) { ctx.fillStyle = col; ctx.fillRect(RX - 9 - i*7, 21, 5, 3); }
   }
   // Players 3 and 4 share the middle of the bar.
-  for (const [k, left] of [['p3', true], ['p4', false]]) {
+  for (const [k, left] of ffa ? [] : [['p3', true], ['p4', false]]) {
     const q = state.players[k];
     if (!q) continue;
     const col = getSkinColor(q, PAL[k]), nm = (names[k] || k.toUpperCase()).slice(0, 10);
@@ -8352,7 +8373,9 @@ function drawHUD(state) {
 
   const w = state.wave;
   ctx.textAlign = 'center';
-  if (state.event === 'secretbot') {
+  if (ffa) {
+    drawFfaHud(state, RX);
+  } else if (state.event === 'secretbot') {
     const t = state.trophy ? 'CLAIM THE TROPHY!' : 'SECRET BOT';
     ctx.fillStyle = '#000'; ctx.fillText(t, HUD_W/2 + 1, 3);
     ctx.fillStyle = '#ff7a3a'; ctx.fillText(t, HUD_W/2, 2);
@@ -8441,7 +8464,7 @@ function drawHUD(state) {
   const mp = state.players[myKeyOf()] || null;
   if (mp) {
     const barW = 60, barH = 4;
-    const leftSide = myNum % 2 === 1, inset = 0;
+    const leftSide = ffa || myNum % 2 === 1, inset = 0;
     const bx = leftSide ? 4 + inset : RX - 4 - barW - inset;
     const lx = leftSide ? bx + barW + 3 : bx - 3;
     const align = leftSide ? 'left' : 'right';
@@ -8516,7 +8539,7 @@ function drawHUD(state) {
 
   // XP and coins live in the top bar beside your own health, so the bottom edge
   // belongs to the weapon rack alone.
-  const right = myNum % 2 === 0;
+  const right = !ffa && myNum % 2 === 0;
   const ax = right ? RX - 86 : 86;
   ctx.font = '8px "Courier New",monospace';
   ctx.textBaseline = 'top';
@@ -10681,9 +10704,9 @@ function mgCardHtml() {
     + '<div class="ev-sub">YOU FIGHT WITH</div><div class="mg-row">' + weapons + '</div>'
     + '<div class="ev-sub">YOU WEAR</div><div class="mg-row">' + armor + '</div>'
     + '<div class="ev-sub">TRAPS</div><div class="mg-row">' + traps + '</div>'
-    + '<div class="ev-desc" style="margin-top:6px">Your own weapons, armour and abilities stay at home. One life. Free to play, as often as you like.</div>'
+    + '<div class="ev-desc" style="margin-top:6px">Your own weapons, armour and abilities stay at home. One life. Free, but <b>one go</b>: win or lose, you wait for the next minigame.</div>'
     + '<div class="ev-sub">PRIZE</div><div class="ev-prize"><canvas class="shop-ic" data-weapon="longbow" width="56" height="32"></canvas><div>' + prize + '</div></div>'
-    + '<button class="ev-enter go" onclick="playMinigame()">&#9654; PLAY ' + escapeHtml(m.name) + '</button>'
+    + (d.played ? '<button class="ev-enter" disabled>YOU HAVE HAD YOUR GO &middot; WAIT FOR THE NEXT ONE</button>' : '<button class="ev-enter go" onclick="playMinigame()">&#9654; PLAY ' + escapeHtml(m.name) + ' (ONE GO)</button>')
     + (d.next ? '<div class="mg-next">NEXT UP: <b>' + escapeHtml(d.next.name) + '</b> &middot; ' + escapeHtml(d.next.goal) + '</div>' : '')
     + '</div>';
 }
@@ -10698,3 +10721,67 @@ function playMinigame() {
   clearInterval(evs.timer); cancelAnimationFrame(evs.raf);
   joinGame('minigame');
 }
+
+
+// ─── FREE FOR ALL ────────────────────────────────────────────────────────────
+// One giant public room: jump in any time once two are fighting, never run out of
+// lives (30s to come back), and after leaving wait 50s before joining again.
+function drawFfaHud(state, RX) {
+  const f = state.ffa, names = state.playerNames || {}, me = myKeyOf();
+  const inRoom = KEYS.filter(k => state.players[k]);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#000'; ctx.fillText('FREE FOR ALL', HUD_W / 2 + 1, 3);
+  ctx.fillStyle = '#ffd84a'; ctx.fillText('FREE FOR ALL', HUD_W / 2, 2);
+  ctx.font = '8px "Courier New",monospace';
+  ctx.fillStyle = '#ccc';
+  ctx.fillText(inRoom.length + ' PLAYING · ' + (f.k[me] || 0) + ' KILLS · ' + (f.d[me] || 0) + ' DEATHS', HUD_W / 2, 15);
+  // the scoreboard: the top five, and you
+  const rows = inRoom.slice().sort((a, b) => (f.k[b] || 0) - (f.k[a] || 0) || (f.d[a] || 0) - (f.d[b] || 0));
+  let show = rows.slice(0, 5);
+  if (me && !show.includes(me) && rows.includes(me)) show = [...show.slice(0, 4), me];
+  const bw = 96, bx = HUD_W - bw - 2;
+  let y = 30;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(bx, y - 2, bw, 9 + show.length * 9);
+  ctx.textAlign = 'left'; ctx.font = '7px "Courier New",monospace';
+  ctx.fillStyle = '#ffd84a'; ctx.fillText('KILLS', bx + 3, y); ctx.textAlign = 'right'; ctx.fillText('K / D', bx + bw - 3, y);
+  y += 9;
+  for (const k of show) {
+    const q = state.players[k], col = k === me ? '#fff' : getSkinColor(q, PAL[k] || '#ccc');
+    ctx.textAlign = 'left'; ctx.fillStyle = col;
+    ctx.fillText((rows.indexOf(k) + 1) + '. ' + String(names[k] || k).slice(0, 11) + (q.dead ? ' ✝' : ''), bx + 3, y);
+    ctx.textAlign = 'right'; ctx.fillText((f.k[k] || 0) + ' / ' + (f.d[k] || 0), bx + bw - 3, y);
+    y += 9;
+  }
+  ctx.font = '10px "Courier New",monospace'; ctx.textAlign = 'center';
+  const mine = state.players[me];
+  if (mine && mine.dead && mine.rsp > 0) {
+    const s = Math.ceil(mine.rsp / 1000);
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(HUD_W / 2 - 90, HUD_H / 2 - 24, 180, 40);
+    ctx.font = 'bold 13px "Courier New",monospace';
+    ctx.fillStyle = '#ff5a6a'; ctx.fillText('YOU DIED', HUD_W / 2, HUD_H / 2 - 20);
+    ctx.font = 'bold 11px "Courier New",monospace';
+    ctx.fillStyle = '#fff'; ctx.fillText('BACK IN ' + s + 's', HUD_W / 2, HUD_H / 2 - 2);
+    ctx.font = '10px "Courier New",monospace';
+  } else if (inRoom.length < 2) {
+    ctx.font = 'bold 9px "Courier New",monospace';
+    ctx.fillStyle = Math.floor(performance.now() / 600) % 2 ? '#ffd84a' : '#fff';
+    ctx.fillText('EVERYONE ELSE LEFT · WAITING FOR PLAYERS...', HUD_W / 2, 30);
+    ctx.font = '10px "Courier New",monospace';
+  }
+  ctx.textAlign = 'left';
+}
+// The menu button: how many are in, and whether it is on.
+let ffaTimer = 0;
+async function ffaRefresh() {
+  const sub = document.getElementById('ffaSub');
+  if (!sub) return;
+  try {
+    const r = await fetch('/api/ffa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const d = await r.json();
+    sub.textContent = d.live ? d.players + '/' + d.max + ' FIGHTING · JUMP IN' : d.players ? d.players + ' WAITING · NEEDS ' + d.need : 'giant public room';
+    document.getElementById('ffaLive')?.classList.toggle('hidden', !d.live);
+  } catch {}
+}
+function playFfa() { document.getElementById('lockMsg').textContent = ''; joinGame('ffa'); }
+setInterval(() => { if (document.getElementById('startScreen')?.classList.contains('active') && !document.hidden) ffaRefresh(); }, 6000);
+setTimeout(ffaRefresh, 1500);

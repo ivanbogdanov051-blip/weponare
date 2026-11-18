@@ -2013,3 +2013,88 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
   border-radius: 8px; border: 2px dashed #b8ffe0;
   background: linear-gradient(160deg, #0a8a5a, #2ac88a 50%, #0a5a6a) !important;
 }
+
+/* ── Zoomed out: the shop, upgrades, skins and events show most of what they hold at once ──
+   The whole screen is drawn smaller (--z) and laid out in columns; buttons are sized so that,
+   zoomed out, they are still at least about 32px to tap. */
+#legendScreen, #shopScreen, #skinsScreen { --z: 0.86; padding: 6px; }
+#legendScreen > .shop-box, #shopScreen > .shop-box, #skinsScreen > .skins-box {
+  zoom: var(--z); box-sizing: border-box; min-width: 0; max-width: none; margin: auto;
+  width: min(1280px, calc((100vw - 12px) / var(--z))); padding: 12px 16px;
+}
+#legendScreen > .shop-box, #shopScreen > .shop-box { max-height: calc((100dvh - 12px) / var(--z)); display: flex; flex-direction: column; }
+#shopScreen .shop-stats { justify-content: flex-start; }
+#legendScreen .shop-list, #shopScreen .shop-list {
+  flex: 1 1 auto; min-height: 0; max-height: none; display: grid; gap: 8px; align-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+}
+#shopScreen .shop-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); }
+#legendScreen .shop-list > *, #shopScreen .shop-list > * { margin: 0 !important; min-width: 0; }
+#legendScreen .shop-list > :not(.shop-row), #shopScreen .shop-list > :not(.shop-row), .shop-list > .lost-row, .shop-list > .mythic-pick, .shop-list > .shop-empty { grid-column: 1 / -1; }
+#legendScreen .shop-row { align-content: flex-start; gap: 6px; }
+.shop-box .shop-desc { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; cursor: pointer; }
+.shop-box .shop-passive { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; cursor: pointer; }
+.shop-box .shop-desc.open, .shop-box .shop-passive.open { display: block; -webkit-line-clamp: unset; }
+.shop-box .legend-buy { margin-top: auto; }
+.shop-box .buy-weapon { min-height: 38px; }
+#shopScreen .up-btn { min-height: 36px; }
+#shopScreen .up-max { min-height: 36px; }
+.shop-box .shop-title { margin-bottom: 0; }
+.shop-box .subtitle { margin-bottom: 4px; }
+.shop-box .shop-back { flex: none; margin-top: 8px; min-height: 40px; }
+
+/* Skins: the preview stays in view while you pick */
+.skin-cols { display: flex; gap: 14px; align-items: flex-start; text-align: center; }
+.skin-left { flex: none; width: 250px; position: sticky; top: 0; display: flex; flex-direction: column; align-items: center; }
+.skin-left .shop-back { width: 100%; margin-top: 4px; }
+.skin-right { flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 4px 14px; align-content: start; }
+.skin-sec { min-width: 0; }
+.skin-sec.wide { grid-column: 1 / -1; }
+#skinsScreen .skin-section-title { margin: 6px 0 5px; }
+#skinsScreen .skin-color { width: 34px; height: 34px; }
+#skinsScreen .skin-hat { min-height: 36px; }
+#skinsScreen .outfit-grid { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
+
+/* Events: more cards side by side, shorter banners */
+#eventsScreen > .arm-box { zoom: 0.9; }
+.ev-list { grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 420px)); justify-content: center; }
+.ev-art { height: 120px; object-fit: cover; }
+.ev-desc { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; cursor: pointer; }
+.ev-desc.open { display: block; }
+.ev-enter { min-height: 46px; }
+.mg-it { min-height: 30px; }
+
+@media (max-width: 700px) {
+  #legendScreen, #shopScreen, #skinsScreen { --z: 0.8; padding: 4px; }
+  #legendScreen .shop-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 196px), 1fr)); }
+  #legendScreen .shop-head { min-width: 0; flex-wrap: wrap; }
+  .skin-cols { flex-direction: column; align-items: stretch; }
+  .skin-left { width: auto; flex-direction: row; justify-content: center; gap: 10px; top: -12px; z-index: 2; padding: 6px 0; background: rgba(40, 12, 60, 0.96); border-radius: 0 0 12px 12px; }
+  .skin-left .shop-back { width: auto; flex: 1 1 0; max-width: 160px; }
+  .skin-left .fx-buy { margin: 0; flex: 1 1 0; }
+  .skin-right { grid-template-columns: 1fr; }
+  #skinPreviewCanvas { width: 128px !important; height: 124px !important; margin: 0 !important; }
+  #eventsScreen > .arm-box { zoom: 0.76; }
+  .ev-art { height: 100px; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  #legendScreen, #shopScreen, #skinsScreen { --z: 0.7; }
+  #eventsScreen > .arm-box { zoom: 0.7; }
+}
+#legendScreen .shop-coins, #shopScreen .shop-coins { align-self: center; }
+#skinsScreen .skin-hat { display: inline-flex; align-items: center; justify-content: center; }
+@media (max-width: 700px) {
+  #skinsScreen .skin-hat { padding: 0 9px; letter-spacing: 0; font-size: 11px; }
+  #skinsScreen .skin-grid, #skinsScreen .hat-grid { gap: 5px; }
+  #skinsScreen .skin-color { width: 32px; height: 32px; }
+  #skinsScreen .outfit-grid { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 5px; }
+}
+
+/* ── FREE FOR ALL ── */
+.p5-color { color: #ff5ad8; } .p6-color { color: #5ae8ff; } .p7-color { color: #b07aff; } .p8-color { color: #ff9a3a; }
+.p9-color { color: #9aff5a; } .p10-color { color: #ff5a7a; } .p11-color { color: #5a8aff; } .p12-color { color: #e8e8f4; }
+.mode-btn.btn-ffa { position: relative; width: 100%; flex: none; margin: 4px 0 2px; padding: 8px 10px; border: 2px solid #fff; border-radius: 10px; color: #fff; font-weight: bold; letter-spacing: 3px;
+  text-shadow: 1px 1px 0 #3a0a00; background: linear-gradient(90deg, #ff3a5a, #ffb02a, #ff3a5a); background-size: 200% 100%; animation: evBtn 5s linear infinite; box-shadow: 0 0 12px rgba(255, 140, 40, 0.6); }
+.mode-btn.btn-ffa small { display: block; letter-spacing: 1px; }
+.btn-ffa::before { content: '⚔️ '; }
+.room-ffa { width: 100%; margin: 0 0 10px; }

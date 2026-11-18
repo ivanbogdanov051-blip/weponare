@@ -59,6 +59,7 @@
           <button class="mode-btn btn-room btn-create" onclick="openCreateRoom()">CREATE ROOM<small>2-4 friends</small></button>
           <button class="mode-btn btn-room btn-join" onclick="openRoomBrowser()">JOIN ROOM<small>see open rooms</small></button>
         </div>
+        <button class="mode-btn btn-ffa" onclick="playFfa()">FREE FOR ALL<span id="ffaLive" class="ev-live hidden">LIVE</span><small id="ffaSub">giant public room</small></button>
       </div>
 
       <div class="menu-tab" data-tab="waves">
@@ -312,6 +313,7 @@
     <div class="pixel-box room-box">
       <div class="title-text" style="font-size:22px;margin-bottom:4px">CREATE ROOM</div>
       <div class="subtitle">YOUR OWN PvP ROOM &middot; OTHERS CAN FIND AND JOIN IT</div>
+      <button class="mode-btn btn-ffa room-ffa" onclick="playFfa()">FREE FOR ALL<small>one giant room for everyone &middot; join any time &middot; never out</small></button>
       <input type="text" id="roomNameInput" class="name-input" placeholder="ROOM NAME" maxlength="20" autocomplete="off" spellcheck="false">
       <div class="room-opt-title">PLAYERS</div>
       <div class="room-opts" id="roomPlayersOpts">
@@ -389,6 +391,8 @@
           <p><b>Sandbox</b> &ndash; solo practice with every weapon. Spawn any monster, boss, item or trap and switch on cheats from the TOOLS button. Nothing you do there is saved.</p></div>
         <div class="howto-sec"><h3>THE FORGE</h3>
           <p>Pick a weapon you own and put coins in the fire (500 to 500,000). More coins give a better chance of an upgrade and a much better chance of a rare one; if the metal cracks the coins are gone. Each weapon holds <b>3 upgrades</b>. Melee weapons have over 30 possible upgrades and ranged weapons over 20. These are passives that work while the weapon is in your hand. The <b>5 rare upgrades</b> each give an extra ability on <b>C</b>, and a weapon can only hold one. Reset a weapon in the forge to free its slots; the coins do not come back. A weapon with a rare upgrade glows red. <b>Mythics</b> have a forge list of their own: 32 stronger upgrades and 5 rare abilities that no other weapon can get.</p></div>
+        <div class="howto-sec"><h3>FREE FOR ALL</h3>
+          <p>One giant public room for everyone (up to 12), on the PvP tab and in CREATE ROOM. It starts as soon as two people are in, and from then on anyone can <b>jump in at any time</b>. Nobody is ever out: when you die you come back <b>30 seconds</b> later, somewhere safe. Every kill counts on the scoreboard. If you leave, you can't join again for <b>50 seconds</b>.</p></div>
         <div class="howto-sec"><h3>FRIENDS, TRADE AND CHALLENGE</h3>
           <p><b>FRIENDS</b>, <b>TRADE</b> and <b>CHALLENGE</b> all work by name: type the name your friend plays under and, if they have the game open, they get a message and answer <b>YES</b>, <b>NO</b> or <b>DON'T NOTIFY TODAY</b> (then you can't ask them anything else until their midnight). YES to a friend request puts you on each other's list, where you see who is online. YES to a trade opens it for both of you. YES to a challenge lets the one who asked pick the map, and you are both sent into a private PvP room. You need a password for all of it.</p></div>
         <div class="howto-sec"><h3>TRADE</h3>
@@ -402,7 +406,7 @@
           <p>Parry (P) opens a short window: a melee blow aimed at you is sent back at the attacker, a shot bounces back the way it came, and a fire hand or inferno fizzles out. Parrying a Giant's swing or shockwave stuns him. It then needs 8 seconds to recharge (the blue bar).</p></div>
         <div class="howto-sec"><h3>COINS &amp; UPGRADES</h3>
           <p><b>The Armoury</b> sells armour, with new stock every 10 minutes. There are 120 pieces in six rarities, from Common (a little health) to Mythic (huge health and 3 or 4 passives, and they glow red). You can own as many as you like and wear one helmet, one chestplate and one pair of leggings. What you buy stays yours, and armour can be traded. It does nothing in the Saw Room.</p>
-          <p><b>Events</b> are hosted for a while (each says when it ends) and can be hosted again later. They have their own fights and prizes, some found nowhere else. The first is the <b>Void Dungeon</b>: pay 200,000 coins to enter a giant void arena and face the <b>rare Abyss</b> (four times the health, bigger, faster, far harder hits, bigger attacks and a new one, ECLIPSE: a ring of void marks closes round you, then one under your feet). Beat him and touch the trophy he leaves to win the mythic shield <b>VOID GATE</b>, which only comes from this event, and 1,000,000 coins plus your 200,000 back. Lose, or leave, and the 200,000 is gone. The second is the <b>Secret Bot</b>: a bot as strong as the INSANE one with the secret FIRE SPEAR, which you win by beating it. <b>Once you beat an event it leaves your list</b>, until it is hosted again.</p>
+          <p><b>Events</b> are hosted for a while (each says when it ends) and can be hosted again later. They have their own fights and prizes, some found nowhere else. The first is the <b>Void Dungeon</b>: pay 200,000 coins to enter a giant void arena and face the <b>rare Abyss</b> (four times the health, bigger, faster, far harder hits, bigger attacks and a new one, ECLIPSE: a ring of void marks closes round you, then one under your feet). Beat him and touch the trophy he leaves to win the mythic shield <b>VOID GATE</b>, which only comes from this event, and 1,000,000 coins plus your 200,000 back. Lose, or leave, and the 200,000 is gone. The second is the <b>Secret Bot</b>: a bot as strong as the INSANE one with the secret FIRE SPEAR, which you win by beating it. <b>Each event is one go</b>: once you enter it, win or lose, it leaves your list until it is hosted again.</p>
           <p><b>Shields</b> are sold there too, and go in a slot of their own. There are 56, in the same six rarities. A shield gives no health. Press the shield button (X on a keyboard) and for 5 seconds a small forcefield takes hits in place of your health, until it has taken all it can and breaks; any hit that breaks it carries on through to you. It is ready again 10 seconds after you pressed it. Rarer shields take more, and pressing the button sets off up to 4 abilities: take 50% less damage for 5 seconds, teleport the way you were moving, burn or freeze whoever is close, heal and more. Some have a passive as well.</p>
           <p>Monsters drop coins &ndash; walk over them to collect. Spend coins in <b>UPGRADE WEAPONS</b> (damage, speed, range, crit, cooldown, multishot and more for each weapon, plus your health, move speed, defense and parry), on <b>ABILITIES</b>, and in <b>CUSTOMIZE</b> on skins, changing colors, glows, animated accessories and nickname backgrounds. Tap one to try it on before you buy it.</p>
           <p><b>&#9733; PASSIVES</b> &ndash; max out <b>every</b> upgrade on one of these weapons and, whenever you hold it, you get its passive (its name shows under your weapon bar, and you glow in its colour):
@@ -431,7 +435,7 @@
         <div class="howto-sec"><h3>ITEMS</h3>
           <p>Glowing gems appear on the floor. Walk over one to pick it up (you can carry 4), then use it with 1-4 or by tapping it: speed, strength, shield, haste, heal, regeneration, vampire, bomb, frost nova, <b>thorns</b> (attackers take half back), <b>cloak</b> (invisible), <b>lightning jar</b> (zaps 5 foes), <b>turret</b>, <b>monster egg</b> (2 monsters fight for you), <b>frenzy</b> (fast, strong and quick), <b>iron skin</b> (half damage), <b>hourglass</b> (slows every foe), <b>gold rush</b> (double coins) and <b>elixir</b> (full heal and cure).</p></div>
         <div class="howto-sec"><h3>MINIGAMES</h3>
-          <p>In the <b>EVENTS</b> menu. One is on at a time and a new one comes every 10 minutes. Each has its own traps, hands you its own weapons and armour (yours stay at home, abilities are off), gives you one life and a goal against the clock: kill 30 spitters in a minute, survive the vents, beat three elite knights... Win and you get a random <b>uncommon weapon</b> (one prize per minigame; with all ten, 50,000 coins). Free, as often as you like.</p></div>
+          <p>In the <b>EVENTS</b> menu. One is on at a time and a new one comes every 10 minutes. Each has its own traps, hands you its own weapons and armour (yours stay at home, abilities are off), gives you one life and a goal against the clock: kill 30 spitters in a minute, survive the vents, beat three elite knights... Win and you get a random <b>uncommon weapon</b> (one prize per minigame; with all ten, 50,000 coins). Free, but <b>one go each</b>: win or lose, you wait for the next one.</p></div>
         <div class="howto-sec"><h3>TRAPS</h3>
           <p><b>VENTS</b> come three at a time, joined under the floor. Step on one and you drop inside, where nobody can see or hit you. <b>Tap (or click) another vent</b> to travel to it; press anything else to climb out. Every second inside hurts, and more each second, so get out quickly. Also new: <b>tar pits</b> (crawl), <b>bear traps</b> (bite and hold), <b>shock plates</b> (stun), <b>flashbangs</b> (blinding), <b>mortars</b> (shells rain down round them), <b>wind fans</b> (blow everyone away), <b>crushers</b> (a long warning, then a huge hit), <b>oil slicks</b> (you slide) and <b>steam geysers</b> (hurt, throw and burn).</p>
           <p>Traps appear around the arena and hurt <b>everyone</b>, monsters included &ndash; so lure enemies onto them. Spikes, fire vents and tesla coils glow while they arm, then go off. Others: mines, snares, poison pools, spring pads and warp runes. Watch out too for <b>frost plates</b> (freeze), <b>saw pits</b>, <b>gravity wells</b> (drag you in), <b>lava cracks</b>, <b>root vines</b> (can't move), <b>powder kegs</b> (huge blast), <b>mirror runes</b> (controls reversed), <b>null fields</b> (no specials, supers or abilities) and <b>fault lines</b> &ndash; and the kind one, the <b>healing spring</b>.</p></div>
@@ -454,26 +458,25 @@
     <div class="pixel-box skins-box">
       <div class="title-text shop-title skin-title"><span class="t-em">🎨</span> CUSTOMIZE</div>
       <div class="subtitle">CHARACTER SKIN</div>
-      <canvas id="skinPreviewCanvas" width="120" height="116"></canvas>
-      <button id="fxBuyBtn" class="fx-buy hidden" onclick="buyFx()"></button>
-      <div class="skin-section-title">COLOR</div>
-      <div id="colorGrid" class="skin-grid"></div>
-      <div class="skin-section-title">CHANGING COLOR</div>
-      <div id="dynGrid" class="hat-grid"></div>
-      <div class="skin-section-title">GLOW</div>
-      <div id="glowGrid" class="hat-grid"></div>
-      <div class="skin-section-title">HAT</div>
-      <div id="hatGrid" class="hat-grid"></div>
-      <div class="skin-section-title">ACCESSORY</div>
-      <div id="accGrid" class="hat-grid"></div>
-      <div class="skin-section-title">ANIMATED ACCESSORY</div>
-      <div id="aaccGrid" class="hat-grid"></div>
-      <div class="skin-section-title">NICKNAME BACKGROUND</div>
-      <div id="nameBgGrid" class="hat-grid"></div>
-      <div class="skin-section-title">SKINS <span id="skinCoins" class="skin-coins"></span></div>
-      <div id="skinShopMsg" class="shop-msg"></div>
-      <div id="outfitGrid" class="outfit-grid"></div>
-      <button class="mode-btn shop-back" onclick="closeSkinsScreen()">&#10003; BACK</button>
+      <div class="skin-cols">
+      <div class="skin-left">
+        <canvas id="skinPreviewCanvas" width="120" height="116"></canvas>
+        <button id="fxBuyBtn" class="fx-buy hidden" onclick="buyFx()"></button>
+        <button class="mode-btn shop-back" onclick="closeSkinsScreen()">&#10003; BACK</button>
+      </div>
+      <div class="skin-right">
+        <div class="skin-sec"><div class="skin-section-title">COLOR</div><div id="colorGrid" class="skin-grid"></div></div>
+        <div class="skin-sec"><div class="skin-section-title">CHANGING COLOR</div><div id="dynGrid" class="hat-grid"></div></div>
+        <div class="skin-sec"><div class="skin-section-title">GLOW</div><div id="glowGrid" class="hat-grid"></div></div>
+        <div class="skin-sec"><div class="skin-section-title">HAT</div><div id="hatGrid" class="hat-grid"></div></div>
+        <div class="skin-sec"><div class="skin-section-title">ACCESSORY</div><div id="accGrid" class="hat-grid"></div></div>
+        <div class="skin-sec"><div class="skin-section-title">ANIMATED ACCESSORY</div><div id="aaccGrid" class="hat-grid"></div></div>
+        <div class="skin-sec"><div class="skin-section-title">NICKNAME BACKGROUND</div><div id="nameBgGrid" class="hat-grid"></div></div>
+        <div class="skin-sec wide"><div class="skin-section-title">SKINS <span id="skinCoins" class="skin-coins"></span></div>
+        <div id="skinShopMsg" class="shop-msg"></div>
+        <div id="outfitGrid" class="outfit-grid"></div></div>
+      </div>
+      </div>
     </div>
   </div>
 

@@ -1307,10 +1307,12 @@ function progress() {
   if (!d.armory) d.armory = {};            // password -> { w: 10-minute window, ids: what is on sale }
   if (!d.events) d.events = {};            // event id -> { start, end, ed } (the last time it was hosted; ed counts the hostings)
   if (!d.eventWins) d.eventWins = {};      // password -> { event id: the hosting (ed) it was beaten in }
+  if (!d.eventPlays) d.eventPlays = {};    // password -> { event id: the hosting (ed) they entered: one go each, win or lose }
   if (!d.tutReward) d.tutReward = {};      // password -> the weapon the tutorial gave them
   if (!d.friends) d.friends = {};          // password -> [friend ids] (a friend id is a hash: no password ever leaves the server)
   if (!d.pidOf) d.pidOf = {};              // friend id -> password, learnt as players come online
   if (!d.names) d.names = {};              // password -> the name last played under
+  if (!d.mgTries) d.mgTries = {};          // password -> the 10-minute minigame window they last played (one go each)
   if (!d.mgWins) d.mgWins = {};            // password -> the 10-minute minigame window they last won a prize in
   return d;
 }
@@ -1367,6 +1369,7 @@ function saveData(pw) {
     armor: d.armor[pw] || [], worn: d.armorWorn[pw] || {},
     mythicPick: d.mythicPick[pw] || null,
     eventWins: d.eventWins[pw] || {},
+    evPlays: d.eventPlays[pw] || {},
     tut: d.tutReward[pw] || null,
     friends: d.friends[pw] || [],
   });
@@ -1426,6 +1429,7 @@ function restoreBackup(pw, backup) {
     d.armorWorn[pw] = cleanWorn(b.worn, armor);
     if (typeof b.mythicPick === 'string' && WEAPON_BY_ID[b.mythicPick]?.mythic) d.mythicPick[pw] = b.mythicPick;
     d.eventWins[pw] = cleanEventWins(b.eventWins);
+    d.eventPlays[pw] = cleanEventWins(b.evPlays);
     if (typeof b.tut === 'string') d.tutReward[pw] = b.tut;
     d.friends[pw] = cleanFriends(b.friends);
     if (b.skin && typeof b.skin === 'object' && d.skins[pw] === undefined) d.skins[pw] = b.skin;
@@ -1462,6 +1466,9 @@ function restoreBackup(pw, backup) {
   if (!d.mythicPick[pw] && typeof b.mythicPick === 'string' && WEAPON_BY_ID[b.mythicPick]?.mythic) { d.mythicPick[pw] = b.mythicPick; changed = true; }
   if (!d.tutReward[pw] && typeof b.tut === 'string') { d.tutReward[pw] = b.tut; changed = true; }
   if (!staleCopy) for (const f of cleanFriends(b.friends)) if (!(d.friends[pw] || []).includes(f)) { d.friends[pw] = [...(d.friends[pw] || []), f]; changed = true; }
+  for (const [id, n] of Object.entries(cleanEventWins(b.evPlays))) {
+    if (n > (d.eventPlays[pw]?.[id] || 0)) { d.eventPlays[pw] = { ...(d.eventPlays[pw] || {}), [id]: n }; changed = true; }
+  }
   for (const [id, n] of Object.entries(cleanEventWins(b.eventWins))) {
     if (n > (d.eventWins[pw]?.[id] || 0)) { d.eventWins[pw] = { ...(d.eventWins[pw] || {}), [id]: n }; changed = true; }
   }
@@ -1914,8 +1921,8 @@ function makePlayer(num, xp, upgrades) {
   return p;
 }
 
-// Player seats. PvP rooms can hold up to four (last one standing); the rest use p1/p2.
-const KEYS = ['p1', 'p2', 'p3', 'p4'];
+// Player seats. PvP rooms can hold up to four (last one standing), FREE FOR ALL twelve; the rest use p1/p2.
+const KEYS = Array.from({ length: 12 }, (_, i) => 'p' + (i + 1));
 const isPKey = k => KEYS.includes(k);
 const perKey = v => Object.fromEntries(KEYS.map(k => [k, typeof v === 'function' ? v(k) : v]));
 function allPlayers() { return KEYS.map(k => room.players[k]); }
@@ -1930,7 +1937,7 @@ function emptyWave() { return { num: 0, monstersLeft: 0, spawnQueue: 0, spawnTim
 // (single-threaded, so it can never be caught half-switched).
 function makeRoom() { return {
   id: Math.random().toString(36).slice(2, 10),
-  p1: null, p2: null, p3: null, p4: null,
+  ...perKey(null),
   gameState: 'LOBBY',
   gameMode: 'pvp',
   mapSize: 'medium',
@@ -1947,7 +1954,7 @@ function makeRoom() { return {
   playerForge: perKey(null),
   playerAbilities: perKey(null),
   playerArmor: perKey(null),
-  p1Joined: false, p2Joined: false, p3Joined: false, p4Joined: false,
+  ...Object.fromEntries(KEYS.map(k => [k + 'Joined', false])),
   players: perKey(null),
   inputs: perKey(blankInput),
   monsters: [],
@@ -4428,6 +4435,7 @@ function startGame() {
       p.maxHp = Math.round(p.maxHp * (BL.hp || 1)); p.hp = p.maxHp;
     }
   }
+  if (room.ffa) for (const k of KEYS) { const p = room.players[k]; if (p) ffaPlace(p, k); }
   clearField();
   room.unlockQueues = perKey(() => []);
   room.chats = [];
@@ -4683,9 +4691,10 @@ function handleKill(target, attackerKey) {
     target.pull = null;
     // Don't respawn still on fire, poisoned or snared.
     if (target.effects) { delete target.effects.burn; delete target.effects.poison; delete target.effects.slow; }
-    if (room.gameMode !== 'sandbox') target.lives--;   // the sandbox never runs out of lives
+    if (room.gameMode !== 'sandbox' && !room.ffa) target.lives--;   // the sandbox never runs out of lives (nor FREE FOR ALL)
     target.hp = 0;
-    if (target.lives > 0) target.respawnTimer = 2000;
+    if (room.ffa) { target.respawnTimer = FFA_RESPAWN_MS; ffaScore(target, attackerKey); }
+    else if (target.lives > 0) target.respawnTimer = 2000;
   } else {
     target.dead = true;
     room.monsters = room.monsters.filter(m => m !== target);
@@ -4797,6 +4806,7 @@ function checkRoundEnd() {
     return;
   }
 
+  if (room.ffa) return;                          // FREE FOR ALL never ends: people come and go
   if (room.event) {
     // An event against a bot: one match, three lives each. Lose yours and it's over;
     // take all of its and it leaves the trophy behind.
@@ -10815,6 +10825,7 @@ function playerView(p) {
   return {
     x: r1(p.x), y: r1(p.y), w: p.w, h: p.h, hp: p.hp, maxHp: p.maxHp,
     lives: p.lives, facing: p.facing, weaponId: w.id, weaponIdx: p.weaponIdx,
+    ...(p.dead && p.respawnTimer > 0 ? { rsp: Math.ceil(p.respawnTimer) } : {}),
     atkSpd: w.atkSpd, reach: w.range, wType: w.type,
     upg: p.upgrades?.[w.id] || null,
     hitFlash: p.hitFlash, dead: p.dead, swingTimer: p.swingTimer,
@@ -10880,6 +10891,7 @@ function buildStateMsg(playerNum) {
     ...(room.event ? { event: room.event } : {}), ...(room.trophy ? { trophy: room.trophy } : {}), ...(room.eventWin ? { eventWin: room.eventWin } : {}),
     world: { size: room.mapSize, w: CANVAS_W, h: CANVAS_H },
     maxPlayers: room.maxPlayers,
+    ...(room.ffa ? { ffa: { k: room.ffa.kills, d: room.ffa.deaths, need: FFA_MIN } } : {}),
     ...(room.custom ? { roomName: room.custom.name, roomId: room.id } : {}),
     seated: seatKeys().filter(k => room[k] || (room.bot && k === 'p2')).length,
     chats: room.chats.map(c => ({ key: c.key, id: c.id, age: Date.now() - c.t })),
@@ -12231,7 +12243,7 @@ function mgFinish(won) {
 app.post('/api/minigame', (req, res) => {
   const pw = sanitizeText(req.body?.password, 32), win = mgWindow();
   res.json({ now: mgCard(minigameAt(win)), next: mgCard(minigameAt(win + 1)), endsIn: (win + 1) * MG_ROTATE_MS - Date.now(),
-             won: !!pw && progress().mgWins[pw] === win, uncommon: UNCOMMON_IDS.length,
+             won: !!pw && progress().mgWins[pw] === win, played: !!pw && !isAdminPw(pw) && progress().mgTries[pw] === win, uncommon: UNCOMMON_IDS.length,
              owned: pw ? UNCOMMON_IDS.filter(id => (progress().weapons[pw] || []).includes(id)).length : 0 });
 });
 
@@ -12445,7 +12457,7 @@ function reapRooms() {
 function findSeat(mode, size) {
   if (!SOLO_MODES.includes(mode)) {
     for (const r of rooms) {
-      if (r.gameState !== 'LOBBY' || r.gameMode !== mode || r.bot || r.custom || r.mapSize !== size) continue;
+      if (r.gameState !== 'LOBBY' || r.gameMode !== mode || r.bot || r.custom || r.ffa || r.mapSize !== size) continue;
       const free = seatKeys(r).find(k => !r[k]);
       if (free && KEYS.some(k => r[k])) return [r, free];
     }
@@ -12470,6 +12482,69 @@ function createRoom(opts) {
   rooms.push(r);
   return [r, 'p1'];
 }
+// ── FREE FOR ALL ──
+// One public room for everyone, on the giant map, up to FFA_MAX players. It starts when
+// FFA_MIN are in, and from then on anyone can jump in at any time. Nobody is ever out:
+// you die, wait FFA_RESPAWN_MS, and come back. Leave and you can't come back for
+// FFA_REJOIN_MS (by password, or without one by address and name).
+const FFA_MAX = 12, FFA_MIN = 2, FFA_RESPAWN_MS = 30000, FFA_REJOIN_MS = 50000;
+const ffaLeft = new Map();          // who left -> when
+function ffaRoom() { return rooms.find(r => r.ffa); }
+function ffaSeat(ws, msg) {
+  const pw = sanitizeText(msg.password, 32);
+  const id = pw ? 'pw:' + pw : 'ip:' + ws.ip + ':' + (sanitizeText(msg.name, 12).toUpperCase() || '?');
+  const left = ffaLeft.get(id);
+  if (left && Date.now() - left < FFA_REJOIN_MS && !isAdminPw(pw)) return { why: { type: 'ffa_wait', ms: FFA_REJOIN_MS - (Date.now() - left) } };
+  if (left) ffaLeft.delete(id);
+  let r = ffaRoom();
+  if (!r) {
+    r = makeRoom();
+    r.gameMode = 'pvp'; r.mapSize = 'giant'; r.maxPlayers = FFA_MAX;
+    r.picked = true;                  // no weapon-pick screen: people drop in mid-fight
+    r.ffa = { kills: perKey(0), deaths: perKey(0), ids: perKey(null) };
+    rooms.push(r);
+  }
+  const key = seatKeys(r).find(k => !r[k]);
+  if (!key) return { why: { type: 'ffa_full', max: FFA_MAX } };
+  ws.ffaId = id;
+  return { seat: [r, key] };
+}
+// Where a fighter comes in: the safest spot, away from everyone.
+function ffaPlace(p, key) {
+  const s = safestSpot(p, key);
+  if (s) { p.x = s.x - p.w / 2; p.y = s.y - p.h / 2; clampToArena(p); }
+  p.invincible = 2000;
+}
+// Someone joins a fight already going: a fighter like startGame makes.
+function ffaAddPlayer(key) {
+  const p = makePlayer(KEYS.indexOf(key) + 1, room.playerXp[key], room.playerUpgrades[key]);
+  room.players[key] = p;
+  if (room.playerSkins[key]) p.skin = room.playerSkins[key];
+  if (room.playerUnlocks[key]) p.unlockedWeapons = room.playerUnlocks[key];
+  if (room.playerAbilities[key]) p.abilities = room.playerAbilities[key].slice();
+  p.forge = room.playerForge[key] || null;
+  p.weaponIdx = 0;
+  wearArmor(p, room.playerArmor[key]);
+  refreshWeapon(p);
+  ffaPlace(p, key);
+  room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 420, max: 420, color: '#ffffff' });
+  room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 46, text: room.playerNames[key] + ' JOINED', color: '#9affd0', timer: 2500, max: 2500 });
+}
+function ffaScore(target, attackerKey) {
+  const tk = playerKeyOf(target);
+  if (tk) room.ffa.deaths[tk]++;
+  const by = isPKey(attackerKey) && room.players[attackerKey] && room.players[attackerKey] !== target ? attackerKey : null;
+  if (by) room.ffa.kills[by]++;
+  if (tk) room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 46, color: '#ffd84a', timer: 2500, max: 2500,
+    text: by ? room.playerNames[by] + ' KILLED ' + room.playerNames[tk] : room.playerNames[tk] + ' DIED' });
+}
+setInterval(() => { const now = Date.now(); for (const [id, t] of ffaLeft) if (now - t > FFA_REJOIN_MS) ffaLeft.delete(id); }, 60 * 1000).unref?.();
+// For the menu: is it on, and how many are in?
+app.post('/api/ffa', (req, res) => {
+  const r = ffaRoom(), n = r ? seatKeys(r).filter(k => r[k]).length : 0;
+  res.json({ players: n, max: FFA_MAX, need: FFA_MIN, live: !!r && r.gameState === 'GAMEPLAY', names: r ? seatKeys(r).filter(k => r[k]).map(k => r.playerNames[k]) : [] });
+});
+
 function openRoomList() {
   return rooms.filter(r => r.custom && !r.challengeId && r.gameState === 'LOBBY' && KEYS.some(k => r[k]) && seatKeys(r).some(k => !r[k]))
     .map(r => ({ id: r.id, name: r.custom.name, host: r.custom.host, size: r.mapSize, maxPlayers: r.maxPlayers,
@@ -12481,7 +12556,8 @@ const CHAT_LINES = ['HELLO!', 'GOOD LUCK!', 'HAVE FUN!', 'NICE ONE!', 'WELL PLAY
                     'WATCH OUT!', 'HELP!', 'THANKS!', 'SORRY!', 'REMATCH?', 'LET\'S GO!', 'HAHA!', 'WOW!'];
 const CHAT_SHOW_MS = 3500, CHAT_GAP_MS = 1200;
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
+  ws.ip = String(req?.headers?.['x-forwarded-for'] || '').split(',')[0].trim() || req?.socket?.remoteAddress || '';
   // Not seated until the player picks a mode (the join message).
   ws.send(JSON.stringify({
     type: 'welcome', num: 0,
@@ -12528,8 +12604,9 @@ wss.on('connection', (ws) => {
           if (!t || t.id !== msg.mode || t.pw !== sanitizeText(msg.password, 32)) { ws.send(JSON.stringify({ type: 'event_denied', reason: PAID_MODES[msg.mode] ? 'Pay for the fight from the menu first.' : 'Enter it from the EVENTS menu first.' })); return; }
           eventTickets.delete(tk);
           if (EVENTS[t.id]) evId = t.id; else paid = t.id;
+          if (evId && t.pw && !isAdminPw(t.pw)) { const d = progress(); d.eventPlays[t.pw] = { ...(d.eventPlays[t.pw] || {}), [evId]: d.events[evId]?.ed || 1 }; markDirty(); }   // one go: entered is used up
         }
-        const mode = paid ? paid : evId ? (evId === 'secretbot' ? 'bot' : 'abyss') : ['pvp', 'coop', 'waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom', 'minigame', 'bot', 'create', 'joinroom'].includes(msg.mode) ? msg.mode : 'pvp';
+        const mode = paid ? paid : evId ? (evId === 'secretbot' ? 'bot' : 'abyss') : ['pvp', 'coop', 'waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom', 'minigame', 'bot', 'create', 'joinroom', 'ffa'].includes(msg.mode) ? msg.mode : 'pvp';
         const size = paid ? 'big' : evId ? (evId === 'secretbot' ? 'big' : mapSizeFor('abyss', 'giant')) : mapSizeFor(mode, msg.size);
         // EXTREME and the PORTAL MAGE open up with XP (admins skip the wait). An event ticket is its own way in.
         if (MODE_XP[mode] && !evId) {
@@ -12537,6 +12614,14 @@ wss.on('connection', (ws) => {
           const saved = pw ? (isAdminPw(pw) ? Infinity : (progress().players[pw] || 0)) : 0;
           const xp = Math.max(saved, Math.floor(Number(msg.localXp) || 0));
           if (xp < MODE_XP[mode]) { ws.send(JSON.stringify({ type: 'mode_locked', mode, need: MODE_XP[mode], xp: Number.isFinite(xp) ? xp : 0 })); return; }
+        }
+        if (mode === 'minigame') {                 // one go per minigame (a new one every 10 minutes)
+          const pw = sanitizeText(msg.password, 32);
+          if (pw && !isAdminPw(pw) && progress().mgTries[pw] === mgWindow()) {
+            const s = Math.ceil(((mgWindow() + 1) * MG_ROTATE_MS - Date.now()) / 1000);
+            ws.send(JSON.stringify({ type: 'event_denied', reason: 'You have had your go at this minigame. The next one starts in ' + Math.floor(s / 60) + 'm ' + (s % 60) + 's.' })); return;
+          }
+          if (pw && !isAdminPw(pw)) { progress().mgTries[pw] = mgWindow(); markDirty(); }
         }
         reapRooms();
         let seat = null;
@@ -12546,6 +12631,11 @@ wss.on('connection', (ws) => {
           let r = rooms.find(o => o.challengeId === c.id && o.gameState === 'LOBBY');
           if (r) { const free = seatKeys(r).find(k => !r[k]); if (!free) { ws.send(JSON.stringify({ type: 'room_gone' })); return; } seat = [r, free]; }
           else { const made = createRoom({ size: c.size, roomName: 'CHALLENGE', name: msg.name, maxPlayers: 2 }); made[0].challengeId = c.id; seat = made; }
+        }
+        if (mode === 'ffa') {
+          const got = ffaSeat(ws, msg);
+          if (!got.seat) { ws.send(JSON.stringify(got.why)); return; }
+          seat = got.seat;
         }
         if (mode === 'joinroom') {
           // A listed room: take its first free seat, if it is still open.
@@ -12616,6 +12706,14 @@ wss.on('connection', (ws) => {
         if (room.bot && !room.p2Joined) setupBot();
         room.playerNames[myKey] = room.playerNames[myKey] || 'PLAYER';
 
+        // FREE FOR ALL: in the fight at once if it is on; it starts when the second player comes.
+        if (room.ffa) {
+          room.ffa.kills[myKey] = 0; room.ffa.deaths[myKey] = 0; room.ffa.ids[myKey] = ws.ffaId;
+          if (room.gameState === 'GAMEPLAY') ffaAddPlayer(myKey);
+          else if (room.gameState === 'LOBBY' && seatKeys().filter(k => room[k + 'Joined']).length >= FFA_MIN) startGame();
+          broadcastState();
+          return;
+        }
         // Start game: solo modes at once, the others once both have joined.
         const canStart = isSolo()
           ? room.p1Joined
@@ -12710,6 +12808,14 @@ wss.on('connection', (ws) => {
     const r = ws.room;
     if (!r || r[ws.key] !== ws) return;
     useRoom(r);
+    if (room.ffa) {
+      if (room.ffa.ids[ws.key]) ffaLeft.set(room.ffa.ids[ws.key], Date.now());
+      room.ffa.ids[ws.key] = null; room.ffa.kills[ws.key] = 0; room.ffa.deaths[ws.key] = 0;
+      clearSlot(ws.key);
+      if (KEYS.every(k => !room[k])) { rooms.splice(rooms.indexOf(r), 1); return; }
+      broadcastState();
+      return;
+    }
     const wasPlaying = room.gameState !== 'LOBBY';
     clearSlot(ws.key);
     // A match can't continue a fighter down — drop back to the lobby, but keep
@@ -12746,6 +12852,12 @@ function eventBeaten(pw, id) {
   const won = progress().eventWins[pw]?.[id];
   return !!won && won >= (progress().events[id]?.ed || 1);
 }
+// Played already (in this hosting), win or lose? Each event is one go.
+function eventPlayed(pw, id) {
+  if (!pw || isAdminPw(pw)) return false;
+  const n = progress().eventPlays[pw]?.[id];
+  return eventBeaten(pw, id) || (!!n && n >= (progress().events[id]?.ed || 1));
+}
 function cleanEventWins(w) {
   const o = {};
   if (w && typeof w === 'object') for (const id of Object.keys(EVENTS)) { const n = Math.floor(Number(w[id]) || 0); if (n > 0) o[id] = n; }
@@ -12774,8 +12886,9 @@ app.post('/api/events', (req, res) => {
   const pw = sanitizeText(req.body?.password, 32);
   // (`badge`: the menu only asks what is on, so the save is left untouched)
   const prof = pw && !req.body?.badge ? profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup }) : null;
-  const open = Object.keys(EVENTS).filter(id => !eventBeaten(pw, id));
-  res.json({ events: open.map(eventInfo), beaten: Object.keys(EVENTS).filter(id => !open.includes(id)).map(id => EVENTS[id].name),
+  const open = Object.keys(EVENTS).filter(id => !eventPlayed(pw, id));
+  res.json({ events: open.map(eventInfo), beaten: Object.keys(EVENTS).filter(id => eventBeaten(pw, id)).map(id => EVENTS[id].name),
+             played: Object.keys(EVENTS).filter(id => !open.includes(id) && !eventBeaten(pw, id)).map(id => EVENTS[id].name),
              admin: isAdminPw(pw), coins: prof ? prof.coins : 0, owned: prof ? [...prof.armor, ...prof.weapons] : [] });
 });
 // The admin hosts an event (for its full length, from now), or ends it early.
@@ -12793,6 +12906,7 @@ app.post('/api/events/enter', (req, res) => {
   const ev = EVENTS[id];
   if (!ev || !eventInfo(id).live) return res.status(400).json({ error: 'That event is not running right now.' });
   if (eventBeaten(pw, id)) return res.status(400).json({ error: 'You have already beaten this event.' });
+  if (eventPlayed(pw, id)) return res.status(400).json({ error: 'You have had your one go at this event.' });
   const admin = isAdminPw(pw);
   const prof = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });
   if (!admin && prof.coins < ev.fee) return res.status(400).json({ error: `You need ${ev.fee.toLocaleString()} coins to enter.` });
