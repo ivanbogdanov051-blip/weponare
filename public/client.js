@@ -3147,7 +3147,7 @@ function renderEvents() {
     const btn = !e.live ? '<button class="ev-enter" disabled>NOT RUNNING</button>'
       : !pendingPass ? '<button class="ev-enter" disabled>SET A PASSWORD FIRST</button>'
       : poor ? `<button class="ev-enter" disabled>NEED ◆ ${e.fee.toLocaleString()}</button>`
-      : confirm ? `<button class="ev-enter go" onclick="enterEvent('${e.id}')">TAP AGAIN: PAY ◆ ${e.fee.toLocaleString()} (YOUR ONE GO)</button>`
+      : confirm ? `<button class="ev-enter go" onclick="enterEvent('${e.id}')">TAP AGAIN: PAY ◆ ${e.fee.toLocaleString()}</button>`
       : `<button class="ev-enter" onclick="askEnterEvent('${e.id}')">ENTER ◆ ${e.fee.toLocaleString()}</button>`;
     const host = d.admin ? `<div class="ev-admin"><button onclick="hostEvent('${e.id}')">${e.live ? 'HOST AGAIN (' + Math.round(e.lasts / 86400000) + ' DAYS FROM NOW)' : 'HOST FOR ' + Math.round(e.lasts / 86400000) + ' DAYS'}</button>${e.live ? `<button onclick="hostEvent('${e.id}', true)">END NOW</button>` : ''}</div>` : '';
     return `<div class="ev-card${e.live ? ' live' : ''}">
@@ -3158,7 +3158,7 @@ function renderEvents() {
       <div class="ev-sub">PRIZES</div>
       ${gear}
       <div class="ev-prize coins"><i>◆</i><div><b>${e.prize.toLocaleString()} COINS</b><span>and your ${e.fee.toLocaleString()} entry back</span></div></div>
-      <div class="ev-fee">ENTRY ◆ ${e.fee.toLocaleString()} &middot; <b>ONE GO ONLY: win or lose, you can't play it again</b></div>
+      <div class="ev-fee">ENTRY ◆ ${e.fee.toLocaleString()} &middot; <b>lose and it's gone</b> &middot; beat it and it leaves your list</div>
       ${btn}${host}
     </div>`;
   }).join('') || `<div class="arm-none">${(d.beaten || []).length || (d.played || []).length ? 'You have had your go at every event that is running.' : 'No events yet.'}</div>`;
@@ -10704,9 +10704,9 @@ function mgCardHtml() {
     + '<div class="ev-sub">YOU FIGHT WITH</div><div class="mg-row">' + weapons + '</div>'
     + '<div class="ev-sub">YOU WEAR</div><div class="mg-row">' + armor + '</div>'
     + '<div class="ev-sub">TRAPS</div><div class="mg-row">' + traps + '</div>'
-    + '<div class="ev-desc" style="margin-top:6px">Your own weapons, armour and abilities stay at home. One life. Free, but <b>one go</b>: win or lose, you wait for the next minigame.</div>'
+    + '<div class="ev-desc" style="margin-top:6px">Your own weapons, armour and abilities stay at home. One life. Free to play, as often as you like.</div>'
     + '<div class="ev-sub">PRIZE</div><div class="ev-prize"><canvas class="shop-ic" data-weapon="longbow" width="56" height="32"></canvas><div>' + prize + '</div></div>'
-    + (d.played ? '<button class="ev-enter" disabled>YOU HAVE HAD YOUR GO &middot; WAIT FOR THE NEXT ONE</button>' : '<button class="ev-enter go" onclick="playMinigame()">&#9654; PLAY ' + escapeHtml(m.name) + ' (ONE GO)</button>')
+    + '<button class="ev-enter go" onclick="playMinigame()">&#9654; PLAY ' + escapeHtml(m.name) + '</button>'
     + (d.next ? '<div class="mg-next">NEXT UP: <b>' + escapeHtml(d.next.name) + '</b> &middot; ' + escapeHtml(d.next.goal) + '</div>' : '')
     + '</div>';
 }

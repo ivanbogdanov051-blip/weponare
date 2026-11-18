@@ -4747,6 +4747,15 @@ function creditXp(key, xpGain) {
   const admin = isAdminPw(pw);
   room.playerXp[key] += xpGain;
 
+  if (room.gameMode === 'minigame') {
+    if (pw && !admin) {
+      const d = progress();
+      d.players[pw] = room.playerXp[key];
+      d.weapons[pw] = sortWeaponIds([...(d.weapons[pw] || []), ...xpWeaponsFor(pw, room.playerXp[key]).filter(id => !(d.weapons[pw] || []).includes(id))]);
+      markDirty();
+    }
+    return;
+  }
   const had = attacker?.unlockedWeapons || room.playerUnlocks[key] || [];
   const newUnlocks = xpWeaponsFor(pw, room.playerXp[key]).filter(id => !had.includes(id));
   room.unlockQueues[key].push(...newUnlocks);
@@ -12243,7 +12252,7 @@ function mgFinish(won) {
 app.post('/api/minigame', (req, res) => {
   const pw = sanitizeText(req.body?.password, 32), win = mgWindow();
   res.json({ now: mgCard(minigameAt(win)), next: mgCard(minigameAt(win + 1)), endsIn: (win + 1) * MG_ROTATE_MS - Date.now(),
-             won: !!pw && progress().mgWins[pw] === win, played: !!pw && !isAdminPw(pw) && progress().mgTries[pw] === win, uncommon: UNCOMMON_IDS.length,
+             won: !!pw && progress().mgWins[pw] === win, uncommon: UNCOMMON_IDS.length,
              owned: pw ? UNCOMMON_IDS.filter(id => (progress().weapons[pw] || []).includes(id)).length : 0 });
 });
 
@@ -12604,7 +12613,6 @@ wss.on('connection', (ws, req) => {
           if (!t || t.id !== msg.mode || t.pw !== sanitizeText(msg.password, 32)) { ws.send(JSON.stringify({ type: 'event_denied', reason: PAID_MODES[msg.mode] ? 'Pay for the fight from the menu first.' : 'Enter it from the EVENTS menu first.' })); return; }
           eventTickets.delete(tk);
           if (EVENTS[t.id]) evId = t.id; else paid = t.id;
-          if (evId && t.pw && !isAdminPw(t.pw)) { const d = progress(); d.eventPlays[t.pw] = { ...(d.eventPlays[t.pw] || {}), [evId]: d.events[evId]?.ed || 1 }; markDirty(); }   // one go: entered is used up
         }
         const mode = paid ? paid : evId ? (evId === 'secretbot' ? 'bot' : 'abyss') : ['pvp', 'coop', 'waves', 'extreme', 'portal', 'abyss', 'tsunami', 'sandbox', 'sawroom', 'minigame', 'bot', 'create', 'joinroom', 'ffa'].includes(msg.mode) ? msg.mode : 'pvp';
         const size = paid ? 'big' : evId ? (evId === 'secretbot' ? 'big' : mapSizeFor('abyss', 'giant')) : mapSizeFor(mode, msg.size);
@@ -12617,11 +12625,7 @@ wss.on('connection', (ws, req) => {
         }
         if (mode === 'minigame') {                 // one go per minigame (a new one every 10 minutes)
           const pw = sanitizeText(msg.password, 32);
-          if (pw && !isAdminPw(pw) && progress().mgTries[pw] === mgWindow()) {
-            const s = Math.ceil(((mgWindow() + 1) * MG_ROTATE_MS - Date.now()) / 1000);
-            ws.send(JSON.stringify({ type: 'event_denied', reason: 'You have had your go at this minigame. The next one starts in ' + Math.floor(s / 60) + 'm ' + (s % 60) + 's.' })); return;
-          }
-          if (pw && !isAdminPw(pw)) { progress().mgTries[pw] = mgWindow(); markDirty(); }
+          // (as often as you like: the prize is paid once per minigame)
         }
         reapRooms();
         let seat = null;
@@ -12852,12 +12856,6 @@ function eventBeaten(pw, id) {
   const won = progress().eventWins[pw]?.[id];
   return !!won && won >= (progress().events[id]?.ed || 1);
 }
-// Played already (in this hosting), win or lose? Each event is one go.
-function eventPlayed(pw, id) {
-  if (!pw || isAdminPw(pw)) return false;
-  const n = progress().eventPlays[pw]?.[id];
-  return eventBeaten(pw, id) || (!!n && n >= (progress().events[id]?.ed || 1));
-}
 function cleanEventWins(w) {
   const o = {};
   if (w && typeof w === 'object') for (const id of Object.keys(EVENTS)) { const n = Math.floor(Number(w[id]) || 0); if (n > 0) o[id] = n; }
@@ -12886,9 +12884,8 @@ app.post('/api/events', (req, res) => {
   const pw = sanitizeText(req.body?.password, 32);
   // (`badge`: the menu only asks what is on, so the save is left untouched)
   const prof = pw && !req.body?.badge ? profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup }) : null;
-  const open = Object.keys(EVENTS).filter(id => !eventPlayed(pw, id));
+  const open = Object.keys(EVENTS).filter(id => !eventBeaten(pw, id));
   res.json({ events: open.map(eventInfo), beaten: Object.keys(EVENTS).filter(id => eventBeaten(pw, id)).map(id => EVENTS[id].name),
-             played: Object.keys(EVENTS).filter(id => !open.includes(id) && !eventBeaten(pw, id)).map(id => EVENTS[id].name),
              admin: isAdminPw(pw), coins: prof ? prof.coins : 0, owned: prof ? [...prof.armor, ...prof.weapons] : [] });
 });
 // The admin hosts an event (for its full length, from now), or ends it early.
@@ -12906,7 +12903,6 @@ app.post('/api/events/enter', (req, res) => {
   const ev = EVENTS[id];
   if (!ev || !eventInfo(id).live) return res.status(400).json({ error: 'That event is not running right now.' });
   if (eventBeaten(pw, id)) return res.status(400).json({ error: 'You have already beaten this event.' });
-  if (eventPlayed(pw, id)) return res.status(400).json({ error: 'You have had your one go at this event.' });
   const admin = isAdminPw(pw);
   const prof = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });
   if (!admin && prof.coins < ev.fee) return res.status(400).json({ error: `You need ${ev.fee.toLocaleString()} coins to enter.` });
