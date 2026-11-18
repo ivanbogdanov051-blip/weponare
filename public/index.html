@@ -212,6 +212,7 @@
         <button data-tab="shop" onclick="pickArmTab('shop')">ON SALE</button>
         <button data-tab="mine" onclick="pickArmTab('mine')">MY ARMOUR (<span id="armOwnedN">0</span>)</button>
         <button data-tab="all" onclick="pickArmTab('all')">ALL 180 PIECES</button>
+        <button data-tab="items" class="arm-items-tab" onclick="pickArmTab('items')">&#10024; ITEMS</button>
       </div>
       <div id="armSlots" class="arm-tabs small hidden">
         <button data-slot="all" onclick="pickArmSlot('all')">ALL</button>
@@ -391,6 +392,8 @@
           <p><b>Sandbox</b> &ndash; solo practice with every weapon. Spawn any monster, boss, item or trap and switch on cheats from the TOOLS button. Nothing you do there is saved.</p></div>
         <div class="howto-sec"><h3>THE FORGE</h3>
           <p>Pick a weapon you own and put coins in the fire (500 to 500,000). More coins give a better chance of an upgrade and a much better chance of a rare one; if the metal cracks the coins are gone. Each weapon holds <b>3 upgrades</b>. Melee weapons have over 30 possible upgrades and ranged weapons over 20. These are passives that work while the weapon is in your hand. The <b>5 rare upgrades</b> each give an extra ability on <b>C</b>, and a weapon can only hold one. Reset a weapon in the forge to free its slots; the coins do not come back. A weapon with a rare upgrade glows red. <b>Mythics</b> have a forge list of their own: 32 stronger upgrades and 5 rare abilities that no other weapon can get.</p></div>
+        <div class="howto-sec"><h3>ITEMS</h3>
+          <p>In the <b>ARMOURY</b>, under <b>ITEMS</b>: 24 items, bought once and kept for ever, each upgradable to level 3. <b>PASSIVE</b> ones are always on (more health, speed, damage, lifesteal...). <b>ACTIVE</b> ones you use with <b>5</b>, <b>6</b> and <b>7</b> (or their buttons on a phone) and then wait for. <b>ONE-TIME-USE</b> ones work once a match. You start with <b>one item slot</b>; buy up to three in all (500,000 coins each) and pick what to take into a fight. Everyone's items show above their name: tap or click one to see what it does. (Items stay home in minigames and the Saw Room.)</p></div>
         <div class="howto-sec"><h3>FREE FOR ALL</h3>
           <p>One giant public room for everyone (up to 12), on the PvP tab and in CREATE ROOM. It starts as soon as two people are in, and from then on anyone can <b>jump in at any time</b>. Nobody is ever out: when you die you come back <b>30 seconds</b> later, somewhere safe. Every kill counts on the scoreboard. If you leave, you can't join again for <b>50 seconds</b>.</p></div>
         <div class="howto-sec"><h3>FRIENDS, TRADE AND CHALLENGE</h3>
@@ -550,6 +553,31 @@
     </div>
   </div>
 
+  <!-- Pause: the game stands still; change a few things, carry on, or leave -->
+  <div id="pauseScreen" class="wp-pop hidden" style="z-index:55">
+    <div class="wp-pop-box pause-box">
+      <div class="wp-pop-title">&#10074;&#10074; PAUSED</div>
+      <div class="wp-pop-body">Nothing moves while you are here. Your progress is saved.</div>
+      <button class="pause-go" onclick="resumeGame()">&#9654; RESUME</button>
+      <div class="pause-row"><span>SOUND</span><button id="pauseSound" onclick="pauseSound()">ON</button></div>
+      <div class="pause-row"><span>MUSIC</span><button id="pauseMusic" onclick="cycleMusic()">&#9835;</button></div>
+      <div class="pause-row"><span>SHOW FPS &amp; PING</span><button id="pauseFps" onclick="toggleNetOverlay(); pauseSync()">OFF</button></div>
+      <div class="pause-row"><span>MOVE BY CLICKING</span><button id="pauseTap" onclick="toggleTapMove(); pauseSync()">OFF</button></div>
+      <div class="pause-hint">Your weapons, armour and abilities are set before a game starts: change them from the menu.</div>
+      <button class="pause-leave" onclick="pauseLeave()">&#10005; LEAVE THE GAME (BACK TO MENU)</button>
+      <button class="pause-leave quit" onclick="pauseQuit()">&#9211; LEAVE WEPONARE</button>
+    </div>
+  </div>
+  <div id="byeScreen" class="wp-pop hidden" style="z-index:56;background:#0a0a14">
+    <div class="wp-pop-box pause-box">
+      <div class="wp-pop-title">SEE YOU SOON!</div>
+      <div class="wp-pop-body">Your progress is saved. You can close this tab now.</div>
+      <button class="pause-go" onclick="location.reload()">&#9654; BACK TO WEPONARE</button>
+    </div>
+  </div>
+
+  <div id="tkTip" class="tk-tip hidden"></div>
+
   <!-- Game canvas -->
   <canvas id="gameCanvas" width="720" height="405"></canvas>
 
@@ -559,6 +587,7 @@
     <button id="sandboxBtn" onclick="toggleSandboxPanel()">&#9874; TOOLS</button>
     <button id="chatBtn" onclick="toggleChat()" title="Quick chat (T)">&#128172; CHAT</button>
     <button id="musicBtnGame" onclick="cycleMusic()">&#9835; 1/21</button>
+    <button id="pauseBtn" onclick="pauseGame()" title="Pause (Esc)">&#10074;&#10074; PAUSE</button>
     <button id="leaveBtn" onclick="leaveGame()">&#10005; LEAVE</button>
   </div>
 
@@ -615,6 +644,7 @@
     </div>
     <div class="action-btns">
       <div class="ability-btns">
+        <button id="btn-it1" class="action-btn ability-btn item-btn hidden-btn"><b></b><i>5</i></button><button id="btn-it2" class="action-btn ability-btn item-btn hidden-btn"><b></b><i>6</i></button><button id="btn-it3" class="action-btn ability-btn item-btn hidden-btn"><b></b><i>7</i></button>
         <button id="btn-ab1" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>Q</i></button><button id="btn-ab2" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>E</i></button><button id="btn-ab3" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>F</i></button><button id="btn-ab4" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>G</i></button><button id="btn-ab5" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>V</i></button><button id="btn-ab6" class="action-btn ability-btn hidden-btn"><canvas class="ab-ic" width="32" height="32"></canvas><i>B</i></button>
       </div>
       <div class="action-row">
@@ -648,6 +678,7 @@
   <script src="weapons.js"></script>
   <script src="arena.js"></script>
   <script src="cosmetics.js"></script>
+  <script src="items.js"></script>
   <script src="client.js"></script>
   <script src="custload.js"></script>
 </body>

@@ -698,9 +698,101 @@ function isUpgradeTarget(id) { return !!(WEAPON_BY_ID[id] || PERK_UPGRADES[id]);
 
 // A player's character and parry stats, from their perk upgrades.
 function perkLevel(p, row, stat) { return (p.upgrades?.[row]?.[stat]) || 0; }
+// ─── ITEMS in a fight ─────────────────────────────────────────────────────────
+const TK_HASTE = 1.5, TK_HORN_MS = 6000, TK_THORN_R = 90, TK_CALM_MS = 4000, TK_BUBBLE_MS = 8000;
+const TK_FROST_R = 95, TK_QUAKE_R = 85, TK_QUAKE_PUSH = 50, TK_BOMB_R = 90;
+// Its number at the level you have it (0 if you don't carry it).
+function tkV(p, id) { const t = p.tk && p.tk.find(x => x.id === id); return t ? Items.val(Items.BY_ID[id], t.lv) : 0; }
+// Into a fight: every item fresh (cooldowns ready, one-time-use ones unused).
+function fitItems(p, list) {
+  p.tk = (room.gameMode === 'sawroom' ? [] : list || []).filter(t => t && Items.BY_ID[t.id]).slice(0, Items.MAX_SLOTS).map(t => ({ id: t.id, lv: Math.max(1, Math.min(Items.MAX_LV, t.lv || 1)), cd: 0, used: false }));
+  p.tkHp = tkV(p, 'heart'); p.tkApple = 0; p.tkBub = 0; p.tkBubT = 0; p.tkHorn = 0; p.tkHaste = 0; p.tkCalm = 0;
+  applyPerks(p);
+  p.hp = p.maxHp;
+}
+const ITEM_KEYS = ['it1', 'it2', 'it3'];
+function itemsTick(p, key, dt) {
+  for (const t of p.tk) if (t.cd > 0) t.cd = Math.max(0, t.cd - dt);
+  if (p.tkHorn > 0) p.tkHorn -= dt;
+  if (p.tkHaste > 0) p.tkHaste -= dt;
+  if (p.tkBubT > 0) { p.tkBubT -= dt; if (p.tkBubT <= 0) p.tkBub = 0; }
+  p.tkCalm = (p.tkCalm || 0) + dt;
+  const moss = tkV(p, 'moss');                                    // REGEN MOSS
+  if (moss && p.tkCalm > TK_CALM_MS && p.hp < p.maxHp) {
+    p.tkRegen = (p.tkRegen || 0) + p.maxHp * moss / 100 * dt / 1000;
+    const n = Math.floor(p.tkRegen);
+    if (n > 0) { p.tkRegen -= n; p.hp = Math.min(p.maxHp, p.hp + n); }
+  }
+  const inp = room.inputs[key] || {};
+  if (!p.tkPrev) p.tkPrev = [false, false, false];
+  for (let i = 0; i < ITEM_KEYS.length; i++) {
+    const down = !!inp[ITEM_KEYS[i]];
+    if (down && !p.tkPrev[i] && !p.dead && p.tk[i]) useItemTk(p, key, i);
+    p.tkPrev[i] = down;
+  }
+}
+function useItemTk(p, key, slot) {
+  const t = p.tk[slot], def = t && Items.BY_ID[t.id];
+  if (!def || !Items.usable(def) || t.cd > 0 || (def.kind === 'once' && t.used)) return false;
+  const v = Items.val(def, t.lv), heal = pct => { p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * pct / 100)); };
+  const near = r => enemyTargets(key).filter(f => f !== p && !f.dead && distBetween(f, p) < r);
+  switch (def.id) {
+    case 'blink': {
+      const inp = room.inputs[key] || {};
+      let dx = (inp.right ? 1 : 0) - (inp.left ? 1 : 0), dy = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
+      if (inp.ang != null) { dx = Math.cos(inp.ang); dy = Math.sin(inp.ang); }
+      if (!dx && !dy) dx = p.facing || 1;
+      const l = Math.hypot(dx, dy) || 1;
+      room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 420, max: 420, color: def.color });
+      p.x += dx / l * v; p.y += dy / l * v;
+      clampToArena(p);
+      room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 420, max: 420, color: def.color });
+      break;
+    }
+    case 'smoke':
+      p.invincible = Math.max(p.invincible || 0, v * 1000);
+      room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 50, timer: 700, max: 700, color: def.color });
+      break;
+    case 'horn': p.tkHorn = TK_HORN_MS; room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 70, timer: 500, max: 500, color: def.color }); break;
+    case 'haste': p.tkHaste = v * 1000; break;
+    case 'wind': case 'potion': heal(v); room.particles.push({ type: 'xp', x: cx(p), y: p.y - 10, text: '+' + v + '%', timer: 900, color: def.color }); break;
+    case 'frost':
+      for (const f of near(TK_FROST_R)) {
+        if (f.num) applyEffect(f, 'slow', v * 1000);
+        else if (f.boss) f.slowTimer = Math.max(f.slowTimer || 0, v * 1000);
+        else { f.freeze = Math.max(f.freeze || 0, v * 1000); f.freezeKind = 'ice'; }
+      }
+      room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: TK_FROST_R, timer: 500, max: 500, color: def.color });
+      break;
+    case 'quake':
+      for (const f of near(TK_QUAKE_R)) {
+        applyDamage(f, v, key);
+        if (!f.boss && !f.dead) { const dx = cx(f) - cx(p), dy = cy(f) - cy(p), d = Math.hypot(dx, dy) || 1; f.x += dx / d * TK_QUAKE_PUSH; f.y += dy / d * TK_QUAKE_PUSH; clampToArena(f); }
+      }
+      room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: TK_QUAKE_R, timer: 450, max: 450, color: def.color });
+      break;
+    case 'bomb':
+      for (const f of near(TK_BOMB_R)) applyDamage(f, v, key);
+      room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: TK_BOMB_R, timer: 500, max: 500, color: def.color });
+      break;
+    case 'bubble': p.tkBub = v; p.tkBubT = TK_BUBBLE_MS; break;
+    case 'clock':
+      p.specialCooldown = 0;
+      if (t.lv >= 2) p.superCooldown = 0;
+      if (t.lv >= 3) p.abCd = {};
+      room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 40, timer: 500, max: 500, color: def.color });
+      break;
+    case 'apple': p.tkApple = (p.tkApple || 0) + v; p.tkHp = tkV(p, 'heart') + p.tkApple; applyPerks(p); p.hp = p.maxHp; break;
+    default: return false;
+  }
+  if (def.kind === 'once') t.used = true; else t.cd = def.cd;
+  room.particles.push({ type: 'crit', x: cx(p), y: p.y - 14, text: def.name, timer: 800, max: 800 });
+  return true;
+}
+
 function applyPerks(p) {
   const hurt = p.maxHp - p.hp;
-  p.maxHp = 100 + perkLevel(p, '_hero', 'hp') * UPGRADE_STATS.hp.perLevel + (p.arHp || 0);
+  p.maxHp = 100 + perkLevel(p, '_hero', 'hp') * UPGRADE_STATS.hp.perLevel + (p.arHp || 0) + (p.tkHp || 0);
   p.hp = Math.max(1, Math.min(p.maxHp, p.maxHp - hurt));
   p.speed = PLAYER_SPEED * (1 + perkLevel(p, '_hero', 'move') * UPGRADE_STATS.move.perLevel);
   p.defense = perkLevel(p, '_hero', 'def') * UPGRADE_STATS.def.perLevel;
@@ -845,6 +937,7 @@ const ABILITY_BY_ID = Object.fromEntries(ABILITIES.map(a => [a.id, a]));
 // the weapon is in your hand; a rare one gives you an extra ability on C.
 // `needs`: only offered on weapons that can use it (see forgeCan).
 const Armor = require('./public/armor.js');
+const Items = require('./public/items.js');
 const FORGE_SLOTS = 3, FORGE_MIN = 500, FORGE_MAX = 500000;
 const FORGE_ODDS = { okMin: 0.35, okMax: 0.95, rareMin: 0.01, rareMax: 0.2 };
 const FORGE_MELEE = [
@@ -1313,7 +1406,10 @@ function progress() {
   if (!d.pidOf) d.pidOf = {};              // friend id -> password, learnt as players come online
   if (!d.names) d.names = {};              // password -> the name last played under
   if (!d.mgTries) d.mgTries = {};          // password -> the 10-minute minigame window they last played (one go each)
-  if (!d.mgWins) d.mgWins = {};            // password -> the 10-minute minigame window they last won a prize in
+  if (!d.mgWins) d.mgWins = {};
+  if (!d.items) d.items = {};              // password -> { item id: level 1-3 }
+  if (!d.itemSlots) d.itemSlots = {};      // password -> item slots bought into (1-3)
+  if (!d.itemWorn) d.itemWorn = {};        // password -> [item ids taken into fights]            // password -> the 10-minute minigame window they last won a prize in
   return d;
 }
 function markDirty() { progressDirty = true; }
@@ -1372,6 +1468,7 @@ function saveData(pw) {
     evPlays: d.eventPlays[pw] || {},
     tut: d.tutReward[pw] || null,
     friends: d.friends[pw] || [],
+    items: d.items[pw] || {}, itemSlots: d.itemSlots[pw] || Items.START_SLOTS, itemWorn: d.itemWorn[pw] || [],
   });
 }
 function makeSave(pw) {
@@ -1432,6 +1529,9 @@ function restoreBackup(pw, backup) {
     d.eventPlays[pw] = cleanEventWins(b.evPlays);
     if (typeof b.tut === 'string') d.tutReward[pw] = b.tut;
     d.friends[pw] = cleanFriends(b.friends);
+    d.items[pw] = cleanItems(b.items);
+    d.itemSlots[pw] = clampItemSlots(b.itemSlots);
+    d.itemWorn[pw] = cleanItemWorn(b.itemWorn, d.items[pw], d.itemSlots[pw]);
     if (b.skin && typeof b.skin === 'object' && d.skins[pw] === undefined) d.skins[pw] = b.skin;
     markDirty();
     return;
@@ -1466,6 +1566,9 @@ function restoreBackup(pw, backup) {
   if (!d.mythicPick[pw] && typeof b.mythicPick === 'string' && WEAPON_BY_ID[b.mythicPick]?.mythic) { d.mythicPick[pw] = b.mythicPick; changed = true; }
   if (!d.tutReward[pw] && typeof b.tut === 'string') { d.tutReward[pw] = b.tut; changed = true; }
   if (!staleCopy) for (const f of cleanFriends(b.friends)) if (!(d.friends[pw] || []).includes(f)) { d.friends[pw] = [...(d.friends[pw] || []), f]; changed = true; }
+  if (!staleCopy) for (const [id, lv] of Object.entries(cleanItems(b.items))) if (lv > (d.items[pw]?.[id] || 0)) { d.items[pw] = { ...(d.items[pw] || {}), [id]: lv }; changed = true; }
+  if (clampItemSlots(b.itemSlots) > (d.itemSlots[pw] || Items.START_SLOTS)) { d.itemSlots[pw] = clampItemSlots(b.itemSlots); changed = true; }
+  if (!(d.itemWorn[pw] || []).length && Array.isArray(b.itemWorn) && b.itemWorn.length) { d.itemWorn[pw] = cleanItemWorn(b.itemWorn, d.items[pw] || {}, d.itemSlots[pw] || Items.START_SLOTS); changed = true; }
   for (const [id, n] of Object.entries(cleanEventWins(b.evPlays))) {
     if (n > (d.eventPlays[pw]?.[id] || 0)) { d.eventPlays[pw] = { ...(d.eventPlays[pw] || {}), [id]: n }; changed = true; }
   }
@@ -1954,6 +2057,7 @@ function makeRoom() { return {
   playerForge: perKey(null),
   playerAbilities: perKey(null),
   playerArmor: perKey(null),
+  playerItems: perKey(null),
   ...Object.fromEntries(KEYS.map(k => [k + 'Joined', false])),
   players: perKey(null),
   inputs: perKey(blankInput),
@@ -2081,6 +2185,7 @@ function effectiveSpeed(p) {
   if (p.kspin > 0) s *= KSPIN_SPEED;
   if (p.fg?.speed) s *= 1 + p.fg.speed;                 // forge: FLEET FOOTED, KITER
   if (p.phoenix) s *= PHX_SPEEDMULT;                    // Ashfeather's PHOENIX FORM                    // the katana's SUPER
+  if (p.tk) { s *= 1 + tkV(p, 'boots') / 100; if (p.tkHaste > 0) s *= TK_HASTE; }   // items: SWIFT BOOTS, HASTE CHARM
   if (hasEffect(p, 'slow'))  s *= 0.4;
   if (hasEffect(p, 'root'))  s = 0;          // ROOT VINES
   return s;
@@ -4429,6 +4534,7 @@ function startGame() {
     p.forge = room.playerForge[key] || null;
     p.weaponIdx = Math.max(0, p.unlockedWeapons.indexOf(held[key]));
     wearArmor(p, room.playerArmor[key]);
+    fitItems(p, room.playerItems[key]);
     refreshWeapon(p);
     if (room.bot && key === 'p2') {
       const BL = BOT_LEVELS[room.bot.level];
@@ -4510,6 +4616,12 @@ function applyDamage(target, dmg, attackerKey) {
   if (target.num && target.passive === 'soullantern') dmg *= 1 - SOUL_BOND * Math.min(SOUL_MAX, target.souls || 0);   // SOUL BOND
   if (target.num && target.passive === 'greatestsword') dmg *= 0.8;                                // IMMOVABLE
   if (target.num && target.passive === 'sword') dmg *= PASSIVE_GUARD;                              // GUARDIAN
+  if (atk && atk !== target && atk.tk) {                                                           // items: WHETSTONE, WAR HORN, ADRENALINE, HAWK EYE
+    dmg *= (1 + tkV(atk, 'whet') / 100) * (atk.tkHorn > 0 ? 1 + tkV(atk, 'horn') / 100 : 1) * (atk.hp < atk.maxHp * 0.35 ? 1 + tkV(atk, 'rage') / 100 : 1);
+    const eye = tkV(atk, 'eye');
+    if (eye && Math.random() < eye / 100) { dmg *= 2; room.particles.push({ type: 'crit', x: cx(target), y: target.y - 4, text: 'HAWK EYE', timer: 600, max: 600 }); }
+  }
+  if (target.num && target.tk) dmg *= 1 - tkV(target, 'plate') / 100;                          // item: IRON PLATE
   if (aw && atk.passive === 'frostscythe' && ((target.freeze || 0) > 0 || (target.slowTimer || 0) > 0
       || (target.num && hasEffect(target, 'slow')))) dmg *= SHATTER_MULT;                          // SHATTERPOINT
   if (aw && atk.passive === 'stormhammer' && Math.random() < THUNDER_CHANCE) {                    // THUNDERSTRUCK
@@ -4550,8 +4662,25 @@ function applyDamage(target, dmg, attackerKey) {
     return;
   }
   const landed = dmg;
+  if (target.num && target.tkBub > 0) {                       // item: GUARDIAN BUBBLE soaks it up first
+    const s = Math.min(dmg, target.tkBub);
+    target.tkBub -= s; dmg -= s;
+    room.particles.push({ type: 'shockwave', x: cx(target), y: cy(target), maxR: target.w + 8, timer: 220, max: 220, color: '#7ab8ff' });
+    if (dmg <= 0) { target.hitFlash = 80; target.invincible = 300; return; }
+  }
   if (target.num) dmg = shieldSoak(target, dmg, true);
   target.hp -= dmg;
+  if (target.num) target.tkCalm = 0;                          // (REGEN MOSS waits until you have been left alone)
+  if (target.num && target.hp <= 0 && target.tk) {             // item: LAST BREATH
+    const b = target.tk.find(t => t.id === 'breath' && !t.used);
+    if (b) {
+      b.used = true;
+      target.hp = Math.max(1, Math.round(target.maxHp * Items.val(Items.BY_ID.breath, b.lv) / 100));
+      target.tkSaved = 1500;
+      room.particles.push({ type: 'shockwave', x: cx(target), y: cy(target), maxR: 60, timer: 600, max: 600, color: '#ffe8a0' });
+      room.particles.push({ type: 'crit', x: cx(target), y: target.y - 12, text: 'LAST BREATH!', timer: 900, max: 900 });
+    }
+  }
   if (afg) forgeProcs(afg, attackerKey, target, dmg);
   if (tfg?.thorns && !room.fgGuard) forgeThorns(target, tfg, atk, landed);
   if (atk && atk !== target && atk.passive === 'revolver') hitBlast(target, attackerKey, atk);
@@ -4570,7 +4699,8 @@ function applyDamage(target, dmg, attackerKey) {
       room.particles.push({ type: 'crit', x: cx(target), y: target.y - 10, text: 'ESCAPE!', timer: 600, max: 600 });
     }
   }
-  const steal = (aw ? aw.lifesteal || 0 : 0) + (atk && atk !== target && hasEffect(atk, 'vampire') ? 0.25 : 0);
+  const steal = (aw ? aw.lifesteal || 0 : 0) + (atk && atk !== target && hasEffect(atk, 'vampire') ? 0.25 : 0)
+    + (atk && atk !== target && atk.tk ? tkV(atk, 'fang') / 100 : 0);   // item: VAMPIRE FANG
   if (steal && !atk.dead) {
     const heal = Math.round(dmg * steal);
     if (heal > 0) atk.hp = Math.min(atk.maxHp, atk.hp + heal);
@@ -4584,6 +4714,13 @@ function applyDamage(target, dmg, attackerKey) {
   if (target.mage) mageFloor(target);
   target.hitFlash  = 200;
   target.invincible = target.num ? 500 : 300;
+  if (target.tkSaved) { target.invincible = target.tkSaved; target.tkSaved = 0; }
+  // item: THORN RING: the nearest foe takes a share of it back
+  if (target.num && target.tk && !room.tkGuard && dmg > 0 && tkV(target, 'thorns')) {
+    const tKey = playerKeyOf(target);
+    const foe = enemyTargets(tKey).filter(f => f !== target && !f.dead && distBetween(f, target) < TK_THORN_R).sort((a, b) => distBetween(a, target) - distBetween(b, target))[0];
+    if (foe) { room.tkGuard = true; try { applyDamage(foe, Math.max(1, Math.round(dmg * tkV(target, 'thorns') / 100)), tKey); } finally { room.tkGuard = false; } }
+  }
   // THORNS: another player who hits you takes half of it back.
   if (target.num && atk && atk !== target && hasEffect(target, 'thorns') && !atk.dead) {
     applyDamage(atk, Math.max(1, Math.round(dmg * THORNS_SHARE)), playerKeyOf(target));
@@ -4662,7 +4799,7 @@ function handleKill(target, attackerKey) {
     baseGain = Math.round(baseGain * Math.max(1, (target.maxHp || 30) / 30) * (def.xp || 1) * (target.shiny ? RARE_XP : 1));
   }
   const modeGain = room.gameMode === 'extreme' ? baseGain * 3 : room.gameMode === 'waves' ? baseGain * 2 : baseGain;
-  const xpGain = Math.round(modeGain * (1 + (reaper?.fg?.killXp || 0)));   // forge: SCHOLAR
+  const xpGain = Math.round(modeGain * (1 + (reaper?.fg?.killXp || 0)) * (1 + (reaper?.tk ? tkV(reaper, 'scroll') / 100 : 0)));   // forge: SCHOLAR, item: SCHOLAR'S SCROLL
 
   // Credit XP to attacking player
   if (isPKey(attackerKey)) creditXp(attackerKey, xpGain);
@@ -4681,7 +4818,7 @@ function handleKill(target, attackerKey) {
   const killedByRival = isPKey(attackerKey);
   if (!isPlayer || killedByRival) {
     const rich = room.players[attackerKey] && hasEffect(room.players[attackerKey], 'gold') ? 2 : 1;   // GOLD RUSH
-    const coins = Math.round(coinsForKill(target, isPlayer) * rich * (1 + (reaper?.fg?.killCoins || 0)));
+    const coins = Math.round(coinsForKill(target, isPlayer) * rich * (1 + (reaper?.fg?.killCoins || 0)) * (1 + (reaper?.tk ? tkV(reaper, 'coin') / 100 : 0)));   // item: LUCKY COIN
     dropCoins(cx(target), cy(target), coins, target.shiny ? RARE_COIN_DROPS : MAX_COIN_DROPS);
     if (target.shiny && room.gameMode !== 'sandbox') room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 44, text: 'RARE SLAIN ◆ ' + coins.toLocaleString('en-US'), color: '#ffd84a', timer: 3000, max: 3000 });
   }
@@ -4886,6 +5023,10 @@ setInterval(() => {
 }, TICK_MS);
 
 function tickRoom(dt) {
+  if (room.paused) {
+    if (Date.now() - room.paused > PAUSE_MAX_MS) room.paused = 0;          // forgotten pauses end by themselves
+    else { broadcastTick(); return; }
+  }
   if (room.gameState !== 'GAMEPLAY') {
     if (room.gameState === 'WEAPON_PICK') tickWeaponPick(dt);
     if (room.gameState === 'ROUND_OVER') {
@@ -5084,6 +5225,7 @@ function tickRoom(dt) {
       if (room.inputs[key]['ab' + (i + 1)] && !p.dead) useAbility(p, key, i);
     }
     if (room.inputs[key].ab7 && p.fgAb) useForgeAbility(p, key);
+    if (p.tk) itemsTick(p, key, dt);
     if (room.parryJustPressed[key] && p.parryCooldown <= 0) {
       startParry(p);
     }
@@ -10835,6 +10977,8 @@ function playerView(p) {
     x: r1(p.x), y: r1(p.y), w: p.w, h: p.h, hp: p.hp, maxHp: p.maxHp,
     lives: p.lives, facing: p.facing, weaponId: w.id, weaponIdx: p.weaponIdx,
     ...(p.dead && p.respawnTimer > 0 ? { rsp: Math.ceil(p.respawnTimer) } : {}),
+    ...(p.tk && p.tk.length ? { tk: p.tk.map(t => [t.id, t.lv, t.used ? 1 : 0, Math.ceil(t.cd)]) } : {}),
+    ...(p.tkBub > 0 ? { tkb: Math.round(p.tkBub) } : {}), ...(p.tkHorn > 0 ? { tkh: 1 } : {}), ...(p.tkHaste > 0 ? { tks: 1 } : {}),
     atkSpd: w.atkSpd, reach: w.range, wType: w.type,
     upg: p.upgrades?.[w.id] || null,
     hitFlash: p.hitFlash, dead: p.dead, swingTimer: p.swingTimer,
@@ -10900,6 +11044,7 @@ function buildStateMsg(playerNum) {
     ...(room.event ? { event: room.event } : {}), ...(room.trophy ? { trophy: room.trophy } : {}), ...(room.eventWin ? { eventWin: room.eventWin } : {}),
     world: { size: room.mapSize, w: CANVAS_W, h: CANVAS_H },
     maxPlayers: room.maxPlayers,
+    ...(room.paused ? { paused: true } : {}),
     ...(room.ffa ? { ffa: { k: room.ffa.kills, d: room.ffa.deaths, need: FFA_MIN } } : {}),
     ...(room.custom ? { roomName: room.custom.name, roomId: room.id } : {}),
     seated: seatKeys().filter(k => room[k] || (room.bot && k === 'p2')).length,
@@ -11034,6 +11179,12 @@ function slimState(ws, m) {
   }
   return m;
 }
+// PAUSE: only in a game with one human in it (a solo mode, or a bot battle). Nothing moves,
+// no clock runs; the save is written at once. Forgotten for PAUSE_MAX_MS, it ends by itself.
+const PAUSE_MAX_MS = 15 * 60 * 1000;
+function canPause() {
+  return room.gameState === 'GAMEPLAY' && !room.ffa && !room.challengeId && (isSolo() || (!!room.bot && KEYS.filter(k => room[k]).length === 1));
+}
 function broadcastTick() {
   const now = Date.now();
   if (now - (room.lastStateAt || 0) < STATE_MIN_GAP_MS) return;
@@ -11154,7 +11305,10 @@ function profileFor(pw, opts = {}) {
   const samuraiKills = admin ? SAM_KILLS_NEED : (d.samuraiKills[pw] || 0);
   const mythicKills = admin ? 999999 : (d.mythicKills[pw] || 0);
   const mythicPick = d.mythicPick[pw] || null;
-  return { xp, coins, weapons, upgrades, ownedSkins, armor, armorWorn, abilities, abilitySlots, slotCount, lightKills, samuraiKills, samuraiNeed: SAM_KILLS_NEED,
+  const items = admin ? Object.fromEntries(Items.LIST.map(t => [t.id, Items.MAX_LV])) : cleanItems(d.items[pw]);
+  const itemSlots = admin ? Items.MAX_SLOTS : clampItemSlots(d.itemSlots[pw]);
+  const itemWorn = cleanItemWorn(d.itemWorn[pw], items, itemSlots);
+  return { items, itemSlots, itemWorn, xp, coins, weapons, upgrades, ownedSkins, armor, armorWorn, abilities, abilitySlots, slotCount, lightKills, samuraiKills, samuraiNeed: SAM_KILLS_NEED,
            mythicKills, mythicPick, tsunamiBeat: admin || !!d.tsunamiBeat[pw], forge: cleanForge(d.forge[pw]), rareWeapons: rareWeaponIds(cleanForge(d.forge[pw])),
            lost: Object.fromEntries(Object.entries(d.lostWeapons[pw] || {}).filter(([id, n]) => n > xp && !weapons.includes(id)).map(([id, n]) => [id, n - xp])),
            lightMaxed: maxedWeaponCount(weapons, upgrades), lightMaxedNeed: lightMaxedNeed(),
@@ -11162,6 +11316,14 @@ function profileFor(pw, opts = {}) {
            refunded, save: makeSave(pw) };
 }
 
+// ── ITEMS (public/items.js): owned with a level, taken into fights in item slots ──
+function cleanItems(o) {
+  const out = {};
+  if (o && typeof o === 'object') for (const [id, lv] of Object.entries(o)) if (Items.BY_ID[id]) { const n = Math.floor(Number(lv) || 0); if (n > 0) out[id] = Math.min(Items.MAX_LV, n); }
+  return out;
+}
+function clampItemSlots(n) { return Math.max(Items.START_SLOTS, Math.min(Items.MAX_SLOTS, Math.floor(Number(n) || Items.START_SLOTS))); }
+function cleanItemWorn(a, owned, slots) { return [...new Set(Array.isArray(a) ? a : [])].filter(id => owned[id]).slice(0, slots); }
 function clampSlots(n) {
   return Math.max(ABILITY_SLOTS, Math.min(MAX_ABILITY_SLOTS, Math.floor(Number(n) || ABILITY_SLOTS)));
 }
@@ -11570,7 +11732,8 @@ function armoryStock(pw, owned) {
   return ids;
 }
 function armoryView(pw, prof) {
-  return { coins: prof.coins, owned: prof.armor, worn: prof.armorWorn, stock: armoryStock(pw, prof.armor),
+  return { items: { owned: prof.items, slots: prof.itemSlots, worn: prof.itemWorn },
+           coins: prof.coins, owned: prof.armor, worn: prof.armorWorn, stock: armoryStock(pw, prof.armor),
            nextIn: ARMORY_ROTATE_MS - (Date.now() % ARMORY_ROTATE_MS), save: prof.save };
 }
 app.post('/api/armory', (req, res) => {
@@ -11608,6 +11771,51 @@ app.post('/api/armory/wear', (req, res) => {
   markDirty();
   for (const [r, key] of liveSeats(pw)) r.playerArmor[key] = Object.values(worn);
   res.json(armoryView(pw, profileFor(pw, {})));
+});
+
+// Items: buy one (level 1), upgrade it (to level 3), buy item slots, pick what to take.
+function itemsTake(pw, prof, mut) {
+  const d = progress();
+  mut(d);
+  markDirty();
+  const after = profileFor(pw, {});
+  for (const [r, key] of liveSeats(pw)) { r.playerCoins[key] = after.coins; r.playerItems[key] = r.gameMode === 'minigame' ? [] : after.itemWorn.map(id => ({ id, lv: after.items[id] })); }
+  return armoryView(pw, after);
+}
+app.post('/api/items/buy', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'A password is required to buy items.' });
+  const t = Items.BY_ID[sanitizeText(req.body?.id, 16)];
+  if (!t) return res.status(400).json({ error: 'No such item.' });
+  const prof = profileFor(pw, { localCoins: req.body?.localCoins, backup: req.body?.backup });
+  const lv = prof.items[t.id] || 0;
+  if (lv >= Items.MAX_LV) return res.status(400).json({ error: t.name + ' is already at its best.' });
+  const cost = lv ? Items.upPrice(t, lv) : t.price;
+  if (prof.coins < cost) return res.status(400).json({ error: 'Not enough coins: it costs ' + cost.toLocaleString() + '.' });
+  res.json({ ...itemsTake(pw, prof, d => {
+    d.coins[pw] = prof.coins - cost;
+    d.items[pw] = { ...prof.items, [t.id]: lv + 1 };
+    // the first items you buy go straight into an empty slot
+    if (!lv && prof.itemWorn.length < prof.itemSlots) d.itemWorn[pw] = [...prof.itemWorn, t.id];
+  }), spent: cost, level: lv + 1 });
+});
+app.post('/api/items/slot', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'A password is required.' });
+  const prof = profileFor(pw, { localCoins: req.body?.localCoins, backup: req.body?.backup });
+  if (prof.itemSlots >= Items.MAX_SLOTS) return res.status(400).json({ error: 'You have every item slot already.' });
+  if (prof.coins < Items.SLOT_PRICE) return res.status(400).json({ error: 'Not enough coins: a slot costs ' + Items.SLOT_PRICE.toLocaleString() + '.' });
+  res.json(itemsTake(pw, prof, d => { d.coins[pw] = prof.coins - Items.SLOT_PRICE; d.itemSlots[pw] = prof.itemSlots + 1; }));
+});
+// Take an item along, or leave it at home (with every slot full, taking one is refused).
+app.post('/api/items/wear', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'A password is required.' });
+  const prof = profileFor(pw, { backup: req.body?.backup }), id = sanitizeText(req.body?.id, 16);
+  if (!prof.items[id]) return res.status(400).json({ error: 'You do not own that item.' });
+  const on = prof.itemWorn.includes(id);
+  if (!on && prof.itemWorn.length >= prof.itemSlots) return res.status(400).json({ error: 'Every item slot is full: take one off first, or buy another slot.' });
+  res.json(itemsTake(pw, prof, d => { d.itemWorn[pw] = on ? prof.itemWorn.filter(x => x !== id) : [...prof.itemWorn, id]; }));
 });
 
 // Hand a player's equipped abilities to any match they're in right now.
@@ -12445,6 +12653,7 @@ function clearSlot(key) {
   room.playerForge[key] = null;
   room.playerAbilities[key] = null;
   room.playerArmor[key] = null;
+  room.playerItems[key] = null;
   room.unlockQueues[key] = [];
   room.players[key] = null;
   room.inputs[key] = blankInput();
@@ -12534,6 +12743,7 @@ function ffaAddPlayer(key) {
   p.forge = room.playerForge[key] || null;
   p.weaponIdx = 0;
   wearArmor(p, room.playerArmor[key]);
+  fitItems(p, room.playerItems[key]);
   refreshWeapon(p);
   ffaPlace(p, key);
   room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 420, max: 420, color: '#ffffff' });
@@ -12681,9 +12891,10 @@ wss.on('connection', (ws, req) => {
         room.playerForge[myKey] = prof.forge || null;
         room.playerAbilities[myKey] = prof.abilitySlots || [null, null];
         room.playerArmor[myKey] = Object.values(prof.armorWorn || {});
+        room.playerItems[myKey] = (prof.itemWorn || []).map(id => ({ id, lv: prof.items[id] }));
         if (room.gameMode === 'minigame') {          // a minigame hands out its own kit: these weapons, this armour, no abilities
           const mg = MG_BY_ID[room.mgId];
-          room.playerUnlocks[myKey] = mg.weapons.slice(); room.playerArmor[myKey] = mg.armor.slice(); room.playerAbilities[myKey] = [null, null];
+          room.playerUnlocks[myKey] = mg.weapons.slice(); room.playerArmor[myKey] = mg.armor.slice(); room.playerAbilities[myKey] = [null, null]; room.playerItems[myKey] = [];
         }
 
         // Skin: if the user explicitly changed it this session, save the new skin;
@@ -12727,12 +12938,21 @@ wss.on('connection', (ws, req) => {
         broadcastState();
       }
 
+      if (msg.type === 'pause' && canPause() && !room.paused) {
+        room.paused = Date.now();
+        for (const k of KEYS) { room.inputs[k] = blankInput(); room.prevInputs[k] = blankPrev(); }
+        flushProgress();
+        broadcastState();
+      }
+      if (msg.type === 'resume' && room.paused) { room.paused = 0; room.lastStateAt = 0; broadcastState(); }
+
       if (msg.type === 'input' && msg.keys && typeof msg.keys === 'object') {
         const k = msg.keys;
         room.inputs[myKey] = {
           up: !!k.up, down: !!k.down, left: !!k.left, right: !!k.right,
           attack: !!k.attack, swap: !!k.swap, swapPrev: !!k.swapPrev, special: !!k.special, parry: !!k.parry, super: !!k.super,
           ab1: !!k.ab1, ab2: !!k.ab2, ab3: !!k.ab3, ab4: !!k.ab4, ab5: !!k.ab5, ab6: !!k.ab6, ab7: !!k.ab7, block: !!k.block,
+          it1: !!k.it1, it2: !!k.it2, it3: !!k.it3,
           // The joystick's exact direction, in radians.
           ang: Number.isFinite(k.ang) ? k.ang : null,
           // Mouse position in world space (desktop only): where DASH goes.
@@ -12810,6 +13030,7 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', () => {
     const r = ws.room;
+    flushProgress();                    // leaving mid-game: what you earned is already on disk
     if (!r || r[ws.key] !== ws) return;
     useRoom(r);
     if (room.ffa) {

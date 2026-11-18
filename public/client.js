@@ -362,6 +362,8 @@ function toggleSound() {
 }
 
 function updateMusicButtons(info) {
+  const pm = document.getElementById('pauseMusic');
+  if (pm) pm.textContent = '♫ ' + (info.idx + 1) + '/' + info.count + ': ' + info.name;
   const sb = document.getElementById('musicBtn');
   if (sb) sb.textContent = (info.idx + 1) + '/' + info.count + ': ' + info.name;
   const gb = document.getElementById('musicBtnGame');
@@ -1086,6 +1088,7 @@ function connect() {
       pushSnapshot(msg, nowT);
       syncAdminTools(msg);
       syncSandbox(msg);
+      syncPause(msg);
       updateScreens(msg);
     }
   };
@@ -2408,6 +2411,7 @@ const AB_CODES = ['KeyQ', 'KeyE', 'KeyF', 'KeyG', 'KeyV', 'KeyB'];
 const AB_BTN_KEYS = [...AB_KEYS, 'C'];   // the seventh is the rare forged ability
 const abBtnState = AB_BTN_KEYS.map(() => ({ id: undefined, cooling: null }));
 function syncAbilityButtons(me) {
+  syncItemButtons(me);
   for (let i = 0; i < AB_BTN_KEYS.length; i++) {
     const el = document.getElementById('btn-ab' + (i + 1));
     if (!el) continue;
@@ -2517,7 +2521,11 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyM') toggleSound();
   if (e.code === 'F3') { e.preventDefault(); toggleNetOverlay(); }
   if (e.code === 'KeyT' && currState && currState.gameState === 'GAMEPLAY' && document.activeElement?.tagName !== 'INPUT') toggleChat();
-  if (e.code === 'Escape') { toggleChat(false); closeRareShop(); }
+  if (e.code === 'Escape') {
+    const chatOpen = !document.getElementById('chatPanel')?.classList.contains('hidden');
+    toggleChat(false); closeRareShop();
+    if (pauseOpen) resumeGame(); else if (!chatOpen && pauseAllowed) pauseGame();
+  }
   if (e.code.startsWith('Digit')) {
     const n = parseInt(e.code.slice(5));
     if (n >= 1 && n <= 4) useItem(n - 1);
@@ -2556,6 +2564,9 @@ function currentInputs() {
     ab6:     !!keys['KeyB'] || touchKeys.ab6,
     ab7:     !!keys['KeyC'] || touchKeys.ab7,   // the rare forged ability
     block:   !!keys['KeyX'] || touchKeys.block, // switch your shield on
+    it1:     !!keys['Digit5'] || !!keys['Numpad5'] || touchKeys.it1,   // your items
+    it2:     !!keys['Digit6'] || !!keys['Numpad6'] || touchKeys.it2,
+    it3:     !!keys['Digit7'] || !!keys['Numpad7'] || touchKeys.it3,
     // The joystick's exact direction (the keys stay 8-way).
     ang:     anyKey || !Number.isFinite(touchKeys.ang) ? null : touchKeys.ang,
     // Mouse position in the world, for DASH (desktop only).
@@ -2713,6 +2724,8 @@ function handleCanvasTap(clientX, clientY) {
   for (const s of itemSlotRects) {
     if (inside(s)) { useItem(s.index); return true; }
   }
+  for (const s of tkHudRects) if (inside(s)) { pressItemKey(s.index); return true; }
+  if (tkWorldTap(clientX, clientY)) return true;
   for (const s of weaponSlotRects) {
     if (inside(s)) {
       selectWeaponIndex(s.index);
@@ -2766,6 +2779,7 @@ function setupTouchControls() {
     ['btn-right','right'], ['btn-attack','attack'], ['btn-next','swap'], ['btn-prev','swapPrev'],
     ['btn-special','special'], ['btn-parry','parry'], ['btn-super','super'],
     ['btn-ab1','ab1'], ['btn-ab2','ab2'], ['btn-ab3','ab3'], ['btn-ab4','ab4'], ['btn-ab5','ab5'], ['btn-ab6','ab6'], ['btn-ab7','ab7'], ['btn-shield','block'],
+    ['btn-it1','it1'], ['btn-it2','it2'], ['btn-it3','it3'],
   ];
   for (const [id, key] of btnMap) {
     const el = document.getElementById(id);
@@ -3291,12 +3305,12 @@ function armoryClock() {
   const el = document.getElementById('armTimer');
   if (el) { const s = Math.max(0, Math.ceil(left / 1000)); el.textContent = 'NEW STOCK IN ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
 }
-function pickArmTab(t) { arm.tab = t; renderArmoryList(); renderArmoryTabs(); }
+function pickArmTab(t) { arm.tab = t; renderArmoryList(); renderArmoryTabs(); renderArmorySide(); }
 function pickArmSlot(s) { arm.slot = s; renderArmoryList(); renderArmoryTabs(); }
 function renderArmoryTabs() {
   for (const b of document.querySelectorAll('#armTabs button')) b.classList.toggle('on', b.dataset.tab === arm.tab);
   for (const b of document.querySelectorAll('#armSlots button')) b.classList.toggle('on', b.dataset.slot === arm.slot);
-  document.getElementById('armSlots').classList.toggle('hidden', arm.tab === 'shop');
+  document.getElementById('armSlots').classList.toggle('hidden', arm.tab === 'shop' || arm.tab === 'items');
   const own = document.getElementById('armOwnedN');
   if (own) own.textContent = arm.data ? arm.data.owned.length : 0;
 }
@@ -3304,6 +3318,7 @@ function armWornKey() { return Object.values(arm.data?.worn || {}).join(); }
 function renderArmorySide() {
   const d = arm.data, side = document.getElementById('armSide');
   if (!side) return;
+  if (arm.tab === 'items') { renderItemSide(side); return; }
   const worn = d ? d.worn : {}, ids = Object.values(worn);
   const lines = Armor.fxLines(Armor.fxOf(ids)), hp = Armor.hpOf(ids), sh = Armor.BY_ID[worn.shield];
   side.innerHTML = `<canvas id="armHero" width="88" height="112"></canvas>
@@ -3339,6 +3354,7 @@ function armoryCard(a, sale) {
 function renderArmoryList() {
   const d = arm.data, list = document.getElementById('armList');
   if (!d || !list) return;
+  if (arm.tab === 'items') { renderItemList(list); return; }
   const bySlot = a => arm.slot === 'all' || a.slot === arm.slot;
   const strong = (a, b) => b.rarity - a.rarity || b.price - a.price;
   const items = arm.tab === 'shop' ? d.stock.map(id => Armor.BY_ID[id]).filter(Boolean)
@@ -6340,6 +6356,7 @@ function drawPlayerBody(p, baseColor, label, key) {
   if (p.lightspeed > 0) drawLightspeedFx(p, x, y);
 
   Cosmetics.nameTag(ctx, x + p.w / 2, y - 13, label, skinCol, fx.nameBg, now);
+  if (p.tk && !p.dead) drawPlayerItems(p, x, y, y - (key === 'p2' && currState?.bot && currState.botReward ? 39 : 27), key);
   if (key === 'p2' && currState?.bot && currState.botReward) drawBounty(x + p.w / 2, y - 25, currState.botReward);
   if (!(p.kspin > 0) && !p.fspin && !p.isw) drawWeaponSprite(p, x, y, key);
   if (p.weaponId === 'infinitybow' && !p.dead) drawInfinityFloaters(p, x, y);
@@ -8533,6 +8550,7 @@ function drawHUD(state) {
               key + (ready ? (def ? def.name : a.id.toUpperCase()) : Math.ceil(a.cd / 1000) + 's'), col, '#3a4450', '#0c1016');
       by += 7;
     });
+    drawHudItems(mp, bx, by + 1);
     ctx.textAlign = 'left';
     ctx.font = '10px "Courier New",monospace';
   }
@@ -8761,7 +8779,8 @@ function drawControlHints() {
   const abil = (me && me.abil) || [];
   const abKeys = abil.map((a, i) => a ? AB_BTN_KEYS[i] : '').filter(Boolean).join('/');
   const t = 'ARROWS MOVE · SPACE ATK · ENTER/Z SWAP · SHIFT SPECIAL · P PARRY · '
-          + (me && me.superMax > 0 ? 'R SUPER · ' : '') + (abKeys ? abKeys + ' ABILITY · ' : '') + '1-4 ITEMS';
+          + (me && me.superMax > 0 ? 'R SUPER · ' : '') + (abKeys ? abKeys + ' ABILITY · ' : '') + '1-4 PICKUPS'
+          + ((me && me.tk || []).some(t => Items.usable(Items.BY_ID[t[0]] || {})) ? ' · 5-7 YOUR ITEMS' : '');
   const w = ctx.measureText(t).width;
   ctx.globalAlpha = 0.8;
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -9931,12 +9950,12 @@ async function askIceKnight() {
   if (performance.now() - ikAsk > 4000) {
     ikAsk = performance.now();
     say('THE ICE KNIGHT COSTS ◆ 2,000,000 A FIGHT, WIN OR LOSE. TAP AGAIN TO PAY');
-    if (sub) sub.textContent = 'TAP AGAIN: PAY ◆ 1,000,000';
+    if (sub) sub.textContent = 'TAP AGAIN: PAY ◆ 2,000,000';
     setTimeout(() => { if (sub && performance.now() - ikAsk >= 3900) sub.textContent = '◆ 2,000,000 to fight'; }, 4000);
     return;
   }
   ikAsk = 0;
-  if (sub) sub.textContent = '◆ 1,000,000 to fight';
+  if (sub) sub.textContent = '◆ 2,000,000 to fight';
   try {
     const r = await abilPost('/api/boss/enter', { id: 'iceknight' });
     if (r.save) storeBackup(pendingPass, r.save);
@@ -10785,3 +10804,195 @@ async function ffaRefresh() {
 function playFfa() { document.getElementById('lockMsg').textContent = ''; joinGame('ffa'); }
 setInterval(() => { if (document.getElementById('startScreen')?.classList.contains('active') && !document.hidden) ffaRefresh(); }, 6000);
 setTimeout(ffaRefresh, 1500);
+
+
+// ─── PAUSE (solo games and bot battles) ──────────────────────────────────────
+// The server freezes the room; this is the screen on top. Esc opens and closes it.
+var pauseOpen = false, pauseAllowed = false, pauseAt = 0;
+function syncPause(state) {
+  const solo = ['waves', 'extreme', 'portal', 'abyss', 'tsunami', 'iceknight', 'sandbox', 'sawroom', 'minigame'].includes(state.gameMode) || !!state.bot;
+  const on = solo && !state.ffa && (state.gameState === 'GAMEPLAY' || !!state.paused);
+  if (on !== pauseAllowed) {
+    pauseAllowed = on;
+    document.getElementById('pauseBtn')?.classList.toggle('shown', on);
+    touchZonesAt = -1e9;
+  }
+  if (state.paused && !pauseOpen && performance.now() - pauseAt > 1500) showPause(true);   // (a snapshot sent just before you pressed RESUME must not reopen it)
+  else if (!state.paused && pauseOpen && performance.now() - pauseAt > 1500) showPause(false);   // it ended by itself
+  if (!on && pauseOpen) showPause(false);
+}
+function showPause(on) {
+  pauseOpen = on; pauseAt = performance.now();
+  document.getElementById('pauseScreen')?.classList.toggle('hidden', !on);
+  if (on) { for (const k in keys) keys[k] = false; for (const k in touchKeys) touchKeys[k] = false; pauseSync(); }
+}
+function pauseSync() {
+  const set = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+  set('pauseSound', window.GameAudio && GameAudio.isMuted && GameAudio.isMuted() ? 'OFF' : (document.getElementById('soundBtn')?.textContent || 'ON'));
+  set('pauseFps', document.getElementById('fpsBtn')?.textContent || 'OFF');
+  set('pauseTap', document.getElementById('tapMoveBtn')?.textContent || 'OFF');
+  const tr = document.getElementById('tapMoveRow'); document.getElementById('pauseTap')?.parentElement?.classList.toggle('hidden', !!tr && getComputedStyle(tr).display === 'none');
+}
+function pauseGame() {
+  if (!pauseAllowed || pauseOpen || !ws || ws.readyState !== 1) return;
+  ws.send(JSON.stringify({ type: 'pause' }));
+  showPause(true);
+}
+function resumeGame() {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'resume' }));
+  showPause(false);
+  sendInput();
+}
+function pauseSound() { toggleSound(); pauseSync(); }
+function pauseLeave() { showPause(false); leaveGame(); }
+function pauseQuit() {
+  showPause(false); leaveGame();
+  try { window.close(); } catch {}
+  setTimeout(() => document.getElementById('byeScreen')?.classList.remove('hidden'), 250);   // a tab the page didn't open can't be closed by it
+}
+
+
+// ─── ITEMS (public/items.js) ─────────────────────────────────────────────────
+// Bought and upgraded in the armoury's ITEMS tab; up to three go into a fight.
+// In the state each carried item is [id, level, used, cooldown ms].
+const itemArm = () => (arm.data && arm.data.items) || { owned: {}, slots: Items.START_SLOTS, worn: [] };
+function itemTag(t) { return '<span class="tk-kind ' + t.kind + '">' + Items.KINDS[t.kind] + (t.kind === 'active' ? ' · ' + Math.round(t.cd / 1000) + 's' : '') + '</span>'; }
+function renderItemSide(side) {
+  const it = itemArm(), d = arm.data || { coins: 0 };
+  let h = '<div class="tk-side-title">TAKE INTO A FIGHT</div><div class="arm-slots">';
+  for (let i = 0; i < Items.MAX_SLOTS; i++) {
+    const id = it.worn[i], t = Items.BY_ID[id];
+    if (i < it.slots) h += t ? '<button class="arm-slot full" style="--rc:' + t.color + '" onclick="itemWear(\'' + id + '\')" title="Leave it at home"><i class="tk-em">' + t.icon + '</i><span>' + escapeHtml(t.name) + ' · LV ' + it.owned[id] + (Items.usable(t) ? '<br><small>KEY ' + (5 + i) + '</small>' : '') + '</span></button>'
+                         : '<div class="arm-slot" style="--rc:#6a6a8a"><i>+</i><span>EMPTY SLOT<br><small>tap an item you own</small></span></div>';
+    else if (i === it.slots) h += '<button class="arm-slot tk-buyslot" style="--rc:#ffd84a" ' + (d.coins < Items.SLOT_PRICE ? 'disabled' : '') + ' onclick="itemSlotBuy()"><i>🔒</i><span>BUY A SLOT<br><small>◆ ' + Items.SLOT_PRICE.toLocaleString() + '</small></span></button>';
+    else h += '<div class="arm-slot" style="--rc:#3a3a5a"><i>🔒</i><span>LOCKED</span></div>';
+  }
+  h += '</div><div class="arm-total"><span>You own ' + Object.keys(it.owned).length + ' of ' + Items.LIST.length + ' items.</span><span>Use the active ones with 5, 6 and 7 (buttons on a phone). ONE-TIME-USE items work once a match.</span></div>';
+  side.innerHTML = h;
+}
+function renderItemList(list) {
+  const it = itemArm(), d = arm.data;
+  const order = { passive: 0, auto: 1, active: 2, once: 3 };
+  list.innerHTML = '<div class="arm-sec">ITEMS: kept for ever, upgradable to level 3. TAKE puts one in a slot for your fights.</div>' + Items.LIST.slice().sort((a, b) => order[a.kind] - order[b.kind]).map(t => {
+    const lv = it.owned[t.id] || 0, worn = it.worn.includes(t.id), cost = lv ? Items.upPrice(t, lv) : t.price, poor = d.coins < cost;
+    const levels = t.v.map((v, i) => '<span class="tk-lv' + (i + 1 === lv ? ' on' : i < lv ? ' had' : '') + '">LV' + (i + 1) + ' ' + v + '</span>').join('');
+    const buy = lv >= Items.MAX_LV ? '<span class="arm-price">MAX LEVEL</span>'
+      : '<button class="arm-act buy" ' + (poor ? 'disabled' : '') + ' onclick="itemBuy(\'' + t.id + '\')">' + (lv ? 'UPGRADE ' : 'BUY ') + '◆ ' + cost.toLocaleString() + '</button>';
+    const wear = !lv ? '' : worn ? '<button class="arm-act on" onclick="itemWear(\'' + t.id + '\')">TAKEN ✓</button>'
+      : '<button class="arm-act wear" onclick="itemWear(\'' + t.id + '\')">TAKE</button>';
+    return '<div class="arm-card tk-card' + (worn ? ' tk-worn' : '') + '" style="--rc:' + t.color + '"><div class="arm-top"><div class="tk-big">' + t.icon + '</div>'
+      + '<div class="arm-head"><b>' + escapeHtml(t.name) + '</b>' + itemTag(t) + '<span class="arm-hp">' + (lv ? 'LEVEL ' + lv : 'NOT OWNED') + '</span></div></div>'
+      + '<div class="tk-desc">' + escapeHtml(Items.describe(t, lv || 1)) + '</div><div class="tk-lvs">' + levels + '</div>'
+      + '<div class="arm-foot tk-foot">' + wear + buy + '</div></div>';
+  }).join('');
+}
+function itemBuy(id) {
+  if (window.GameAudio) { GameAudio.init(); GameAudio.sfx.unlock(); }
+  const lv = itemArm().owned[id] || 0, t = Items.BY_ID[id];
+  armoryDo('/api/items/buy', { id }, lv ? t.name + ' is now level ' + (lv + 1) + '!' : t.name + ' is yours for ever!');
+}
+function itemWear(id) { armoryDo('/api/items/wear', { id }); }
+function itemSlotBuy() { armoryDo('/api/items/slot', {}, 'A new item slot!'); }
+
+// The phone buttons: one for each usable item you carry, dimmed while it waits or once used.
+const itBtnState = [{}, {}, {}];
+function syncItemButtons(me) {
+  for (let i = 0; i < 3; i++) {
+    const el = document.getElementById('btn-it' + (i + 1));
+    if (!el) continue;
+    const t = me && me.tk ? me.tk[i] : null, def = t && Items.BY_ID[t[0]], show = !!def && Items.usable(def);
+    const st = itBtnState[i], id = show ? def.id : null;
+    if (id !== st.id) {
+      st.id = id; el.classList.toggle('hidden-btn', !show);
+      el.querySelector('b').textContent = show ? def.icon : '';
+      if (show) el.style.setProperty('--abc', def.color);
+      touchZonesAt = -1e9;
+      if (!show) touchKeys['it' + (i + 1)] = false;
+    }
+    const off = show && (t[2] || t[3] > 0);
+    if (off !== st.off) { st.off = off; el.classList.toggle('cooling', !!off); }
+  }
+}
+// A quick press of an item key, for a tap on its HUD icon.
+function pressItemKey(i) {
+  touchKeys['it' + (i + 1)] = true; sendInput();
+  setTimeout(() => { touchKeys['it' + (i + 1)] = false; sendInput(); }, 120);
+}
+let tkHudRects = [];
+function drawHudItems(me, x, y) {
+  tkHudRects = [];
+  if (!me || !me.tk || !me.tk.length) return;
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  me.tk.forEach((t, i) => {
+    const def = Items.BY_ID[t[0]]; if (!def) return;
+    const bx = x + i * 17, S = 15, off = t[2] || t[3] > 0;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(bx, y, S, S);
+    ctx.strokeStyle = def.color; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, y + 0.5, S - 1, S - 1);
+    ctx.globalAlpha = off ? 0.35 : 1;
+    ctx.font = '10px sans-serif'; ctx.fillText(def.icon, bx + S / 2, y + S / 2 + 1);
+    ctx.globalAlpha = 1;
+    if (t[3] > 0 && def.cd) { ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(bx, y + S * (1 - t[3] / def.cd), S, S * t[3] / def.cd); }
+    ctx.font = 'bold 6px "Courier New",monospace';
+    if (t[2]) { ctx.fillStyle = '#ff6a6a'; ctx.fillText('USED', bx + S / 2, y + S + 4); }
+    else if (t[3] > 0) { ctx.fillStyle = '#ccc'; ctx.fillText(Math.ceil(t[3] / 1000) + 's', bx + S / 2, y + S + 4); }
+    else if (Items.usable(def)) { ctx.fillStyle = '#ffe84a'; ctx.fillText(String(5 + i), bx + S / 2, y + S + 4); }
+    if (Items.usable(def)) tkHudRects.push({ x: bx, y, w: S, h: S, index: i });
+  });
+  ctx.restore();
+}
+// Above every fighter's name: what they carry. Tap or click one to see what it does.
+const tkWorldRects = {};
+function drawPlayerItems(p, x, py, y, key) {
+  const list = p.tk.map(t => [Items.BY_ID[t[0]], t]).filter(a => a[0]);
+  tkWorldRects[key] = [];
+  if (!list.length) return;
+  const S = 12, gap = 2, w = list.length * S + (list.length - 1) * gap;
+  let ix = Math.round(x + p.w / 2 - w / 2);
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const [def, t] of list) {
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(ix, y, S, S);
+    ctx.strokeStyle = def.color; ctx.lineWidth = 1; ctx.strokeRect(ix + 0.5, y + 0.5, S - 1, S - 1);
+    ctx.globalAlpha = t[2] ? 0.3 : 1;
+    ctx.font = '9px sans-serif'; ctx.fillText(def.icon, ix + S / 2, y + S / 2 + 0.5);
+    ctx.globalAlpha = 1;
+    tkWorldRects[key].push({ x: ix, y, w: S, h: S, id: def.id, lv: t[1], used: !!t[2] });
+    ix += S + gap;
+  }
+  if (p.tkb > 0) {                                   // GUARDIAN BUBBLE up
+    ctx.globalAlpha = 0.35; ctx.strokeStyle = '#7ab8ff'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x + p.w / 2, py + p.h / 2, Math.max(p.w, p.h) / 2 + 6, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+}
+function tkWorldTap(clientX, clientY) {
+  const r = canvas.getBoundingClientRect();
+  if (!r.width || !r.height || !currState) return false;
+  const wx = (clientX - r.left) * VIEW_W / r.width, wy = (clientY - r.top) * VIEW_H / r.height + CAM_Y, pad = 3;
+  for (const [key, rects] of Object.entries(tkWorldRects)) {
+    if (!currState.players?.[key]) continue;
+    for (const s of rects) {
+      if (wx >= s.x - pad && wx <= s.x + s.w + pad && wy >= s.y - pad && wy <= s.y + s.h + pad) {
+        showItemTip(s, (currState.playerNames || {})[key] || key.toUpperCase(), clientX, clientY);
+        return true;
+      }
+    }
+  }
+  return false;
+}
+let tkTipTimer = 0;
+function showItemTip(s, who, cx, cy) {
+  const el = document.getElementById('tkTip'), t = Items.BY_ID[s.id];
+  if (!el || !t) return;
+  el.innerHTML = '<b style="color:' + t.color + '">' + t.icon + ' ' + escapeHtml(t.name) + ' · LV ' + s.lv + '</b>'
+    + '<span>' + escapeHtml(Items.describe(t, s.lv)) + '</span>'
+    + '<small>' + Items.KINDS[t.kind] + (t.kind === 'active' ? ' · EVERY ' + Math.round(t.cd / 1000) + 's' : '') + (s.used ? ' · USED' : '') + ' · ' + escapeHtml(who) + '</small>';
+  el.classList.remove('hidden');
+  const w = Math.min(240, innerWidth - 16);
+  el.style.left = Math.max(8, Math.min(innerWidth - w - 8, cx - w / 2)) + 'px';
+  el.style.top = Math.max(8, cy - 80) + 'px';
+  el.style.width = w + 'px';
+  clearTimeout(tkTipTimer);
+  tkTipTimer = setTimeout(() => el.classList.add('hidden'), 3500);
+}

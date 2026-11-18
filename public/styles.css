@@ -2098,3 +2098,44 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 .mode-btn.btn-ffa small { display: block; letter-spacing: 1px; }
 .btn-ffa::before { content: '⚔️ '; }
 .room-ffa { width: 100%; margin: 0 0 10px; }
+
+/* ── Pause ── */
+#gameControls #pauseBtn { display: none; border-color: #ffd84a; color: #ffe88a; }
+#gameControls #pauseBtn.shown { display: inline-block; }
+.pause-box { max-width: 360px; }
+.pause-go, .pause-leave { display: block; width: 100%; min-height: 44px; margin: 8px 0 0; border-radius: 10px; border: 2px solid #fff; cursor: pointer; font: bold 14px 'Courier New', monospace; letter-spacing: 1px; }
+.pause-go { color: #06331c; background: linear-gradient(180deg, #9affc0, #2ad07a); }
+.pause-leave { color: #ffd0c8; background: #3a1218; border-color: #ff6a5a; font-size: 12px; }
+.pause-leave.quit { background: #1c1020; border-color: #9a7aba; color: #e0d0f0; }
+.pause-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; color: #e8e0ff; font: bold 11px 'Courier New', monospace; letter-spacing: 1px; text-align: left; }
+.pause-row.hidden { display: none; }
+.pause-row button { min-height: 36px; min-width: 96px; max-width: 200px; padding: 0 10px; border-radius: 8px; border: 2px solid #8a8ab0; background: #0b0b18; color: #fff; font: bold 11px 'Courier New', monospace; cursor: pointer; }
+.pause-hint { margin: 10px 0 2px; font-size: 10px; line-height: 1.4; color: #9a9ab8; }
+
+/* ── ITEMS ── */
+.arm-tabs button.arm-items-tab { border-color: #ffd84a; color: #ffe88a; }
+.arm-tabs button.arm-items-tab.on { color: #2a0a3a; }
+.tk-side-title { font-weight: bold; font-size: 12px; color: #ffe84a; letter-spacing: 1px; }
+.arm-slot .tk-em { font-size: 20px; font-style: normal; color: inherit; }
+.arm-slot small { font-size: 9px; color: #cfc6ee; font-weight: normal; }
+.arm-slot.tk-buyslot { border-style: solid; color: #ffe84a; cursor: pointer; }
+.arm-slot.tk-buyslot:disabled { opacity: 0.6; cursor: default; }
+.tk-card { min-height: 0; }
+.tk-card.tk-worn { box-shadow: 0 0 0 2px #fff, 0 0 12px color-mix(in srgb, var(--rc) 70%, transparent); }
+.tk-big { flex: none; width: 52px; height: 52px; border-radius: 10px; background: rgba(255, 255, 255, 0.1); display: flex; align-items: center; justify-content: center; font-size: 32px; }
+.tk-kind { font-size: 9px; font-weight: bold; letter-spacing: 1px; color: #9affd0; }
+.tk-kind.active { color: #8ad8ff; }
+.tk-kind.once, .tk-kind.auto { color: #ff9a6a; }
+.tk-desc { font-size: 11px; line-height: 1.3; color: #fff; }
+.tk-lvs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tk-lv { font-size: 9px; padding: 1px 5px; border-radius: 999px; background: rgba(0, 0, 0, 0.35); color: #9a9ab8; }
+.tk-lv.had { color: #cfc6ee; }
+.tk-lv.on { background: var(--rc); color: #1a0a2a; font-weight: bold; }
+.tk-foot { gap: 6px; flex-wrap: wrap; }
+.tk-foot .arm-act { min-height: 34px; }
+.item-btn b { font-size: 20px; line-height: 1; }
+.tk-tip { position: fixed; z-index: 40; pointer-events: none; display: flex; flex-direction: column; gap: 3px; padding: 7px 9px; border-radius: 10px; box-sizing: border-box;
+  background: rgba(10, 6, 30, 0.95); border: 2px solid #ffd84a; color: #fff; font: 11px 'Courier New', monospace; line-height: 1.3; }
+.tk-tip.hidden { display: none; }
+.tk-tip small { color: #b8b0d8; font-size: 9px; }
+.arm-tabs.hidden { display: none; }
