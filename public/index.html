@@ -122,6 +122,7 @@
           <button class="mode-btn btn-friends" onclick="openFriends('friend')">FRIENDS<span id="frOnline" class="ev-live fr-on hidden">0</span><small>see who is online</small></button>
           <button class="mode-btn btn-challenge" onclick="openFriends('challenge')">CHALLENGE<small>fight a friend</small></button>
         </div>
+        <button class="mode-btn btn-suggest" onclick="openSuggest()">SUGGESTION BOX<small>ideas for the game &middot; like the best ones</small></button>
       </div>
       <div id="lockMsg" class="lock-msg"></div>
       <button id="installBtn" class="skin-btn" style="display:none" onclick="installApp()">&#11015; INSTALL APP</button>
@@ -153,6 +154,8 @@
   <div id="settingsScreen" class="overlay hidden">
     <div class="pixel-box settings-box">
       <div class="title-text shop-title">SETTINGS</div>
+      <div class="set-row"><span class="set-label">PLAYERS ONLINE</span>
+        <button class="set-btn on-btn" id="onlineBtn" onclick="openOnline()">SEE WHO</button></div>
       <div class="set-row"><span class="set-label">SOUND</span>
         <button class="set-btn" id="soundBtn" onclick="toggleSound()">ON</button></div>
       <div class="set-row"><span class="set-label">MUSIC</span>
@@ -295,6 +298,20 @@
     </div>
   </div>
 
+  <!-- The suggestion box: ideas for the game; everyone can like them -->
+  <div id="suggestScreen" class="overlay hidden">
+    <div class="pixel-box shop-box sg-box">
+      <div class="title-text shop-title"><span class="t-em">💡</span> SUGGESTION BOX</div>
+      <div class="subtitle">WHAT SHOULD BE ADDED NEXT? LIKE THE IDEAS YOU WANT MOST</div>
+      <div class="sg-write"><textarea id="sgText" maxlength="200" rows="2" placeholder="YOUR IDEA FOR THE GAME..." spellcheck="true" aria-label="Your idea"></textarea>
+        <div class="sg-write-row"><span id="sgNote" class="sg-note"></span><button class="mode-btn sg-post" id="sgPost" onclick="suggestPost()">&#10148; POST</button></div></div>
+      <div id="sgMsg" class="shop-msg"></div>
+      <div class="arm-tabs sg-tabs"><button data-sort="top" onclick="suggestSort('top')">&#10084; MOST LIKED</button><button data-sort="new" onclick="suggestSort('new')">&#9733; NEWEST</button><button data-sort="added" onclick="suggestSort('added')">&#10004; ADDED</button></div>
+      <div id="sgList" class="sg-list"></div>
+      <button class="mode-btn shop-back" onclick="closeSuggest()">&#10003; BACK</button>
+    </div>
+  </div>
+
   <!-- Abilities: bought once with coins, kept forever, used with Q / E in matches -->
   <div id="abilitiesScreen" class="overlay hidden">
     <div class="pixel-box shop-box">
@@ -394,6 +411,8 @@
           <p>Pick a weapon you own and put coins in the fire (500 to 500,000). More coins give a better chance of an upgrade and a much better chance of a rare one; if the metal cracks the coins are gone. Each weapon holds <b>3 upgrades</b>. Melee weapons have over 30 possible upgrades and ranged weapons over 20. These are passives that work while the weapon is in your hand. The <b>5 rare upgrades</b> each give an extra ability on <b>C</b>, and a weapon can only hold one. Reset a weapon in the forge to free its slots; the coins do not come back. A weapon with a rare upgrade glows red. <b>Mythics</b> have a forge list of their own: 32 stronger upgrades and 5 rare abilities that no other weapon can get.</p></div>
         <div class="howto-sec"><h3>ITEMS</h3>
           <p>In the <b>ARMOURY</b>, under <b>ITEMS</b>: 24 items, bought once and kept for ever, each upgradable to level 3. <b>PASSIVE</b> ones are always on (more health, speed, damage, lifesteal...). <b>ACTIVE</b> ones you use with <b>5</b>, <b>6</b> and <b>7</b> (or their buttons on a phone) and then wait for. <b>ONE-TIME-USE</b> ones work once a match. You start with <b>one item slot</b>; buy up to three in all (500,000 coins each) and pick what to take into a fight. Everyone's items show above their name: tap or click one to see what it does. (Items stay home in minigames and the Saw Room.)</p></div>
+        <div class="howto-sec"><h3>SUGGESTION BOX</h3>
+          <p>On the 🎨 tab. Got an idea for the game? With <b>100,000 coins</b> you can post it (the coins are not spent; up to 3 a day). Everyone can read every idea and <b>like</b> the ones they want most. Ideas the game's maker picks are marked <b>PLANNED</b>, then <b>ADDED</b> when they are in.</p></div>
         <div class="howto-sec"><h3>FREE FOR ALL</h3>
           <p>One giant public room for everyone (up to 12), on the PvP tab and in CREATE ROOM. It starts as soon as two people are in, and from then on anyone can <b>jump in at any time</b>. Nobody is ever out: when you die you come back <b>30 seconds</b> later, somewhere safe. Every kill counts on the scoreboard. If you leave, you can't join again for <b>50 seconds</b>.</p></div>
         <div class="howto-sec"><h3>FRIENDS, TRADE AND CHALLENGE</h3>
@@ -577,6 +596,14 @@
   </div>
 
   <div id="tkTip" class="tk-tip hidden"></div>
+  <div id="onlineScreen" class="wp-pop hidden" style="z-index:45" onclick="if (event.target === this) closeOnline()">
+    <div class="wp-pop-box online-box">
+      <div class="wp-pop-title">&#127760; PLAYERS ONLINE</div>
+      <div id="onlineSum" class="online-sum">Looking...</div>
+      <div id="onlineList" class="online-list"></div>
+      <button class="pause-go" onclick="closeOnline()">&#10003; CLOSE</button>
+    </div>
+  </div>
 
   <!-- Game canvas -->
   <canvas id="gameCanvas" width="720" height="405"></canvas>

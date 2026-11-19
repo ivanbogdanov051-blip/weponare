@@ -1407,6 +1407,7 @@ function progress() {
   if (!d.names) d.names = {};              // password -> the name last played under
   if (!d.mgTries) d.mgTries = {};          // password -> the 10-minute minigame window they last played (one go each)
   if (!d.mgWins) d.mgWins = {};
+  if (!d.suggestions) d.suggestions = [];  // the suggestion box: { id, pw, name, text, at, likes: [passwords], status }
   if (!d.items) d.items = {};              // password -> { item id: level 1-3 }
   if (!d.itemSlots) d.itemSlots = {};      // password -> item slots bought into (1-3)
   if (!d.itemWorn) d.itemWorn = {};        // password -> [item ids taken into fights]            // password -> the 10-minute minigame window they last won a prize in
@@ -12518,6 +12519,93 @@ function socialPw(req, res) {
   if (isAdminPw(pw)) { res.status(400).json({ error: 'The admin account can not do that.' }); return null; }
   return pw;
 }
+// ─── THE SUGGESTION BOX ───────────────────────────────────────────────────────
+// Anyone with SUGGEST_NEED coins can post an idea (the coins are not spent; up to
+// SUGGEST_PER_DAY a day). Everyone sees them and can like each one once. The admin
+// marks them PLANNED or ADDED, or deletes them. Passwords never leave the server.
+const SUGGEST_NEED = 100000, SUGGEST_MAX_LEN = 200, SUGGEST_PER_DAY = 3, SUGGEST_MAX = 1000;
+const SUGGEST_STATUS = ['open', 'planned', 'added'];
+function suggestView(s, pw) {
+  return { id: s.id, name: s.name, text: s.text, at: s.at, likes: s.likes.length, liked: !!pw && s.likes.includes(pw), mine: !!pw && s.pw === pw, status: s.status || 'open' };
+}
+function suggestList(pw) {
+  const d = progress(), admin = isAdminPw(pw), prof = pw && !admin ? profileFor(pw, {}) : null;
+  const day = Date.now() - 24 * 3600 * 1000;
+  const left = pw ? Math.max(0, SUGGEST_PER_DAY - d.suggestions.filter(s => s.pw === pw && s.at > day).length) : 0;
+  return { items: d.suggestions.map(s => suggestView(s, pw)), admin, need: SUGGEST_NEED, maxLen: SUGGEST_MAX_LEN,
+           coins: prof ? prof.coins : 0, canPost: !!pw && (admin || prof.coins >= SUGGEST_NEED) && (admin || left > 0), left: admin ? 99 : left };
+}
+app.post('/api/suggest/list', (req, res) => res.json(suggestList(sanitizeText(req.body?.password, 32))));
+app.post('/api/suggest/post', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'Set a password on the menu first.' });
+  const text = String(req.body?.text == null ? '' : req.body.text).replace(/[<>&"]/g, '').replace(/\s+/g, ' ').trim().slice(0, SUGGEST_MAX_LEN);
+  if (text.length < 5) return res.status(400).json({ error: 'Write a little more (at least 5 letters).' });
+  const L = suggestList(pw);
+  if (!L.admin && L.coins < SUGGEST_NEED) return res.status(400).json({ error: 'You need ' + SUGGEST_NEED.toLocaleString('en-US') + ' coins to post (they are not spent).' });
+  if (!L.admin && L.left <= 0) return res.status(400).json({ error: 'That is ' + SUGGEST_PER_DAY + ' today: try again tomorrow.' });
+  const d = progress();
+  if (d.suggestions.some(s => s.text.toLowerCase() === text.toLowerCase())) return res.status(400).json({ error: 'Someone already suggested exactly that: like it instead!' });
+  const name = sanitizeText(req.body?.name, 12).toUpperCase() || d.names[pw] || 'PLAYER';
+  d.suggestions.unshift({ id: crypto.randomBytes(6).toString('hex'), pw, name, text, at: Date.now(), likes: [], status: 'open' });
+  if (d.suggestions.length > SUGGEST_MAX) d.suggestions.length = SUGGEST_MAX;
+  markDirty();
+  res.json(suggestList(pw));
+});
+app.post('/api/suggest/like', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'Set a password on the menu first to like ideas.' });
+  const s = progress().suggestions.find(x => x.id === sanitizeText(req.body?.id, 16));
+  if (!s) return res.status(400).json({ error: 'That suggestion is gone.' });
+  if (s.pw === pw) return res.status(400).json({ error: 'You can not like your own idea.' });
+  s.likes = s.likes.includes(pw) ? s.likes.filter(x => x !== pw) : [...s.likes, pw];
+  markDirty();
+  res.json(suggestList(pw));
+});
+app.post('/api/suggest/admin', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!isAdminPw(pw)) return res.status(403).json({ error: 'Only the admin can do that.' });
+  const d = progress(), id = sanitizeText(req.body?.id, 16), act = sanitizeText(req.body?.action, 10);
+  const s = d.suggestions.find(x => x.id === id);
+  if (!s) return res.status(400).json({ error: 'That suggestion is gone.' });
+  if (act === 'delete') d.suggestions = d.suggestions.filter(x => x !== s);
+  else if (SUGGEST_STATUS.includes(act)) s.status = act;
+  else return res.status(400).json({ error: 'Unknown action.' });
+  markDirty();
+  res.json(suggestList(pw));
+});
+
+// PLAYERS ONLINE (Settings): everyone in a game right now, and everyone with the game
+// open on a menu, by name, with what they are doing. Only names leave the server.
+const MODE_LABEL = { waves: 'THE HORDE', extreme: 'EXTREME', portal: 'PORTAL MAGE', abyss: 'THE ABYSS', tsunami: 'TSUNAMI', iceknight: 'ICE KNIGHT',
+  sandbox: 'SANDBOX', sawroom: 'THE SAWS', minigame: 'A MINIGAME', coop: 'CO-OP', pvp: 'PvP' };
+function doingOf(r) {
+  if (r.ffa) return 'FREE FOR ALL';
+  if (r.event) return EVENTS[r.event]?.name || 'AN EVENT';
+  if (r.challengeId) return 'A CHALLENGE';
+  if (r.bot) return 'BOT BATTLE';
+  if (r.tutorial) return 'THE TUTORIAL';
+  if (r.custom) return 'ROOM ' + r.custom.name;
+  const m = MODE_LABEL[r.gameMode] || 'A GAME';
+  return r.gameState === 'LOBBY' && !SOLO_MODES.includes(r.gameMode) ? m + ' (WAITING)' : m;
+}
+app.post('/api/online', (req, res) => {
+  const me = sanitizeText(req.body?.password, 32), seen = new Set(), list = [];
+  for (const r of rooms) for (const k of seatKeys(r)) {
+    const ws = r[k];
+    if (!ws || ws.readyState !== 1) continue;
+    const pw = r.passwords[k];
+    if (pw) { if (seen.has(pw)) continue; seen.add(pw); }
+    list.push({ name: r.playerNames[k] || 'PLAYER', doing: doingOf(r), you: !!pw && pw === me, game: true });
+  }
+  for (const [pw, o] of online) {
+    if (seen.has(pw) || Date.now() - o.seen >= ONLINE_MS) continue;
+    seen.add(pw);
+    list.push({ name: o.name || 'PLAYER', doing: 'ON THE MENU', you: pw === me, game: false });
+  }
+  list.sort((a, b) => (b.you - a.you) || (b.game - a.game) || a.name.localeCompare(b.name));
+  res.json({ count: list.length, playing: list.filter(p => p.game).length, players: list.slice(0, 300) });
+});
 app.post('/api/social/poll', (req, res) => {
   const pw = socialPw(req, res);
   if (!pw) return;

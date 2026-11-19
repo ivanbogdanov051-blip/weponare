@@ -863,7 +863,7 @@ function syncSettings() {
   const f = document.getElementById('fpsBtn');
   if (f) { f.textContent = netOverlay ? 'ON' : 'OFF'; f.classList.toggle('on', netOverlay); }
 }
-function openSettings() { syncSettings(); renderArenaPicker(); showScreen('settingsScreen'); }
+function openSettings() { syncSettings(); renderArenaPicker(); showScreen('settingsScreen'); onlineFetch(); }
 function closeSettings() { showScreen('startScreen'); }
 
 // ── Modes unlock with XP ──
@@ -2510,6 +2510,8 @@ const touchKeys = { up: false, down: false, left: false, right: false, attack: f
                     ab1: false, ab2: false, ab3: false, ab4: false, ab5: false, ab6: false, ab7: false, block: false, ang: null };
 
 window.addEventListener('keydown', (e) => {
+  // Typing in a text box (a name, a suggestion...): the keys are letters, not game controls.
+  if (/^(INPUT|TEXTAREA)$/.test(e.target?.tagName || '') && e.code !== 'Escape') return;
   if (!keys[e.code]) { keys[e.code] = true; sendInput(); }
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','ShiftLeft','ShiftRight','KeyP','ControlLeft','ControlRight'].includes(e.code)) e.preventDefault();
   if (e.code === 'Space' && currState && currState.gameState === 'WEAPON_UNLOCK' && currState.pendingUnlock) sendAckUnlock();
@@ -4736,7 +4738,7 @@ const ABILITY_ICONS = {
   },
 };
 
-const SCREENS = ['friendsScreen', 'settingsScreen', 'startScreen','lobbyScreen','pickScreen','armoryScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','legendScreen','eventsScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen','forgeScreen','tradeScreen'];
+const SCREENS = ['suggestScreen', 'friendsScreen', 'settingsScreen', 'startScreen','lobbyScreen','pickScreen','armoryScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','legendScreen','eventsScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen','forgeScreen','tradeScreen'];
 // The main menu is shrunk to whatever the screen allows (never below 45%), so the
 // name and password fields and the mode buttons are all in view on small phones
 // and short windows. Re-measured on resize / rotation / when it is shown.
@@ -10996,3 +10998,95 @@ function showItemTip(s, who, cx, cy) {
   clearTimeout(tkTipTimer);
   tkTipTimer = setTimeout(() => el.classList.add('hidden'), 3500);
 }
+
+
+// ─── PLAYERS ONLINE (in Settings) ────────────────────────────────────────────
+// Who is on right now: in a game (and which) or on a menu. Refreshed while open.
+let onlineTimer = 0;
+async function onlineFetch() {
+  try {
+    const r = await fetch('/api/online', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: (document.getElementById('passInput')?.value || '').trim() }) });
+    const d = await r.json();
+    const btn = document.getElementById('onlineBtn');
+    if (btn) btn.textContent = 'SEE WHO (' + d.count + ')';
+    if (document.getElementById('onlineScreen')?.classList.contains('hidden')) return;
+    document.getElementById('onlineSum').innerHTML = '<b>' + d.count + '</b> ONLINE &middot; <b>' + d.playing + '</b> IN A GAME';
+    document.getElementById('onlineList').innerHTML = d.players.map(p =>
+      '<div class="online-row' + (p.you ? ' you' : '') + '"><i class="' + (p.game ? 'on' : 'menu') + '"></i><b>' + escapeHtml(p.name) + (p.you ? ' (YOU)' : '') + '</b><span>' + escapeHtml(p.doing) + '</span></div>').join('')
+      || '<div class="online-row"><span>Nobody else is here right now.</span></div>';
+  } catch { const s = document.getElementById('onlineSum'); if (s) s.textContent = 'Could not reach the server.'; }
+}
+function openOnline() {
+  document.getElementById('onlineScreen').classList.remove('hidden');
+  onlineFetch();
+  clearInterval(onlineTimer);
+  onlineTimer = setInterval(onlineFetch, 5000);
+}
+function closeOnline() { document.getElementById('onlineScreen').classList.add('hidden'); clearInterval(onlineTimer); }
+// The count on the Settings button, kept fresh while Settings is open.
+setInterval(() => { if (document.getElementById('settingsScreen')?.classList.contains('active') && !document.hidden) onlineFetch(); }, 8000);
+
+
+// ─── THE SUGGESTION BOX ──────────────────────────────────────────────────────
+const sg = { data: null, sort: 'top', busy: false, timer: 0 };
+function setSgMsg(t, bad) { const el = document.getElementById('sgMsg'); if (el) { el.textContent = t || ''; el.className = 'shop-msg' + (bad ? ' err' : ''); } }
+async function sgPost(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: (document.getElementById('passInput')?.value || '').trim(), name: (document.getElementById('nameInput')?.value || '').trim(), ...body }) });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || 'Something went wrong.');
+  return d;
+}
+async function openSuggest() {
+  readCredentials();
+  showScreen('suggestScreen');
+  setSgMsg('');
+  await suggestLoad();
+  clearInterval(sg.timer);
+  sg.timer = setInterval(() => { if (document.getElementById('suggestScreen').classList.contains('active') && !document.hidden) suggestLoad(); else clearInterval(sg.timer); }, 15000);
+}
+function closeSuggest() { clearInterval(sg.timer); showScreen('startScreen'); }
+async function suggestLoad() {
+  try { sg.data = await sgPost('/api/suggest/list', {}); renderSuggest(); } catch (e) { setSgMsg(e.message || 'Could not reach the server.', true); }
+}
+function suggestSort(s) { sg.sort = s; renderSuggest(); }
+function sgAgo(t) {
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  return s < 60 ? 'JUST NOW' : s < 3600 ? Math.floor(s / 60) + 'M AGO' : s < 86400 ? Math.floor(s / 3600) + 'H AGO' : Math.floor(s / 86400) + 'D AGO';
+}
+function renderSuggest() {
+  const d = sg.data; if (!d) return;
+  for (const b of document.querySelectorAll('.sg-tabs button')) b.classList.toggle('on', b.dataset.sort === sg.sort);
+  const pw = (document.getElementById('passInput')?.value || '').trim();
+  const note = document.getElementById('sgNote'), post = document.getElementById('sgPost'), box = document.getElementById('sgText');
+  note.textContent = !pw ? 'SET A PASSWORD ON THE MENU TO POST AND LIKE'
+    : d.admin ? 'ADMIN: POST AS MUCH AS YOU LIKE'
+    : d.coins < d.need ? 'YOU NEED ◆ ' + d.need.toLocaleString() + ' TO POST (YOU HAVE ' + d.coins.toLocaleString() + ') · NOT SPENT'
+    : d.left <= 0 ? 'THAT IS 3 TODAY: MORE TOMORROW' : d.left + ' LEFT TODAY · COINS ARE NOT SPENT';
+  post.disabled = box.disabled = !d.canPost;
+  let items = d.items.slice();
+  if (sg.sort === 'top') items.sort((a, b) => b.likes - a.likes || b.at - a.at);
+  else if (sg.sort === 'new') items.sort((a, b) => b.at - a.at);
+  else items = items.filter(s => s.status !== 'open').sort((a, b) => (a.status === 'added' ? 0 : 1) - (b.status === 'added' ? 0 : 1) || b.likes - a.likes);
+  const tag = { planned: '<span class="sg-tag planned">PLANNED</span>', added: '<span class="sg-tag added">✔ ADDED</span>' };
+  document.getElementById('sgList').innerHTML = items.map(s =>
+    '<div class="sg-card' + (s.mine ? ' mine' : '') + ' ' + s.status + '"><div class="sg-top"><b>' + escapeHtml(s.name) + (s.mine ? ' (YOU)' : '') + '</b>' + (tag[s.status] || '') + '<span>' + sgAgo(s.at) + '</span></div>'
+    + '<div class="sg-text">' + escapeHtml(s.text) + '</div><div class="sg-foot">'
+    + '<button class="sg-like' + (s.liked ? ' on' : '') + '" ' + (s.mine || !pw ? 'disabled' : '') + ' onclick="suggestLike(\'' + s.id + '\')">' + (s.liked ? '❤️' : '🤍') + ' ' + s.likes + '</button>'
+    + (d.admin ? '<span class="sg-admin"><button onclick="suggestAdmin(\'' + s.id + '\', \'planned\')">PLANNED</button><button onclick="suggestAdmin(\'' + s.id + '\', \'added\')">ADDED</button><button onclick="suggestAdmin(\'' + s.id + '\', \'open\')">OPEN</button><button class="del" onclick="suggestAdmin(\'' + s.id + '\', \'delete\')">DELETE</button></span>' : '')
+    + '</div></div>').join('') || '<div class="sg-none">' + (sg.sort === 'added' ? 'Nothing marked yet.' : 'No ideas yet: be the first!') + '</div>';
+}
+async function suggestDo(url, body, note) {
+  if (sg.busy) return;
+  sg.busy = true; setSgMsg('');
+  try { sg.data = await sgPost(url, body); renderSuggest(); if (note) setSgMsg(note); return true; }
+  catch (e) { setSgMsg(e.message, true); return false; }
+  finally { sg.busy = false; }
+}
+async function suggestPost() {
+  const box = document.getElementById('sgText');
+  if (await suggestDo('/api/suggest/post', { text: box.value }, 'Posted! Everyone can see it now.')) { box.value = ''; sg.sort = 'new'; renderSuggest(); }
+}
+function suggestLike(id) { suggestDo('/api/suggest/like', { id }); }
+function suggestAdmin(id, action) { if (action !== 'delete' || confirm('Delete this suggestion?')) suggestDo('/api/suggest/admin', { id, action }); }

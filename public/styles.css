@@ -2139,3 +2139,50 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 .tk-tip.hidden { display: none; }
 .tk-tip small { color: #b8b0d8; font-size: 9px; }
 .arm-tabs.hidden { display: none; }
+
+/* ── Players online ── */
+.online-box { max-width: 420px; }
+.online-sum { color: #e8e0ff; font: 12px 'Courier New', monospace; margin-bottom: 8px; }
+.online-sum b { color: #7affb0; }
+.online-list { max-height: min(55vh, 420px); overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.online-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.06); font: 12px 'Courier New', monospace; color: #fff; }
+.online-row.you { background: rgba(255, 216, 74, 0.15); }
+.online-row b { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.online-row span { flex: none; font-size: 10px; color: #b8b0d8; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.online-row i { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #7a7a98; }
+.online-row i.on { background: #4aff8a; box-shadow: 0 0 6px #4aff8a; }
+
+/* ── Suggestion box ── */
+.btn-suggest::before { content: '💡 '; }
+.menu-box .mode-btn.btn-suggest { width: 100%; flex: none; margin-top: 6px; border-radius: 12px; border: 2px solid #ffe88a; color: #2a1a00; text-shadow: none;
+  background: linear-gradient(90deg, #ffd84a, #ffb02a) !important; box-shadow: 0 0 10px rgba(255, 216, 74, 0.5); }
+.menu-box .mode-btn.btn-suggest small { color: #4a3000; }
+.sg-box { display: flex; flex-direction: column; }
+.sg-write { display: flex; flex-direction: column; gap: 6px; margin: 4px 0; }
+.sg-write textarea { width: 100%; box-sizing: border-box; resize: vertical; min-height: 52px; padding: 8px; border-radius: 10px; border: 2px solid #ffd84a; background: #0b0b18; color: #fff; font: 13px 'Courier New', monospace; }
+.sg-write textarea:disabled { opacity: 0.5; }
+.sg-write-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.sg-note { font-size: 10px; color: #e8e0ff; text-align: left; line-height: 1.3; }
+.mode-btn.sg-post { flex: none; width: auto; min-height: 40px; padding: 0 18px; margin: 0; border-radius: 10px; background: linear-gradient(90deg, #ffd84a, #ffb02a); color: #2a1a00; font-weight: bold; }
+.mode-btn.sg-post:disabled { opacity: 0.45; }
+.sg-tabs { margin: 4px 0 6px; }
+.sg-list { flex: 1 1 auto; min-height: 120px; max-height: min(50vh, 460px); overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.sg-card { padding: 8px 10px; border-radius: 10px; background: rgba(10, 6, 30, 0.55); border: 1px solid rgba(255, 255, 255, 0.14); }
+.sg-card.mine { border-color: #ffd84a; }
+.sg-card.planned { border-color: #8ad8ff; }
+.sg-card.added { border-color: #6affa0; background: rgba(20, 70, 40, 0.4); }
+.sg-top { display: flex; gap: 8px; align-items: center; font-size: 11px; }
+.sg-top b { color: #ffe88a; }
+.sg-top > span:last-child { margin-left: auto; color: #8a8aa8; font-size: 9px; }
+.sg-tag { font-size: 9px; font-weight: bold; padding: 1px 6px; border-radius: 999px; }
+.sg-tag.planned { background: #8ad8ff; color: #062030; }
+.sg-tag.added { background: #6affa0; color: #06301a; }
+.sg-text { margin: 5px 0; font-size: 13px; line-height: 1.35; color: #fff; word-break: break-word; }
+.sg-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sg-like { min-height: 34px; min-width: 64px; padding: 0 10px; border-radius: 999px; border: 2px solid #ff7aa8; background: rgba(0, 0, 0, 0.35); color: #fff; font: bold 13px 'Courier New', monospace; cursor: pointer; }
+.sg-like.on { background: rgba(255, 90, 140, 0.3); }
+.sg-like:disabled { opacity: 0.6; cursor: default; }
+.sg-admin { display: flex; gap: 4px; flex-wrap: wrap; margin-left: auto; }
+.sg-admin button { min-height: 30px; padding: 0 8px; border-radius: 8px; border: 1px dashed #ffd84a; background: rgba(0, 0, 0, 0.4); color: #ffd84a; font: bold 10px 'Courier New', monospace; cursor: pointer; }
+.sg-admin button.del { border-color: #ff6a5a; color: #ffb0a0; }
+.sg-none { text-align: center; padding: 24px; color: #cfc6ee; }
