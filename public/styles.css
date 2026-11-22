@@ -2186,3 +2186,46 @@ canvas.rare-glow { animation: rare-glow 1.3s ease-in-out infinite; }
 .sg-admin button { min-height: 30px; padding: 0 8px; border-radius: 8px; border: 1px dashed #ffd84a; background: rgba(0, 0, 0, 0.4); color: #ffd84a; font: bold 10px 'Courier New', monospace; cursor: pointer; }
 .sg-admin button.del { border-color: #ff6a5a; color: #ffb0a0; }
 .sg-none { text-align: center; padding: 24px; color: #cfc6ee; }
+
+/* ── Team rooms, conditions, free chat ── */
+.room-note { font-size: 10px; color: #b8b0d8; margin: 4px 0; min-height: 13px; }
+.room-cond { margin: 4px 0; padding: 6px 8px; border: 1px dashed #ffd84a; border-radius: 8px; }
+.room-cond.hidden { display: none; }
+.room-opt-title small { font-size: 9px; color: #9a9ab8; letter-spacing: 0; }
+.cond-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 5px 0; font-size: 11px; color: #e8e0ff; text-align: left; }
+.cond-row small { color: #9a9ab8; font-size: 9px; }
+.cond-row input[type=number] { width: 110px; min-height: 32px; padding: 0 6px; border-radius: 6px; border: 2px solid #ffd84a; background: #0b0b18; color: #ffe84a; font: bold 13px 'Courier New', monospace; }
+.cond-row input[type=checkbox] { width: 24px; height: 24px; accent-color: #ffd84a; flex: none; }
+.cond-sub { font-size: 9px; color: #9a9ab8; text-align: left; }
+.fc-opt { margin: 6px 0; padding: 6px 8px; border: 1px dashed #7affb0; border-radius: 8px; }
+.tA { color: #4aa8ff; } .tB { color: #ff5a5a; }
+.room-stake { font-size: 10px; color: #ffe84a; margin-top: 2px; }
+.room-panel { width: min(520px, 94vw); margin: 8px auto; padding: 8px 10px; border-radius: 12px; background: rgba(10, 6, 30, 0.85); border: 2px solid #ffd84a; color: #fff; font-family: 'Courier New', monospace; text-align: center; }
+.room-panel.hidden { display: none; }
+.rp-head { font-weight: bold; color: #ffe84a; letter-spacing: 2px; }
+.rp-warn { font-size: 10px; color: #ff9a8a; margin-top: 2px; }
+.rp-teams { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+.rp-team { border-radius: 10px; padding: 6px; min-height: 60px; }
+.rp-team.tA { background: rgba(40, 120, 255, 0.18); border: 2px solid #4aa8ff; }
+.rp-team.tB { background: rgba(255, 60, 60, 0.18); border: 2px solid #ff5a5a; }
+.rp-th { font-weight: bold; font-size: 12px; margin-bottom: 4px; }
+.rp-p { display: flex; align-items: center; gap: 4px; justify-content: space-between; font-size: 11px; padding: 3px 0; flex-wrap: wrap; }
+.rp-p.me span { color: #ffe84a; }
+.rp-p em { font-style: normal; color: #7affb0; font-size: 10px; }
+.rp-p button { min-height: 30px; padding: 0 8px; border-radius: 6px; border: 1px solid #fff; background: rgba(0, 0, 0, 0.4); color: #fff; font: bold 11px 'Courier New', monospace; cursor: pointer; }
+.rp-hint, .rp-why { font-size: 10px; color: #cfc6ee; margin: 4px 0; }
+.rp-acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.rp-acts select { min-height: 38px; max-width: 100%; border-radius: 8px; background: #0b0b18; color: #fff; border: 2px solid #ffd84a; font: 12px 'Courier New', monospace; }
+.rp-btn { min-height: 40px; padding: 0 14px; border-radius: 10px; border: 2px solid #fff; font: bold 12px 'Courier New', monospace; cursor: pointer; }
+.rp-btn.go { background: linear-gradient(90deg, #ffd84a, #ffb02a); color: #2a1a00; }
+.rp-btn.on { background: rgba(40, 160, 90, 0.6); color: #fff; }
+.rp-btn.start { background: linear-gradient(180deg, #9affc0, #2ad07a); color: #06331c; }
+.rp-btn:disabled { opacity: 0.45; cursor: default; }
+.stake-res { margin-top: 6px; padding: 6px; border-radius: 8px; background: rgba(255, 216, 74, 0.12); color: #ffe88a; font-size: 11px; line-height: 1.4; }
+.fc-box { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.fc-head { font: bold 10px 'Courier New', monospace; color: #7affb0; letter-spacing: 2px; }
+.fc-log { max-height: 140px; overflow-y: auto; background: rgba(0, 0, 0, 0.35); border-radius: 4px; padding: 4px; text-align: left; }
+.fc-line { font: 11px 'Courier New', monospace; color: #e8f0ff; padding: 1px 0; word-break: break-word; }
+#chatPanel .fc-rep { padding: 0 6px; min-height: 22px; font-size: 11px; border-color: #ff6a5a; color: #ffb0a0; background: transparent; }
+.fc-row { display: flex; gap: 4px; }
+.fc-row input { flex: 1 1 auto; min-width: 0; min-height: 34px; padding: 0 6px; border-radius: 4px; border: 1px solid #3a8a5a; background: #0b0b18; color: #fff; font: 12px 'Courier New', monospace; }

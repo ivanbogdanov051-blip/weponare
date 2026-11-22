@@ -184,6 +184,7 @@ const COIN_MAGNET = 30;       // auto-collect radius
 const COIN_ATTRACT = 170;     // coins fly toward a player from this far away
 const COIN_PULL = 0.9, COIN_SETTLED_PULL = 0.45, COIN_SETTLE_MS = 1200;
 const MAX_COIN_DROPS = 9;     // entities per kill (value is stacked instead)
+const MONSTER_REWARD_MULT = 1.5;   // monsters give half as much again in XP and coins
 const COIN_KILL_MULT = 4;     // every kill pays out this many times the base amount
 const MAX_COINS_ON_FLOOR = 140;
 
@@ -1408,6 +1409,8 @@ function progress() {
   if (!d.mgTries) d.mgTries = {};          // password -> the 10-minute minigame window they last played (one go each)
   if (!d.mgWins) d.mgWins = {};
   if (!d.suggestions) d.suggestions = [];  // the suggestion box: { id, pw, name, text, at, likes: [passwords], status }
+  if (!d.reports) d.reports = {};          // password -> [passwords that reported their free chat] (10 = a fine)
+  if (!d.fines) d.fines = {};              // password -> how many times fined for free chat
   if (!d.items) d.items = {};              // password -> { item id: level 1-3 }
   if (!d.itemSlots) d.itemSlots = {};      // password -> item slots bought into (1-3)
   if (!d.itemWorn) d.itemWorn = {};        // password -> [item ids taken into fights]            // password -> the 10-minute minigame window they last won a prize in
@@ -2155,13 +2158,14 @@ function enemyTargets(pKey) {
   for (const k of KEYS) {
     if (k === pKey) continue;
     if (room.gameMode === 'coop' && isPKey(pKey)) continue;
+    if (room.teams && isPKey(pKey) && sameTeam(k, pKey)) continue;   // not your teammates
     const p = room.players[k];
     if (p && !p.dead && !unseen(p)) out.push(p);
   }
   // A hidden Portal Mage can't be seen, hit or aimed at.
   for (const m of room.monsters) if (!m.dead && !m.hidden) out.push(m);
   // In PvP the rival's summoned allies can be cut down.
-  if (room.gameMode === 'pvp') for (const a of room.allies) if (!a.dead && a.owner !== pKey) out.push(a);
+  if (room.gameMode === 'pvp') for (const a of room.allies) if (!a.dead && a.owner !== pKey && !(room.teams && sameTeam(a.owner, pKey))) out.push(a);
   return out;
 }
 
@@ -2482,11 +2486,11 @@ function spawnItem() {
 
 // ── Coins ──
 function coinsForKill(target, isPlayer) {
-  if (isPlayer) return 10 * COIN_KILL_MULT;
+  if (isPlayer) return 40 * COIN_KILL_MULT;                      // a player is worth four times what it was
   if (target.shiny) return rareCoinsFor();
   const def = MONSTER_TYPES[target.type] || MONSTER_TYPES.grunt;
   const mode = room.gameMode === 'extreme' ? EXTREME_COIN_MULT : 1;
-  return Math.max(1, Math.round((2 + Math.floor((target.maxHp || 30) / 30)) * (def.coins || 1) * COIN_KILL_MULT * mode));
+  return Math.max(1, Math.round((2 + Math.floor((target.maxHp || 30) / 30)) * (def.coins || 1) * COIN_KILL_MULT * mode * MONSTER_REWARD_MULT));
 }
 
 function dropCoins(x, y, total, most = MAX_COIN_DROPS) {
@@ -4585,6 +4589,7 @@ function applyDamage(target, dmg, attackerKey) {
     return;
   }
   if (room.gameMode === 'coop' && target.num && isPKey(attackerKey)) return;
+  if (room.teams && target.num && isPKey(attackerKey) && attackerKey !== playerKeyOf(target) && sameTeam(attackerKey, playerKeyOf(target))) return;   // teammates can't hurt each other
   if (room.event === 'voiddungeon' && attackerKey === 'monster' && target.num) dmg *= VA.dmg;   // the rare Abyss hits much harder
   if (target.iceKnight) {
     if (target.act === 'parry' && isPKey(attackerKey)) { ikParried(target, attackerKey); return; }
@@ -4792,7 +4797,7 @@ function handleKill(target, attackerKey) {
     reaper.superCooldown = Math.max(0, (reaper.superCooldown || 0) - VOID_HUNGER_MS);
   }
   const isPlayer = !!target.num;
-  let baseGain = isPlayer ? 15 : 6;
+  let baseGain = isPlayer ? 60 : 6 * MONSTER_REWARD_MULT;   // (players 4x, monsters 1.5x what they were)
   // Bigger (tankier) monsters reward more XP, scaled by their max HP over the base
   // 30, then again by how dangerous their type is.
   if (!isPlayer) {
@@ -4979,6 +4984,7 @@ function checkRoundEnd() {
     const fighters = KEYS.filter(k => room.players[k]);
     if (fighters.length < 2) return;
     const standing = fighters.filter(k => !(room.players[k].dead && room.players[k].lives <= 0));
+    if (room.teams) { teamRoundEnd(fighters, standing); return; }
     if (standing.length <= 1) {
       // Everyone out at once is a draw — nobody banks a win.
       const winner = standing[0] || null;
@@ -5033,7 +5039,7 @@ function tickRoom(dt) {
     if (room.gameState === 'ROUND_OVER') {
       // A finished PvP / bot match waits for a choice: RESTART (everyone still
       // here has to ask) or back to the menu. A long timeout stops it hanging.
-      if (room.round.matchWinner && !isSolo()) {
+      if (room.round.matchWinner && !isSolo() && !(room.custom && room.custom.fmt)) {
         const here = KEYS.filter(k => room[k] && room[k].readyState === 1);
         const all = !here.length || here.every(k => room.rematch?.has(k));
         room.matchWait = (room.matchWait || 0) + dt;
@@ -5049,7 +5055,7 @@ function tickRoom(dt) {
         } else if (isSolo() || room.event) {
           endWavesRun();
         } else {
-          startGame();
+          nextMatch();
         }
       }
     }
@@ -5545,7 +5551,7 @@ function tickRoom(dt) {
       if (d < nearDist) { nearDist = d; near = p; nearKey = key; }
     }
     if (near && nearDist <= COIN_MAGNET + (near.fg?.magnet || 0)) {
-      addCoins(nearKey, c.value);
+      if (room.teams && room.teams[nearKey]) shareCoins(nearKey, c.value); else addCoins(nearKey, c.value);
       room.particles.push({ type: 'coin', x: cx(c), y: cy(c), text: '+' + c.value, timer: 700, max: 700 });
       return false;
     }
@@ -11049,7 +11055,9 @@ function buildStateMsg(playerNum) {
     ...(room.ffa ? { ffa: { k: room.ffa.kills, d: room.ffa.deaths, need: FFA_MIN } } : {}),
     ...(room.custom ? { roomName: room.custom.name, roomId: room.id } : {}),
     seated: seatKeys().filter(k => room[k] || (room.bot && k === 'p2')).length,
-    chats: room.chats.map(c => ({ key: c.key, id: c.id, age: Date.now() - c.t })),
+    chats: room.chats.map(c => ({ key: c.key, id: c.id, ...(c.text ? { text: c.text } : {}), age: Date.now() - c.t })),
+    ...(room.custom && room.custom.freeChat ? { chatLog: (room.chatLog || []).slice(-14).map(m => ({ mid: m.mid, key: m.key, name: m.name, text: m.text, mine: m.key === key && room.passwords[key] === m.pw })) } : {}),
+    ...(room.custom && room.custom.fmt ? { roomInfo: roomInfo(key) } : {}),
     ...(room.round.matchWinner && room.rematch ? { rematch: [...room.rematch] } : {}),
     ...(room.bot ? { bot: room.bot.level, botReward: BOT_REWARDS[room.bot.level] || 0 } : {}),
     playerNames: room.playerNames,
@@ -12523,7 +12531,7 @@ function socialPw(req, res) {
 // Anyone with SUGGEST_NEED coins can post an idea (the coins are not spent; up to
 // SUGGEST_PER_DAY a day). Everyone sees them and can like each one once. The admin
 // marks them PLANNED or ADDED, or deletes them. Passwords never leave the server.
-const SUGGEST_NEED = 100000, SUGGEST_MAX_LEN = 200, SUGGEST_PER_DAY = 3, SUGGEST_MAX = 1000;
+const SUGGEST_NEED = 10000, SUGGEST_MAX_LEN = 200, SUGGEST_PER_DAY = 3, SUGGEST_MAX = 1000;
 const SUGGEST_STATUS = ['open', 'planned', 'added'];
 function suggestView(s, pw) {
   return { id: s.id, name: s.name, text: s.text, at: s.at, likes: s.likes.length, liked: !!pw && s.likes.includes(pw), mine: !!pw && s.pw === pw, status: s.status || 'open' };
@@ -12757,6 +12765,220 @@ function reapRooms() {
   }
 }
 
+// ─── TEAM ROOMS, CONDITIONS AND FREE CHAT ────────────────────────────────────
+// A created room can be 1v1, 2v1, 3v1 or 2v2. Its owner (whoever made it, or the
+// next one in if they leave) puts every player on team A or B and starts the match.
+// Teammates can't hurt each other and share the coins they pick up.
+// CONDITIONS: what each player on a team pays if their team loses the match (split
+// between the winners), and/or a weapon each player puts up that the winners take.
+// Everyone sees them and must ACCEPT before the owner can start; with conditions you
+// need a password, and leaving a match part-way counts as losing it. After a match
+// the room goes back to its lobby, so the next one is agreed again.
+const ROOM_FMTS = { '1v1': [1, 1], '2v1': [2, 1], '3v1': [3, 1], '2v2': [2, 2] };
+const STAKE_MAX = 10000000;
+const condActive = r => !!(r.custom && r.custom.cond && (r.custom.cond.a > 0 || r.custom.cond.b > 0 || r.custom.cond.weapons));
+const sameTeam = (a, b) => !!(room.teams && room.teams[a] && room.teams[a] === room.teams[b]);
+function setupRoomRules(r, opts) {
+  r.custom.freeChat = !!opts.freeChat;
+  const fmt = ROOM_FMTS[opts.fmt] ? opts.fmt : null;
+  if (!fmt) return;
+  r.custom.fmt = fmt;
+  r.maxPlayers = ROOM_FMTS[fmt][0] + ROOM_FMTS[fmt][1];
+  if (r.maxPlayers > 2 && r.mapSize === 'duel') r.mapSize = 'medium';
+  const c = opts.cond && typeof opts.cond === 'object' ? opts.cond : {};
+  const amt = v => Math.max(0, Math.min(STAKE_MAX, Math.floor(Number(v) || 0)));
+  r.custom.cond = { a: amt(c.a), b: amt(c.b), weapons: !!c.weapons };
+  r.teams = perKey(null);
+  r.accept = {};
+  r.betChoices = {};
+  r.ownerKey = 'p1';
+}
+// Who is on which team, and whether the split is the one the room is for.
+function teamCounts(r = room) { const n = { A: 0, B: 0 }; for (const k of seatKeys(r)) if (r[k] && r.teams[k]) n[r.teams[k]]++; return n; }
+function teamsValid(r = room) {
+  const [x, y] = ROOM_FMTS[r.custom.fmt], n = teamCounts(r);
+  return (n.A === x && n.B === y) || (n.A === y && n.B === x);
+}
+function roomJoined(key, pw, prof) {
+  const [x, y] = ROOM_FMTS[room.custom.fmt], n = teamCounts();
+  if (!room.teams[key]) room.teams[key] = n.A < x ? 'A' : n.B < y ? 'B' : 'A';
+  if (!room[room.ownerKey]) room.ownerKey = key;
+  delete room.accept[key];
+  room.betChoices[key] = pw && !isAdminPw(pw) ? prof.weapons.filter(id => !tradeWhy('weapons', id, prof, null)).map(id => ({ id, name: WEAPON_BY_ID[id].name })) : [];
+}
+// What a player on this team stands to lose (coins), or 0.
+const stakeFor = team => room.custom.cond ? (team === 'A' ? room.custom.cond.a : room.custom.cond.b) : 0;
+function roomInfo(key) {
+  const keys = seatKeys().filter(k => room[k]);
+  return { fmt: room.custom.fmt, cond: room.custom.cond, freeChat: !!room.custom.freeChat, owner: room.ownerKey, me: key, isOwner: key === room.ownerKey,
+           teams: Object.fromEntries(keys.map(k => [k, room.teams[k]])), valid: teamsValid(), full: keys.length === room.maxPlayers,
+           accept: Object.fromEntries(keys.map(k => [k, room.accept[k] ? { ok: true, bet: room.accept[k].bet ? WEAPON_BY_ID[room.accept[k].bet]?.name : null } : null])),
+           needAccept: condActive(room), bets: room.custom.cond?.weapons ? room.betChoices[key] || [] : [], result: room.stakeResult || null };
+}
+function canStartRoom() {
+  if (seatKeys().some(k => !room[k] || !room[k + 'Joined'])) return 'Waiting for every seat to fill.';
+  if (!teamsValid()) return 'The teams are not ' + room.custom.fmt + ' yet.';
+  if (condActive(room) && seatKeys().some(k => !room.accept[k])) return 'Everyone has to ACCEPT the conditions first.';
+  return null;
+}
+function roomSay(ws, text) { try { ws.send(JSON.stringify({ type: 'room_note', text })); } catch {} }
+function roomMsg(ws, key, msg) {
+  if (room.gameState !== 'LOBBY') return;
+  if (msg.type === 'room_team' && key === room.ownerKey && isPKey(msg.key) && room[msg.key] && (msg.team === 'A' || msg.team === 'B')) {
+    room.teams[msg.key] = msg.team;
+    room.accept = {};                              // the teams changed: everyone agrees again
+  }
+  if (msg.type === 'room_accept') {
+    if (!condActive(room)) return;
+    const pw = room.passwords[key];
+    if (!pw || isAdminPw(pw)) return roomSay(ws, 'You need a password (not the admin one) to play for stakes.');
+    const prof = profileFor(pw, {});
+    const owe = stakeFor(room.teams[key]);
+    if (prof.coins < owe) return roomSay(ws, 'You need ' + owe.toLocaleString('en-US') + ' coins to accept: that is what you pay if your team loses.');
+    let bet = null;
+    if (room.custom.cond.weapons) {
+      bet = sanitizeText(msg.bet, 24);
+      if (!bet || tradeWhy('weapons', bet, prof, null)) return roomSay(ws, 'Pick a weapon to put up: the winners take it if you lose.');
+    }
+    room.accept[key] = { bet };
+  }
+  if (msg.type === 'room_unaccept') delete room.accept[key];
+  if (msg.type === 'room_start' && key === room.ownerKey) {
+    const why = canStartRoom();
+    if (why) return roomSay(ws, why);
+    room.stakeResult = null;
+    room.staked = condActive(room);
+    room.settled = false;
+    room.bets = Object.fromEntries(seatKeys().map(k => [k, room.accept[k]?.bet || null]));
+    room.stakeTeams = { ...room.teams };
+    room.stakePws = Object.fromEntries(seatKeys().map(k => [k, room.passwords[k]]));
+    startGame();
+  }
+  broadcastState();
+}
+// A team round: everyone on one team down. Each winner gets the round; the first
+// team to maxWins takes the match (and its stakes).
+function teamRoundEnd(fighters, standing) {
+  const alive = new Set(standing.map(k => room.teams[k]));
+  if (alive.size > 1) return;
+  const W = [...alive][0] || null;
+  const winners = W ? fighters.filter(k => room.teams[k] === W) : [];
+  room.round.roundWinner = winners.length ? Number(winners[0].slice(1)) : 0;
+  room.round.roundTeam = W;
+  for (const k of winners) room.round.wins[k]++;
+  const champ = winners.find(k => room.round.wins[k] >= room.round.maxWins);
+  room.round.matchWinner = champ ? Number(champ.slice(1)) : 0;
+  room.round.matchTeam = champ ? W : null;
+  room.gameState = 'ROUND_OVER';
+  room.roundOverTimer = champ ? 7000 : 4000;
+  if (champ && room.staked && !room.settled) settleStakes(W);
+}
+// The losers pay; the winners share it, and take the weapons put up.
+function settleStakes(W) {
+  room.settled = true;
+  const d = progress(), cond = room.custom.cond, T = room.stakeTeams, PW = room.stakePws;
+  const winners = Object.keys(T).filter(k => T[k] === W && PW[k]), losers = Object.keys(T).filter(k => T[k] && T[k] !== W && PW[k]);
+  const lines = [];
+  let pot = 0;
+  for (const k of losers) {
+    const pw = PW[k], owe = T[k] === 'A' ? cond.a : cond.b, pay = Math.min(owe, d.coins[pw] || 0);
+    if (pay > 0) { d.coins[pw] = (d.coins[pw] || 0) - pay; pot += pay; lines.push(nameIn(k) + ' PAYS ◆ ' + pay.toLocaleString('en-US')); }
+  }
+  if (pot && winners.length) {
+    const each = Math.floor(pot / winners.length);
+    winners.forEach((k, i) => { const got = each + (i === 0 ? pot - each * winners.length : 0); d.coins[PW[k]] = (d.coins[PW[k]] || 0) + got; lines.push(nameIn(k) + ' GETS ◆ ' + got.toLocaleString('en-US')); });
+  }
+  if (cond.weapons && winners.length) {
+    let i = 0;
+    for (const k of losers) {
+      const id = room.bets[k]; if (!id) continue;
+      const lprof = profileFor(PW[k], {});
+      if (tradeWhy('weapons', id, lprof, null)) continue;                       // (it went elsewhere meanwhile)
+      const to = [...winners.slice(i), ...winners.slice(0, i)].find(w => !profileFor(PW[w], {}).weapons.includes(id));
+      i = (i + 1) % winners.length;
+      if (!to) { lines.push(nameIn(k) + ' KEEPS ' + WEAPON_BY_ID[id].name + ' (THE WINNERS HAVE IT)'); continue; }
+      moveGoods(PW[k], PW[to], { coins: 0, weapons: [id], skins: [], abilities: [], armor: [] });
+      bumpRev(PW[k]); bumpRev(PW[to]);
+      lines.push(nameIn(to) + ' TAKES ' + WEAPON_BY_ID[id].name + ' FROM ' + nameIn(k));
+    }
+  }
+  room.stakeResult = { team: W, lines };
+  markDirty(); flushProgress();
+  const was = room;
+  for (const pw of new Set(Object.values(PW).filter(Boolean))) syncLive(pw);
+  useRoom(was);
+  for (const k of seatKeys()) if (room.passwords[k]) room.playerCoins[k] = progress().coins[room.passwords[k]] || 0;
+  room.particles.push({ type: 'newtype', x: CANVAS_W / 2, y: CANVAS_H / 2 + 46, text: 'TEAM ' + W + ' WINS THE STAKES', color: '#ffd84a', timer: 5000, max: 5000 });
+}
+const nameIn = k => room.playerNames[k] || k.toUpperCase();
+// After a match in a team room: back to its lobby, everyone agrees again.
+function nextMatch() {
+  if (room.custom && room.custom.fmt && room.round.matchWinner) {
+    const kept = room.stakeResult;
+    resetToLobby();
+    room.accept = {};
+    room.staked = false;
+    room.stakeResult = kept;
+    for (const k of seatKeys()) if (room[k] && room.passwords[k]) roomJoined(k, room.passwords[k], profileFor(room.passwords[k], {}));
+    return;
+  }
+  startGame();
+}
+function roomLeft(key, wasPlaying) {
+  if (wasPlaying && room.staked && !room.settled && room.stakeTeams && room.stakeTeams[key]) {
+    settleStakes(room.stakeTeams[key] === 'A' ? 'B' : 'A');     // walking out of a match played for stakes loses it
+  }
+  room.teams[key] = null;
+  delete room.accept[key];
+  if (room.ownerKey === key) room.ownerKey = seatKeys().find(k => k !== key && room[k]) || 'p1';
+}
+// Coins picked up are shared by the team (rounded up, so nothing is lost).
+function shareCoins(key, value) {
+  const mates = seatKeys().filter(k => room[k] && sameTeam(k, key));
+  const each = Math.max(1, Math.ceil(value / Math.max(1, mates.length)));
+  for (const k of mates) addCoins(k, each);
+}
+// FREE CHAT: a room can allow typed lines (with a password, so they can be reported).
+// Ten different players reporting someone costs them 1,000,000 coins (or all they have).
+const FREE_CHAT_MAX = 80, FREE_CHAT_GAP = 1500, REPORT_LIMIT = 10, REPORT_FINE = 1000000;
+let chatSeq = 0;
+function freeChatSay(ws, key, raw) {
+  if (!room.custom || !room.custom.freeChat) return;
+  const pw = room.passwords[key];
+  if (!pw) return roomSay(ws, 'Set a password on the menu to use free chat.');
+  const text = String(raw == null ? '' : raw).replace(/[<>&"]/g, '').replace(/\s+/g, ' ').trim().slice(0, FREE_CHAT_MAX);
+  if (!text) return;
+  const now = Date.now();
+  if (now - (ws.lastSay || 0) < FREE_CHAT_GAP) return;
+  ws.lastSay = now;
+  room.chats = room.chats.filter(c => c.key !== key && now - c.t < CHAT_SHOW_MS);
+  room.chats.push({ key, text, t: now });
+  (room.chatLog = room.chatLog || []).push({ mid: ++chatSeq, key, name: room.playerNames[key], text, pw, t: now });
+  if (room.chatLog.length > 40) room.chatLog.shift();
+}
+function freeChatReport(ws, key, mid) {
+  const me = room.passwords[key];
+  if (!me) return roomSay(ws, 'Set a password on the menu to report someone.');
+  const m = (room.chatLog || []).find(x => x.mid === mid);
+  if (!m || !m.pw || m.pw === me) return;
+  const d = progress(), list = d.reports[m.pw] || [];
+  if (list.includes(me)) return roomSay(ws, 'You have already reported ' + m.name + '.');
+  list.push(me);
+  d.reports[m.pw] = list;
+  roomSay(ws, 'Reported ' + m.name + '. Thank you.');
+  if (list.length >= REPORT_LIMIT && !isAdminPw(m.pw)) {
+    const fine = Math.min(REPORT_FINE, d.coins[m.pw] || 0);
+    d.coins[m.pw] = (d.coins[m.pw] || 0) - fine;
+    d.reports[m.pw] = [];
+    d.fines[m.pw] = (d.fines[m.pw] || 0) + 1;
+    for (const [r, k] of liveSeats(m.pw)) {
+      r.playerCoins[k] = d.coins[m.pw];
+      try { r[k].send(JSON.stringify({ type: 'room_note', fined: fine, text: 'TEN PLAYERS REPORTED WHAT YOU WROTE: YOU LOST ' + fine.toLocaleString('en-US') + ' COINS.' })); } catch {}
+    }
+  }
+  markDirty(); flushProgress();
+}
+
 // Seat a player who picked a mode. WAVES and EXTREME are solo, so they always
 // get a room of their own; PvP and co-op pair up with someone waiting for the
 // same mode, or open a new room and wait.
@@ -12785,6 +13007,7 @@ function createRoom(opts) {
   r.mapSize = MAP_SIZES[opts.size] ? opts.size : 'medium';
   r.maxPlayers = r.mapSize === 'duel' ? 2 : Math.max(2, Math.min(4, Math.floor(Number(opts.maxPlayers) || 2)));
   r.custom = { name: sanitizeText(opts.roomName, ROOM_NAME_MAX) || 'ROOM', host: sanitizeText(opts.name, 12).toUpperCase() || 'PLAYER' };
+  setupRoomRules(r, opts);
   rooms.push(r);
   return [r, 'p1'];
 }
@@ -12854,7 +13077,7 @@ app.post('/api/ffa', (req, res) => {
 
 function openRoomList() {
   return rooms.filter(r => r.custom && !r.challengeId && r.gameState === 'LOBBY' && KEYS.some(k => r[k]) && seatKeys(r).some(k => !r[k]))
-    .map(r => ({ id: r.id, name: r.custom.name, host: r.custom.host, size: r.mapSize, maxPlayers: r.maxPlayers,
+    .map(r => ({ id: r.id, name: r.custom.name, host: r.custom.host, size: r.mapSize, maxPlayers: r.maxPlayers, fmt: r.custom.fmt || null, cond: r.custom.cond || null, freeChat: !!r.custom.freeChat,
                  players: seatKeys(r).filter(k => r[k]).length, names: seatKeys(r).filter(k => r[k]).map(k => r.playerNames[k]) }));
 }
 
@@ -12944,6 +13167,8 @@ wss.on('connection', (ws, req) => {
           const r = rooms.find(o => o.id === msg.roomId && o.custom && o.gameState === 'LOBBY');
           const free = r && seatKeys(r).find(k => !r[k]);
           if (!free) { ws.send(JSON.stringify({ type: 'room_gone' })); return; }
+          const jpw = sanitizeText(msg.password, 32);
+          if (condActive(r) && (!jpw || isAdminPw(jpw))) { ws.send(JSON.stringify({ type: 'room_gone', reason: !jpw ? 'That room plays for coins or weapons: set a password on the menu first.' : 'The admin account can not play for stakes.' })); return; }
           seat = [r, free];
         }
         // BOT BATTLE: a PvP room of your own, the bot in the other seat.
@@ -13018,6 +13243,11 @@ wss.on('connection', (ws, req) => {
           return;
         }
         // Start game: solo modes at once, the others once both have joined.
+        if (room.custom && room.custom.fmt) {         // a room with teams: you join a team; the owner starts it
+          roomJoined(myKey, pw, prof);
+          broadcastState();
+          return;
+        }
         const canStart = isSolo()
           ? room.p1Joined
           : seatKeys().every(k => room[k + 'Joined']);
@@ -13026,6 +13256,9 @@ wss.on('connection', (ws, req) => {
         broadcastState();
       }
 
+      if (msg.type && msg.type.startsWith('room_') && room.custom && room.custom.fmt) roomMsg(ws, myKey, msg);
+      if (msg.type === 'say') freeChatSay(ws, myKey, msg.text);
+      if (msg.type === 'report') freeChatReport(ws, myKey, Number(msg.mid));
       if (msg.type === 'pause' && canPause() && !room.paused) {
         room.paused = Date.now();
         for (const k of KEYS) { room.inputs[k] = blankInput(); room.prevInputs[k] = blankPrev(); }
@@ -13110,7 +13343,7 @@ wss.on('connection', (ws, req) => {
         const othersDone = isSolo() || KEYS.slice(1).every(k => !room[k + 'Joined'] || room.unlockQueues[k].length === 0);
         if (p1Done && othersDone) {
           if (isSolo()) endWavesRun();
-          else startGame();
+          else nextMatch();
         }
       }
     } catch {}
@@ -13130,6 +13363,7 @@ wss.on('connection', (ws, req) => {
       return;
     }
     const wasPlaying = room.gameState !== 'LOBBY';
+    if (room.custom && room.custom.fmt) roomLeft(ws.key, wasPlaying);
     clearSlot(ws.key);
     // A match can't continue a fighter down — drop back to the lobby, but keep
     // whoever is still connected (and their progress) in place.

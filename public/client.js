@@ -1018,9 +1018,10 @@ function connect() {
       return;
     }
     if (msg.type === 'rareshop') { showRareShop(msg); return; }
+    if (msg.type === 'room_note') { if (msg.fined != null) popup({ title: 'REPORTED', html: escapeHtml(msg.text) }); else toast(msg.text); return; }
     if (msg.type === 'room_gone' && pendingMode === 'challenge') { leaveGame(); popup({ title: 'CHALLENGE', html: 'That challenge has run out. Send a new one.' }); return; }
     if (msg.type === 'room_gone') {
-      setLobbyMsg('That room is full or has already started.');
+      setLobbyMsg(msg.reason ? escapeHtml(msg.reason) : 'That room is full or has already started.');
       setTimeout(() => { leaveGame(); openRoomBrowser(); }, 1600);
     }
     if (msg.type === 'seat') {
@@ -1089,6 +1090,7 @@ function connect() {
       syncAdminTools(msg);
       syncSandbox(msg);
       syncPause(msg);
+      syncFreeChat(msg);
       updateScreens(msg);
     }
   };
@@ -5067,8 +5069,21 @@ function pickMapSize(size) {
 pickMapSize(['small', 'medium', 'big', 'giant', 'duel'].includes(pendingMapSize) ? pendingMapSize : 'medium');
 
 // ── Rooms: create one, or browse and join someone else's ──
-let roomDraft = { maxPlayers: 2, size: 'medium' };
+let roomDraft = { maxPlayers: 2, size: 'medium', fmt: '1v1' };
+const ROOM_FMT_N = { '1v1': 2, '2v1': 3, '3v1': 4, '2v2': 4, ffa3: 3, ffa4: 4 };
+function pickRoomFormat(f) {
+  roomDraft.fmt = f; roomDraft.maxPlayers = ROOM_FMT_N[f];
+  for (const b of document.querySelectorAll('#roomPlayersOpts .room-opt')) b.classList.toggle('on', b.dataset.f === f);
+  if (roomDraft.size === 'duel' && f !== '1v1') pickRoomSize('medium');
+  const team = !f.startsWith('ffa');
+  document.getElementById('roomCond')?.classList.toggle('hidden', !team);
+  const n = document.getElementById('roomFmtNote');
+  if (n) n.textContent = team ? (f === '1v1' ? 'One against one. Add conditions to play for coins or weapons.' : 'Not always fair, sometimes it is! You put everyone on a team once they are in. Teammates can\'t hurt each other and share their coins.') : 'Everyone for themselves: the last one standing wins the round.';
+}
 function pickRoomPlayers(n) {
+  pickRoomFormat(n >= 4 ? 'ffa4' : n === 3 ? 'ffa3' : '1v1');
+}
+function pickRoomPlayersOld(n) {
   roomDraft.maxPlayers = n;
   for (const b of document.querySelectorAll('#roomPlayersOpts .room-opt')) b.classList.toggle('on', Number(b.dataset.n) === n);
 }
@@ -5077,12 +5092,12 @@ function pickRoomSize(size) {
   for (const b of document.querySelectorAll('#roomSizeOpts .room-opt')) b.classList.toggle('on', b.dataset.size === size);
   // A duel map is for two.
   const duel = size === 'duel';
-  if (duel && roomDraft.maxPlayers > 2) pickRoomPlayers(2);
-  for (const b of document.querySelectorAll('#roomPlayersOpts .room-opt')) b.disabled = duel && Number(b.dataset.n) > 2;
+  if (duel && roomDraft.fmt !== '1v1') pickRoomFormat('1v1');
+  for (const b of document.querySelectorAll('#roomPlayersOpts .room-opt')) b.disabled = duel && b.dataset.f !== '1v1';
 }
 function openCreateRoom() {
   readCredentials();
-  pickRoomPlayers(roomDraft.maxPlayers);
+  pickRoomFormat(roomDraft.fmt || '1v1');
   pickRoomSize(pendingMapSize || 'medium');
   const inp = document.getElementById('roomNameInput');
   if (inp && !inp.value) inp.value = ((pendingName && pendingName !== 'PLAYER' ? pendingName : 'MY') + "'S ROOM").slice(0, 20);
@@ -5091,7 +5106,10 @@ function openCreateRoom() {
 function createRoomGo() {
   const name = (document.getElementById('roomNameInput')?.value || '').trim().slice(0, 20) || 'ROOM';
   pendingMapSize = roomDraft.size;
-  pendingRoom = { roomName: name, maxPlayers: roomDraft.maxPlayers };
+  const team = !roomDraft.fmt.startsWith('ffa'), num = id => Math.max(0, Math.floor(Number(document.getElementById(id)?.value) || 0));
+  pendingRoom = { roomName: name, maxPlayers: roomDraft.maxPlayers, freeChat: !!document.getElementById('freeChatOpt')?.checked,
+    ...(team ? { fmt: roomDraft.fmt, cond: { a: num('condA'), b: num('condB'), weapons: !!document.getElementById('condW')?.checked } } : {}) };
+  if (team && (pendingRoom.cond.a || pendingRoom.cond.b || pendingRoom.cond.weapons) && !pendingPass) { popup({ title: 'CONDITIONS', html: 'Set a password on the menu first: coins and weapons are saved against it.' }); return; }
   document.getElementById('createRoomScreen').className = 'overlay hidden';
   joinGame('create');
 }
@@ -5105,7 +5123,8 @@ async function refreshRoomList() {
     el.innerHTML = list.length ? list.map(r => `<div class="room-row">
         <div class="room-info">
           <div class="room-name">${escapeHtml(r.name)}</div>
-          <div class="room-meta">HOST ${escapeHtml(r.host)} &middot; ${r.players}/${r.maxPlayers} PLAYERS &middot; ${r.maxPlayers > 2 ? 'LAST ONE STANDING' : 'DUEL'} &middot; ${String(r.size).toUpperCase()} MAP</div>
+          <div class="room-meta">HOST ${escapeHtml(r.host)} &middot; ${r.players}/${r.maxPlayers} PLAYERS &middot; ${r.fmt ? r.fmt.toUpperCase() + (r.fmt === '1v1' ? ' DUEL' : ' TEAMS') : r.maxPlayers > 2 ? 'LAST ONE STANDING' : 'DUEL'} &middot; ${String(r.size).toUpperCase()} MAP${r.freeChat ? ' &middot; FREE CHAT' : ''}</div>
+          ${condLine(r.cond)}
           <div class="room-who">${r.names.map(escapeHtml).join(', ')}</div>
         </div>
         <button onclick="joinRoom('${r.id}', '${r.size}')">JOIN</button>
@@ -5136,13 +5155,15 @@ function joinRoom(id, size) {
 let CHAT_LINES = [];
 function buildChatPanel() {
   const el = document.getElementById('chatPanel');
-  if (el) el.innerHTML = CHAT_LINES.map((t, i) => `<button onclick="sendChat(${i})">${escapeHtml(t)}</button>`).join('');
+  if (el) el.innerHTML = CHAT_LINES.map((t, i) => `<button onclick="sendChat(${i})">${escapeHtml(t)}</button>`).join('')
+    + (currState && currState.chatLog ? '<div class="fc-box"><div class="fc-head">FREE CHAT</div><div id="fcLog" class="fc-log"></div><div class="fc-row"><input id="fcIn" maxlength="80" placeholder="TYPE A LINE..." autocomplete="off" onkeydown="if (event.key === \'Enter\') sayFree()"><button onclick="sayFree()">SEND</button></div></div>' : '');
+  fcLogKey = ''; if (currState) syncFreeChat(currState);
 }
 function toggleChat(show) {
   const el = document.getElementById('chatPanel');
   if (!el) return;
   const on = show ?? el.classList.contains('hidden');
-  if (on && !el.children.length) buildChatPanel();
+  if (on) buildChatPanel();
   el.classList.toggle('hidden', !on);
 }
 function sendChat(i) {
@@ -5152,7 +5173,7 @@ function sendChat(i) {
 // A speech bubble over whoever spoke, fading out.
 function drawChatBubbles(state) {
   for (const c of state.chats || []) {
-    const p = state.players?.[c.key], text = CHAT_LINES[c.id];
+    const p = state.players?.[c.key], text = c.text || CHAT_LINES[c.id];
     if (!p || p.dead || !text || (p.effects && (p.effects.vanish > 0 || p.effects.ghost > 0) && c.key !== myKeyOf())) continue;
     const age = (c.age || 0) + (performance.now() - stateRecvTime);
     const a = Math.max(0, Math.min(1, (3500 - age) / 500));
@@ -5267,6 +5288,7 @@ function renderPick(state) {
 function updateScreens(state) {
   if (state.gameState === 'WEAPON_PICK') { renderPick(state); return; }
   pickUI.key = ''; pickUI.secs = -1;
+  syncRoomPanel(state);
   if (state.gameState === 'LOBBY') {
     const soloMsg = soloLobbyMsg(state.event === 'secretbot' ? 'secretbot' : state.bot ? 'bot' : state.gameMode === 'sandbox' && pendingTutorial ? 'tutorial' : state.gameMode);
     if (soloMsg) {
@@ -5278,7 +5300,7 @@ function updateScreens(state) {
           + 'Waiting for ' + Math.max(1, need - n) + ' more player' + (need - n > 1 ? 's' : '') + ' to start... ' + n + '/' + need);
         return;
       }
-      const modeStr = state.gameMode === 'coop' ? 'CO-OP MODE' : state.maxPlayers > 2 ? 'LAST ONE STANDING' : 'PvP MODE';
+      const modeStr = state.roomInfo ? state.roomInfo.fmt.toUpperCase() + (state.roomInfo.fmt === '1v1' ? ' DUEL' : ' TEAMS') : state.gameMode === 'coop' ? 'CO-OP MODE' : state.maxPlayers > 2 ? 'LAST ONE STANDING' : 'PvP MODE';
       const k = myKeyOf();
       if (state.roomId && state.gameState === 'LOBBY') invite = { id: state.roomId, name: state.roomName };
       const head = state.roomName ? `<span style="color:#ffe45a">${escapeHtml(state.roomName)}</span><br>` : '';
@@ -5442,7 +5464,12 @@ function updateScreens(state) {
       lb.classList.add('hidden');
       const nameOf = n => state.playerNames?.['p' + n] || 'P' + n;
       const fighters = KEYS.filter(k => state.players[k]);
-      if (r.matchWinner) {
+      if (r.matchTeam) {
+        const mine = state.roomInfo?.teams?.[myKeyOf()] === r.matchTeam;
+        hint.textContent = 'BACK TO THE ROOM...';
+        document.getElementById('matchChoice').classList.add('hidden');
+        document.getElementById('roundTitle').innerHTML = '<span style="color:' + (mine ? '#7affb0' : '#ff6a6a') + '">TEAM ' + r.matchTeam + ' TAKES THE MATCH' + (mine ? '!' : '') + '</span>';
+      } else if (r.matchWinner) {
         const voted = (state.rematch || []).includes(myKeyOf());
         hint.textContent = voted ? 'WAITING FOR THE OTHERS...' : 'PLAY AGAIN?';
         const rb = document.getElementById('rematchBtn'); if (rb) { rb.disabled = voted; rb.textContent = voted ? 'WAITING...' : 'RESTART'; }
@@ -5452,13 +5479,14 @@ function updateScreens(state) {
       } else {
         hint.textContent = 'NEXT ROUND STARTING...';
         const wn = r.roundWinner || 0;
-        document.getElementById('roundTitle').innerHTML = !wn ? '<span style="color:#ffcc00">DRAW!</span>'
+        document.getElementById('roundTitle').innerHTML = !wn ? '<span style="color:#ffcc00">DRAW!</span>' : r.roundTeam ? '<span style="color:#ffe84a">TEAM ' + r.roundTeam + ' WINS THE ROUND</span>'
           : `<span class="p${wn}-color">${nameOf(wn)} ${fighters.length > 2 ? 'IS THE LAST ONE STANDING' : 'WINS THE ROUND'}</span>`;
       }
       document.getElementById('roundStats').innerHTML =
         fighters.map(k => `<span class="${k}-color">${nameOf(Number(k.slice(1)))}</span> ${(r.wins || {})[k] || 0}`).join(' &nbsp;—&nbsp; ')
         + `<br><span style="color:#888">FIRST TO ${r.maxWins} WINS THE MATCH</span><br>`
-        + `XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`;
+        + `XP: ${state.xp} &nbsp; <span style="color:${PAL.coin}">◆ ${state.myCoins||0}</span>`
+        + (r.matchTeam && state.roomInfo?.result?.lines?.length ? '<div class="stake-res">' + state.roomInfo.result.lines.map(escapeHtml).join('<br>') + '</div>' : '');
     }
     return;
   }
@@ -5540,7 +5568,8 @@ function draw(state) {
   drawMonsters(state.monsters || []);
   drawAllies(state.allies || []);
   const names = state.playerNames || {};
-  for (const k of KEYS) if (state.players[k]) drawPlayer(state.players[k], PAL[k], names[k] || k.toUpperCase(), k);
+  const tm = state.roomInfo && state.roomInfo.teams;
+  for (const k of KEYS) if (state.players[k]) drawPlayer(state.players[k], PAL[k], (tm && tm[k] ? '[' + tm[k] + '] ' : '') + (names[k] || k.toUpperCase()), k);
   if (state.timeStop) drawTimeStop(state.timeStop);
   drawChatBubbles(state);
   drawFireHands(state.fires || []);
@@ -11090,3 +11119,71 @@ async function suggestPost() {
 }
 function suggestLike(id) { suggestDo('/api/suggest/like', { id }); }
 function suggestAdmin(id, action) { if (action !== 'delete' || confirm('Delete this suggestion?')) suggestDo('/api/suggest/admin', { id, action }); }
+
+
+// ─── TEAM ROOMS: the lobby panel ─────────────────────────────────────────────
+function condLine(c) {
+  if (!c || (!c.a && !c.b && !c.weapons)) return '';
+  const p = [];
+  if (c.a) p.push('TEAM A LOSES: EACH PAYS ◆ ' + c.a.toLocaleString());
+  if (c.b) p.push('TEAM B LOSES: EACH PAYS ◆ ' + c.b.toLocaleString());
+  if (c.weapons) p.push('WEAPONS AT STAKE');
+  return '<div class="room-stake">⚖️ ' + p.join(' &middot; ') + '</div>';
+}
+let roomPanelKey = '', roomBetPick = '';
+function roomSend(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+function syncRoomPanel(state) {
+  const el = document.getElementById('roomPanel'); if (!el) return;
+  const info = state.gameState === 'LOBBY' ? state.roomInfo : null;
+  el.classList.toggle('hidden', !info);
+  if (!info) { roomPanelKey = ''; return; }
+  const names = state.playerNames || {}, key = JSON.stringify([info, names, state.seated]);
+  if (key === roomPanelKey) return;
+  roomPanelKey = key;
+  const ks = Object.keys(info.teams), c = info.cond || {};
+  const col = T => '<div class="rp-team t' + T + '"><div class="rp-th">TEAM ' + T + '</div>' + ks.filter(k => info.teams[k] === T).map(k => {
+    const a = info.accept[k];
+    return '<div class="rp-p' + (k === info.me ? ' me' : '') + '"><span>' + (k === info.owner ? '👑 ' : '') + escapeHtml(names[k] || k) + (k === info.me ? ' (YOU)' : '') + '</span>'
+      + (info.needAccept ? '<em>' + (a ? '✓' + (a.bet ? ' ' + escapeHtml(a.bet) : '') : '…') + '</em>' : '')
+      + (info.isOwner ? '<button onclick="roomSend({ type: \'room_team\', key: \'' + k + '\', team: \'' + (T === 'A' ? 'B' : 'A') + '\' })">→ ' + (T === 'A' ? 'B' : 'A') + '</button>' : '') + '</div>';
+  }).join('') + '</div>';
+  const mine = info.accept[info.me], myTeam = info.teams[info.me];
+  const owe = myTeam === 'A' ? c.a : c.b;
+  let acc = '';
+  if (info.needAccept) {
+    acc = mine ? '<button class="rp-btn on" onclick="roomSend({ type: \'room_unaccept\' })">ACCEPTED ✓ (UNDO)</button>'
+      : (c.weapons ? '<select id="rpBet" onchange="roomBetPick = this.value"><option value="">PICK A WEAPON TO PUT UP...</option>' + info.bets.map(b => '<option value="' + b.id + '"' + (b.id === roomBetPick ? ' selected' : '') + '>' + escapeHtml(b.name) + '</option>').join('') + '</select>' : '')
+        + '<button class="rp-btn go" onclick="roomSend({ type: \'room_accept\', bet: (document.getElementById(\'rpBet\') || {}).value || \'\' })">ACCEPT' + (owe ? ': I PAY ◆ ' + owe.toLocaleString() + ' IF WE LOSE' : '') + '</button>';
+  }
+  const why = !info.full ? 'WAITING FOR EVERYONE TO JOIN' : !info.valid ? 'THE TEAMS MUST BE ' + info.fmt.toUpperCase() : info.needAccept && ks.some(k => !info.accept[k]) ? 'WAITING FOR EVERYONE TO ACCEPT' : '';
+  el.innerHTML = '<div class="rp-head">' + info.fmt.toUpperCase() + (info.fmt === '1v1' ? ' DUEL' : ' TEAMS') + (info.freeChat ? ' &middot; FREE CHAT' : '') + '</div>'
+    + condLine(c) + (info.needAccept ? '<div class="rp-warn">Everyone accepts first. Leaving a match part-way LOSES it.</div>' : '')
+    + '<div class="rp-teams">' + col('A') + col('B') + '</div>'
+    + (info.isOwner ? '<div class="rp-hint">You are the owner: move players between teams, then START.</div>' : '')
+    + '<div class="rp-acts">' + acc + (info.isOwner ? '<button class="rp-btn start" ' + (why ? 'disabled' : '') + ' onclick="roomSend({ type: \'room_start\' })">▶ START</button>' : '') + '</div>'
+    + (why ? '<div class="rp-why">' + why + '</div>' : '')
+    + (info.result && info.result.lines.length ? '<div class="stake-res"><b>LAST MATCH: TEAM ' + info.result.team + ' WON</b><br>' + info.result.lines.map(escapeHtml).join('<br>') + '</div>' : '');
+}
+
+// ─── FREE CHAT ───────────────────────────────────────────────────────────────
+let fcLogKey = '';
+function sayFree() {
+  const inp = document.getElementById('fcIn'); if (!inp) return;
+  const t = inp.value.trim(); if (!t) return;
+  roomSend({ type: 'say', text: t });
+  inp.value = '';
+}
+function reportLine(mid, name) {
+  popup({ title: 'REPORT ' + escapeHtml(name) + '?', html: 'Only for something nasty. Ten different players reporting someone costs them 1,000,000 coins.',
+    buttons: [{ label: 'REPORT', cls: 'pop-no', fn: () => roomSend({ type: 'report', mid }) }, { label: 'CANCEL' }] });
+}
+function syncFreeChat(state) {
+  const log = document.getElementById('fcLog');
+  if (!log || !state.chatLog) return;
+  const k = JSON.stringify(state.chatLog);
+  if (k === fcLogKey) return;
+  fcLogKey = k;
+  log.innerHTML = state.chatLog.map(m => '<div class="fc-line"><b class="' + m.key + '-color">' + escapeHtml(m.name) + ':</b> ' + escapeHtml(m.text)
+    + (m.mine ? '' : ' <button class="fc-rep" title="Report" onclick="reportLine(' + m.mid + ', \'' + escapeHtml(m.name).replace(/'/g, '') + '\')">⚑</button>') + '</div>').join('') || '<div class="fc-line"><i>No messages yet.</i></div>';
+  log.scrollTop = log.scrollHeight;
+}

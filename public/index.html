@@ -333,12 +333,24 @@
       <div class="subtitle">YOUR OWN PvP ROOM &middot; OTHERS CAN FIND AND JOIN IT</div>
       <button class="mode-btn btn-ffa room-ffa" onclick="playFfa()">FREE FOR ALL<small>one giant room for everyone &middot; join any time &middot; never out</small></button>
       <input type="text" id="roomNameInput" class="name-input" placeholder="ROOM NAME" maxlength="20" autocomplete="off" spellcheck="false">
-      <div class="room-opt-title">PLAYERS</div>
+      <div class="room-opt-title">FIGHT</div>
       <div class="room-opts" id="roomPlayersOpts">
-        <button class="room-opt" data-n="2" onclick="pickRoomPlayers(2)">2<span>DUEL</span></button>
-        <button class="room-opt" data-n="3" onclick="pickRoomPlayers(3)">3<span>LAST ONE STANDING</span></button>
-        <button class="room-opt" data-n="4" onclick="pickRoomPlayers(4)">4<span>LAST ONE STANDING</span></button>
+        <button class="room-opt" data-f="1v1" onclick="pickRoomFormat('1v1')">1 v 1<span>DUEL</span></button>
+        <button class="room-opt" data-f="2v1" onclick="pickRoomFormat('2v1')">2 v 1<span>TEAMS</span></button>
+        <button class="room-opt" data-f="3v1" onclick="pickRoomFormat('3v1')">3 v 1<span>TEAMS</span></button>
+        <button class="room-opt" data-f="2v2" onclick="pickRoomFormat('2v2')">2 v 2<span>TEAMS</span></button>
+        <button class="room-opt" data-f="ffa3" onclick="pickRoomFormat('ffa3')">3<span>LAST ONE STANDING</span></button>
+        <button class="room-opt" data-f="ffa4" onclick="pickRoomFormat('ffa4')">4<span>LAST ONE STANDING</span></button>
       </div>
+      <div class="room-note" id="roomFmtNote"></div>
+      <div id="roomCond" class="room-cond">
+        <div class="room-opt-title">CONDITIONS <small>(optional: everyone has to accept them)</small></div>
+        <label class="cond-row"><span>IF TEAM <b class="tA">A</b> LOSES, EACH OF THEM PAYS</span><input id="condA" type="number" min="0" step="1000" value="0" inputmode="numeric"></label>
+        <label class="cond-row"><span>IF TEAM <b class="tB">B</b> LOSES, EACH OF THEM PAYS</span><input id="condB" type="number" min="0" step="1000" value="0" inputmode="numeric"></label>
+        <div class="cond-sub">It is split between the winners. You pick the teams in the room, once everyone is in.</div>
+        <label class="cond-row"><span>WEAPONS AT STAKE<br><small>each puts one up; the winners take the losers'</small></span><input id="condW" type="checkbox"></label>
+      </div>
+      <label class="cond-row fc-opt"><span>FREE CHAT<br><small>players can type their own lines (and report bad ones)</small></span><input id="freeChatOpt" type="checkbox"></label>
       <div class="room-opt-title">MAP SIZE</div>
       <div class="room-opts" id="roomSizeOpts">
         <button class="room-opt" data-size="small" onclick="pickRoomSize('small')">SMALL</button>
@@ -411,8 +423,12 @@
           <p>Pick a weapon you own and put coins in the fire (500 to 500,000). More coins give a better chance of an upgrade and a much better chance of a rare one; if the metal cracks the coins are gone. Each weapon holds <b>3 upgrades</b>. Melee weapons have over 30 possible upgrades and ranged weapons over 20. These are passives that work while the weapon is in your hand. The <b>5 rare upgrades</b> each give an extra ability on <b>C</b>, and a weapon can only hold one. Reset a weapon in the forge to free its slots; the coins do not come back. A weapon with a rare upgrade glows red. <b>Mythics</b> have a forge list of their own: 32 stronger upgrades and 5 rare abilities that no other weapon can get.</p></div>
         <div class="howto-sec"><h3>ITEMS</h3>
           <p>In the <b>ARMOURY</b>, under <b>ITEMS</b>: 24 items, bought once and kept for ever, each upgradable to level 3. <b>PASSIVE</b> ones are always on (more health, speed, damage, lifesteal...). <b>ACTIVE</b> ones you use with <b>5</b>, <b>6</b> and <b>7</b> (or their buttons on a phone) and then wait for. <b>ONE-TIME-USE</b> ones work once a match. You start with <b>one item slot</b>; buy up to three in all (500,000 coins each) and pick what to take into a fight. Everyone's items show above their name: tap or click one to see what it does. (Items stay home in minigames and the Saw Room.)</p></div>
+        <div class="howto-sec"><h3>TEAM ROOMS AND CONDITIONS</h3>
+          <p><b>CREATE ROOM</b> can be <b>1v1, 2v1, 3v1 or 2v2</b>. Once everyone is in, the owner (👑) puts each player on team <b>A</b> or <b>B</b> and presses START. Teammates can't hurt each other and share every coin they pick up. The first team to win 3 rounds takes the match.</p>
+          <p><b>CONDITIONS</b> (optional): how much each player of a team pays if their team loses (split between the winners; e.g. you alone against three: you pay 10,000 if you lose, they pay 1,000 each if they do), and <b>WEAPONS AT STAKE</b>: everyone puts up a weapon and the winners take the losers'. Everyone has to <b>ACCEPT</b> first, you need a password, and <b>leaving a match part-way loses it</b>. After each match the room goes back to its lobby to agree the next one.</p>
+          <p><b>FREE CHAT</b> (if the room allows it): type your own lines in the chat. Anything nasty can be <b>reported</b>: ten different players reporting someone costs them 1,000,000 coins (or all they have).</p></div>
         <div class="howto-sec"><h3>SUGGESTION BOX</h3>
-          <p>On the 🎨 tab. Got an idea for the game? With <b>100,000 coins</b> you can post it (the coins are not spent; up to 3 a day). Everyone can read every idea and <b>like</b> the ones they want most. Ideas the game's maker picks are marked <b>PLANNED</b>, then <b>ADDED</b> when they are in.</p></div>
+          <p>On the 🎨 tab. Got an idea for the game? With <b>10,000 coins</b> you can post it (the coins are not spent; up to 3 a day). Everyone can read every idea and <b>like</b> the ones they want most. Ideas the game's maker picks are marked <b>PLANNED</b>, then <b>ADDED</b> when they are in.</p></div>
         <div class="howto-sec"><h3>FREE FOR ALL</h3>
           <p>One giant public room for everyone (up to 12), on the PvP tab and in CREATE ROOM. It starts as soon as two people are in, and from then on anyone can <b>jump in at any time</b>. Nobody is ever out: when you die you come back <b>30 seconds</b> later, somewhere safe. Every kill counts on the scoreboard. If you leave, you can't join again for <b>50 seconds</b>.</p></div>
         <div class="howto-sec"><h3>FRIENDS, TRADE AND CHALLENGE</h3>
@@ -508,6 +524,7 @@
       <div class="load-brand"><span>WEPONARE</span></div>
       <canvas id="loadScene" class="load-scene" width="480" height="270"></canvas>
       <div id="lobbyMsg" class="load-msg">Connecting...</div>
+      <div id="roomPanel" class="room-panel hidden"></div>
       <div class="blade-bar"><div class="blade"><div class="blade-fill sweep"></div></div></div>
       <div class="load-tip" id="loadTip"></div>
       <div id="xpDisplay" class="xp-text"></div>
