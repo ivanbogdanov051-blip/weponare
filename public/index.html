@@ -109,6 +109,7 @@
           <button class="mode-btn btn-cust btn-upg" onclick="openShop()">UPGRADES<small>weapons</small></button>
           <button class="mode-btn btn-forge" onclick="openForge()">THE FORGE<small>coins for upgrades</small></button>
         </div>
+        <button class="mode-btn btn-cw" onclick="openCustomW()">CUSTOM WEAPON<small>make your OWN weapon &middot; ◆ 1,000,000 and ALL your progress</small></button>
       </div>
 
       <div class="menu-tab hidden" data-tab="custom">
@@ -298,6 +299,37 @@
     </div>
   </div>
 
+  <!-- CUSTOM WEAPONS: your own weapon, for a million and everything else (public/customw.js) -->
+  <div id="cwScreen" class="overlay hidden">
+    <div class="pixel-box shop-box cw-box">
+      <div class="title-text shop-title cw-title"><span class="t-em">⚒️</span> CUSTOM WEAPON</div>
+      <div class="cw-warn"><b>◆ 1,000,000 AND ALL YOUR PROGRESS.</b> Coins, XP, weapons, upgrades, skins, armour, items and abilities are all lost. You keep your name, your friends and this weapon: better than a secret weapon, and it can never be traded or lost.</div>
+      <div id="cwMine" class="cw-mine"></div>
+      <div class="cw-sec">1 &middot; NAME AND LOOK</div>
+      <div class="cw-row"><input id="cwName" maxlength="16" placeholder="WEAPON NAME" autocomplete="off" spellcheck="false" aria-label="Weapon name">
+        <label class="cw-col">EFFECTS <input type="color" id="cwColor" value="#33ffcc" oninput="cwPower()"></label></div>
+      <canvas id="cwPrev" width="320" height="110" aria-label="Your weapon"></canvas>
+      <div class="arm-tabs cw-tabs"><button data-t="gen" onclick="cwTexTab('gen')">🎲 GENERATE</button><button data-t="img" onclick="cwTexTab('img')">🖼️ YOUR IMAGE</button></div>
+      <div id="cwGen" class="cw-pane">
+        <div id="cwShapes" class="cw-shapes"></div>
+        <div class="cw-row cw-cols"><label>BLADE <input type="color" id="cwC1" value="#c8d8f0" oninput="cwRegen()"></label><label>HANDLE <input type="color" id="cwC2" value="#6b4326" oninput="cwRegen()"></label><label>GEM <input type="color" id="cwC3" value="#ff3a5a" oninput="cwRegen()"></label>
+          <button class="mode-btn cw-mini" onclick="cwReroll()">🎲 NEW ONE</button></div>
+      </div>
+      <div id="cwImg" class="cw-pane hidden">
+        <input type="file" id="cwFile" accept="image/*" onchange="cwLoadImg(this.files[0])" aria-label="Your image">
+        <label class="cw-chk"><input type="checkbox" id="cwBg" checked onchange="cwLoadImg()"> REMOVE THE BACKGROUND</label>
+        <div class="cw-hint">Point it to the RIGHT: the left side is where you hold it. It is turned into pixel art (up to 15 colours).</div>
+      </div>
+      <div class="cw-sec">2 &middot; ITS MOVES <small>each one borrowed from a real weapon, then tuned</small></div>
+      <div id="cwMoves"></div>
+      <div class="cw-sec">3 &middot; THE CHECK</div>
+      <div class="cw-power"><div class="cw-bar"><i id="cwBarFill"></i><b id="cwBarRef" title="FIRE SPEAR"></b><u id="cwBarLim" title="LIMIT"></u></div><div id="cwPowTxt" class="cw-powtxt"></div></div>
+      <div id="cwMsg" class="shop-msg"></div>
+      <button class="mode-btn cw-make" id="cwMake" onclick="cwMake()">⚒️ CHECK AND CREATE</button>
+      <button class="mode-btn shop-back" onclick="closeCustomW()">&#10003; BACK</button>
+    </div>
+  </div>
+
   <!-- The suggestion box: ideas for the game; everyone can like them -->
   <div id="suggestScreen" class="overlay hidden">
     <div class="pixel-box shop-box sg-box">
@@ -423,6 +455,8 @@
           <p>Pick a weapon you own and put coins in the fire (500 to 500,000). More coins give a better chance of an upgrade and a much better chance of a rare one; if the metal cracks the coins are gone. Each weapon holds <b>3 upgrades</b>. Melee weapons have over 30 possible upgrades and ranged weapons over 20. These are passives that work while the weapon is in your hand. The <b>5 rare upgrades</b> each give an extra ability on <b>C</b>, and a weapon can only hold one. Reset a weapon in the forge to free its slots; the coins do not come back. A weapon with a rare upgrade glows red. <b>Mythics</b> have a forge list of their own: 32 stronger upgrades and 5 rare abilities that no other weapon can get.</p></div>
         <div class="howto-sec"><h3>ITEMS</h3>
           <p>In the <b>ARMOURY</b>, under <b>ITEMS</b>: 24 items, bought once and kept for ever, each upgradable to level 3. <b>PASSIVE</b> ones are always on (more health, speed, damage, lifesteal...). <b>ACTIVE</b> ones you use with <b>5</b>, <b>6</b> and <b>7</b> (or their buttons on a phone) and then wait for. <b>ONE-TIME-USE</b> ones work once a match. You start with <b>one item slot</b>; buy up to three in all (500,000 coins each) and pick what to take into a fight. Everyone's items show above their name: tap or click one to see what it does. (Items stay home in minigames and the Saw Room.)</p></div>
+        <div class="howto-sec"><h3>CUSTOM WEAPONS</h3>
+          <p>In the 🛒 tab, <b>CUSTOM WEAPON</b>: make your own. Give it a name and a picture (generate one, or use your own image), then pick its moves: <b>ATK</b>, <b>SPECIAL</b>, <b>SUPER</b> and the <b>ULTIMATE</b> (key <b>U</b> or the 🌟 button). Each one is borrowed from a real weapon and tuned. Then it is checked: if its <b>POWER</b> is over the limit it cannot be made, so turn something down and try again. It costs <b>◆ 1,000,000 and ALL your progress</b> (you keep your name and friends). It can never be traded, bet or lost.</p></div>
         <div class="howto-sec"><h3>TEAM ROOMS AND CONDITIONS</h3>
           <p><b>CREATE ROOM</b> can be <b>1v1, 2v1, 3v1 or 2v2</b>. Once everyone is in, the owner (👑) puts each player on team <b>A</b> or <b>B</b> and presses START. Teammates can't hurt each other and share every coin they pick up. The first team to win 3 rounds takes the match.</p>
           <p><b>CONDITIONS</b> (optional): how much each player of a team pays if their team loses (split between the winners; e.g. you alone against three: you pay 10,000 if you lose, they pay 1,000 each if they do), and <b>WEAPONS AT STAKE</b>: everyone puts up a weapon and the winners take the losers'. Everyone has to <b>ACCEPT</b> first, you need a password, and <b>leaving a match part-way loses it</b>. After each match the room goes back to its lobby to agree the next one.</p>
@@ -698,6 +732,7 @@
         <button id="btn-special" class="action-btn special-btn round" aria-label="Special">✨</button>
       </div>
       <div class="action-row">
+        <button id="btn-ult" class="action-btn ult-btn round hidden-btn" aria-label="Ultimate">🌟</button>
         <button id="btn-super" class="action-btn super-btn round hidden-btn" aria-label="Super">💥</button>
         <button id="btn-attack" class="action-btn big-btn round" aria-label="Attack">⚔️</button>
       </div>
@@ -723,6 +758,7 @@
   <script src="arena.js"></script>
   <script src="cosmetics.js"></script>
   <script src="items.js"></script>
+  <script src="customw.js"></script>
   <script src="client.js"></script>
   <script src="custload.js"></script>
 </body>

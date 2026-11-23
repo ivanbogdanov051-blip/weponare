@@ -512,6 +512,8 @@ for (const w of WEAPONS) {
 }
 
 const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
+// The real weapons: the only ones a CUSTOM WEAPON may borrow its moves from.
+const CW_BASE = new Set(WEAPONS.map(w => w.id));
 
 const WEAPON_COLORS = {
   scimitar: '#e8e0c8', slingshot: '#b08a5a', mace: '#9aa4b0', javelin: '#d8c8a0', claws: '#e0e4ec',
@@ -939,6 +941,7 @@ const ABILITY_BY_ID = Object.fromEntries(ABILITIES.map(a => [a.id, a]));
 // `needs`: only offered on weapons that can use it (see forgeCan).
 const Armor = require('./public/armor.js');
 const Items = require('./public/items.js');
+const CustomW = require('./public/customw.js');
 const FORGE_SLOTS = 3, FORGE_MIN = 500, FORGE_MAX = 500000;
 const FORGE_ODDS = { okMin: 0.35, okMax: 0.95, rareMin: 0.01, rareMax: 0.2 };
 const FORGE_MELEE = [
@@ -1413,6 +1416,8 @@ function progress() {
   if (!d.fines) d.fines = {};              // password -> how many times fined for free chat
   if (!d.items) d.items = {};              // password -> { item id: level 1-3 }
   if (!d.itemSlots) d.itemSlots = {};      // password -> item slots bought into (1-3)
+  if (!d.customWeapons) d.customWeapons = {};  // custom weapon id -> what it is (see public/customw.js)
+  if (!d.wipes) d.wipes = {};              // password -> how many times the account was given up for a custom weapon
   if (!d.itemWorn) d.itemWorn = {};        // password -> [item ids taken into fights]            // password -> the 10-minute minigame window they last won a prize in
   return d;
 }
@@ -1473,6 +1478,9 @@ function saveData(pw) {
     tut: d.tutReward[pw] || null,
     friends: d.friends[pw] || [],
     items: d.items[pw] || {}, itemSlots: d.itemSlots[pw] || Items.START_SLOTS, itemWorn: d.itemWorn[pw] || [],
+    wipe: d.wipes[pw] || 0,
+    // Your custom weapons themselves, so they come back even if the server loses its file.
+    custom: (d.weapons[pw] || []).filter(id => WEAPON_BY_ID[id]?.custom).map(id => cwDefs.get(id)).filter(Boolean),
   });
 }
 function makeSave(pw) {
@@ -1493,6 +1501,9 @@ function restoreBackup(pw, backup) {
 
   const d = progress();
   const num = v => Math.max(0, Math.floor(Number(v) || 0));
+  if (Array.isArray(b.custom)) for (const c of b.custom.slice(0, CustomW.MAX_OWNED)) {
+    if (registerCustom(c)) { d.customWeapons[c.id] = cwDefs.get(c.id); markDirty(); }
+  }
   const weapons = Array.isArray(b.weapons) ? b.weapons.filter(id => WEAPON_BY_ID[id]) : [];
   const skins = Array.isArray(b.ownedSkins) ? b.ownedSkins.filter(id => SKIN_BY_ID[id]) : [];
   const abils = Array.isArray(b.abilities) ? b.abilities.filter(id => ABILITY_BY_ID[id]) : [];
@@ -1536,11 +1547,15 @@ function restoreBackup(pw, backup) {
     d.items[pw] = cleanItems(b.items);
     d.itemSlots[pw] = clampItemSlots(b.itemSlots);
     d.itemWorn[pw] = cleanItemWorn(b.itemWorn, d.items[pw], d.itemSlots[pw]);
+    if (num(b.wipe)) d.wipes[pw] = num(b.wipe);
     if (b.skin && typeof b.skin === 'object' && d.skins[pw] === undefined) d.skins[pw] = b.skin;
     markDirty();
     return;
   }
 
+  // A copy from before the account was given up for a custom weapon: none of it comes back.
+  if (num(b.wipe) < (d.wipes[pw] || 0)) return;
+  if (num(b.wipe) > (d.wipes[pw] || 0)) { d.wipes[pw] = num(b.wipe); markDirty(); }
   // Both sides have a save (e.g. another device): merge what only goes up.
   // A copy from before the last trade still lists what was traded away, so
   // ownership is only merged from a copy that is up to date.
@@ -2007,6 +2022,7 @@ function makePlayer(num, xp, upgrades) {
     atkCooldown: 0,
     specialCooldown: 0,
     superCooldown: 0,
+    ultCooldown: 0,
     abilities: [null, null],   // equipped on Q and E
     abCd: {},                  // ability id -> ms until it's ready
     vortexShield: 0,     // ms the vortex shield stays up
@@ -2033,7 +2049,7 @@ const KEYS = Array.from({ length: 12 }, (_, i) => 'p' + (i + 1));
 const isPKey = k => KEYS.includes(k);
 const perKey = v => Object.fromEntries(KEYS.map(k => [k, typeof v === 'function' ? v(k) : v]));
 function allPlayers() { return KEYS.map(k => room.players[k]); }
-const blankInput = () => ({ up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false, ab1: false, ab2: false, block: false });
+const blankInput = () => ({ up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false, ult: false, ab1: false, ab2: false, block: false });
 const blankPrev = () => ({ attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false });
 function newRound() { return { wins: perKey(0), maxWins: 3, matchWinner: 0 }; }
 
@@ -2090,6 +2106,7 @@ function makeRoom() { return {
   specialJustPressed: perKey(false),
   parryJustPressed: perKey(false),
   superJustPressed: perKey(false),
+  ultJustPressed: perKey(false),
   prevInputs: perKey(blankPrev),
 }; }
 
@@ -3492,7 +3509,7 @@ function updateChronos(dt) {
   const now = Date.now();
   for (const key of KEYS) {
     const p = room.players[key];
-    if (!p || p.dead || weapon(p).id !== 'chronosedge') { if (p) p.hist = null; continue; }
+    if (!p || p.dead || !(weapon(p).id === 'chronosedge' || weapon(p).custom)) { if (p) p.hist = null; continue; }
     if (!p.hist) p.hist = [];
     if (!p.hist.length || now - p.hist[p.hist.length - 1].at >= CHR_HIST_GAP) p.hist.push({ x: p.x, y: p.y, hp: p.hp, at: now });
     while (p.hist.length && now - p.hist[0].at > CHR_HIST_MS) p.hist.shift();
@@ -3658,7 +3675,7 @@ function openDeathsDoor(p, pKey, dmg) {
 function lanternKill(key, target) {
   const p = room.players[key];
   if (!p || p.dead || target.num || target.ally) return;
-  if (weapon(p).id === 'soullantern' && (p.souls || 0) < SOUL_MAX) p.souls = (p.souls || 0) + 1;
+  if (weapon(p).soulWisp && (p.souls || 0) < SOUL_MAX) p.souls = (p.souls || 0) + 1;
   const def = MONSTER_TYPES[target.type];
   if (p.deathDoor > 0 && def && !def.boss && !target.mage && !target.abyss
       && room.allies.filter(a => a.owner === key && !a.dead).length < DOOR_CAP) {
@@ -3671,7 +3688,7 @@ function updateLantern(dt) {
     const p = room.players[key];
     if (!p) continue;
     if (p.deathDoor > 0) p.deathDoor -= dt;
-    if (p.dead || weapon(p).id !== 'soullantern') p.souls = 0;
+    if (p.dead || !weapon(p).soulWisp) p.souls = 0;
   }
 }
 
@@ -4009,7 +4026,7 @@ function updateDarklight(dt) {
   for (const key of KEYS) {
     const p = room.players[key];
     if (!p) continue;
-    if (p.dead || weapon(p).id !== 'darklight') { p.kunais = null; continue; }
+    if (p.dead || !weapon(p).kunaiOrbit) { p.kunais = null; continue; }
     if (!p.kunais || !p.kunais.length) continue;
     p.dkA = ((p.dkA || 0) + DL_SPIN * dt) % (Math.PI * 2);
     const n = p.kunais.length, foes = enemyTargets(key);
@@ -5077,6 +5094,7 @@ function tickRoom(dt) {
     room.specialJustPressed[key] = inp.special;
     room.parryJustPressed[key]   = inp.parry   && !prev.parry;
     room.superJustPressed[key]   = inp.super;
+    room.ultJustPressed[key]     = !!inp.ult;
     room.prevInputs[key] = { attack: inp.attack, swap: inp.swap, swapPrev: !!inp.swapPrev, special: inp.special, parry: inp.parry, super: inp.super };
   }
 
@@ -5160,6 +5178,7 @@ function tickRoom(dt) {
     if (p.atkCooldown     > 0) p.atkCooldown     -= dt;
     if (p.specialCooldown > 0) p.specialCooldown -= dt;
     if (p.superCooldown   > 0) p.superCooldown   -= dt;
+    if (p.ultCooldown     > 0) p.ultCooldown     -= dt;
     if (p.vortexShield    > 0) p.vortexShield    -= dt;
     if (p.parryCooldown   > 0) p.parryCooldown   -= dt;
     if (p.parryTimer      > 0) p.parryTimer      -= dt;
@@ -5226,6 +5245,10 @@ function tickRoom(dt) {
     if (room.superJustPressed[key] && p.superCooldown <= 0 && weapon(p).super) {
       room.inSuper = true;                 // what a super does can't be shrugged off
       try { doSuper(p, key); } finally { room.inSuper = false; }
+    }
+    if (room.ultJustPressed[key] && !(p.ultCooldown > 0) && weapon(p).ultimate) {
+      room.inSuper = true;
+      try { doUltimate(p, key); } finally { room.inSuper = false; }
     }
     // Abilities auto-fire while held, like attack/special/super.
     for (let i = 0; i < p.abilities.length && i < MAX_ABILITY_SLOTS; i++) {
@@ -6165,6 +6188,26 @@ function explodeHand(f) {
   }
   room.particles.push({ type: 'aoe', x: f.x, y: f.y, maxR: f.aoe, radius: 2, timer: 420, max: 420, color: WEAPON_COLORS.fireglove });
   room.particles.push({ type: 'shockwave', x: f.x, y: f.y, maxR: f.aoe, timer: 380, max: 380, color: '#ffc23a' });
+}
+
+// A custom weapon's ULTIMATE: a special or super borrowed from another weapon,
+// far stronger, on a long cooldown of its own (the weapon's SPECIAL and SUPER
+// are left as they were).
+function doUltimate(p, pKey) {
+  const w = weapon(p), u = w.ultimate;
+  if (!u || hasEffect(p, 'silence')) return;
+  const keepSp = p.specialCooldown, keepSu = p.superCooldown, part = u.part === 'super' ? 'super' : 'special';
+  p.w_ = { ...w, [part]: u };
+  let cast = 0;
+  try {
+    if (part === 'super') doSuper(p, pKey); else doSpecial(p, pKey);
+    cast = part === 'super' ? p.superCooldown : p.specialCooldown;
+  } finally { if (p.w_ && p.w_.id === w.id) p.w_ = w; p.specialCooldown = keepSp; p.superCooldown = keepSu; }
+  if (!(cast >= u.cd)) return;            // nothing to cast it on: it stays ready
+  p.ultCooldown = u.cd;
+  const col = WEAPON_COLORS[w.id] || '#ffffff';
+  room.particles.push({ type: 'shockwave', x: cx(p), y: cy(p), maxR: 120, timer: 700, max: 700, color: col });
+  room.particles.push({ type: 'trapburst', x: cx(p), y: cy(p), maxR: 70, timer: 1000, max: 1000, color: col, text: 'ULTIMATE!' });
 }
 
 function doSuper(p, pKey) {
@@ -8365,7 +8408,8 @@ function startSandbox() {
   room.waveHpMult = 1; room.waveSpeedMult = 1;
   const p = room.players.p1;
   if (p) {
-    p.unlockedWeapons = WEAPONS.map(w => w.id);
+    // Every weapon, but of custom weapons only your own.
+    p.unlockedWeapons = [...WEAPONS.filter(w => !w.custom).map(w => w.id), ...(p.unlockedWeapons || []).filter(id => WEAPON_BY_ID[id]?.custom)];
     p.weaponIdx = 0;
     refreshWeapon(p);
     // Every ability slot, to try any combination.
@@ -8388,7 +8432,7 @@ function sandboxCheats(p) {
   const s = room.sandbox;
   if (s.god) { p.hp = p.maxHp; if (p.effects) { delete p.effects.burn; delete p.effects.poison; } }
   if (s.noCd) {
-    p.specialCooldown = 0; p.superCooldown = 0; p.parryCooldown = 0;
+    p.specialCooldown = 0; p.superCooldown = 0; p.parryCooldown = 0; p.ultCooldown = 0;
     for (const id in p.abCd) p.abCd[id] = 0;
   }
 }
@@ -9997,7 +10041,7 @@ function updateLightStreak(f) {
 // SUPER: LIGHTSPEED. Triple speed, an aura that zaps whatever comes close, and
 // crashing into a foe sets off a huge lightning blast.
 function lightspeedTick(p, key, dt) {
-  if (weapon(p).id !== 'lightblade') { p.lightspeed = 0; return; }
+  if (weapon(p).id !== 'lightblade' && !weapon(p).custom) { p.lightspeed = 0; return; }
   p.lightspeed -= dt;
   p.crashCd = (p.crashCd || 0) - dt;
   p.lsAcc = (p.lsAcc || 0) + dt;
@@ -10992,6 +11036,7 @@ function playerView(p) {
     unlockedWeapons: p.unlockedWeapons, skin: p.skin,
     specialCd: Math.max(0, p.specialCooldown), specialMax: w.special?.cd || 0,
     superCd: Math.max(0, p.superCooldown || 0), superMax: w.super?.cd || 0,
+    ...(w.ultimate ? { ultCd: Math.max(0, Math.round(p.ultCooldown || 0)), ultMax: w.ultimate.cd } : {}),
     abil: abilityView(p),
     ...(p.fg?.speed ? { fgs: 1 + p.fg.speed } : {}),
     ...(p.suit?.length ? { arm: p.suit.join() } : {}), ...(p.fg?.aura ? { aura: 1 } : {}),
@@ -11253,6 +11298,8 @@ function weaponCatalog() {
     bossReward: !!w.bossReward, secret: !!w.secret, from: w.from || null, uncommon: !!w.uncommon,
     special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd } : null,
     super: w.super ? { kind: w.super.kind, dmg: w.super.dmg, cd: w.super.cd } : null,
+    ...(w.ultimate ? { ultimate: { kind: w.ultimate.kind, dmg: w.ultimate.dmg, cd: w.ultimate.cd, part: w.ultimate.part } } : {}),
+    ...(w.custom ? { custom: cwDefs.get(w.id) || null } : {}),
     upgrades: upgradesFor(w.id),
     passive: PASSIVES[w.id] || null,
     forgeClass: forgeClass(w), forgeCan: forgeCan(w),
@@ -11266,7 +11313,7 @@ function profileFor(pw, opts = {}) {
 
   let xp = admin ? ADMIN_XP : (d.players[pw] || 0);
   const localXp = Math.max(0, Math.floor(Number(opts.localXp) || 0));
-  if (!admin && localXp > xp) { xp = localXp; d.players[pw] = xp; markDirty(); }
+  if (!admin && localXp > xp && !(d.wipes[pw] > 0)) { xp = localXp; d.players[pw] = xp; markDirty(); }
 
   let coins;
   if (admin) {
@@ -11998,12 +12045,87 @@ app.post('/api/pick_mythic', (req, res) => {
 });
 
 // Shop-only weapons: bought with coins, and only once every XP weapon is unlocked.
+// ─── CUSTOM WEAPONS ──────────────────────────────────────────────────────────
+// ◆1,000,000 and EVERYTHING else on the account (coins, XP, weapons, upgrades,
+// skins, armour, items, abilities, events...) for one weapon of your own. Its
+// moves are borrowed from real weapons and tuned; POWER over the limit is turned
+// down. It can never be traded, bet, sold or lost. Name and friends are kept.
+const cwDefs = new Map();                  // id -> its spec (name, colour, texture, moves)
+const cwSrc = id => CW_BASE.has(id) ? WEAPON_BY_ID[id] : null;
+function registerCustom(def) {
+  if (!def || typeof def.id !== 'string' || !/^cw_[a-f0-9]{10}$/.test(def.id)) return false;
+  const have = WEAPON_BY_ID[def.id];
+  if (have && !have.custom) return false;
+  const r = CustomW.check(def, cwSrc, null, true);
+  if (r.error) return false;
+  const spec = { id: def.id, ...r.spec, by: sanitizeText(def.by, 16), at: Math.floor(Number(def.at) || Date.now()) };
+  const w = CustomW.build(def.id, spec, cwSrc);
+  if (have) { for (const k of Object.keys(have)) delete have[k]; Object.assign(have, w); }
+  else { WEAPONS.push(w); WEAPON_BY_ID[w.id] = w; }
+  WEAPON_COLORS[w.id] = spec.color;
+  cwDefs.set(w.id, spec);
+  return true;
+}
+function wipeAccount(pw, keep) {
+  const d = progress();
+  const ups = {}, forge = {};
+  for (const id of keep) {
+    if (d.upgrades[pw]?.[id]) ups[id] = d.upgrades[pw][id];
+    if (d.forge[pw]?.[id]) forge[id] = d.forge[pw][id];
+  }
+  d.players[pw] = 0; d.coins[pw] = 0;
+  d.weapons[pw] = sortWeaponIds(keep); d.upgrades[pw] = ups; d.forge[pw] = forge; d.lostWeapons[pw] = {};
+  d.ownedSkins[pw] = []; delete d.skins[pw];
+  d.abilities[pw] = []; d.abilitySlots[pw] = []; delete d.abilitySlotCount[pw];
+  d.lightKills[pw] = 0; d.samuraiKills[pw] = 0; d.mythicKills[pw] = 0;
+  delete d.tsunamiBeat[pw]; delete d.mythicPick[pw];
+  d.armor[pw] = []; d.armorWorn[pw] = {}; delete d.armory[pw];
+  d.items[pw] = {}; delete d.itemSlots[pw]; d.itemWorn[pw] = [];
+  d.eventWins[pw] = {}; d.eventPlays[pw] = {}; delete d.mgWins[pw]; delete d.mgTries[pw];
+  d.wipes[pw] = (d.wipes[pw] || 0) + 1;
+  bumpRev(pw);
+  markDirty();
+}
+app.post('/api/customweapon/check', (req, res) => {
+  const r = CustomW.check(req.body?.spec, cwSrc, WEAPONS.map(w => w.name));
+  res.status(r.error ? 400 : 200).json(r.error ? r : { ok: true, power: r.spec.power, limit: CustomW.LIMIT_PCT });
+});
+app.post('/api/customweapon/make', (req, res) => {
+  const pw = sanitizeText(req.body?.password, 32);
+  if (!pw) return res.status(400).json({ error: 'Type your password on the menu first: the weapon is saved to it.' });
+  const admin = isAdminPw(pw), d = progress();
+  const prof = profileFor(pw, { localXp: req.body?.localXp, localCoins: req.body?.localCoins, backup: req.body?.backup });
+  if (!admin && prof.coins < CustomW.PRICE) {
+    return res.status(400).json({ error: 'You need ◆ ' + CustomW.PRICE.toLocaleString('en-US') + ' (you have ◆ ' + prof.coins.toLocaleString('en-US') + ').' });
+  }
+  const owned = prof.weapons.filter(id => WEAPON_BY_ID[id]?.custom);
+  if (owned.length >= CustomW.MAX_OWNED) return res.status(400).json({ error: 'You already have ' + CustomW.MAX_OWNED + ' custom weapons: that is the most.' });
+  if (req.body?.agree !== true) return res.status(400).json({ error: 'You must agree to lose all your progress.' });
+  const r = CustomW.check(req.body?.spec, cwSrc, WEAPONS.map(w => w.name));
+  if (r.error) return res.status(400).json(r);
+  const id = 'cw_' + crypto.randomBytes(5).toString('hex');
+  const by = sanitizeText(req.body?.name || d.names[pw] || '', 16).toUpperCase();
+  if (!registerCustom({ ...r.spec, id, by, at: Date.now() })) return res.status(400).json({ error: 'It could not be made. Try again.' });
+  d.customWeapons[id] = cwDefs.get(id);
+  if (admin) d.weapons[pw] = sortWeaponIds([...(d.weapons[pw] || []), id]);
+  else wipeAccount(pw, [...owned, id]);
+  markDirty();
+  flushProgress();
+  res.json({ ok: true, id, weapon: weaponCatalog().find(w => w.id === id), save: makeSave(pw), power: r.spec.power });
+});
+// A custom weapon someone else made, seen in a game (its picture and name).
+app.post('/api/customweapon/get', (req, res) => {
+  const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).slice(0, 12).map(x => String(x));
+  res.json({ weapons: weaponCatalog().filter(w => w.custom && ids.includes(w.id)) });
+});
+
 app.post('/api/buy_weapon', (req, res) => {
   const pw = sanitizeText(req.body?.password, 32);
   if (!pw) return res.status(400).json({ error: 'A password is required to buy weapons.' });
   const weaponId = sanitizeText(req.body?.weaponId, 24);
   const def = WEAPON_BY_ID[weaponId];
   if (!def || !def.shopOnly) return res.status(400).json({ error: 'That weapon is not for sale.' });
+  if (def.custom) return res.status(400).json({ error: 'A custom weapon belongs to the player who made it.' });
   if (def.mythic) return res.status(400).json({ error: 'Mythics are only sold in the rare shop that opens after a Giant wave.' });
   if (def.secret) return res.status(400).json({ error: def.from === 'boss' ? 'Only won by defeating the Ice Knight.' : def.uncommon ? 'An uncommon weapon: only won in a MINIGAME (EVENTS menu).' : 'A secret weapon: only won in the SECRET BOT event.' });
   if (def.bossReward) return res.status(400).json({ error: def.id === 'infinitybow' ? 'Only won by defeating the Abyss.' : def.id === 'endlessscythe' ? 'Only won by defeating the Abyss a second time.' : 'Only won by defeating the Portal Mage.' });
@@ -12173,6 +12295,7 @@ function tradeWhy(kind, id, prof, other) {
   if (kind === 'weapons') {
     const w = WEAPON_BY_ID[id];
     if (!w || !prof.weapons.includes(id)) return 'not yours';
+    if (w.custom) return 'a custom weapon never leaves its maker';
     if (w.mythic) return 'mythics only come from the rare shop';
     if (!w.shopOnly && !regainXp(id)) return 'starter weapon';
     if (other && other.weapons.includes(id)) return 'they already own it';
@@ -13271,7 +13394,7 @@ wss.on('connection', (ws, req) => {
         const k = msg.keys;
         room.inputs[myKey] = {
           up: !!k.up, down: !!k.down, left: !!k.left, right: !!k.right,
-          attack: !!k.attack, swap: !!k.swap, swapPrev: !!k.swapPrev, special: !!k.special, parry: !!k.parry, super: !!k.super,
+          attack: !!k.attack, swap: !!k.swap, swapPrev: !!k.swapPrev, special: !!k.special, parry: !!k.parry, super: !!k.super, ult: !!k.ult,
           ab1: !!k.ab1, ab2: !!k.ab2, ab3: !!k.ab3, ab4: !!k.ab4, ab5: !!k.ab5, ab6: !!k.ab6, ab7: !!k.ab7, block: !!k.block,
           it1: !!k.it1, it2: !!k.it2, it3: !!k.it3,
           // The joystick's exact direction, in radians.
@@ -13487,4 +13610,5 @@ if (!progress().events.secretbot) hostEvent('secretbot');
 // The Void Dungeon was given 5 more days (once).
 { const h = progress().events.voiddungeon; if (h && !h.plus5) { h.end += 5 * EVENT_DAY; h.plus5 = true; markDirty(); } }
 
+for (const def of Object.values(progress().customWeapons)) registerCustom(def);
 server.listen(PORT, () => console.log('Weponare running on port', PORT));

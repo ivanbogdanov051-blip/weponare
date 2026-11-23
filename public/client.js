@@ -920,6 +920,7 @@ function applyCatalog(catalog, colors) {
   if (Array.isArray(catalog)) {
     WEAPON_META = {};
     for (const w of catalog) WEAPON_META[w.id] = w;
+    for (const w of catalog) if (w.custom) cwRegisterArt(w);
   }
   if (colors && typeof colors === 'object') { WEAPON_COLOR = { ...WEAPON_COLOR, ...colors }; menuBgRepaint(); }
 }
@@ -2448,6 +2449,12 @@ function syncSuperButton(me) {
   }
   const cooling = show && (me.superCd || 0) > 0 && !me.controlling;
   if (cooling !== superBtnCooling) { superBtnCooling = cooling; el.classList.toggle('cooling', cooling); }
+  const ub = document.getElementById('btn-ult');
+  if (ub) {
+    const showU = !!(me && me.ultMax > 0);
+    if (showU !== !ub.classList.contains('hidden-btn')) { ub.classList.toggle('hidden-btn', !showU); touchZonesAt = -1e9; if (!showU) touchKeys.ult = false; }
+    ub.classList.toggle('cooling', showU && (me.ultCd || 0) > 0);
+  }
   const label = me && me.controlling ? '🖐️' : '💥';
   if (el.textContent !== label) el.textContent = label;
   // Inside a monster, SPECIAL is its own ability.
@@ -2506,9 +2513,9 @@ canvas.addEventListener('pointermove', (e) => {
 });
 canvas.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') mouseAim = null; });
 
-const blankControls = { up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false,
+const blankControls = { up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false, ult: false,
                         ab1: false, ab2: false, ab3: false, ab4: false, ab5: false, ab6: false, ab7: false, block: false, ang: null, aimX: null, aimY: null };
-const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false,
+const touchKeys = { up: false, down: false, left: false, right: false, attack: false, swap: false, swapPrev: false, special: false, parry: false, super: false, ult: false,
                     ab1: false, ab2: false, ab3: false, ab4: false, ab5: false, ab6: false, ab7: false, block: false, ang: null };
 
 window.addEventListener('keydown', (e) => {
@@ -2560,6 +2567,7 @@ function currentInputs() {
     special: !!keys['ShiftLeft'] || !!keys['ShiftRight'] || touchKeys.special,
     parry:   !!keys['KeyP'] || !!keys['ControlLeft'] || !!keys['ControlRight'] || touchKeys.parry,
     super:   !!keys['KeyR'] || touchKeys.super,
+    ult:     !!keys['KeyU'] || touchKeys.ult,       // a custom weapon's ULTIMATE
     ab1:     !!keys['KeyQ'] || touchKeys.ab1,
     ab2:     !!keys['KeyE'] || touchKeys.ab2,
     ab3:     !!keys['KeyF'] || touchKeys.ab3,
@@ -2781,7 +2789,7 @@ function setupTouchControls() {
   const btnMap = [
     ['btn-up','up'], ['btn-down','down'], ['btn-left','left'],
     ['btn-right','right'], ['btn-attack','attack'], ['btn-next','swap'], ['btn-prev','swapPrev'],
-    ['btn-special','special'], ['btn-parry','parry'], ['btn-super','super'],
+    ['btn-special','special'], ['btn-parry','parry'], ['btn-super','super'], ['btn-ult','ult'],
     ['btn-ab1','ab1'], ['btn-ab2','ab2'], ['btn-ab3','ab3'], ['btn-ab4','ab4'], ['btn-ab5','ab5'], ['btn-ab6','ab6'], ['btn-ab7','ab7'], ['btn-shield','block'],
     ['btn-it1','it1'], ['btn-it2','it2'], ['btn-it3','it3'],
   ];
@@ -3990,7 +3998,7 @@ const LEGEND_MOVES = {
 // Shop-only weapons (the fire glove) you don't own yet: bought with coins,
 // and only once every other weapon is unlocked.
 function legendaryCards(weapons, coins) {
-  const all = Object.values(WEAPON_META);
+  const all = Object.values(WEAPON_META).filter(w => !w.custom);   // a custom weapon is its maker's alone
   const xpIds = all.filter(w => !w.shopOnly).map(w => w.id);
   const have = xpIds.filter(id => weapons.includes(id)).length;
   return all.filter(w => w.shopOnly && !weapons.includes(w.id)).map(w => {
@@ -4740,7 +4748,7 @@ const ABILITY_ICONS = {
   },
 };
 
-const SCREENS = ['suggestScreen', 'friendsScreen', 'settingsScreen', 'startScreen','lobbyScreen','pickScreen','armoryScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','legendScreen','eventsScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen','forgeScreen','tradeScreen'];
+const SCREENS = ['cwScreen', 'suggestScreen', 'friendsScreen', 'settingsScreen', 'startScreen','lobbyScreen','pickScreen','armoryScreen','unlockScreen','roundScreen','disconnectedScreen','skinsScreen','shopScreen','legendScreen','eventsScreen','abilitiesScreen','howtoScreen','botScreen','createRoomScreen','roomsScreen','forgeScreen','tradeScreen'];
 // The main menu is shrunk to whatever the screen allows (never below 45%), so the
 // name and password fields and the mode buttons are all in view on small phones
 // and short windows. Re-measured on resize / rotation / when it is shown.
@@ -5945,7 +5953,7 @@ function drawItemBar(inv, me) {
   const rowW = Math.max(1, inv.length) * (INV_SLOT + INV_GAP) - INV_GAP;
   const x0 = onRight ? HUD_W - INV_X - rowW : INV_X;
   // Below the SUPER and ability bars.
-  const top = INV_Y + (me && me.superMax > 0 ? 7 : 0) + ((me && me.abil) || []).filter(Boolean).length * 7;
+  const top = INV_Y + (me && me.superMax > 0 ? 7 : 0) + (me && me.ultMax > 0 ? 7 : 0) + ((me && me.abil) || []).filter(Boolean).length * 7;
   let y = clearOfButtons(x0 - 2, top - 2, rowW + 4, INV_SLOT + 4) + 2;
   if (y + INV_SLOT + 8 > HUD_H) y = top;
   ctx.save();
@@ -6655,7 +6663,7 @@ function drawRareWeapon(g, id, scale, color) {
 
 function drawWeaponSprite(p, px, py, key) {
   const wId = p.weaponId;
-  if (!WEAPON_ART[wId]) return;
+  if (!WEAPON_ART[wId]) { if (typeof wId === 'string' && wId.startsWith('cw_')) cwFetch(wId); return; }
   const wc = WEAPON_COLOR[wId] || PAL.white;
   const d = p.facing;
   const hx = d === 1 ? px + p.w - 2 : px + 2;   // hand attachment (the front glove)
@@ -8553,6 +8561,12 @@ function drawHUD(state) {
               ready ? 'SUPER' : 'SUP', '#ff8a2a', '#7a3a10', '#2a0e04');
       by += 7;
     }
+    if (mp.ultMax > 0) {
+      const ready = (mp.ultCd || 0) <= 0;
+      drawBar(by, ready ? 1 : Math.max(0, 1 - mp.ultCd / mp.ultMax), ready,
+              ready ? 'U ULTIMATE' : 'ULT ' + Math.ceil(mp.ultCd / 1000) + 's', '#ffe14a', '#7a6a10', '#2a2004');
+      by += 7;
+    }
     // Equipped abilities, labelled with their key.
     (mp.abil || []).forEach((a, i) => {
       if (!a) return;
@@ -8810,7 +8824,7 @@ function drawControlHints() {
   const abil = (me && me.abil) || [];
   const abKeys = abil.map((a, i) => a ? AB_BTN_KEYS[i] : '').filter(Boolean).join('/');
   const t = 'ARROWS MOVE · SPACE ATK · ENTER/Z SWAP · SHIFT SPECIAL · P PARRY · '
-          + (me && me.superMax > 0 ? 'R SUPER · ' : '') + (abKeys ? abKeys + ' ABILITY · ' : '') + '1-4 PICKUPS'
+          + (me && me.superMax > 0 ? 'R SUPER · ' : '') + (me && me.ultMax > 0 ? 'U ULTIMATE · ' : '') + (abKeys ? abKeys + ' ABILITY · ' : '') + '1-4 PICKUPS'
           + ((me && me.tk || []).some(t => Items.usable(Items.BY_ID[t[0]] || {})) ? ' · 5-7 YOUR ITEMS' : '');
   const w = ctx.measureText(t).width;
   ctx.globalAlpha = 0.8;
@@ -11186,4 +11200,277 @@ function syncFreeChat(state) {
   log.innerHTML = state.chatLog.map(m => '<div class="fc-line"><b class="' + m.key + '-color">' + escapeHtml(m.name) + ':</b> ' + escapeHtml(m.text)
     + (m.mine ? '' : ' <button class="fc-rep" title="Report" onclick="reportLine(' + m.mid + ', \'' + escapeHtml(m.name).replace(/'/g, '') + '\')">⚑</button>') + '</div>').join('') || '<div class="fc-line"><i>No messages yet.</i></div>';
   log.scrollTop = log.scrollHeight;
+}
+
+// ─── CUSTOM WEAPONS ──────────────────────────────────────────────────────────
+// Your own weapon (public/customw.js has the rules): a name, a colour, a picture
+// (generated or from an image) and four moves, each borrowed from a real weapon
+// and tuned. The POWER meter is the same sum the server checks.
+const cw = { shape: 'sword', seed: 1, tab: 'gen', tex: null, img: null, mine: [], coins: 0,
+             moves: { atk: { from: 'katana', d: 100, s: 100, r: 100 }, sp: { from: 'katana', d: 100, c: 100 }, su: { from: '', d: 100, c: 100 }, ult: { from: '', part: 'super', d: 100, c: 100 } } };
+const cwById = id => { const w = WEAPON_META[id]; return w && !w.custom ? w : null; };
+const cwKind = k => String(k || '').replace(/([a-z])([A-Z])/g, '$1 $2').toUpperCase();
+
+// A custom weapon in the catalog: its picture becomes weapon art like any other.
+function cwRegisterArt(w) {
+  if (!w || !w.custom || !w.custom.tex || typeof CustomW === 'undefined') return;
+  const a = CustomW.art(w.custom.tex);
+  a.box = measureArt(a.draw);
+  WEAPON_ART[w.id] = a;
+  WEAPON_COLOR[w.id] = w.custom.color;
+  const by = w.custom.by ? ' made by ' + w.custom.by : '';
+  WEAPON_DESC[w.id] = 'A CUSTOM WEAPON' + by;
+  const mv = (lbl, m) => m ? `<b>${lbl}</b> ${cwKind(m.kind)} (${m.dmg} damage, ${Math.round(m.cd / 100) / 10}s)` : '';
+  LEGEND_MOVES[w.id] = [mv('SPECIAL', w.special), mv('SUPER', w.super), mv('ULTIMATE', w.ultimate)].filter(Boolean).join(' · ')
+    + '. It can never be traded or lost.';
+}
+// Someone else's custom weapon, seen in a game for the first time: fetch its picture.
+const cwAsked = new Map();
+let cwAskTimer = 0;
+function cwFetch(id) {
+  if (cwAsked.has(id) && Date.now() - cwAsked.get(id) < 30000) return;
+  cwAsked.set(id, Date.now());
+  clearTimeout(cwAskTimer);
+  cwAskTimer = setTimeout(async () => {
+    const ids = [...cwAsked.keys()].filter(k => !WEAPON_ART[k]);
+    if (!ids.length) return;
+    try {
+      const r = await fetch('/api/customweapon/get', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
+      const d = await r.json();
+      for (const w of d.weapons || []) { WEAPON_META[w.id] = w; cwRegisterArt(w); }
+    } catch {}
+  }, 150);
+}
+
+async function openCustomW() {
+  readCredentials();
+  showScreen('cwScreen');
+  cwMsg('');
+  if (!cw.tex) cw.tex = CustomW.generate(cw.shape, cwVal('cwC1'), cwVal('cwC2'), cwVal('cwC3'), cw.seed);
+  cwBuildShapes(); cwBuildMoves(); cwTexTab(cw.tab); cwDraw(); cwPower();
+  const pw = (document.getElementById('passInput')?.value || '').trim();
+  const mine = document.getElementById('cwMine');
+  if (!pw) { mine.innerHTML = '<span class="cw-no">Type your PASSWORD on the menu first: the weapon is saved to it.</span>'; return; }
+  mine.innerHTML = '<span class="cw-no">Loading...</span>';
+  try {
+    const r = await fetch('/api/profile', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw, localXp: loadLocalXp(pw), localCoins: loadLocalCoins(pw), backup: loadBackup(pw) }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    storeBackup(pw, d.save); applyCatalog(d.catalog, d.colors);
+    cw.coins = d.coins; cw.mine = (d.weapons || []).filter(id => WEAPON_META[id]?.custom);
+    cwRenderMine();
+  } catch { mine.innerHTML = '<span class="cw-no">Could not reach the server.</span>'; }
+}
+function closeCustomW() { showScreen('startScreen'); }
+function cwRenderMine() {
+  const el = document.getElementById('cwMine');
+  const rich = cw.coins >= CustomW.PRICE;
+  el.innerHTML = `<div class="cw-coins">YOU HAVE <b class="${rich ? 'ok' : 'no'}">◆ ${cw.coins.toLocaleString('en-US')}</b> ${rich ? '' : '&middot; you need ◆ ' + CustomW.PRICE.toLocaleString('en-US')}</div>`
+    + (cw.mine.length ? `<div class="cw-own">YOUR CUSTOM WEAPONS (${cw.mine.length}/${CustomW.MAX_OWNED}): ${cw.mine.map(id =>
+      `<span class="cw-chip"><canvas data-weapon="${id}" width="48" height="22"></canvas>${escapeHtml(WEAPON_META[id].name)}</span>`).join('')}</div>` : '');
+  for (const cv of el.querySelectorAll('canvas')) { const g = cv.getContext('2d'); g.imageSmoothingEnabled = false; drawWeaponPixelsFitted(g, cv.dataset.weapon, cv.width / 2, cv.height / 2, cv.width - 4, cv.height - 4, WEAPON_COLOR[cv.dataset.weapon]); }
+}
+function cwMsg(t, bad) { const el = document.getElementById('cwMsg'); el.textContent = t; el.className = 'shop-msg' + (bad ? ' err' : ''); }
+const cwVal = id => document.getElementById(id)?.value || '#ffffff';
+
+// ── the picture ──
+function cwTexTab(t) {
+  cw.tab = t;
+  for (const b of document.querySelectorAll('.cw-tabs button')) b.classList.toggle('on', b.dataset.t === t);
+  document.getElementById('cwGen').classList.toggle('hidden', t !== 'gen');
+  document.getElementById('cwImg').classList.toggle('hidden', t !== 'img');
+  if (t === 'gen') cwRegen(); else if (cw.img) cwLoadImg();
+}
+function cwBuildShapes() {
+  const el = document.getElementById('cwShapes');
+  if (el.childElementCount) return;
+  el.innerHTML = CustomW.SHAPES.map(s => `<button data-s="${s}" onclick="cwShape('${s}')">${s.toUpperCase()}</button>`).join('');
+  cwShape(cw.shape);
+}
+function cwShape(s) { cw.shape = s; for (const b of document.querySelectorAll('#cwShapes button')) b.classList.toggle('on', b.dataset.s === s); cwRegen(); }
+function cwReroll() { cw.seed = 1 + Math.floor(Math.random() * 1e6); cwRegen(); }
+function cwRegen() {
+  if (cw.tab !== 'gen') return;
+  cw.tex = CustomW.generate(cw.shape, cwVal('cwC1'), cwVal('cwC2'), cwVal('cwC3'), cw.seed);
+  cwDraw();
+}
+// An image, shrunk to a pixel weapon: up to 15 colours, see-through where it was
+// (and where the background was, if asked), cropped to what is left.
+function cwLoadImg(file) {
+  const go = img => { cw.img = img; cw.tex = cwFromImage(img, document.getElementById('cwBg').checked); cwDraw();
+    if (!cw.tex) cwMsg('Nothing was left of that picture: try another, or untick REMOVE THE BACKGROUND.', true); else cwMsg(''); };
+  if (!file) { if (cw.img) go(cw.img); return; }
+  if (!/^image\//.test(file.type)) { cwMsg('That is not an image.', true); return; }
+  const url = URL.createObjectURL(file), img = new Image();
+  img.onload = () => { URL.revokeObjectURL(url); go(img); };
+  img.onerror = () => { URL.revokeObjectURL(url); cwMsg('That image could not be read.', true); };
+  img.src = url;
+}
+function cwFromImage(img, noBg) {
+  const T = CustomW.TEX, maxW = 40, maxH = 16;
+  const s = Math.min(maxW / img.width, maxH / img.height);
+  const w = Math.max(T.minW, Math.min(maxW, Math.round(img.width * s))), h = Math.max(T.minH, Math.min(maxH, Math.round(img.height * s)));
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const g = cv.getContext('2d'); g.drawImage(img, 0, 0, w, h);
+  const px = g.getImageData(0, 0, w, h).data;
+  const at = (x, y) => { const i = (y * w + x) * 4; return [px[i], px[i + 1], px[i + 2], px[i + 3]]; };
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const bgs = noBg ? [at(0, 0), at(w - 1, 0), at(0, h - 1), at(w - 1, h - 1)].filter(c => c[3] > 200) : [];
+  const keep = [];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const c = at(x, y);
+    keep.push(c[3] >= 110 && !bgs.some(b => dist(b, c) < 48) ? c : null);
+  }
+  // The 15 most used colours (close ones counted together).
+  const hist = new Map();
+  for (const c of keep) if (c) { const k = (c[0] >> 4) << 8 | (c[1] >> 4) << 4 | (c[2] >> 4); hist.set(k, (hist.get(k) || 0) + 1); }
+  const pal = [];
+  for (const [k] of [...hist].sort((a, b) => b[1] - a[1])) {
+    const c = [((k >> 8) & 15) * 17, ((k >> 4) & 15) * 17, (k & 15) * 17];
+    if (pal.every(p => dist(p, c) > 26)) pal.push(c);
+    if (pal.length >= T.maxPal) break;
+  }
+  if (!pal.length) return null;
+  const idx = keep.map(c => { if (!c) return 0; let bi = 0, bd = 1e9; pal.forEach((p, i) => { const d = dist(p, c); if (d < bd) { bd = d; bi = i; } }); return bi + 1; });
+  // Crop to the picture.
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  idx.forEach((v, i) => { if (!v) return; const x = i % w, y = Math.floor(i / w); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); });
+  if (x1 < 0) return null;
+  const cw2 = Math.max(T.minW, x1 - x0 + 1), ch = Math.max(T.minH, y1 - y0 + 1);
+  let out = '';
+  for (let y = y0; y < y0 + ch; y++) for (let x = x0; x < x0 + cw2; x++) out += (x < w && y < h ? idx[y * w + x] : 0).toString(16);
+  const tex = { w: cw2, h: ch, pal: pal.map(c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join('')), px: out };
+  return CustomW.cleanTex(tex);
+}
+function cwDraw() {
+  const cv = document.getElementById('cwPrev'); if (!cv) return;
+  const g = cv.getContext('2d'), W = cv.width, H = cv.height;
+  g.clearRect(0, 0, W, H);
+  for (let y = 0; y < H; y += 10) for (let x = 0; x < W; x += 10) { g.fillStyle = (x + y) / 10 % 2 ? '#15152a' : '#1c1c34'; g.fillRect(x, y, 10, 10); }
+  const t = cw.tex; if (!t) return;
+  const u = Math.floor(Math.min((W - 20) / t.w, (H - 16) / t.h)), ox = Math.floor((W - t.w * u) / 2), oy = Math.floor((H - t.h * u) / 2);
+  const solid = (x, y) => x >= 0 && y >= 0 && x < t.w && y < t.h && t.px[y * t.w + x] !== '0';
+  g.fillStyle = '#05050b';                // the dark edge every weapon has
+  for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) if (solid(x, y)) g.fillRect(ox + x * u - 2, oy + y * u - 2, u + 4, u + 4);
+  for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) {
+    const i = parseInt(t.px[y * t.w + x], 16); if (!i) continue;
+    g.fillStyle = t.pal[i - 1]; g.fillRect(ox + x * u, oy + y * u, u, u);
+  }
+  g.fillStyle = '#8a8aa8'; g.font = '9px "Courier New",monospace'; g.fillText('◄ GRIP', 4, H - 4);
+}
+
+// ── the moves ──
+const CW_PARTS = [
+  { k: 'atk', lbl: 'ATK', part: null, need: true, note: 'How it attacks: it fights like this weapon.' },
+  { k: 'sp', lbl: 'SPECIAL', part: 'special', need: true, note: 'SHIFT / ✨' },
+  { k: 'su', lbl: 'SUPER', part: 'super', need: false, note: 'R / 💥' },
+  { k: 'ult', lbl: 'ULTIMATE', part: 'any', need: false, note: 'U / 🌟 · the best one: 2.5x the damage, 2.5x the wait' },
+];
+function cwSources(part) {
+  const tierOf = w => w.secret ? 'SECRET' : w.mythic ? 'MYTHIC' : w.uncommon ? 'UNCOMMON' : w.shopOnly ? 'LEGENDARY' : 'COMMON';
+  const out = [];
+  for (const w of Object.values(WEAPON_META)) {
+    if (w.custom) continue;
+    if (part === null) { if (!CustomW.NO_ATK.includes(w.id)) out.push({ v: w.id, t: w.name + ' · ' + w.damage + ' dmg', g: tierOf(w) }); continue; }
+    for (const pt of part === 'any' ? ['special', 'super'] : [part]) {
+      const m = w[pt];
+      if (!m || CustomW.NO_MOVE.includes(m.kind)) continue;
+      out.push({ v: part === 'any' ? w.id + ':' + pt : w.id, t: w.name + ' ' + (part === 'any' ? pt.toUpperCase() + ' ' : '') + '· ' + cwKind(m.kind), g: tierOf(w) });
+    }
+  }
+  const order = ['COMMON', 'UNCOMMON', 'LEGENDARY', 'MYTHIC', 'SECRET'];
+  return order.map(g => [g, out.filter(o => o.g === g)]).filter(([, l]) => l.length);
+}
+function cwBuildMoves() {
+  const el = document.getElementById('cwMoves');
+  if (el.childElementCount) { cwSyncMoves(); return; }
+  el.innerHTML = CW_PARTS.map(P => {
+    const groups = cwSources(P.part).map(([g, l]) => `<optgroup label="${g}">${l.map(o => `<option value="${o.v}">${escapeHtml(o.t)}</option>`).join('')}</optgroup>`).join('');
+    const sl = (key, lbl, lim) => `<label class="cw-sl"><span>${lbl} <b data-v="${P.k}.${key}">100%</b></span><input type="range" min="${lim[0]}" max="${lim[1]}" step="5" value="100" data-k="${P.k}" data-f="${key}" oninput="cwSlide(this)"></label>`;
+    const sliders = P.k === 'atk' ? sl('d', 'DAMAGE', CustomW.LIM.d) + sl('s', 'WAIT', CustomW.LIM.s) + sl('r', 'REACH', CustomW.LIM.r)
+                                  : sl('d', 'DAMAGE', CustomW.LIM.d) + sl('c', 'WAIT', CustomW.LIM.c);
+    return `<div class="cw-move cw-${P.k}"><div class="cw-mh"><b>${P.lbl}</b><small>${P.note}</small></div>
+      <select data-k="${P.k}" onchange="cwPick(this)" aria-label="${P.lbl}">${P.need ? '' : '<option value="">— NONE —</option>'}${groups}</select>
+      <div class="cw-sls">${sliders}</div><div class="cw-res" data-r="${P.k}"></div></div>`;
+  }).join('');
+  cwSyncMoves();
+}
+function cwSyncMoves() {
+  for (const sel of document.querySelectorAll('#cwMoves select')) {
+    const m = cw.moves[sel.dataset.k];
+    sel.value = sel.dataset.k === 'ult' && m.from ? m.from + ':' + m.part : m.from;
+    if (sel.value === '' && sel.dataset.k !== 'su' && sel.dataset.k !== 'ult' && sel.options.length) { sel.selectedIndex = 0; cwPick(sel, true); }
+  }
+  for (const inp of document.querySelectorAll('#cwMoves input[type=range]')) inp.value = cw.moves[inp.dataset.k][inp.dataset.f];
+  cwPower();
+}
+function cwPick(sel, quiet) {
+  const m = cw.moves[sel.dataset.k];
+  if (sel.dataset.k === 'ult') { const [id, pt] = sel.value.split(':'); m.from = id || ''; m.part = pt || 'super'; }
+  else m.from = sel.value;
+  if (!quiet) cwPower();
+}
+function cwSlide(inp) { cw.moves[inp.dataset.k][inp.dataset.f] = +inp.value; cwPower(); }
+function cwSpec() {
+  const M = cw.moves, opt = m => m.from ? m : null;
+  return { name: document.getElementById('cwName').value, color: cwVal('cwColor'), tex: cw.tex,
+           atk: M.atk, sp: M.sp, su: opt(M.su), ult: M.ult.from ? M.ult : null };
+}
+function cwPower() {
+  const spec = cwSpec(), pct = CustomW.powerPct(spec, cwById), lim = CustomW.LIMIT_PCT, top = 200;
+  const fill = document.getElementById('cwBarFill'); if (!fill) return;
+  fill.style.width = Math.min(100, pct / top * 100) + '%';
+  fill.classList.toggle('over', pct > lim);
+  document.getElementById('cwBarRef').style.left = (100 / top * 100) + '%';
+  document.getElementById('cwBarLim').style.left = (lim / top * 100) + '%';
+  document.getElementById('cwPowTxt').innerHTML = `POWER <b class="${pct > lim ? 'no' : 'ok'}">${pct}</b> &middot; FIRE SPEAR (a secret weapon) = 100 &middot; LIMIT <b>${lim}</b>`
+    + (pct > lim ? '<br><span class="no">TOO STRONG: turn something down, or it cannot be made</span>' : pct > 100 ? '<br><span class="ok">STRONGER THAN A SECRET WEAPON</span>' : '');
+  // What each move comes out as.
+  for (const P of CW_PARTS) {
+    const el = document.querySelector(`.cw-res[data-r="${P.k}"]`); if (!el) continue;
+    const m = cw.moves[P.k];
+    for (const b of document.querySelectorAll(`[data-v^="${P.k}."]`)) b.textContent = m[b.dataset.v.split('.')[1]] + '%';
+    const w = cwById(m.from);
+    if (!w) { el.textContent = ''; continue; }
+    if (P.k === 'atk') { el.innerHTML = `= <b>${Math.round(w.damage * m.d / 100)}</b> damage, every <b>${(w.atkSpd * m.s / 100000).toFixed(2)}s</b>, reach <b>${Math.round(w.range * m.r / 100)}</b>`; continue; }
+    const src = w[P.k === 'ult' ? m.part : P.part]; if (!src) { el.textContent = ''; continue; }
+    const dm = P.k === 'ult' ? CustomW.ULT_DMG : 1, cm = P.k === 'ult' ? CustomW.ULT_CD : 1;
+    el.innerHTML = `= <b>${Math.round((src.dmg || 0) * m.d / 100 * dm)}</b> damage, every <b>${Math.max(P.k === 'ult' ? 30 : 0.5, src.cd * m.c / 100 * cm / 1000).toFixed(1)}s</b>`;
+  }
+}
+
+// ── making it ──
+function cwMake() {
+  const pw = (document.getElementById('passInput')?.value || '').trim();
+  if (!pw) { cwMsg('Type your PASSWORD on the menu first: the weapon is saved to it.', true); return; }
+  const r = CustomW.check(cwSpec(), cwById, Object.values(WEAPON_META).map(w => w.name));
+  if (r.error) { cwMsg(r.error === 'TOO STRONG' ? `TOO STRONG (POWER ${r.power}, the limit is ${r.limit}). Turn something down and try again.` : r.error, true); return; }
+  popup({ title: '⚠️ LOSE EVERYTHING?', html: `Making <b>${escapeHtml(r.spec.name)}</b> costs <b style="color:var(--c-gold)">◆ 1,000,000</b> and <b>ALL your progress</b>:`
+      + ' every coin, all your XP, weapons, upgrades, skins, armour, items, abilities and events.<br><br>You keep your name, your friends and this weapon (and any custom weapons you already have).<br><br><b>This cannot be undone.</b>',
+    buttons: [{ label: 'CANCEL' }, { label: 'LOSE EVERYTHING AND CREATE', cls: 'danger', fn: () => cwSend(pw) }] });
+}
+async function cwSend(pw) {
+  const btn = document.getElementById('cwMake');
+  btn.disabled = true; cwMsg('Checking your weapon...');
+  try {
+    const r = await fetch('/api/customweapon/make', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw, name: (document.getElementById('nameInput')?.value || '').trim(), spec: cwSpec(), agree: true,
+                             localXp: loadLocalXp(pw), localCoins: loadLocalCoins(pw), backup: loadBackup(pw) }) });
+    const d = await r.json();
+    if (!r.ok) {
+      cwMsg(d.error === 'TOO STRONG' ? `TOO STRONG (POWER ${d.power}, the limit is ${d.limit}). It was not made and nothing was taken. Try again.` : d.error || 'Something went wrong.', true);
+      return;
+    }
+    if (d.save) storeBackup(pw, d.save);
+    saveLocalXp(pw, 0); saveLocalCoins(pw, 0);
+    if (d.weapon) { WEAPON_META[d.weapon.id] = d.weapon; cwRegisterArt(d.weapon); }
+    cwMsg('');
+    refreshSavedBanner();
+    popup({ title: '⚒️ ' + escapeHtml(d.weapon?.name || 'YOUR WEAPON') + ' IS YOURS', html: `<canvas id="cwDone" width="260" height="90" style="image-rendering:pixelated;display:block;margin:0 auto 8px"></canvas>`
+        + `POWER <b>${d.power}</b>. It is in your weapons now, forever: nobody can trade it or take it.`
+        + (d.weapon?.ultimate ? '<br>Fire its <b>ULTIMATE</b> with <b>U</b> (or the 🌟 button).' : ''), buttons: [{ label: 'OK', fn: () => openCustomW() }] });
+    setTimeout(() => { const c = document.getElementById('cwDone'); if (c && d.weapon) { const g = c.getContext('2d'); g.imageSmoothingEnabled = false; drawWeaponPixelsFitted(g, d.weapon.id, 130, 45, 240, 80, WEAPON_COLOR[d.weapon.id]); } }, 60);
+  } catch { cwMsg('Could not reach the server.', true); }
+  finally { btn.disabled = false; }
 }

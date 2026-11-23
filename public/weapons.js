@@ -1549,6 +1549,7 @@ if (typeof window !== 'undefined') {
   window.WEAPON_ART = WEAPON_ART;
   window.drawWeaponArt = drawWeaponArt;
   window.drawWeaponFitted = drawWeaponFitted;
+  window.measureArt = measureArt;
 }
 
 // ─── Pixel rasterisation ──────────────────────────────────────────────────────
