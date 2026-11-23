@@ -309,6 +309,7 @@
       <div class="cw-row"><input id="cwName" maxlength="16" placeholder="WEAPON NAME" autocomplete="off" spellcheck="false" aria-label="Weapon name">
         <label class="cw-col">EFFECTS <input type="color" id="cwColor" value="#33ffcc" oninput="cwPower()"></label></div>
       <canvas id="cwPrev" data-paint="w" width="400" height="160" aria-label="Your weapon"></canvas>
+      <div id="cwStyleW"></div>
       <div class="arm-tabs cw-tabs"><button data-t="gen" onclick="cwTexTab('gen')">🎲 GENERATE</button><button data-t="draw" onclick="cwTexTab('draw')">✏️ DRAW</button><button data-t="img" onclick="cwTexTab('img')">🖼️ YOUR IMAGE</button></div>
       <div id="cwGen" class="cw-pane">
         <div id="cwShapes" class="cw-shapes"></div>
@@ -318,11 +319,13 @@
       <div id="cwDraw" class="cw-pane hidden">
         <div class="cw-hint">Tap or drag on the picture above to paint it, pixel by pixel. Pick a colour (🎨 changes it), or the eraser.</div>
         <div class="cw-pal" data-pal="w"></div>
+        <div id="cwDrawTools"></div>
         <div class="cw-row"><button class="mode-btn cw-mini" onclick="cwBlank('w')">⬜ START BLANK</button></div>
       </div>
       <div id="cwImg" class="cw-pane hidden">
         <input type="file" id="cwFile" accept="image/*" onchange="cwLoadImg(this.files[0])" aria-label="Your image">
         <label class="cw-chk"><input type="checkbox" id="cwBg" checked onchange="cwLoadImg()"> REMOVE THE BACKGROUND</label>
+        <label class="cw-chk">COLOURS <select id="cwImgCols" onchange="cwLoadImg()"><option value="15">15 (most detail)</option><option value="8">8</option><option value="4">4 (bold)</option><option value="2">2 (silhouette)</option></select></label>
         <div class="cw-hint">Point it to the RIGHT: the left side is where you hold it. It is turned into pixel art (up to 15 colours).</div>
       </div>
       <div class="cw-sec">2 &middot; ITS MOVES <small>BORROW one from a real weapon, or ✏️ BUILD your own: its pattern, effects and the shots it fires (you draw them)</small></div>
@@ -461,7 +464,7 @@
         <div class="howto-sec"><h3>ITEMS</h3>
           <p>In the <b>ARMOURY</b>, under <b>ITEMS</b>: 24 items, bought once and kept for ever, each upgradable to level 3. <b>PASSIVE</b> ones are always on (more health, speed, damage, lifesteal...). <b>ACTIVE</b> ones you use with <b>5</b>, <b>6</b> and <b>7</b> (or their buttons on a phone) and then wait for. <b>ONE-TIME-USE</b> ones work once a match. You start with <b>one item slot</b>; buy up to three in all (500,000 coins each) and pick what to take into a fight. Everyone's items show above their name: tap or click one to see what it does. (Items stay home in minigames and the Saw Room.)</p></div>
         <div class="howto-sec"><h3>CUSTOM WEAPONS</h3>
-          <p>In the 🛒 tab, <b>CUSTOM WEAPON</b>: make your own. Give it a name and a picture (generate one, or use your own image), then pick its moves: <b>ATK</b>, <b>SPECIAL</b>, <b>SUPER</b> and the <b>ULTIMATE</b> (key <b>U</b> or the 🌟 button). Each one is borrowed from a real weapon and tuned, or <b>BUILT</b> by you: a pattern (VOLLEY, RING, RAIN, ORBIT, NOVA, BEAM, DASH), effects (burn, freeze, chain, explode...) and shots with a picture you draw. Then it is checked: if its <b>POWER</b> is over the limit it cannot be made, so turn something down and try again. It costs <b>◆ 1,000,000 and ALL your progress</b> (you keep your name and friends). It can never be traded, bet or lost.</p></div>
+          <p>In the 🛒 tab, <b>CUSTOM WEAPON</b>: make your own. Give it a name and a picture (generate one, or use your own image), then pick its moves: <b>ATK</b>, <b>SPECIAL</b>, <b>SUPER</b> and the <b>ULTIMATE</b> (key <b>U</b> or the 🌟 button). Each one is borrowed from a real weapon and tuned, or <b>BUILT</b> by you: patterns (VOLLEY, RING, RAIN, ORBIT, NOVA, BEAM, DASH, BACKFIRE, MINES, SPIRAL), up to 3 of them one after another as a COMBO (like a DASH, then shots out behind you), effects (burn, freeze, chain, explode...) and shots with a picture you draw. Then it is checked: if its <b>POWER</b> is over the limit it cannot be made, so turn something down and try again. It costs <b>◆ 1,000,000 and ALL your progress</b> (you keep your name and friends). It can never be traded, bet or lost.</p></div>
         <div class="howto-sec"><h3>TEAM ROOMS AND CONDITIONS</h3>
           <p><b>CREATE ROOM</b> can be <b>1v1, 2v1, 3v1 or 2v2</b>. Once everyone is in, the owner (👑) puts each player on team <b>A</b> or <b>B</b> and presses START. Teammates can't hurt each other and share every coin they pick up. The first team to win 3 rounds takes the match.</p>
           <p><b>CONDITIONS</b> (optional): how much each player of a team pays if their team loses (split between the winners; e.g. you alone against three: you pay 10,000 if you lose, they pay 1,000 each if they do), and <b>WEAPONS AT STAKE</b>: everyone puts up a weapon and the winners take the losers'. Everyone has to <b>ACCEPT</b> first, you need a password, and <b>leaving a match part-way loses it</b>. After each match the room goes back to its lobby to agree the next one.</p>

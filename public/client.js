@@ -1136,7 +1136,10 @@ function interpById(prevList, currList, t) {
   for (const e of prevList) byId.set(e.id, e);
   return currList.map(e => {
     const p = byId.get(e.id);
-    return p ? { ...e, x: lerp(p.x, e.x, t), y: lerp(p.y, e.y, t) } : e;
+    if (!p) return e;
+    const out = { ...e, x: lerp(p.x, e.x, t), y: lerp(p.y, e.y, t) };
+    if (e.ob && p.ob) { const d = Math.atan2(Math.sin(e.ob[0] - p.ob[0]), Math.cos(e.ob[0] - p.ob[0])); out.ob = [p.ob[0] + d * t, e.ob[1], e.ob[2]]; }   // an ORBIT shot's angle, smoothly
+    return out;
   });
 }
 
@@ -1319,7 +1322,8 @@ function pinToOwners(state) {
   };
   const fires = (state.fires || []).map(f => { const o = f.fo && at(f.fo); return o ? { ...f, x: o.x, y: o.y } : f; });
   const chains = (state.chains || []).map(ch => { const o = ch.o && at(ch.o); return o ? { ...ch, x1: o.x, y1: o.y } : ch; });
-  return { ...state, fires, chains };
+  const projectiles = (state.projectiles || []).map(pr => { const o = pr.ob && at(pr.ob[2]); return o ? { ...pr, x: o.x + Math.cos(pr.ob[0]) * pr.ob[1], y: o.y + Math.sin(pr.ob[0]) * pr.ob[1] } : pr; });
+  return { ...state, fires, chains, projectiles };
 }
 
 // The Dagger of Ghosts' cloak, predicted: it goes on (or comes off) the moment
@@ -11222,7 +11226,7 @@ function cwRegisterArt(w) {
   WEAPON_COLOR[w.id] = w.custom.color;
   const by = w.custom.by ? ' made by ' + w.custom.by : '';
   WEAPON_DESC[w.id] = 'A CUSTOM WEAPON' + by;
-  const mv = (lbl, m) => m ? `<b>${lbl}</b> ${m.kind === 'cwmove' ? (CustomW.PATS[m.pat]?.n || 'BUILT') + (m.fx && m.fx.length ? ' + ' + m.fx.map(x => CustomW.FX[x].n).join(' + ') : '') : cwKind(m.kind)} (${m.dmg} damage, ${Math.round(m.cd / 100) / 10}s)` : '';
+  const mv = (lbl, m) => m ? `<b>${lbl}</b> ${m.kind === 'cwmove' ? (CustomW.PATS[m.pat]?.n || 'BUILT') + (m.steps && m.steps.length ? ' → ' + m.steps.map(p => CustomW.PATS[p]?.n || p).join(' → ') : '') + (m.fx && m.fx.length ? ' + ' + m.fx.map(x => CustomW.FX[x].n).join(' + ') : '') : cwKind(m.kind)} (${m.dmg} damage, ${Math.round(m.cd / 100) / 10}s)` : '';
   LEGEND_MOVES[w.id] = [mv('SPECIAL', w.special), mv('SUPER', w.super), mv('ULTIMATE', w.ultimate)].filter(Boolean).join(' · ')
     + '. It can never be traded or lost.';
 }
@@ -11250,6 +11254,7 @@ async function openCustomW() {
   cwMsg('');
   if (!cw.tex) cw.tex = CustomW.generate(cw.shape, cwVal('cwC1'), cwVal('cwC2'), cwVal('cwC3'), cw.seed);
   cwBuildShapes(); cwBuildMoves(); cwTexTab(cw.tab); cwDraw(); cwPower();
+  document.getElementById('cwStyleW').innerHTML = cwStylesHtml('w');
   const pw = (document.getElementById('passInput')?.value || '').trim();
   const mine = document.getElementById('cwMine');
   if (!pw) { mine.innerHTML = '<span class="cw-no">Type your PASSWORD on the menu first: the weapon is saved to it.</span>'; return; }
@@ -11284,7 +11289,8 @@ function cwTexTab(t) {
   document.getElementById('cwImg').classList.toggle('hidden', t !== 'img');
   document.getElementById('cwDraw').classList.toggle('hidden', t !== 'draw');
   document.getElementById('cwPrev').classList.toggle('painting', t === 'draw');
-  if (t === 'gen') cwRegen(); else if (t === 'img' && cw.img) cwLoadImg(); else if (t === 'draw') cwPalRefresh('w');
+  if (t === 'gen') cwRegen(); else if (t === 'img' && cw.img) cwLoadImg();
+  else if (t === 'draw') { document.getElementById('cwDrawTools').innerHTML = cwToolsHtml('w'); cwPalRefresh('w'); }
 }
 function cwBuildShapes() {
   const el = document.getElementById('cwShapes');
@@ -11296,13 +11302,14 @@ function cwShape(s) { cw.shape = s; for (const b of document.querySelectorAll('#
 function cwReroll() { cw.seed = 1 + Math.floor(Math.random() * 1e6); cwRegen(); }
 function cwRegen() {
   if (cw.tab !== 'gen') return;
+  if (cw.tex) cwSnap('w');
   cw.tex = CustomW.generate(cw.shape, cwVal('cwC1'), cwVal('cwC2'), cwVal('cwC3'), cw.seed);
   cwDraw();
 }
 // An image, shrunk to a pixel weapon: up to 15 colours, see-through where it was
 // (and where the background was, if asked), cropped to what is left.
 function cwLoadImg(file) {
-  const go = img => { cw.img = img; cw.tex = cwFromImage(img, document.getElementById('cwBg').checked); cwDraw();
+  const go = img => { cwSnap('w'); cw.img = img; cw.tex = cwFromImage(img, document.getElementById('cwBg').checked, CustomW.TEX, 40, 16, +(document.getElementById('cwImgCols')?.value || 15)); cwDraw();
     if (!cw.tex) cwMsg('Nothing was left of that picture: try another, or untick REMOVE THE BACKGROUND.', true); else cwMsg(''); };
   if (!file) { if (cw.img) go(cw.img); return; }
   if (!/^image\//.test(file.type)) { cwMsg('That is not an image.', true); return; }
@@ -11311,7 +11318,7 @@ function cwLoadImg(file) {
   img.onerror = () => { URL.revokeObjectURL(url); cwMsg('That image could not be read.', true); };
   img.src = url;
 }
-function cwFromImage(img, noBg, T = CustomW.TEX, maxW = 40, maxH = 16) {
+function cwFromImage(img, noBg, T = CustomW.TEX, maxW = 40, maxH = 16, maxPal = T.maxPal) {
   const s = Math.min(maxW / img.width, maxH / img.height);
   const w = Math.max(T.minW, Math.min(maxW, Math.round(img.width * s))), h = Math.max(T.minH, Math.min(maxH, Math.round(img.height * s)));
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
@@ -11332,7 +11339,7 @@ function cwFromImage(img, noBg, T = CustomW.TEX, maxW = 40, maxH = 16) {
   for (const [k] of [...hist].sort((a, b) => b[1] - a[1])) {
     const c = [((k >> 8) & 15) * 17, ((k >> 4) & 15) * 17, (k & 15) * 17];
     if (pal.every(p => dist(p, c) > 26)) pal.push(c);
-    if (pal.length >= T.maxPal) break;
+    if (pal.length >= Math.min(T.maxPal, maxPal)) break;
   }
   if (!pal.length) return null;
   const idx = keep.map(c => { if (!c) return 0; let bi = 0, bd = 1e9; pal.forEach((p, i) => { const d = dist(p, c); if (d < bd) { bd = d; bi = i; } }); return bi + 1; });
@@ -11349,8 +11356,9 @@ function cwFromImage(img, noBg, T = CustomW.TEX, maxW = 40, maxH = 16) {
 function cwDraw() { const cv = document.getElementById('cwPrev'); if (cv) cwDrawTex(cv, cw.tex, true); }
 
 // ── the moves ──
-// Each one is BORROWED (a real weapon's move, tuned) or BUILT (a pattern, effects
-// and shots with a picture you make).
+// Each one is BORROWED (a real weapon's move, tuned) or BUILT (patterns, effects
+// and shots with a picture you make). A built move can be a COMBO: up to three
+// patterns one after another (DASH, then BACKFIRE...).
 const CW_PARTS = [
   { k: 'atk', lbl: 'ATK', part: null, need: true, note: 'SPACE / ⚔️ · your normal attack' },
   { k: 'sp', lbl: 'SPECIAL', part: 'special', need: true, note: 'SHIFT / ✨' },
@@ -11358,14 +11366,15 @@ const CW_PARTS = [
   { k: 'ult', lbl: 'ULTIMATE', part: 'any', need: false, note: 'U / 🌟 · the best one' },
 ];
 const CW_BUILD0 = {
-  atk: { style: 'shot', dmg: 30, n: 1, speed: 7, range: 220, wait: 650, spin: false, fx: [] },
-  sp:  { pat: 'volley', dmg: 40, n: 5, range: 260, cd: 8000, dur: 3000, fx: [] },
-  su:  { pat: 'ring', dmg: 60, n: 10, range: 300, cd: 20000, dur: 4000, fx: [] },
-  ult: { pat: 'rain', dmg: 120, n: 8, range: 320, cd: 40000, dur: 5000, fx: [] },
+  atk: { style: 'shot', dmg: 30, n: 1, speed: 7, range: 220, wait: 650, spin: false, sdmg: 20, srange: 220, fx: [] },
+  sp:  { pat: 'volley', dmg: 40, n: 5, range: 260, cd: 8000, dur: 3000, orad: 50, ospin: 32, fx: [], steps: [] },
+  su:  { pat: 'ring', dmg: 60, n: 10, range: 300, cd: 20000, dur: 4000, orad: 60, ospin: 32, fx: [], steps: [] },
+  ult: { pat: 'rain', dmg: 120, n: 8, range: 320, cd: 40000, dur: 5000, orad: 70, ospin: 32, fx: [], steps: [] },
 };
+const CW_STEP0 = { pat: 'backfire', dmg: 30, n: 5, range: 220, dur: 2000, orad: 50, ospin: 32, delay: 250 };
 function cwMoveState(k) {
   const m = cw.moves[k];
-  if (!m.b) m.b = { ...CW_BUILD0[k], fx: [], shot: CustomW.genShot(k === 'atk' ? 'arrow' : k === 'sp' ? 'orb' : k === 'su' ? 'star' : 'flame', cwVal('cwColor'), '#ffffff'), c1: cwVal('cwColor'), c2: '#ffffff' };
+  if (!m.b) m.b = { ...CW_BUILD0[k], fx: [], steps: [], shot: CustomW.genShot(k === 'atk' ? 'arrow' : k === 'sp' ? 'orb' : k === 'su' ? 'star' : 'flame', cwVal('cwColor'), '#ffffff'), c1: cwVal('cwColor'), c2: '#ffffff' };
   if (!m.mode) m.mode = 'borrow';
   return m;
 }
@@ -11390,6 +11399,27 @@ function cwBuildMoves() {
   for (const P of CW_PARTS) cwRenderMove(P.k);
   cwPower();
 }
+const cwSec = v => (v / 1000).toFixed(v < 1000 ? 2 : 1) + 's';
+const cwFmt = (key, v) => /wait|cd|dur|delay/.test(key) ? cwSec(v) : /^[dsrc]$/.test(key) ? v + '%' : key === 'ospin' ? (v / 10).toFixed(1) : v;
+function cwSlider(k, path, lbl, L, step) {
+  const key = path.split('.').pop(), val = cwGet(cw.moves[k], path);
+  return `<label class="cw-sl"><span>${lbl} <b data-v="${k}.${path}">${cwFmt(key, +val)}</b></span><input type="range" min="${L[0]}" max="${L[1]}" step="${step}" value="${val}" data-k="${k}" data-f="${path}" oninput="cwSlide(this)"></label>`;
+}
+const cwGet = (o, path) => path.split('.').reduce((x, p) => x == null ? x : x[p], o);
+function cwPut(o, path, v) { const ps = path.split('.'), last = ps.pop(); const t = ps.reduce((x, p) => x[p], o); t[last] = v; }
+// The sliders one pattern needs (`at` is where its numbers live: 'b' or 'b.steps.0').
+function cwPatSliders(k, at, st, main) {
+  const L = CustomW.B.move, P = CustomW.PATS[st.pat], s = (key, lbl, lim, step) => cwSlider(k, at + '.' + key, lbl, lim, step);
+  return s('dmg', 'DAMAGE', L.dmg, 5) + (P.shots ? s('n', 'SHOTS', L.n, 1) : '') + (st.pat === 'mines' ? '' : s('range', st.pat === 'nova' ? 'SIZE' : 'RANGE', L.range, 10))
+    + (main ? s('cd', 'WAIT', k === 'ult' ? [CustomW.ULT_BUILD_MIN_CD, L.cd[1]] : L.cd, 500) : s('delay', 'AFTER', L.delay, 50))
+    + (['orbit', 'mines', 'spiral'].includes(st.pat) ? s('dur', 'LASTS', L.dur, 250) : '')
+    + (st.pat === 'orbit' ? s('orad', 'CIRCLE SIZE', L.orad, 2) + s('ospin', 'SPIN', L.ospin, 1) : '')
+    + (st.pat === 'mines' ? s('range', 'SPREAD', L.range, 10) : '');
+}
+function cwPatChips(k, at, cur) {
+  return `<div class="cw-chips">${Object.entries(CustomW.PATS).map(([v, p]) =>
+    `<button class="${cur === v ? 'on' : ''}" title="${p.t}" onclick="cwSetPat('${k}','${at}','${v}')">${p.n}</button>`).join('')}</div><div class="cw-hint">${CustomW.PATS[cur].t}</div>`;
+}
 // One move's box, drawn again whenever its kind changes (sliders only update numbers).
 function cwRenderMove(k) {
   const P = CW_PARTS.find(x => x.k === k), m = cwMoveState(k), box = document.querySelector(`.cw-move[data-k="${k}"]`);
@@ -11399,44 +11429,39 @@ function cwRenderMove(k) {
   let body;
   if (m.mode === 'borrow') {
     const groups = cwSources(P.part).map(([g, l]) => `<optgroup label="${g}">${l.map(o => `<option value="${o.v}">${escapeHtml(o.t)}</option>`).join('')}</optgroup>`).join('');
-    const sl = (key, lbl, lim) => cwSlider(k, key, lbl, lim[0], lim[1], 5, m[key], v => v + '%');
+    const sl = (key, lbl, lim) => cwSlider(k, key, lbl, lim, 5);
     body = `<select data-k="${k}" onchange="cwPick(this)" aria-label="${P.lbl}">${P.need ? '' : '<option value="">— NONE —</option>'}${groups}</select>
       <div class="cw-sls">${k === 'atk' ? sl('d', 'DAMAGE', CustomW.LIM.d) + sl('s', 'WAIT', CustomW.LIM.s) + sl('r', 'REACH', CustomW.LIM.r)
                                        : sl('d', 'DAMAGE', CustomW.LIM.d) + sl('c', 'WAIT', CustomW.LIM.c)}</div>`;
   } else {
-    const b = m.b, sec = v => (v / 1000).toFixed(v < 1000 ? 2 : 1) + 's';
-    const s = (key, lbl, L, step, fmt) => cwSlider(k, 'b.' + key, lbl, L[0], L[1], step, b[key], fmt);
-    let shots = true, sliders, kinds;
+    const b = m.b;
+    let shots = true, sliders, kinds, steps = '';
     if (k === 'atk') {
-      const L = b.style === 'swing' ? CustomW.B.swing : CustomW.B.shot;
-      kinds = `<div class="cw-chips">${[['shot', '➶ SHOTS', 'it shoots your projectiles'], ['swing', '⚔ SWING', 'it hits close up']].map(([v, t, d]) =>
+      const L = CustomW.B.swing, Q = CustomW.B.shot, s = (key, lbl, lim, step) => cwSlider(k, 'b.' + key, lbl, lim, step);
+      kinds = `<div class="cw-chips">${[['shot', '➶ SHOTS', 'it shoots your projectiles'], ['swing', '⚔ SWING', 'it hits close up'], ['both', '⚔+➶ SWING + SHOTS', 'it hits close up AND shoots']].map(([v, t, d]) =>
         `<button class="${b.style === v ? 'on' : ''}" title="${d}" onclick="cwSet('${k}','style','${v}')">${t}</button>`).join('')}</div>`;
-      if (b.style === 'swing') {
-        shots = false;
-        sliders = s('dmg', 'DAMAGE', L.dmg, 5) + s('range', 'REACH', L.range, 5) + s('wait', 'WAIT', L.wait, 10, sec)
-          + `<label class="cw-chk"><input type="checkbox" ${b.spin ? 'checked' : ''} onchange="cwSet('${k}','spin',this.checked)"> FULL CIRCLE (hits all round you)</label>`;
-      } else sliders = s('dmg', 'DAMAGE', L.dmg, 5) + s('n', 'SHOTS', L.n, 1) + s('speed', 'SPEED', L.speed, 1) + s('range', 'RANGE', L.range, 10) + s('wait', 'WAIT', L.wait, 10, sec);
+      const spin = `<label class="cw-chk"><input type="checkbox" ${b.spin ? 'checked' : ''} onchange="cwSet('${k}','spin',this.checked)"> FULL CIRCLE (hits all round you)</label>`;
+      if (b.style === 'swing') { shots = false; sliders = s('dmg', 'DAMAGE', L.dmg, 5) + s('range', 'REACH', L.range, 5) + s('wait', 'WAIT', L.wait, 10) + spin; }
+      else if (b.style === 'both') sliders = s('dmg', 'SWING DAMAGE', L.dmg, 5) + s('range', 'REACH', L.range, 5) + s('wait', 'WAIT', L.wait, 10)
+        + s('sdmg', 'SHOT DAMAGE', Q.dmg, 5) + s('n', 'SHOTS', Q.n, 1) + s('speed', 'SPEED', Q.speed, 1) + s('srange', 'SHOT RANGE', Q.range, 10) + spin;
+      else sliders = s('dmg', 'DAMAGE', Q.dmg, 5) + s('n', 'SHOTS', Q.n, 1) + s('speed', 'SPEED', Q.speed, 1) + s('range', 'RANGE', Q.range, 10) + s('wait', 'WAIT', Q.wait, 10);
     } else {
-      const L = CustomW.B.move, pat = CustomW.PATS[b.pat];
-      shots = pat.shots;
-      kinds = `<div class="cw-chips">${Object.entries(CustomW.PATS).map(([v, p]) =>
-        `<button class="${b.pat === v ? 'on' : ''}" title="${p.t}" onclick="cwSet('${k}','pat','${v}')">${p.n}</button>`).join('')}</div><div class="cw-hint">${pat.t}</div>`;
-      const cdL = k === 'ult' ? [CustomW.ULT_BUILD_MIN_CD, L.cd[1]] : L.cd;
-      sliders = s('dmg', 'DAMAGE', L.dmg, 5) + (shots ? s('n', 'SHOTS', L.n, 1) : '') + s('range', b.pat === 'nova' ? 'SIZE' : 'RANGE', L.range, 10)
-        + s('cd', 'WAIT', cdL, 500, sec) + (b.pat === 'orbit' ? s('dur', 'LASTS', L.dur, 500, sec) : '');
+      kinds = cwPatChips(k, 'b', b.pat);
+      sliders = cwPatSliders(k, 'b', b, true);
+      shots = [b, ...b.steps].some(st => CustomW.PATS[st.pat].shots);
+      steps = b.steps.map((st, i) => `<div class="cw-step"><div class="cw-mh"><b>THEN ${i + 2}</b><small>a COMBO: this comes after</small>
+          <button class="cw-x" onclick="cwStepDel('${k}',${i})" aria-label="remove">✕</button></div>${cwPatChips(k, 'b.steps.' + i, st.pat)}
+          <div class="cw-sls">${cwPatSliders(k, 'b.steps.' + i, st, false)}</div></div>`).join('')
+        + (b.steps.length < CustomW.MAX_STEPS - 1 ? `<button class="mode-btn cw-mini cw-add" onclick="cwStepAdd('${k}')">＋ ADD A STEP (COMBO)</button>` : '');
     }
     const fx = !(k === 'atk' && b.style === 'swing') ? `<div class="cw-sub">EFFECTS <small>(up to ${CustomW.MAX_FX})</small></div><div class="cw-chips cw-fx">${Object.entries(CustomW.FX).map(([v, f]) =>
-      `<button class="${b.fx.includes(v) ? 'on' : ''}" title="${f.t}" onclick="cwFx('${k}','${v}')">${f.n}</button>`).join('')}</div>` : '';
-    body = kinds + `<div class="cw-sls">${sliders}</div>` + fx + (shots ? cwShotEditor(k, b) : '');
+      `<button class="${b.fx.includes(v) ? 'on' : ''}" data-fx="${v}" title="${f.t}" onclick="cwFx('${k}','${v}')">${f.n}</button>`).join('')}</div>` : '';
+    body = kinds + `<div class="cw-sls">${sliders}</div>` + steps + fx + (shots ? cwShotEditor(k, b) : '');
   }
   box.innerHTML = head + body + `<div class="cw-res" data-r="${k}"></div>`;
   if (m.mode === 'borrow') { const sel = box.querySelector('select'); sel.value = k === 'ult' && m.from ? m.from + ':' + m.part : m.from;
     if (sel.value === '' && P.need && sel.options.length) { sel.selectedIndex = 0; cwPick(sel, true); } }
   const cv = box.querySelector('canvas.cw-shotcv'); if (cv) cwDrawTex(cv, m.b.shot, false);
-}
-function cwSlider(k, key, lbl, min, max, step, val, fmt) {
-  fmt = fmt || (v => v);
-  return `<label class="cw-sl"><span>${lbl} <b data-v="${k}.${key}">${fmt(+val)}</b></span><input type="range" min="${min}" max="${max}" step="${step}" value="${val}" data-k="${k}" data-f="${key}" oninput="cwSlide(this)"></label>`;
 }
 function cwShotEditor(k, b) {
   return `<div class="cw-sub">ITS SHOTS <small>pick one, then draw on it</small></div>
@@ -11445,16 +11470,18 @@ function cwShotEditor(k, b) {
         <div class="cw-row"><label>MAIN <input type="color" value="${b.c1}" onchange="cwShotCol('${k}',1,this.value)"></label><label>SECOND <input type="color" value="${b.c2}" onchange="cwShotCol('${k}',2,this.value)"></label></div>
         ${cwPalHtml(k, b.shot)}
         <div class="cw-row"><button class="mode-btn cw-mini" onclick="cwBlank('${k}')">⬜ BLANK</button><label class="mode-btn cw-mini cw-up">🖼️ IMAGE<input type="file" accept="image/*" onchange="cwShotImg('${k}',this.files[0])"></label></div>
-      </div></div>`;
+      </div></div>${cwToolsHtml(k)}${cwStylesHtml(k)}`;
 }
-const cwFmt = (key, v) => /wait|cd|dur/.test(key) ? (v / 1000).toFixed(v < 1000 ? 2 : 1) + 's' : /^[dsrc]$/.test(key) ? v + '%' : v;
 function cwMode(k, mode) { cwMoveState(k).mode = mode; cwRenderMove(k); cwPower(); }
-function cwSet(k, key, v) { const b = cwMoveState(k).b; b[key] = v; if (key === 'style' || key === 'pat') cwRenderMove(k); cwPower(); }
+function cwSet(k, key, v) { const b = cwMoveState(k).b; b[key] = v; if (key === 'style') cwRenderMove(k); cwPower(); }
+function cwSetPat(k, at, v) { cwPut(cwMoveState(k), at + '.pat', v); cwRenderMove(k); cwPower(); }
+function cwStepAdd(k) { const b = cwMoveState(k).b; if (b.steps.length < CustomW.MAX_STEPS - 1) b.steps.push({ ...CW_STEP0, pat: b.pat === 'dash' ? 'backfire' : 'nova' }); cwRenderMove(k); cwPower(); }
+function cwStepDel(k, i) { cwMoveState(k).b.steps.splice(i, 1); cwRenderMove(k); cwPower(); }
 function cwFx(k, v) {
   const b = cwMoveState(k).b;
   if (b.fx.includes(v)) b.fx = b.fx.filter(x => x !== v);
   else { if (b.fx.length >= CustomW.MAX_FX) b.fx.shift(); b.fx.push(v); }
-  for (const btn of document.querySelectorAll(`.cw-move[data-k="${k}"] .cw-fx button`)) btn.classList.toggle('on', b.fx.includes(btn.getAttribute('onclick').match(/'(\w+)'\)$/)[1]));
+  for (const btn of document.querySelectorAll(`.cw-move[data-k="${k}"] .cw-fx button`)) btn.classList.toggle('on', b.fx.includes(btn.dataset.fx));
   cwPower();
 }
 function cwPick(sel, quiet) {
@@ -11465,14 +11492,14 @@ function cwPick(sel, quiet) {
 }
 function cwSlide(inp) {
   const m = cw.moves[inp.dataset.k], f = inp.dataset.f;
-  if (f.startsWith('b.')) m.b[f.slice(2)] = +inp.value; else m[f] = +inp.value;
-  const lbl = document.querySelector(`[data-v="${inp.dataset.k}.${f}"]`); if (lbl) lbl.textContent = cwFmt(f.replace('b.', ''), +inp.value);
+  cwPut(m, f, +inp.value);
+  const lbl = document.querySelector(`[data-v="${inp.dataset.k}.${f}"]`); if (lbl) lbl.textContent = cwFmt(f.split('.').pop(), +inp.value);
   cwPower();
 }
 function cwSpec() {
   const one = k => {
     const m = cwMoveState(k);
-    if (m.mode === 'build') { const { c1, c2, ...b } = m.b; return { mode: 'build', ...b }; }
+    if (m.mode === 'build') { const { c1, c2, ...b } = m.b; void c1; void c2; return { mode: 'build', ...b }; }
     if (!m.from) return null;
     return k === 'atk' ? { from: m.from, d: m.d, s: m.s, r: m.r } : { from: m.from, d: m.d, c: m.c, ...(k === 'ult' ? { part: m.part } : {}) };
   };
@@ -11487,15 +11514,18 @@ function cwPower() {
   document.getElementById('cwBarLim').style.left = (lim / top * 100) + '%';
   document.getElementById('cwPowTxt').innerHTML = `POWER <b class="${pct > lim ? 'no' : 'ok'}">${pct}</b> &middot; FIRE SPEAR (a secret weapon) = 100 &middot; LIMIT <b>${lim}</b>`
     + (pct > lim ? '<br><span class="no">TOO STRONG: turn something down, or it cannot be made</span>' : pct > 100 ? '<br><span class="ok">STRONGER THAN A SECRET WEAPON</span>' : '');
-  const sec = v => (v / 1000).toFixed(v < 1000 ? 2 : 1) + 's';
   for (const P of CW_PARTS) {
     const el = document.querySelector(`.cw-res[data-r="${P.k}"]`); if (!el) continue;
     const m = cw.moves[P.k];
     if (m.mode === 'build') {
       const b = m.b, fx = (b.fx || []).map(x => CustomW.FX[x].n).join(' + ');
-      if (P.k === 'atk') el.innerHTML = b.style === 'swing' ? `= <b>${b.dmg}</b> damage, every <b>${sec(b.wait)}</b>, reach <b>${b.range}</b>${b.spin ? ', all round you' : ''}`
-        : `= <b>${b.dmg}</b> damage × <b>${b.n}</b> shot${b.n > 1 ? 's' : ''}, every <b>${sec(b.wait)}</b>, range <b>${b.range}</b>${fx ? ' · ' + fx : ''}`;
-      else el.innerHTML = `= ${CustomW.PATS[b.pat].n}: <b>${b.dmg}</b> damage${CustomW.PATS[b.pat].shots ? ` × <b>${b.n}</b> shots` : ''}, every <b>${sec(Math.max(P.k === 'ult' ? CustomW.ULT_BUILD_MIN_CD : 0, b.cd))}</b>${fx ? ' · ' + fx : ''}`;
+      if (P.k === 'atk') el.innerHTML = b.style === 'swing' ? `= <b>${b.dmg}</b> damage, every <b>${cwSec(b.wait)}</b>, reach <b>${b.range}</b>${b.spin ? ', all round you' : ''}`
+        : b.style === 'both' ? `= a <b>${b.dmg}</b> swing + <b>${b.sdmg}</b> × <b>${b.n}</b> shot${b.n > 1 ? 's' : ''}, every <b>${cwSec(b.wait)}</b>${fx ? ' · ' + fx : ''}`
+        : `= <b>${b.dmg}</b> damage × <b>${b.n}</b> shot${b.n > 1 ? 's' : ''}, every <b>${cwSec(b.wait)}</b>, range <b>${b.range}</b>${fx ? ' · ' + fx : ''}`;
+      else {
+        const part = st => `${CustomW.PATS[st.pat].n} <b>${st.dmg}</b>${CustomW.PATS[st.pat].shots ? `×<b>${st.n}</b>` : ''}`;
+        el.innerHTML = `= ${[b, ...b.steps].map(part).join(' → ')}, every <b>${cwSec(Math.max(P.k === 'ult' ? CustomW.ULT_BUILD_MIN_CD : 0, b.cd))}</b>${fx ? ' · ' + fx : ''}`;
+      }
       continue;
     }
     const w = cwById(m.from);
@@ -11509,20 +11539,96 @@ function cwPower() {
 
 // ── drawing: the weapon (scope 'w') and each move's shots (scope = its key) ──
 const cwPaintSel = {};
+const cwTool = { tool: 'pen', size: 1 };
+const cwHist = {};
 const cwTexOf = s => s === 'w' ? cw.tex : cwMoveState(s).b.shot;
 function cwTexSet(s, t) { if (s === 'w') cw.tex = t; else cwMoveState(s).b.shot = t; }
 const cwLimOf = s => s === 'w' ? CustomW.TEX : CustomW.SHOT;
+// Undo: a copy of the picture before each change.
+function cwSnap(s) { const h = cwHist[s] = cwHist[s] || { u: [], r: [] }; const t = cwTexOf(s); if (!t) return; h.u.push(JSON.stringify(t)); if (h.u.length > 40) h.u.shift(); h.r = []; }
+function cwUndo(s, redo) {
+  const h = cwHist[s]; if (!h) return;
+  const from = redo ? h.r : h.u, to = redo ? h.u : h.r;
+  if (!from.length) return;
+  to.push(JSON.stringify(cwTexOf(s)));
+  cwTexSet(s, JSON.parse(from.pop()));
+  cwPalRefresh(s); cwRedraw(s);
+}
 function cwPalHtml(s, t) {
   const sel = cwPaintSel[s] ?? 1;
   return `<div class="cw-pal" data-pal="${s}">${(t?.pal || []).map((c, i) => `<button class="${sel === i + 1 ? 'on' : ''}" style="background:${c}" onclick="cwPalPick('${s}',${i + 1})" aria-label="colour ${i + 1}"></button>`).join('')}`
     + `<button class="cw-erase ${sel === 0 ? 'on' : ''}" onclick="cwPalPick('${s}',0)" title="eraser">⌫</button>`
     + `<label class="cw-palset" title="change the picked colour (or add one)">🎨<input type="color" value="${t?.pal?.[(sel || 1) - 1] || '#ffffff'}" onchange="cwPalSet('${s}',this.value)"></label></div>`;
 }
-function cwPalRefresh(s) { const el = document.querySelector(`.cw-pal[data-pal="${s}"]`); if (el) el.outerHTML = cwPalHtml(s, cwTexOf(s)); }
+function cwToolsHtml(s) {
+  const t = cwTexOf(s) || { w: 0, h: 0 }, L = cwLimOf(s);
+  const tb = (v, lbl, title) => `<button data-tool="${v}" class="${cwTool.tool === v ? 'on' : ''}" title="${title}" onclick="cwSetTool('${v}')">${lbl}</button>`;
+  const sz = n => `<button data-size="${n}" class="${cwTool.size === n ? 'on' : ''}" title="brush ${n}x${n}" onclick="cwSetSize(${n})">${n}</button>`;
+  const act = (a, lbl, title) => `<button title="${title}" onclick="cwAct('${s}','${a}')">${lbl}</button>`;
+  return `<div class="cw-tools" data-tools="${s}">
+      <div class="cw-chips">${tb('pen', '✏️ PEN', 'paint pixels')}${tb('fill', '🪣 FILL', 'fill an area of one colour')}${tb('pick', '💧 PICK', 'pick a colour from the picture')}
+        <span class="cw-tlbl">SIZE</span>${sz(1)}${sz(2)}${sz(3)}</div>
+      <div class="cw-chips">${act('undo', '↶ UNDO', 'undo')}${act('redo', '↷ REDO', 'redo')}${act('fliph', '⇆ FLIP', 'mirror left-right')}${act('flipv', '⇅ FLIP', 'mirror up-down')}
+        ${act('left', '◀', 'move left')}${act('up', '▲', 'move up')}${act('down', '▼', 'move down')}${act('right', '▶', 'move right')}
+        ${act('outline', '▢ OUTLINE', 'a dark edge around it')}${act('clear', '🗑 CLEAR', 'wipe it')}</div>
+      <div class="cw-row cw-size">SIZE <input type="number" min="${L.minW}" max="${L.maxW}" value="${t.w}" data-dim="w" aria-label="width"> × <input type="number" min="${L.minH}" max="${L.maxH}" value="${t.h}" data-dim="h" aria-label="height">
+        <button class="mode-btn cw-mini" onclick="cwResize('${s}')">RESIZE</button></div>
+    </div>`;
+}
+function cwStylesHtml(s) {
+  return `<div class="cw-sub">STYLE <small>a new look for its colours (UNDO puts it back)</small></div><div class="cw-chips cw-styles">${Object.entries(CustomW.STYLES).map(([v, st]) =>
+    `<button onclick="cwStyle('${s}','${v}')">${st.n}</button>`).join('')}</div>`;
+}
+function cwSetTool(v) { cwTool.tool = v; for (const b of document.querySelectorAll('.cw-tools [data-tool]')) b.classList.toggle('on', b.dataset.tool === v); }
+function cwSetSize(n) { cwTool.size = n; for (const b of document.querySelectorAll('.cw-tools [data-size]')) b.classList.toggle('on', +b.dataset.size === n); }
+function cwStyle(s, v) { const t = cwTexOf(s); if (!t) return; cwSnap(s); cwTexSet(s, CustomW.restyle(t, v)); cwPalRefresh(s); cwRedraw(s); }
+function cwAct(s, a) {
+  if (a === 'undo' || a === 'redo') { cwUndo(s, a === 'redo'); return; }
+  const t = cwTexOf(s); if (!t) return;
+  cwSnap(s);
+  const { w, h } = t, at = (x, y) => t.px[y * w + x], out = [];
+  const remap = f => { for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) out.push(f(x, y)); return out.join(''); };
+  let px = t.px, pal = t.pal;
+  if (a === 'fliph') px = remap((x, y) => at(w - 1 - x, y));
+  else if (a === 'flipv') px = remap((x, y) => at(x, h - 1 - y));
+  else if (a === 'left' || a === 'right' || a === 'up' || a === 'down') {
+    const dx = a === 'left' ? 1 : a === 'right' ? -1 : 0, dy = a === 'up' ? 1 : a === 'down' ? -1 : 0;
+    px = remap((x, y) => at((x + dx + w) % w, (y + dy + h) % h));
+  } else if (a === 'clear') px = '0'.repeat(w * h);
+  else if (a === 'outline') {
+    // The darkest colour edges it (a near-black one is added if none is dark enough).
+    let dark = 0, dl = 2;
+    pal.forEach((c, i) => { const n = parseInt(c.slice(1), 16), l = ((n >> 16) * 3 + ((n >> 8) & 255) * 6 + (n & 255)) / 2550; if (l < dl) { dl = l; dark = i + 1; } });
+    if (dl > 0.25 && pal.length < cwLimOf(s).maxPal) { pal = [...pal, '#101018']; dark = pal.length; }
+    const solid = (x, y) => x >= 0 && y >= 0 && x < w && y < h && at(x, y) !== '0';
+    px = remap((x, y) => at(x, y) !== '0' ? at(x, y) : (solid(x - 1, y) || solid(x + 1, y) || solid(x, y - 1) || solid(x, y + 1)) ? dark.toString(16) : '0');
+  }
+  cwTexSet(s, { ...t, px, pal });
+  cwPalRefresh(s); cwRedraw(s);
+}
+function cwResize(s) {
+  const t = cwTexOf(s), box = document.querySelector(`.cw-tools[data-tools="${s}"]`); if (!t || !box) return;
+  const L = cwLimOf(s);
+  const nw = Math.max(L.minW, Math.min(L.maxW, Math.round(+box.querySelector('[data-dim="w"]').value) || t.w));
+  const nh = Math.max(L.minH, Math.min(L.maxH, Math.round(+box.querySelector('[data-dim="h"]').value) || t.h));
+  cwSnap(s);
+  const oy = Math.round((nh - t.h) / 2);       // kept in the middle, top to bottom; the grip stays on the left
+  let px = '';
+  for (let y = 0; y < nh; y++) for (let x = 0; x < nw; x++) { const sy = y - oy; px += x < t.w && sy >= 0 && sy < t.h ? t.px[sy * t.w + x] : '0'; }
+  cwTexSet(s, { ...t, w: nw, h: nh, px });
+  box.querySelector('[data-dim="w"]').value = nw; box.querySelector('[data-dim="h"]').value = nh;
+  cwRedraw(s);
+}
+function cwPalRefresh(s) {
+  const el = document.querySelector(`.cw-pal[data-pal="${s}"]`); if (el) el.outerHTML = cwPalHtml(s, cwTexOf(s));
+  const t = cwTexOf(s), box = document.querySelector(`.cw-tools[data-tools="${s}"]`);
+  if (t && box) { box.querySelector('[data-dim="w"]').value = t.w; box.querySelector('[data-dim="h"]').value = t.h; }
+}
 function cwPalPick(s, i) { cwPaintSel[s] = i; cwPalRefresh(s); }
 function cwPalSet(s, c) {
   const t = cwTexOf(s); if (!t) return;
   let i = cwPaintSel[s] ?? 1;
+  cwSnap(s);
   if (i === 0 || i > t.pal.length) { if (t.pal.length >= cwLimOf(s).maxPal) { cwMsg('No room for more colours: change one instead.', true); return; } t.pal.push(c); i = t.pal.length; }
   else t.pal[i - 1] = c;
   cwPaintSel[s] = i;
@@ -11533,16 +11639,17 @@ function cwBlank(s) {
   s = s || 'w';
   const old = cwTexOf(s), L = s === 'w' ? { w: 40, h: 16 } : { w: 16, h: 12 };
   const pal = old?.pal?.length ? old.pal.slice() : ['#ffffff'];
+  cwSnap(s);
   cwTexSet(s, { w: L.w, h: L.h, pal, px: '0'.repeat(L.w * L.h) });
   cwPaintSel[s] = 1; cwPalRefresh(s); cwRedraw(s);
 }
-function cwShotShape(k, shape) { const b = cwMoveState(k).b; b.shot = CustomW.genShot(shape, b.c1, b.c2); cwPalRefresh(k); cwRedraw(k); }
+function cwShotShape(k, shape) { const b = cwMoveState(k).b; cwSnap(k); b.shot = CustomW.genShot(shape, b.c1, b.c2); cwPalRefresh(k); cwRedraw(k); }
 function cwShotCol(k, which, c) { const b = cwMoveState(k).b; b['c' + which] = c; }
 function cwShotImg(k, file) {
   if (!file || !/^image\//.test(file.type)) return;
   const url = URL.createObjectURL(file), img = new Image();
   img.onload = () => { URL.revokeObjectURL(url); const t = cwFromImage(img, true, CustomW.SHOT, 16, 12);
-    if (!t) { cwMsg('Nothing was left of that picture.', true); return; } cwMoveState(k).b.shot = t; cwPalRefresh(k); cwRedraw(k); cwMsg(''); };
+    if (!t) { cwMsg('Nothing was left of that picture.', true); return; } cwSnap(k); cwMoveState(k).b.shot = t; cwPalRefresh(k); cwRedraw(k); cwMsg(''); };
   img.src = url;
 }
 // Draw a pixel picture into a canvas, as big as fits; remembers where, for painting.
@@ -11551,7 +11658,7 @@ function cwDrawTex(cv, t, grip) {
   g.clearRect(0, 0, W, H);
   for (let y = 0; y < H; y += 10) for (let x = 0; x < W; x += 10) { g.fillStyle = (x + y) / 10 % 2 ? '#15152a' : '#1c1c34'; g.fillRect(x, y, 10, 10); }
   if (!t) return;
-  const u = Math.max(1, Math.floor(Math.min((W - 12) / t.w, (H - 12) / t.h))), ox = Math.floor((W - t.w * u) / 2), oy = Math.floor((H - t.h * u) / 2);
+  const u = Math.max(1, Math.floor(Math.min((W - 12) / t.w, (H - 16) / t.h))), ox = Math.floor((W - t.w * u) / 2), oy = Math.floor((H - 6 - t.h * u) / 2);
   cv._geo = { u, ox, oy };
   g.strokeStyle = 'rgba(255,255,255,0.07)'; g.lineWidth = 1;          // the grid you paint on
   for (let x = 0; x <= t.w; x++) { g.beginPath(); g.moveTo(ox + x * u + 0.5, oy); g.lineTo(ox + x * u + 0.5, oy + t.h * u); g.stroke(); }
@@ -11564,25 +11671,38 @@ function cwDrawTex(cv, t, grip) {
     const i = parseInt(t.px[y * t.w + x], 16); if (!i) continue;
     g.fillStyle = t.pal[i - 1]; g.fillRect(ox + x * u, oy + y * u, u, u);
   }
-  if (grip) { g.fillStyle = '#8a8aa8'; g.font = '9px "Courier New",monospace'; g.fillText('◄ GRIP', 4, H - 4); }
-  else { g.fillStyle = '#8a8aa8'; g.font = '9px "Courier New",monospace'; g.fillText('FLIES ►', W - 46, H - 4); }
+  g.fillStyle = '#8a8aa8'; g.font = '9px "Courier New",monospace';
+  if (grip) g.fillText('◄ GRIP', 4, H - 3); else g.fillText('FLIES ►', W - 46, H - 3);
 }
 let cwPainting = null;
 function cwPaintEv(e) {
   if (e.type === 'pointerup' || e.type === 'pointercancel') { cwPainting = null; return; }
   const cv = e.target && e.target.closest ? e.target.closest('canvas[data-paint]') : null;
-  if (e.type === 'pointerdown') { if (!cv) return; cwPainting = cv; try { cv.setPointerCapture(e.pointerId); } catch {} }
+  const down = e.type === 'pointerdown';
+  if (down) { if (!cv) return; if (cv.dataset.paint === 'w' && cw.tab !== 'draw') return; cwPainting = cv; try { cv.setPointerCapture(e.pointerId); } catch {} }
   const c = cwPainting; if (!c || (cv && cv !== c)) return;
   const s = c.dataset.paint;
-  if (s === 'w' && cw.tab !== 'draw') return;
   const t = cwTexOf(s), geo = c._geo; if (!t || !geo) return;
   const r = c.getBoundingClientRect(), k = c.width / r.width;
   const x = Math.floor(((e.clientX - r.left) * k - geo.ox) / geo.u), y = Math.floor(((e.clientY - r.top) * k - geo.oy) / geo.u);
   if (x < 0 || y < 0 || x >= t.w || y >= t.h) return;
-  const i = Math.min(cwPaintSel[s] ?? 1, t.pal.length), at = y * t.w + x, ch = i.toString(16);
-  if (t.px[at] === ch) return;
-  t.px = t.px.slice(0, at) + ch + t.px.slice(at + 1);
   e.preventDefault();
+  const idx = Math.min(cwPaintSel[s] ?? 1, t.pal.length), ch = idx.toString(16);
+  if (cwTool.tool === 'pick') { if (down) { cwPaintSel[s] = parseInt(t.px[y * t.w + x], 16); cwPalRefresh(s); cwSetTool('pen'); } cwPainting = null; return; }
+  if (cwTool.tool === 'fill') {
+    if (!down) return;
+    const from = t.px[y * t.w + x]; if (from === ch) return;
+    cwSnap(s);
+    const px = t.px.split(''), todo = [[x, y]];
+    while (todo.length) { const [qx, qy] = todo.pop(); if (qx < 0 || qy < 0 || qx >= t.w || qy >= t.h || px[qy * t.w + qx] !== from) continue; px[qy * t.w + qx] = ch; todo.push([qx + 1, qy], [qx - 1, qy], [qx, qy + 1], [qx, qy - 1]); }
+    t.px = px.join(''); cwPainting = null; cwRedraw(s); return;
+  }
+  if (down) cwSnap(s);
+  const px = t.px.split(''), n = cwTool.size, o = Math.floor((n - 1) / 2);
+  let changed = false;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const qx = x - o + i, qy = y - o + j; if (qx >= 0 && qy >= 0 && qx < t.w && qy < t.h && px[qy * t.w + qx] !== ch) { px[qy * t.w + qx] = ch; changed = true; } }
+  if (!changed) return;
+  t.px = px.join('');
   cwRedraw(s);
 }
 for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) document.addEventListener(ev, cwPaintEv, { passive: false });

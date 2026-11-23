@@ -2321,3 +2321,16 @@ canvas.cw-shotcv { width: 192px; max-width: 100%; image-rendering: pixelated; bo
 .cw-palset input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
 .cw-up { position: relative; overflow: hidden; display: inline-flex; align-items: center; cursor: pointer; }
 .cw-up input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+/* ── Custom weapons: combos, drawing tools, styles ── */
+.cw-step { border: 1px dashed #6a5aa0; border-radius: 8px; padding: 6px; margin: 6px 0; background: rgba(60, 30, 100, 0.18); }
+.cw-step .cw-mh b { color: #c8a8ff; font-size: 11px; }
+.cw-x { margin-left: auto; border: 1px solid #8a4a5a; background: #2a1018; color: #ffb0b0; border-radius: 6px; cursor: pointer; font-weight: bold; padding: 2px 8px; }
+.mode-btn.cw-add { align-self: flex-start; margin: 4px 0; }
+.cw-tools { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.cw-tools .cw-chips { margin: 2px 0; }
+.cw-tlbl { font-size: 10px; color: #9a9ac0; align-self: center; margin-left: 6px; }
+.cw-size { font-size: 10px; color: #c8c8e8; }
+.cw-size input { width: 52px; min-height: 26px; border-radius: 6px; border: 1px solid #6a6a9a; background: #0b0b18; color: #fff; font: 11px 'Courier New', monospace; padding: 0 4px; }
+.cw-styles button { background: #1a1a30; }
+#cwImgCols { min-height: 26px; border-radius: 6px; border: 1px solid #6a6a9a; background: #0b0b18; color: #fff; font: 11px 'Courier New', monospace; }

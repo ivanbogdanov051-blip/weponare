@@ -5256,6 +5256,7 @@ function tickRoom(dt) {
     }
     if (room.inputs[key].ab7 && p.fgAb) useForgeAbility(p, key);
     if (p.tk) itemsTick(p, key, dt);
+    if (p.cwQ && p.cwQ.length) cwQueueTick(p, key, dt);   // a custom weapon's COMBO steps
     if (room.parryJustPressed[key] && p.parryCooldown <= 0) {
       startParry(p);
     }
@@ -5997,7 +5998,7 @@ function attackMove(p, pKey) {
   // Any attack can swat an enemy's fire hand out of the air.
   swatFireHands(p, pKey, w.type === 'melee' ? w.range : 48);
   swatShots(p, w.type === 'melee' ? w.range + 10 : 44);
-  if (w.cwShot) { cwAttack(p, pKey, w, dmgMult); return; }
+  if (w.cwShot) { cwAttack(p, pKey, w, dmgMult); if (!w.cwShot.swing) return; }   // SWING + SHOTS goes on to swing too
   if (w.infinityShot) { infinityAttack(p, pKey, w, dmgMult); return; }
   if (w.kunaiOrbit) { darklightAttack(p, pKey, w, dmgMult); return; }
   if (w.starStaff) { starAttack(p, pKey, w, dmgMult); return; }
@@ -6225,7 +6226,7 @@ function cwAttack(p, pKey, w, dmgMult) {
   const s = w.cwShot, n = s.n + (w.multi || 0), aim = nearestTargetAngle(p, pKey);
   p.facing = Math.cos(aim) < 0 ? -1 : 1;
   const spread = n > 1 ? Math.min(0.9, 0.14 * (n - 1)) : 0;
-  for (let i = 0; i < n; i++) cwShoot(pKey, w.id, 'atk', cx(p), cy(p), aim + (n > 1 ? -spread / 2 + spread * i / (n - 1) : 0), s.speed, w.range, Math.round(w.damage * dmgMult), s.fx);
+  for (let i = 0; i < n; i++) cwShoot(pKey, w.id, 'atk', cx(p), cy(p), aim + (n > 1 ? -spread / 2 + spread * i / (n - 1) : 0), s.speed, s.range || w.range, Math.round((s.dmg || w.damage) * dmgMult), s.fx);
 }
 function cwOrbitStep(proj, dt) {
   const o = room.players[proj.owner];
@@ -6239,49 +6240,85 @@ function cwOrbitStep(proj, dt) {
   if (proj.recycle > 500 && proj.hitTargets) { proj.hitTargets.clear(); proj.recycle = 0; }   // the same foe again, twice a second
   return true;
 }
+// A built move: its first pattern now, then each COMBO step after its wait.
 function cwCast(p, pKey, m, dmg) {
+  const mult = m.dmg ? dmg / m.dmg : 1;
+  cwStep(p, pKey, m, m, dmg);
+  let at = 0;
+  for (const st of m.steps || []) {
+    at += st.delay || 0;
+    const run = () => { if (!p.dead && room.players[pKey] === p) cwStep(p, pKey, m, st, Math.round(st.dmg * mult)); };
+    if (at <= 0) run(); else (p.cwQ = p.cwQ || []).push({ at, run });
+  }
+}
+// Steps waiting their turn (and SPIRAL's shots, one after another).
+function cwQueueTick(p, key, dt) {
+  if (p.dead) { p.cwQ = null; return; }
+  const due = [];
+  for (const e of p.cwQ) { e.at -= dt; if (e.at <= 0) due.push(e); }
+  p.cwQ = p.cwQ.filter(e => e.at > 0);
+  for (const e of due) e.run();
+}
+function cwStep(p, pKey, m, st, dmg) {
   const wid = weapon(p).id, col = WEAPON_COLORS[wid] || '#ffffff', px = cx(p), py = cy(p);
   const fx = cwFx(m.fx, dmg);
   const hitAll = list => { for (const t of list) { strikeTarget(t, dmg, pKey); if (!t.dead) onHitExtras({ owner: pKey, x: cx(t), y: cy(t), dx: 1, dy: 0, damage: dmg, weaponId: 'cwp', ...fx }, t); } };
   const aim = nearestTargetAngle(p, pKey);
   p.facing = Math.cos(aim) < 0 ? -1 : 1;
   const shoot = (x, y, a, speed, range, extra, fxList) => cwShoot(pKey, wid, m.slot, x, y, a, speed, range, dmg, fxList || m.fx, extra);
-  if (m.pat === 'volley') {
-    const spread = m.n > 1 ? Math.min(1.4, 0.16 * (m.n - 1)) : 0;
-    for (let i = 0; i < m.n; i++) shoot(px, py, aim + (m.n > 1 ? -spread / 2 + spread * i / (m.n - 1) : 0), 7, m.range);
-  } else if (m.pat === 'ring') {
-    for (let i = 0; i < m.n; i++) shoot(px, py, aim + i / m.n * Math.PI * 2, 6, m.range);
-  } else if (m.pat === 'rain') {
-    const foes = enemyTargets(pKey).filter(t => Math.hypot(cx(t) - px, cy(t) - py) <= m.range)
+  const fan = (a0, n, wide) => { const spread = n > 1 ? Math.min(wide, 0.16 * (n - 1)) : 0; for (let i = 0; i < n; i++) shoot(px, py, a0 + (n > 1 ? -spread / 2 + spread * i / (n - 1) : 0), 7, st.range); };
+  if (st.pat === 'volley') fan(aim, st.n, 1.4);
+  else if (st.pat === 'backfire') {
+    // Behind you: behind the way you just dashed, or away from the nearest foe.
+    const back = p.cwDashAt && Date.now() - p.cwDashAt < 1500 ? p.cwDashA + Math.PI : aim + Math.PI;
+    fan(back, st.n, 1.6);
+  } else if (st.pat === 'ring') {
+    for (let i = 0; i < st.n; i++) shoot(px, py, aim + i / st.n * Math.PI * 2, 6, st.range);
+  } else if (st.pat === 'spiral') {
+    const gap = Math.max(40, Math.round(st.dur / Math.max(1, st.n) / 2));
+    for (let i = 0; i < st.n; i++) {
+      const fire = () => { if (p.dead) return; shoot(cx(p), cy(p), aim + i * 0.7, 6, st.range); };
+      if (i === 0) fire(); else (p.cwQ = p.cwQ || []).push({ at: i * gap, run: fire });
+    }
+  } else if (st.pat === 'mines') {
+    for (let i = 0; i < st.n; i++) {
+      const a = Math.random() * Math.PI * 2, d = 24 + Math.random() * Math.max(10, st.range * 0.45);
+      const at = arenaClamp(px + Math.cos(a) * d, py + Math.sin(a) * d, 8);
+      shoot(at.x, at.y, a, 0.001, 1e9, { ttl: st.dur, homing: false, fgBounce: 0 });
+    }
+  } else if (st.pat === 'rain') {
+    const foes = enemyTargets(pKey).filter(t => Math.hypot(cx(t) - px, cy(t) - py) <= st.range)
       .sort((a, b) => Math.hypot(cx(a) - px, cy(a) - py) - Math.hypot(cx(b) - px, cy(b) - py));
-    for (let i = 0; i < m.n; i++) {
+    for (let i = 0; i < st.n; i++) {
       const t = foes.length ? foes[i % foes.length] : null;
-      const tx = t ? cx(t) + (Math.random() - 0.5) * 14 : px + (Math.random() - 0.5) * m.range;
-      const ty = t ? cy(t) : py + (Math.random() - 0.5) * m.range;
+      const tx = t ? cx(t) + (Math.random() - 0.5) * 14 : px + (Math.random() - 0.5) * st.range;
+      const ty = t ? cy(t) : py + (Math.random() - 0.5) * st.range;
       const y0 = Math.max(ARENA_Y + 3, ty - 150 - i * 22);
       shoot(tx, y0, Math.PI / 2, 8, ty - y0 + 24, t ? { homing: true, quarry: t, seekR: 80 } : null);
     }
-  } else if (m.pat === 'orbit') {
-    for (let i = 0; i < m.n; i++) {
-      const a = i / m.n * Math.PI * 2;
-      shoot(px + Math.cos(a) * 44, py + Math.sin(a) * 44, a + Math.PI / 2, 3, 1e9, { orbit: { a, r: 44, spin: 3.2 }, ttl: m.dur, pierce: true, hitTargets: new Set(), homing: false, fgBounce: 0 });
+  } else if (st.pat === 'orbit') {
+    const r = st.orad || 50, spin = (st.ospin || 32) / 10;
+    for (let i = 0; i < st.n; i++) {
+      const a = i / st.n * Math.PI * 2;
+      shoot(px + Math.cos(a) * r, py + Math.sin(a) * r, a + Math.PI / 2, 3, 1e9, { orbit: { a, r, spin }, ttl: st.dur, pierce: true, hitTargets: new Set(), homing: false, fgBounce: 0 });
     }
-  } else if (m.pat === 'nova') {
-    hitAll(enemyTargets(pKey).filter(t => Math.hypot(cx(t) - px, cy(t) - py) <= m.range + t.w / 2));
-    room.particles.push({ type: 'shockwave', x: px, y: py, maxR: m.range, timer: 500, max: 500, color: col });
-  } else if (m.pat === 'beam') {
-    const ex = px + Math.cos(aim) * m.range, ey = py + Math.sin(aim) * m.range;
+  } else if (st.pat === 'nova') {
+    hitAll(enemyTargets(pKey).filter(t => Math.hypot(cx(t) - px, cy(t) - py) <= st.range + t.w / 2));
+    room.particles.push({ type: 'shockwave', x: px, y: py, maxR: st.range, timer: 500, max: 500, color: col });
+  } else if (st.pat === 'beam') {
+    const ex = px + Math.cos(aim) * st.range, ey = py + Math.sin(aim) * st.range;
     hitAll(enemyTargets(pKey).filter(t => distToSegment(cx(t), cy(t), px, py, ex, ey) <= 14 + t.w / 2));
     for (let k = 0; k < 3; k++) room.particles.push({ type: 'bolt', x: px, y: py, x2: ex, y2: ey, timer: 260 + k * 60, max: 380, color: k ? '#ffffff' : col });
-  } else if (m.pat === 'dash') {
-    const t = nearestFoe(p, pKey, m.range);
+  } else if (st.pat === 'dash') {
+    const t = nearestFoe(p, pKey, st.range);
     const a = t ? Math.atan2(cy(t) - py, cx(t) - px) : aim;
-    const dist = t ? Math.min(m.range, Math.hypot(cx(t) - px, cy(t) - py) + 30) : m.range;
+    const dist = t ? Math.min(st.range, Math.hypot(cx(t) - px, cy(t) - py) + 30) : st.range;
     room.particles.push({ type: 'teleport', x: px, y: py, timer: 300, max: 300, color: col });
     p.x += Math.cos(a) * dist; p.y += Math.sin(a) * dist;
     clampToArena(p, 2);
     p.pull = null;
     p.invincible = Math.max(p.invincible || 0, 300);
+    p.cwDashA = a; p.cwDashAt = Date.now();
     const ex = cx(p), ey = cy(p);
     hitAll(enemyTargets(pKey).filter(o => distToSegment(cx(o), cy(o), px, py, ex, ey) <= 22 + o.w / 2));
     room.particles.push({ type: 'bolt', x: px, y: py, x2: ex, y2: ey, timer: 300, max: 300, color: col });
@@ -11249,7 +11286,7 @@ function buildStateMsg(playerNum) {
                   face: a.face, swing: a.swing > 0 ? Math.round(a.swing) : 0, fade: a.life < 1500 })),
     projectiles: room.projectiles.map(pr => ({ id: pr.id, x: r1(pr.x), y: r1(pr.y), dx: r1(pr.dx), dy: r1(pr.dy), weaponId: pr.weaponId,
                   upg: pr.upg || null, isAoe: pr.isAoe, special: !!pr.special, grapple: !!pr.grapple,
-                  hook: !!pr.hook, boomerang: !!pr.boomerang, ...(pr.owner === 'monster' ? { owner: 'monster' } : {}), ...(pr.big ? { big: pr.big } : {}) })),
+                  hook: !!pr.hook, boomerang: !!pr.boomerang, ...(pr.owner === 'monster' ? { owner: 'monster' } : {}), ...(pr.orbit ? { ob: [Math.round(pr.orbit.a * 100) / 100, pr.orbit.r, pr.owner] } : {}), ...(pr.big ? { big: pr.big } : {}) })),
     pools:       room.fires.filter(f => f.kind === 'tspool').map(f => [Math.round(f.x), Math.round(f.y), Math.round(f.t / f.life * 100) / 100, f.owner === 'monster' ? 0 : +f.owner.slice(1)]),
     fires:       room.fires.filter(f => f.kind !== 'tspool').map(f => ({ id: f.id, kind: f.kind, x: r1(f.x), y: r1(f.y), r: r1(f.r || 0),
                                     a: Math.round((f.a || 0) * 100) / 100, v: f.v ? r1(f.v) : 0, k: Math.round(f.t / f.life * 100) / 100,
@@ -11397,9 +11434,9 @@ function weaponCatalog() {
     needLight: !!w.needLight,
     needSamurai: !!w.needSamurai,
     bossReward: !!w.bossReward, secret: !!w.secret, from: w.from || null, uncommon: !!w.uncommon,
-    special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd, ...(w.special.pat ? { pat: w.special.pat, fx: w.special.fx } : {}) } : null,
-    super: w.super ? { kind: w.super.kind, dmg: w.super.dmg, cd: w.super.cd, ...(w.super.pat ? { pat: w.super.pat, fx: w.super.fx } : {}) } : null,
-    ...(w.ultimate ? { ultimate: { kind: w.ultimate.kind, dmg: w.ultimate.dmg, cd: w.ultimate.cd, part: w.ultimate.part, ...(w.ultimate.pat ? { pat: w.ultimate.pat, fx: w.ultimate.fx } : {}) } } : {}),
+    special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd, ...(w.special.pat ? { pat: w.special.pat, fx: w.special.fx, steps: (w.special.steps || []).map(x => x.pat) } : {}) } : null,
+    super: w.super ? { kind: w.super.kind, dmg: w.super.dmg, cd: w.super.cd, ...(w.super.pat ? { pat: w.super.pat, fx: w.super.fx, steps: (w.super.steps || []).map(x => x.pat) } : {}) } : null,
+    ...(w.ultimate ? { ultimate: { kind: w.ultimate.kind, dmg: w.ultimate.dmg, cd: w.ultimate.cd, part: w.ultimate.part, ...(w.ultimate.pat ? { pat: w.ultimate.pat, fx: w.ultimate.fx, steps: (w.ultimate.steps || []).map(x => x.pat) } : {}) } } : {}),
     ...(w.custom ? { custom: cwDefs.get(w.id) || null } : {}),
     upgrades: upgradesFor(w.id),
     passive: PASSIVES[w.id] || null,
