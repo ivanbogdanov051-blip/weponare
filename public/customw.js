@@ -17,7 +17,7 @@
   const ULT_DMG = 2.5, ULT_CD = 2.5, ULT_MIN_CD = 30000;   // a borrowed ULTIMATE: its move, 2.5x as strong and 2.5x as slow to come back
   const W = { atk: 0.40, sp: 0.25, su: 0.20, ult: 0.15 };  // how much each move counts towards POWER
   const REF = 0.85 * 1.4;                   // the FIRE SPEAR (a secret weapon) on that scale
-  const LIMIT = REF * 2;                    // the most a custom weapon may have: twice the Fire Spear
+  const LIMIT = REF * 5;                    // the most a custom weapon may have: five times the Fire Spear
   const TEX = { minW: 8, maxW: 48, minH: 4, maxH: 24, maxPal: 15, minPx: 12 };
   const SHOT = { minW: 3, maxW: 16, minH: 3, maxH: 12, maxPal: 8, minPx: 3 };   // a projectile's picture
   // Moves that only work with their own weapon's machinery: never borrowed.

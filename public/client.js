@@ -11479,7 +11479,7 @@ function cwSpec() {
   return { name: document.getElementById('cwName').value, color: cwVal('cwColor'), tex: cw.tex, atk: one('atk'), sp: one('sp'), su: one('su'), ult: one('ult') };
 }
 function cwPower() {
-  const spec = cwSpec(), pct = CustomW.powerPct(spec, cwById), lim = CustomW.LIMIT_PCT, top = 260;
+  const spec = cwSpec(), pct = CustomW.powerPct(spec, cwById), lim = CustomW.LIMIT_PCT, top = Math.round(lim * 1.3);
   const fill = document.getElementById('cwBarFill'); if (!fill) return;
   fill.style.width = Math.min(100, pct / top * 100) + '%';
   fill.classList.toggle('over', pct > lim);
