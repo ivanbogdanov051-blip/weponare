@@ -17,7 +17,7 @@
   const ULT_DMG = 2.5, ULT_CD = 2.5, ULT_MIN_CD = 30000;   // a borrowed ULTIMATE: its move, 2.5x as strong and 2.5x as slow to come back
   const W = { atk: 0.40, sp: 0.25, su: 0.20, ult: 0.15 };  // how much each move counts towards POWER
   const REF = 0.85 * 1.4;                   // the FIRE SPEAR (a secret weapon) on that scale
-  const LIMIT = REF * 7;                    // the most a custom weapon may have: seven times the Fire Spear
+  const LIMIT = REF * 13;                   // the most a custom weapon may have: thirteen times the Fire Spear
   const TEX = { minW: 8, maxW: 48, minH: 4, maxH: 24, maxPal: 15, minPx: 12 };
   const SHOT = { minW: 3, maxW: 16, minH: 3, maxH: 12, maxPal: 8, minPx: 3 };   // a projectile's picture
   // Moves that only work with their own weapon's machinery: never borrowed.
@@ -38,8 +38,25 @@
     knock:     { n: 'KNOCKBACK', m: 1.05, t: 'shoves foes away' },
     lifesteal: { n: 'LIFESTEAL', m: 1.2,  t: 'heals you a fifth of the damage' },
     bounce:    { n: 'BOUNCE',    m: 1.1,  t: 'bounces off the walls twice' },
+    split:     { n: 'SPLIT',     m: 1.3,  t: 'bursts into 3 smaller shots when it hits' },
+    crit:      { n: 'CRIT',      m: 1.25, t: '1 in 4 hits do double damage' },
+    execute:   { n: 'EXECUTE',   m: 1.2,  t: 'hits again a foe under 30% health' },
+    pull:      { n: 'PULL',      m: 1.1,  t: 'drags foes towards you' },
+    curse:     { n: 'CURSE',     m: 1.3,  t: 'every bad effect at once, for a moment' },
+    frostbite: { n: 'FROSTBITE', m: 1.2,  t: 'the 3rd hit freezes a foe solid' },
+    teleport:  { n: 'TELEPORT',  m: 1.05, t: 'you jump to where the shot lands' },
   };
-  const MAX_FX = 2;
+  const MAX_FX = 4;
+  // PASSIVES: always on while you hold it (up to 2). v: what each one adds to POWER.
+  const PAS = {
+    regen:  { n: 'REGEN',  t: 'heals 2% of your health every second', v: 0.35 },
+    rage:   { n: 'RAGE',   t: '+40% damage while you are under 40% health', v: 0.3 },
+    dodge:  { n: 'DODGE',  t: '1 hit in 7 misses you completely', v: 0.35 },
+    thorns: { n: 'THORNS', t: 'whoever hits you takes 30% of it back', v: 0.25 },
+    revive: { n: 'REVIVE', t: 'once a game, come back at 40% health instead of dying', v: 0.4 },
+  };
+  const MAX_PAS = 2;
+  const cleanPas = l => [...new Set((Array.isArray(l) ? l : []).filter(k => PAS[k]))].slice(0, MAX_PAS);
   const PATS = {
     volley: { n: 'VOLLEY', t: 'a fan of shots at the nearest foe',          shots: true,  hits: b => Math.pow(b.n, 0.6) },
     ring:   { n: 'RING',   t: 'shots fly out all around you',               shots: true,  hits: b => Math.pow(b.n, 0.45) },
@@ -119,6 +136,7 @@
       const w = m && byId(m.from);
       if (w && w[part]) s += W[k] * tier(w) * pct(m.d, 'd') / pct(m.c, 'c');
     }
+    for (const k of cleanPas(spec.pas)) s += PAS[k].v;
     const u = spec.ult;
     if (isBuild(u)) s += W.ult * moveValue(cleanMoveB(u, true), REF_SU);
     else { const uw = u && byId(u.from); if (uw && uw[u.part]) s += W.ult * tier(uw) * pct(u.d, 'd') / pct(u.c, 'c'); }
@@ -161,7 +179,7 @@
       if (!okSrc(aw) || NO_ATK.includes(a.from)) return { error: 'Pick the ATK it borrows.' };
       atk = { from: a.from, d: clamp(a.d, LIM.d), s: clamp(a.s, LIM.s), r: clamp(a.r, LIM.r) };
     }
-    const spec = { name, color, tex, atk };
+    const spec = { name, color, tex, atk, pas: cleanPas(raw.pas) };
     const move = (m, part, need, ult) => {
       if (isBuild(m)) {
         const b = cleanMoveB(m, ult);
@@ -211,6 +229,7 @@
     };
     Object.assign(w, {
       id, name: spec.name, custom: true, secret: true, shopOnly: true, noRequirement: true, price: 0, unlockXp: 0,
+      ...(spec.pas && spec.pas.length ? { cwPas: cleanPas(spec.pas) } : {}),
       special: mv(spec.sp, 'special', 1, 1, 0, 'sp'),
       super: spec.su ? mv(spec.su, 'super', 1, 1, 0, 'su') : undefined,
       ultimate: spec.ult ? { ...mv(spec.ult, spec.ult.part, ULT_DMG, ULT_CD, ULT_MIN_CD, 'ult'), part: spec.ult.part } : undefined,
@@ -269,7 +288,8 @@
   }
 
   // ── The generator: a pixel weapon from a shape, three colours and a seed ──
-  const SHAPES = ['sword', 'axe', 'spear', 'hammer', 'staff', 'scythe', 'dagger', 'bow', 'greatsword', 'trident', 'katana', 'mace', 'wand', 'gun', 'lance', 'sickle'];
+  const SHAPES = ['sword', 'axe', 'spear', 'hammer', 'staff', 'scythe', 'dagger', 'bow', 'greatsword', 'trident', 'katana', 'mace', 'wand', 'gun', 'lance', 'sickle',
+                  'rapier', 'cleaver', 'halberd', 'pickaxe', 'crossbow', 'club', 'chakram', 'shuriken', 'cannon', 'fan'];
   function shade(c, f) {
     const n = parseInt(c.slice(1), 16), ch = [n >> 16, (n >> 8) & 255, n & 255];
     const o = ch.map(v => Math.round(f >= 0 ? v + (255 - v) * f : v * (1 + f)));
@@ -350,6 +370,33 @@
       case 'sickle': { const hl = 12; haft(hl); pommel();
         for (let t = 0; t <= Math.PI * 1.15; t += 0.04) { const x = hl + 7 + Math.cos(t - Math.PI / 2) * 7, y = mid - 1 + Math.sin(t - Math.PI / 2) * 7; put(x, y, BL); put(x - Math.cos(t) * 0.9, y + 1, t < 1.6 ? BH : BD); }
         break; }
+      case 'rapier': { const hl = 7; haft(hl); pommel();
+        for (let j = -4; j <= 4; j++) put(hl + 1 + Math.round(Math.abs(j) * 0.4), mid + j, Math.abs(j) > 3 ? BH : BD);
+        for (let x = hl + 2; x < 39; x++) { put(x, mid, BL); if (x < 34) put(x, mid - 1, BH); } put(39, mid, BH); break; }
+      case 'cleaver': { const hl = 12; haft(hl); pommel(); const bw = len(20, 24);
+        rect(hl, mid - 7, bw, 8, BL); rect(hl, mid - 7, bw, 1, BH); rect(hl, mid, bw, 1, BD); rect(hl, mid - 7, 1, 8, BD);
+        g[(mid - 5) * w + hl + bw - 4] = 0; g[(mid - 5) * w + hl + bw - 3] = 0; g[(mid - 4) * w + hl + bw - 4] = 0; g[(mid - 4) * w + hl + bw - 3] = 0; break; }
+      case 'halberd': { const hl = len(30, 33); haft(hl); pommel(); bladeTo(hl, 39, 1);
+        for (let j = 1; j <= 7; j++) for (let i = 0; i < 7 - Math.round(j * 0.5); i++) put(hl - 8 + i, mid - j, i === 6 - Math.round(j * 0.5) ? BH : BL);
+        for (let j = 1; j <= 3; j++) put(hl - 4, mid + j, BD); break; }
+      case 'pickaxe': { const hl = len(28, 31); haft(hl); pommel();
+        for (let j = -7; j <= 7; j++) { const x = hl + 1 - Math.round(Math.abs(j) * 0.45); put(x, mid + j, Math.abs(j) > 5 ? BH : BL); put(x + 1, mid + j, BD); } break; }
+      case 'crossbow': { rect(0, mid - 1, 30, 3, HA); rect(0, mid + 1, 30, 1, HD); rect(4, mid + 2, 3, 3, HD);
+        for (let j = -7; j <= 7; j++) { put(25 + Math.round(Math.cos(j / 7 * 1.2) * 3), mid + j, BD); put(24 + Math.round(Math.cos(j / 7 * 1.2) * 3), mid + j, BL); put(22 + Math.round((7 - Math.abs(j)) / 3), mid + j, BH); }
+        rect(20, mid - 1, 16, 1, BH); put(36, mid - 1, GM); put(37, mid - 1, GM); break; }
+      case 'club': { for (let x = 0; x < 36; x++) { const hw = Math.round(1 + x / 36 * 4); for (let y = -hw; y <= hw; y++) put(x, mid + y, y < 0 ? HA : HD); }
+        for (const [x, y] of [[20, -2], [26, 2], [31, -3], [33, 2], [28, -1]]) put(x, mid + y, GM);
+        if (R() < 0.6) for (const [x, y] of [[24, -5], [30, -6], [30, 6], [34, -5], [34, 5]]) put(x, mid + y, BD); break; }
+      case 'chakram': { haft(20); pommel(); const cxr = 30;
+        for (let y = 0; y < h; y++) for (let x = 22; x < w; x++) { const d = Math.hypot(x - cxr, y - mid); if (d <= 7.5 && d >= 4.2) put(x, y, d > 6.8 ? BH : y < mid ? BL : BD); } break; }
+      case 'shuriken': { haft(22); pommel(); const sx = 31;
+        for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + 0.3; for (let r = 0; r <= 7; r++) { const hw = Math.max(0, Math.round((7 - r) / 3)); for (let q = -hw; q <= hw; q++) put(sx + Math.cos(a) * r - Math.sin(a) * q, mid + Math.sin(a) * r + Math.cos(a) * q, q < 0 ? BH : BL); } }
+        disc(sx, mid, 1, GM); put(sx, mid, 0); break; }
+      case 'cannon': { rect(0, mid - 1, 7, 2, HA); rect(6, mid - 4, 29, 8, BD); rect(6, mid - 4, 29, 2, BL); rect(6, mid - 3, 29, 1, BH); rect(34, mid - 5, 3, 10, BL); rect(34, mid - 5, 3, 1, BH);
+        disc(13, mid + 5, 2.6, HA); disc(13, mid + 5, 1, GM); rect(20, mid - 6, 2, 2, GM); break; }
+      case 'fan': { haft(8); pommel();
+        for (let r = 3; r <= 17; r += 0.4) for (let a = -1.05; a <= 0.35; a += 0.015) { const rib = Math.abs(((a + 1.05) / 0.2) % 1) < 0.1; put(8 + Math.cos(a) * r, mid + 4 + Math.sin(a) * r, r > 16.4 ? BD : rib ? HD : r > 14.5 ? GM : (Math.floor((a + 1.05) / 0.2) % 2 ? BL : BH)); }
+        break; }
       default: { const hl = 8; haft(hl); pommel(); rect(hl, mid - 4, 2, 8, BD); rect(hl, mid - 4, 2, 1, BH); disc(hl + 1, mid, 0, GM); bladeTo(hl + 2, len(30, 36), 2); }
     }
     if (R() < 0.5) for (let n = 0; n < 3; n++) { const x = 12 + Math.floor(R() * 20); if (g[mid * w + x]) put(x, mid, R() < 0.5 ? GH : GM); }
@@ -387,7 +434,7 @@
   }
 
   const CustomW = { PRICE, MAX_OWNED, LIM, ULT_DMG, ULT_CD, LIMIT, LIMIT_PCT, REF, TEX, SHOT, NO_ATK, NO_MOVE, SHAPES, FX, MAX_FX, PATS, B, SHOT_SHAPES, ULT_BUILD_MIN_CD,
-                    isBuild, cleanAtkB, cleanMoveB, genShot, MAX_STEPS, STYLES, restyle,
+                    isBuild, cleanAtkB, cleanMoveB, genShot, PAS, MAX_PAS, MAX_STEPS, STYLES, restyle,
                     tier, power, powerPct, check, cleanTex, build, art, generate, shade };
   if (typeof module !== 'undefined' && module.exports) module.exports = CustomW;
   else root.CustomW = CustomW;

@@ -11227,7 +11227,8 @@ function cwRegisterArt(w) {
   const by = w.custom.by ? ' made by ' + w.custom.by : '';
   WEAPON_DESC[w.id] = 'A CUSTOM WEAPON' + by;
   const mv = (lbl, m) => m ? `<b>${lbl}</b> ${m.kind === 'cwmove' ? (CustomW.PATS[m.pat]?.n || 'BUILT') + (m.steps && m.steps.length ? ' → ' + m.steps.map(p => CustomW.PATS[p]?.n || p).join(' → ') : '') + (m.fx && m.fx.length ? ' + ' + m.fx.map(x => CustomW.FX[x].n).join(' + ') : '') : cwKind(m.kind)} (${m.dmg} damage, ${Math.round(m.cd / 100) / 10}s)` : '';
-  LEGEND_MOVES[w.id] = [mv('SPECIAL', w.special), mv('SUPER', w.super), mv('ULTIMATE', w.ultimate)].filter(Boolean).join(' · ')
+  LEGEND_MOVES[w.id] = [mv('SPECIAL', w.special), mv('SUPER', w.super), mv('ULTIMATE', w.ultimate),
+    ...((w.custom.pas || []).map(k => CustomW.PAS[k] ? `<b>PASSIVE</b> ${CustomW.PAS[k].n} (${CustomW.PAS[k].t})` : ''))].filter(Boolean).join(' · ')
     + '. It can never be traded or lost.';
 }
 // Someone else's custom weapon, seen in a game for the first time: fetch its picture.
@@ -11255,6 +11256,7 @@ async function openCustomW() {
   if (!cw.tex) cw.tex = CustomW.generate(cw.shape, cwVal('cwC1'), cwVal('cwC2'), cwVal('cwC3'), cw.seed);
   cwBuildShapes(); cwBuildMoves(); cwTexTab(cw.tab); cwDraw(); cwPower();
   document.getElementById('cwStyleW').innerHTML = cwStylesHtml('w');
+  document.getElementById('cwZoomW').innerHTML = cwZoomBar('w'); cwApplyZoom('w');
   const pw = (document.getElementById('passInput')?.value || '').trim();
   const mine = document.getElementById('cwMine');
   if (!pw) { mine.innerHTML = '<span class="cw-no">Type your PASSWORD on the menu first: the weapon is saved to it.</span>'; return; }
@@ -11393,7 +11395,20 @@ function cwSources(part) {
   const order = ['COMMON', 'UNCOMMON', 'LEGENDARY', 'MYTHIC', 'SECRET'];
   return order.map(g => [g, out.filter(o => o.g === g)]).filter(([, l]) => l.length);
 }
+// PASSIVES: always on while you hold it.
+function cwRenderPas() {
+  const el = document.getElementById('cwPas'); if (!el) return;
+  cw.pas = cw.pas || [];
+  el.innerHTML = Object.entries(CustomW.PAS).map(([v, p]) => `<button class="cw-pas ${cw.pas.includes(v) ? 'on' : ''}" onclick="cwPasPick('${v}')"><b>${p.n}</b><small>${p.t}</small></button>`).join('');
+}
+function cwPasPick(v) {
+  cw.pas = cw.pas || [];
+  if (cw.pas.includes(v)) cw.pas = cw.pas.filter(x => x !== v);
+  else { if (cw.pas.length >= CustomW.MAX_PAS) cw.pas.shift(); cw.pas.push(v); }
+  cwRenderPas(); cwPower();
+}
 function cwBuildMoves() {
+  cwRenderPas();
   const el = document.getElementById('cwMoves');
   if (!el.childElementCount) el.innerHTML = CW_PARTS.map(P => `<div class="cw-move cw-${P.k}" data-k="${P.k}"></div>`).join('');
   for (const P of CW_PARTS) cwRenderMove(P.k);
@@ -11461,11 +11476,11 @@ function cwRenderMove(k) {
   box.innerHTML = head + body + `<div class="cw-res" data-r="${k}"></div>`;
   if (m.mode === 'borrow') { const sel = box.querySelector('select'); sel.value = k === 'ult' && m.from ? m.from + ':' + m.part : m.from;
     if (sel.value === '' && P.need && sel.options.length) { sel.selectedIndex = 0; cwPick(sel, true); } }
-  const cv = box.querySelector('canvas.cw-shotcv'); if (cv) cwDrawTex(cv, m.b.shot, false);
+  const cv = box.querySelector('canvas.cw-shotcv'); if (cv) { cwDrawTex(cv, m.b.shot, false); cwApplyZoom(k); }
 }
 function cwShotEditor(k, b) {
   return `<div class="cw-sub">ITS SHOTS <small>pick one, then draw on it</small></div>
-    <div class="cw-shot"><canvas class="cw-shotcv" data-paint="${k}" width="192" height="144" aria-label="Shot picture"></canvas>
+    <div class="cw-shot"><div class="cw-shotleft"><div class="cw-zwrap cw-zshot"><canvas class="cw-shotcv" data-paint="${k}" width="192" height="144" aria-label="Shot picture"></canvas></div>${cwZoomBar(k)}</div>
       <div class="cw-shotside"><div class="cw-chips cw-shapes2">${CustomW.SHOT_SHAPES.map(s => `<button onclick="cwShotShape('${k}','${s}')">${s.toUpperCase()}</button>`).join('')}</div>
         <div class="cw-row"><label>MAIN <input type="color" value="${b.c1}" onchange="cwShotCol('${k}',1,this.value)"></label><label>SECOND <input type="color" value="${b.c2}" onchange="cwShotCol('${k}',2,this.value)"></label></div>
         ${cwPalHtml(k, b.shot)}
@@ -11503,7 +11518,7 @@ function cwSpec() {
     if (!m.from) return null;
     return k === 'atk' ? { from: m.from, d: m.d, s: m.s, r: m.r } : { from: m.from, d: m.d, c: m.c, ...(k === 'ult' ? { part: m.part } : {}) };
   };
-  return { name: document.getElementById('cwName').value, color: cwVal('cwColor'), tex: cw.tex, atk: one('atk'), sp: one('sp'), su: one('su'), ult: one('ult') };
+  return { name: document.getElementById('cwName').value, color: cwVal('cwColor'), tex: cw.tex, atk: one('atk'), sp: one('sp'), su: one('su'), ult: one('ult'), pas: cw.pas || [] };
 }
 function cwPower() {
   const spec = cwSpec(), pct = CustomW.powerPct(spec, cwById), lim = CustomW.LIMIT_PCT, top = Math.round(lim * 1.3);
@@ -11579,7 +11594,7 @@ function cwStylesHtml(s) {
   return `<div class="cw-sub">STYLE <small>a new look for its colours (UNDO puts it back)</small></div><div class="cw-chips cw-styles">${Object.entries(CustomW.STYLES).map(([v, st]) =>
     `<button onclick="cwStyle('${s}','${v}')">${st.n}</button>`).join('')}</div>`;
 }
-function cwSetTool(v) { cwTool.tool = v; for (const b of document.querySelectorAll('.cw-tools [data-tool]')) b.classList.toggle('on', b.dataset.tool === v); }
+function cwSetTool(v) { cwTool.tool = v; for (const b of document.querySelectorAll('.cw-tools [data-tool], .cw-zoom [data-tool]')) b.classList.toggle('on', b.dataset.tool === v); }
 function cwSetSize(n) { cwTool.size = n; for (const b of document.querySelectorAll('.cw-tools [data-size]')) b.classList.toggle('on', +b.dataset.size === n); }
 function cwStyle(s, v) { const t = cwTexOf(s); if (!t) return; cwSnap(s); cwTexSet(s, CustomW.restyle(t, v)); cwPalRefresh(s); cwRedraw(s); }
 function cwAct(s, a) {
@@ -11674,13 +11689,91 @@ function cwDrawTex(cv, t, grip) {
   g.fillStyle = '#8a8aa8'; g.font = '9px "Courier New",monospace';
   if (grip) g.fillText('◄ GRIP', 4, H - 3); else g.fillText('FLIES ►', W - 46, H - 3);
 }
-let cwPainting = null;
-function cwPaintEv(e) {
-  if (e.type === 'pointerup' || e.type === 'pointercancel') { cwPainting = null; return; }
+// ── ZOOM: each drawing (the weapon, every shot) can be blown up to 6x and moved
+// around: ＋/－, ctrl + mouse wheel, or pinch with two fingers. ✋ MOVE drags it. ──
+const cwZoomLv = {};
+const CW_ZOOMS = [1, 1.5, 2, 3, 4, 6];
+const cwCanvasOf = s => s === 'w' ? document.getElementById('cwPrev') : document.querySelector(`canvas.cw-shotcv[data-paint="${s}"]`);
+function cwZoomBar(s) {
+  const z = CW_ZOOMS[cwZoomLv[s] || 0];
+  return `<div class="cw-zoom" data-zb="${s}"><button onclick="cwZoom('${s}',-1)" aria-label="zoom out">－</button><b>${Math.round(z * 100)}%</b>`
+    + `<button onclick="cwZoom('${s}',1)" aria-label="zoom in">＋</button><button data-tool="move" class="${cwTool.tool === 'move' ? 'on' : ''}" title="drag the zoomed picture around" onclick="cwSetTool(cwTool.tool === 'move' ? 'pen' : 'move')">✋ MOVE</button>`
+    + `<small>${'ontouchstart' in window ? 'pinch to zoom' : 'ctrl + wheel to zoom'}</small></div>`;
+}
+// Size the canvas for its zoom: more real pixels too, so it stays sharp.
+function cwApplyZoom(s, keepAt) {
+  const cv = cwCanvasOf(s); if (!cv) return;
+  if (!cv.dataset.bw) { cv.dataset.bw = cv.width; cv.dataset.bh = cv.height; }
+  const wrap = cv.parentElement, z = CW_ZOOMS[cwZoomLv[s] || 0];
+  // Keep the same spot in the middle of the view (or under the fingers / mouse).
+  const fx = keepAt ? keepAt.fx : wrap ? (wrap.scrollLeft + wrap.clientWidth / 2) / Math.max(1, wrap.scrollWidth) : 0.5;
+  const fy = keepAt ? keepAt.fy : wrap ? (wrap.scrollTop + wrap.clientHeight / 2) / Math.max(1, wrap.scrollHeight) : 0.5;
+  cv.width = Math.round(cv.dataset.bw * z); cv.height = Math.round(cv.dataset.bh * z);
+  cv.style.width = (z * 100) + '%';
+  cv.classList.toggle('zoomed', z > 1);
+  cwRedraw(s);
+  if (wrap) { wrap.scrollLeft = fx * wrap.scrollWidth - (keepAt ? keepAt.vx : wrap.clientWidth / 2); wrap.scrollTop = fy * wrap.scrollHeight - (keepAt ? keepAt.vy : wrap.clientHeight / 2); }
+  const bar = document.querySelector(`.cw-zoom[data-zb="${s}"] b`); if (bar) bar.textContent = Math.round(z * 100) + '%';
+}
+function cwZoom(s, d, at) {
+  const lv = Math.max(0, Math.min(CW_ZOOMS.length - 1, (cwZoomLv[s] || 0) + d));
+  if (lv === (cwZoomLv[s] || 0)) return;
+  cwZoomLv[s] = lv;
+  let keepAt = null;
+  const cv = cwCanvasOf(s), wrap = cv && cv.parentElement;
+  if (at && wrap) { const r = wrap.getBoundingClientRect(), vx = at.x - r.left, vy = at.y - r.top;
+    keepAt = { fx: (wrap.scrollLeft + vx) / Math.max(1, wrap.scrollWidth), fy: (wrap.scrollTop + vy) / Math.max(1, wrap.scrollHeight), vx, vy }; }
+  cwApplyZoom(s, keepAt);
+}
+document.addEventListener('wheel', e => {
   const cv = e.target && e.target.closest ? e.target.closest('canvas[data-paint]') : null;
+  if (!cv || !e.ctrlKey) return;
+  e.preventDefault();
+  cwZoom(cv.dataset.paint, e.deltaY < 0 ? 1 : -1, { x: e.clientX, y: e.clientY });
+}, { passive: false });
+
+let cwPainting = null, cwPan = null;
+const cwTouches = new Map();             // fingers on a drawing, for pinching
+let cwPinch = null;
+function cwPaintEv(e) {
+  const cv0 = e.target && e.target.closest ? e.target.closest('canvas[data-paint]') : null;
+  if (e.type === 'pointerup' || e.type === 'pointercancel') {
+    cwTouches.delete(e.pointerId);
+    if (cwTouches.size < 2) cwPinch = null;
+    if (!cwTouches.size) { cwPainting = null; cwPan = null; }
+    return;
+  }
+  // Two fingers: zoom and move, never paint.
+  if (e.pointerType === 'touch' && (cv0 || cwTouches.has(e.pointerId))) {
+    if (e.type === 'pointerdown') cwTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    else if (cwTouches.has(e.pointerId)) cwTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (cwTouches.size >= 2) {
+      e.preventDefault();
+      const c = cwPainting || cv0; if (!c) return;
+      const [a, b] = [...cwTouches.values()], d = Math.hypot(a.x - b.x, a.y - b.y), mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      if (!cwPinch) {
+        if (cwPainting && cwPainting._stroke) cwUndo(cwPainting.dataset.paint);   // the first finger's stray dab
+        cwPinch = { d, mid, s: c.dataset.paint }; cwPainting = null; return;
+      }
+      const wrap = c.parentElement;
+      if (wrap) { wrap.scrollLeft -= mid.x - cwPinch.mid.x; wrap.scrollTop -= mid.y - cwPinch.mid.y; }
+      if (d / cwPinch.d > 1.3) { cwZoom(cwPinch.s, 1, mid); cwPinch.d = d; }
+      else if (d / cwPinch.d < 0.77) { cwZoom(cwPinch.s, -1, mid); cwPinch.d = d; }
+      cwPinch.mid = mid;
+      return;
+    }
+  }
+  const cv = cv0;
   const down = e.type === 'pointerdown';
-  if (down) { if (!cv) return; if (cv.dataset.paint === 'w' && cw.tab !== 'draw') return; cwPainting = cv; try { cv.setPointerCapture(e.pointerId); } catch {} }
+  if (down) {
+    if (!cv) return;
+    if (cv.dataset.paint === 'w' && cw.tab !== 'draw' && cwTool.tool !== 'move') return;
+    cwPainting = cv; cv._stroke = false;
+    try { cv.setPointerCapture(e.pointerId); } catch {}
+    if (cwTool.tool === 'move') { const wrap = cv.parentElement; cwPan = { x: e.clientX, y: e.clientY, l: wrap.scrollLeft, t: wrap.scrollTop }; e.preventDefault(); return; }
+  }
   const c = cwPainting; if (!c || (cv && cv !== c)) return;
+  if (cwPan) { const wrap = c.parentElement; wrap.scrollLeft = cwPan.l - (e.clientX - cwPan.x); wrap.scrollTop = cwPan.t - (e.clientY - cwPan.y); e.preventDefault(); return; }
   const s = c.dataset.paint;
   const t = cwTexOf(s), geo = c._geo; if (!t || !geo) return;
   const r = c.getBoundingClientRect(), k = c.width / r.width;
@@ -11692,16 +11785,16 @@ function cwPaintEv(e) {
   if (cwTool.tool === 'fill') {
     if (!down) return;
     const from = t.px[y * t.w + x]; if (from === ch) return;
-    cwSnap(s);
+    cwSnap(s); c._stroke = true;
     const px = t.px.split(''), todo = [[x, y]];
     while (todo.length) { const [qx, qy] = todo.pop(); if (qx < 0 || qy < 0 || qx >= t.w || qy >= t.h || px[qy * t.w + qx] !== from) continue; px[qy * t.w + qx] = ch; todo.push([qx + 1, qy], [qx - 1, qy], [qx, qy + 1], [qx, qy - 1]); }
     t.px = px.join(''); cwPainting = null; cwRedraw(s); return;
   }
-  if (down) cwSnap(s);
   const px = t.px.split(''), n = cwTool.size, o = Math.floor((n - 1) / 2);
   let changed = false;
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const qx = x - o + i, qy = y - o + j; if (qx >= 0 && qy >= 0 && qx < t.w && qy < t.h && px[qy * t.w + qx] !== ch) { px[qy * t.w + qx] = ch; changed = true; } }
   if (!changed) return;
+  if (!c._stroke) { cwSnap(s); c._stroke = true; }     // one UNDO takes back the whole stroke
   t.px = px.join('');
   cwRedraw(s);
 }

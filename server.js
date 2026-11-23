@@ -4624,6 +4624,11 @@ function applyDamage(target, dmg, attackerKey) {
     room.particles.push({ type: 'crit', x: cx(target), y: target.y - 8, text: 'DODGE', timer: 500, max: 500 });
     return;
   }
+  const tcp = target.num ? weapon(target).cwPas : null;                                            // a custom weapon's PASSIVES
+  if (tcp && tcp.includes('dodge') && Math.random() < 1 / 7) {
+    room.particles.push({ type: 'crit', x: cx(target), y: target.y - 8, text: 'DODGE', timer: 500, max: 500 });
+    return;
+  }
   if (tfg?.ward && !(target.wardCd > 0)) {                                                         // forge: WARDSTONE
     target.wardCd = 8000;
     target.invincible = 300;
@@ -4634,6 +4639,7 @@ function applyDamage(target, dmg, attackerKey) {
   if (afg) dmg *= forgeHitMult(afg, atk, target);
   if (aw && aw.ghostCloak && target.boss) dmg *= GHOST_BOSS_MULT;                                  // the Dagger of Ghosts fades against bosses
   if (aw && atk.passive === 'axe') dmg *= 1 + PASSIVE_RAGE * Math.max(0, 1 - atk.hp / atk.maxHp);   // BERSERKER
+  if (aw && aw.cwPas && aw.cwPas.includes('rage') && atk.hp < atk.maxHp * 0.4) dmg *= 1.4;         // custom: RAGE
   if (target.num && hasEffect(target, 'ironskin')) dmg *= 0.5;                                     // IRON SKIN
   if (target.num && hasEffect(target, 'frostarmor')) dmg *= 0.75;                                  // FROST ARMOR
   if (target.num && target.passive === 'soullantern') dmg *= 1 - SOUL_BOND * Math.min(SOUL_MAX, target.souls || 0);   // SOUL BOND
@@ -4744,6 +4750,12 @@ function applyDamage(target, dmg, attackerKey) {
     const foe = enemyTargets(tKey).filter(f => f !== target && !f.dead && distBetween(f, target) < TK_THORN_R).sort((a, b) => distBetween(a, target) - distBetween(b, target))[0];
     if (foe) { room.tkGuard = true; try { applyDamage(foe, Math.max(1, Math.round(dmg * tkV(target, 'thorns') / 100)), tKey); } finally { room.tkGuard = false; } }
   }
+  // custom THORNS: whoever hit you (or, for a monster's shot, the nearest foe) takes 30% back.
+  if (tcp && tcp.includes('thorns') && dmg > 0 && !room.cwThorn) {
+    const tKey = playerKeyOf(target);
+    const foe = atk && atk !== target ? atk : enemyTargets(tKey).filter(f => f !== target && !f.dead && distBetween(f, target) < 110).sort((a, b) => distBetween(a, target) - distBetween(b, target))[0];
+    if (foe && !foe.dead) { room.cwThorn = true; try { if (!foe.num) foe.invincible = 0; applyDamage(foe, Math.max(1, Math.round(dmg * 0.3)), tKey); } finally { room.cwThorn = false; } }
+  }
   // THORNS: another player who hits you takes half of it back.
   if (target.num && atk && atk !== target && hasEffect(target, 'thorns') && !atk.dead) {
     applyDamage(atk, Math.max(1, Math.round(dmg * THORNS_SHARE)), playerKeyOf(target));
@@ -4771,6 +4783,16 @@ function handleKill(target, attackerKey) {
     target.hp = Math.round(target.maxHp * 0.25);
     target.invincible = 2000;
     room.particles.push({ type: 'trapburst', x: cx(target), y: cy(target), maxR: 60, timer: 900, max: 900, color: '#ff4a4a', text: 'UNDYING' });
+    return;
+  }
+  // custom REVIVE: once a game, death is undone.
+  if (target.num && !target.cwRevived && (weapon(target).cwPas || []).includes('revive')) {
+    target.cwRevived = true;
+    target.hp = Math.round(target.maxHp * 0.4);
+    target.invincible = 2000;
+    const col = WEAPON_COLORS[weapon(target).id] || '#ffffff';
+    room.particles.push({ type: 'shockwave', x: cx(target), y: cy(target), maxR: 80, timer: 700, max: 700, color: col });
+    room.particles.push({ type: 'trapburst', x: cx(target), y: cy(target), maxR: 60, timer: 1000, max: 1000, color: col, text: 'REVIVE!' });
     return;
   }
   // REBIRTH (Ashfeather): once a game, death becomes an explosion of fire.
@@ -5257,6 +5279,10 @@ function tickRoom(dt) {
     if (room.inputs[key].ab7 && p.fgAb) useForgeAbility(p, key);
     if (p.tk) itemsTick(p, key, dt);
     if (p.cwQ && p.cwQ.length) cwQueueTick(p, key, dt);   // a custom weapon's COMBO steps
+    if (!p.dead && p.hp < p.maxHp && (weapon(p).cwPas || []).includes('regen')) {   // custom REGEN: 2% a second
+      p.cwRegen = (p.cwRegen || 0) + dt;
+      while (p.cwRegen >= 500) { p.cwRegen -= 500; p.hp = Math.min(p.maxHp, p.hp + Math.max(1, Math.round(p.maxHp * 0.01))); }
+    }
     if (room.parryJustPressed[key] && p.parryCooldown <= 0) {
       startParry(p);
     }
@@ -5943,6 +5969,7 @@ function onHitExtras(proj, t) {
     clampToArena(t);
   }
   if (proj.burn) ignite(t, proj.burn);
+  if (proj.cw || proj.weaponId === 'cwp') cwHitExtras(proj, t);
   if (proj.chain > 0) {
     const hit = new Set([t]);
     let from = t;
@@ -6212,12 +6239,41 @@ function cwFx(fx, dmg) {
     else if (k === 'knock') o.gust = 30;
     else if (k === 'lifesteal') o.soulHeal = Math.max(1, Math.round(dmg * 0.2));
     else if (k === 'bounce') o.fgBounce = 2;
+    else if (k === 'split') o.cwSplit = true;
+    else if (k === 'execute') o.cwExec = true;
+    else if (k === 'pull') o.cwPull = 34;
+    else if (k === 'curse') o.cwCurse = 1500;
+    else if (k === 'frostbite') o.frostbite = true;
+    else if (k === 'teleport') o.teleport = true;
   }
   return o;
 }
+// The effects only built moves have.
+function cwHitExtras(proj, t) {
+  if (proj.cwCrit) room.particles.push({ type: 'crit', x: cx(t), y: t.y - 8, text: 'CRIT!', timer: 500, max: 500 });
+  if (proj.cwExec && !t.dead && t.hp < (t.maxHp || 0) * 0.3) {
+    if (!t.num) t.invincible = 0;
+    strikeTarget(t, proj.damage, proj.owner);
+    room.particles.push({ type: 'crit', x: cx(t), y: t.y - 14, text: 'EXECUTE', timer: 600, max: 600 });
+  }
+  if (proj.cwPull && !t.boss && !t.dead) {
+    const o = room.players[proj.owner];
+    if (o) { const dx = cx(o) - cx(t), dy = cy(o) - cy(t), d = Math.hypot(dx, dy) || 1, k = Math.min(proj.cwPull, Math.max(0, d - 24)); t.x += dx / d * k; t.y += dy / d * k; clampToArena(t); }
+  }
+  if (proj.cwCurse && !t.dead) dlCurse(t, proj.owner, proj.cwCurse);
+  if (proj.cwSplit && !proj.cwChild && typeof proj.weaponId === 'string' && proj.weaponId.split(':').length === 3) {
+    const [, wid, slot] = proj.weaponId.split(':'), a0 = Math.atan2(proj.dy, proj.dx);
+    const fx = (proj.cwFxList || []).filter(k => k !== 'split' && k !== 'teleport' && k !== 'crit');
+    for (const da of [-0.7, 0, 0.7]) cwShoot(proj.owner, wid, slot, proj.x, proj.y, a0 + da, 6, 110, Math.max(1, Math.round(proj.damage * 0.5)), fx, { cwChild: true, ignore: t });
+  }
+}
+
 // One shot, drawn on the page with the picture its maker gave it ('cwp:<weapon>:<move>').
 function cwShoot(pKey, wid, slot, x, y, a, speed, range, dmg, fx, extra) {
-  room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * speed, dy: Math.sin(a) * speed, damage: dmg, owner: pKey,
+  const crit = (fx || []).includes('crit') && Math.random() < 0.25;
+  if (crit) dmg *= 2;
+  // (SPLIT's shots are born mid-pass, so they join the others after it)
+  (extra && extra.cwChild ? (room.spawnLater = room.spawnLater || []) : room.projectiles).push({ cwFxList: fx || [], ...(crit ? { cwCrit: true } : {}), id: nextId(), x, y, dx: Math.cos(a) * speed, dy: Math.sin(a) * speed, damage: dmg, owner: pKey,
     traveled: 0, maxRange: range, weaponId: 'cwp:' + wid + ':' + slot, isAoe: false, aoeRadius: 0, pierce: false, grapple: false,
     boomerang: false, returning: false, life: 0, hitTargets: null, cw: true, aoeColor: WEAPON_COLORS[wid] || '#ffffff',
     ...cwFx(fx, dmg), ...(extra || {}) });
@@ -6262,7 +6318,9 @@ function cwQueueTick(p, key, dt) {
 function cwStep(p, pKey, m, st, dmg) {
   const wid = weapon(p).id, col = WEAPON_COLORS[wid] || '#ffffff', px = cx(p), py = cy(p);
   const fx = cwFx(m.fx, dmg);
-  const hitAll = list => { for (const t of list) { strikeTarget(t, dmg, pKey); if (!t.dead) onHitExtras({ owner: pKey, x: cx(t), y: cy(t), dx: 1, dy: 0, damage: dmg, weaponId: 'cwp', ...fx }, t); } };
+  const crits = (m.fx || []).includes('crit');
+  const hitAll = list => { for (const t of list) { const c = crits && Math.random() < 0.25, d = c ? dmg * 2 : dmg; strikeTarget(t, d, pKey);
+    if (!t.dead) onHitExtras({ owner: pKey, x: cx(t), y: cy(t), dx: cx(t) - px || 1, dy: cy(t) - py, damage: d, weaponId: 'cwp', ...fx, teleport: false, cwSplit: false, ...(c ? { cwCrit: true } : {}) }, t); } };
   const aim = nearestTargetAngle(p, pKey);
   p.facing = Math.cos(aim) < 0 ? -1 : 1;
   const shoot = (x, y, a, speed, range, extra, fxList) => cwShoot(pKey, wid, m.slot, x, y, a, speed, range, dmg, fxList || m.fx, extra);
