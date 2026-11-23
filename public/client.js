@@ -7797,6 +7797,7 @@ function drawProjectiles(projs) {
     const ang = Math.atan2(pr.dy, pr.dx);
     const u = upgScale(pr.upg);
 
+    if (pr.weaponId && pr.weaponId.startsWith('cwp:')) { drawCwShot(pr, ang); continue; }   // a custom weapon's own shot
     if (NEW_SHOTS[pr.weaponId]) { NEW_SHOTS[pr.weaponId](pr, ang, now, u); continue; }
     if (pr.weaponId === 'abyssbolt' || pr.weaponId === 'infinitybow') { drawVoidBolt(pr, ang); continue; }
     if (pr.weaponId === 'tswave' || pr.weaponId === 'tswide' || pr.weaponId === 'wavestorm') { drawTsWave(pr, ang, now, pr.weaponId === 'tswide'); continue; }
@@ -11204,8 +11205,9 @@ function syncFreeChat(state) {
 
 // ─── CUSTOM WEAPONS ──────────────────────────────────────────────────────────
 // Your own weapon (public/customw.js has the rules): a name, a colour, a picture
-// (generated or from an image) and four moves, each borrowed from a real weapon
-// and tuned. The POWER meter is the same sum the server checks.
+// (generated, drawn or from an image) and four moves, each borrowed from a real
+// weapon and tuned, or built from scratch with shots you draw. The POWER meter is
+// the same sum the server checks.
 const cw = { shape: 'sword', seed: 1, tab: 'gen', tex: null, img: null, mine: [], coins: 0,
              moves: { atk: { from: 'katana', d: 100, s: 100, r: 100 }, sp: { from: 'katana', d: 100, c: 100 }, su: { from: '', d: 100, c: 100 }, ult: { from: '', part: 'super', d: 100, c: 100 } } };
 const cwById = id => { const w = WEAPON_META[id]; return w && !w.custom ? w : null; };
@@ -11220,7 +11222,7 @@ function cwRegisterArt(w) {
   WEAPON_COLOR[w.id] = w.custom.color;
   const by = w.custom.by ? ' made by ' + w.custom.by : '';
   WEAPON_DESC[w.id] = 'A CUSTOM WEAPON' + by;
-  const mv = (lbl, m) => m ? `<b>${lbl}</b> ${cwKind(m.kind)} (${m.dmg} damage, ${Math.round(m.cd / 100) / 10}s)` : '';
+  const mv = (lbl, m) => m ? `<b>${lbl}</b> ${m.kind === 'cwmove' ? (CustomW.PATS[m.pat]?.n || 'BUILT') + (m.fx && m.fx.length ? ' + ' + m.fx.map(x => CustomW.FX[x].n).join(' + ') : '') : cwKind(m.kind)} (${m.dmg} damage, ${Math.round(m.cd / 100) / 10}s)` : '';
   LEGEND_MOVES[w.id] = [mv('SPECIAL', w.special), mv('SUPER', w.super), mv('ULTIMATE', w.ultimate)].filter(Boolean).join(' · ')
     + '. It can never be traded or lost.';
 }
@@ -11280,7 +11282,9 @@ function cwTexTab(t) {
   for (const b of document.querySelectorAll('.cw-tabs button')) b.classList.toggle('on', b.dataset.t === t);
   document.getElementById('cwGen').classList.toggle('hidden', t !== 'gen');
   document.getElementById('cwImg').classList.toggle('hidden', t !== 'img');
-  if (t === 'gen') cwRegen(); else if (cw.img) cwLoadImg();
+  document.getElementById('cwDraw').classList.toggle('hidden', t !== 'draw');
+  document.getElementById('cwPrev').classList.toggle('painting', t === 'draw');
+  if (t === 'gen') cwRegen(); else if (t === 'img' && cw.img) cwLoadImg(); else if (t === 'draw') cwPalRefresh('w');
 }
 function cwBuildShapes() {
   const el = document.getElementById('cwShapes');
@@ -11307,8 +11311,7 @@ function cwLoadImg(file) {
   img.onerror = () => { URL.revokeObjectURL(url); cwMsg('That image could not be read.', true); };
   img.src = url;
 }
-function cwFromImage(img, noBg) {
-  const T = CustomW.TEX, maxW = 40, maxH = 16;
+function cwFromImage(img, noBg, T = CustomW.TEX, maxW = 40, maxH = 16) {
   const s = Math.min(maxW / img.width, maxH / img.height);
   const w = Math.max(T.minW, Math.min(maxW, Math.round(img.width * s))), h = Math.max(T.minH, Math.min(maxH, Math.round(img.height * s)));
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
@@ -11341,32 +11344,31 @@ function cwFromImage(img, noBg) {
   let out = '';
   for (let y = y0; y < y0 + ch; y++) for (let x = x0; x < x0 + cw2; x++) out += (x < w && y < h ? idx[y * w + x] : 0).toString(16);
   const tex = { w: cw2, h: ch, pal: pal.map(c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join('')), px: out };
-  return CustomW.cleanTex(tex);
+  return CustomW.cleanTex(tex, T);
 }
-function cwDraw() {
-  const cv = document.getElementById('cwPrev'); if (!cv) return;
-  const g = cv.getContext('2d'), W = cv.width, H = cv.height;
-  g.clearRect(0, 0, W, H);
-  for (let y = 0; y < H; y += 10) for (let x = 0; x < W; x += 10) { g.fillStyle = (x + y) / 10 % 2 ? '#15152a' : '#1c1c34'; g.fillRect(x, y, 10, 10); }
-  const t = cw.tex; if (!t) return;
-  const u = Math.floor(Math.min((W - 20) / t.w, (H - 16) / t.h)), ox = Math.floor((W - t.w * u) / 2), oy = Math.floor((H - t.h * u) / 2);
-  const solid = (x, y) => x >= 0 && y >= 0 && x < t.w && y < t.h && t.px[y * t.w + x] !== '0';
-  g.fillStyle = '#05050b';                // the dark edge every weapon has
-  for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) if (solid(x, y)) g.fillRect(ox + x * u - 2, oy + y * u - 2, u + 4, u + 4);
-  for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) {
-    const i = parseInt(t.px[y * t.w + x], 16); if (!i) continue;
-    g.fillStyle = t.pal[i - 1]; g.fillRect(ox + x * u, oy + y * u, u, u);
-  }
-  g.fillStyle = '#8a8aa8'; g.font = '9px "Courier New",monospace'; g.fillText('◄ GRIP', 4, H - 4);
-}
+function cwDraw() { const cv = document.getElementById('cwPrev'); if (cv) cwDrawTex(cv, cw.tex, true); }
 
 // ── the moves ──
+// Each one is BORROWED (a real weapon's move, tuned) or BUILT (a pattern, effects
+// and shots with a picture you make).
 const CW_PARTS = [
-  { k: 'atk', lbl: 'ATK', part: null, need: true, note: 'How it attacks: it fights like this weapon.' },
+  { k: 'atk', lbl: 'ATK', part: null, need: true, note: 'SPACE / ⚔️ · your normal attack' },
   { k: 'sp', lbl: 'SPECIAL', part: 'special', need: true, note: 'SHIFT / ✨' },
   { k: 'su', lbl: 'SUPER', part: 'super', need: false, note: 'R / 💥' },
-  { k: 'ult', lbl: 'ULTIMATE', part: 'any', need: false, note: 'U / 🌟 · the best one: 2.5x the damage, 2.5x the wait' },
+  { k: 'ult', lbl: 'ULTIMATE', part: 'any', need: false, note: 'U / 🌟 · the best one' },
 ];
+const CW_BUILD0 = {
+  atk: { style: 'shot', dmg: 30, n: 1, speed: 7, range: 220, wait: 650, spin: false, fx: [] },
+  sp:  { pat: 'volley', dmg: 40, n: 5, range: 260, cd: 8000, dur: 3000, fx: [] },
+  su:  { pat: 'ring', dmg: 60, n: 10, range: 300, cd: 20000, dur: 4000, fx: [] },
+  ult: { pat: 'rain', dmg: 120, n: 8, range: 320, cd: 40000, dur: 5000, fx: [] },
+};
+function cwMoveState(k) {
+  const m = cw.moves[k];
+  if (!m.b) m.b = { ...CW_BUILD0[k], fx: [], shot: CustomW.genShot(k === 'atk' ? 'arrow' : k === 'sp' ? 'orb' : k === 'su' ? 'star' : 'flame', cwVal('cwColor'), '#ffffff'), c1: cwVal('cwColor'), c2: '#ffffff' };
+  if (!m.mode) m.mode = 'borrow';
+  return m;
+}
 function cwSources(part) {
   const tierOf = w => w.secret ? 'SECRET' : w.mythic ? 'MYTHIC' : w.uncommon ? 'UNCOMMON' : w.shopOnly ? 'LEGENDARY' : 'COMMON';
   const out = [];
@@ -11384,25 +11386,75 @@ function cwSources(part) {
 }
 function cwBuildMoves() {
   const el = document.getElementById('cwMoves');
-  if (el.childElementCount) { cwSyncMoves(); return; }
-  el.innerHTML = CW_PARTS.map(P => {
-    const groups = cwSources(P.part).map(([g, l]) => `<optgroup label="${g}">${l.map(o => `<option value="${o.v}">${escapeHtml(o.t)}</option>`).join('')}</optgroup>`).join('');
-    const sl = (key, lbl, lim) => `<label class="cw-sl"><span>${lbl} <b data-v="${P.k}.${key}">100%</b></span><input type="range" min="${lim[0]}" max="${lim[1]}" step="5" value="100" data-k="${P.k}" data-f="${key}" oninput="cwSlide(this)"></label>`;
-    const sliders = P.k === 'atk' ? sl('d', 'DAMAGE', CustomW.LIM.d) + sl('s', 'WAIT', CustomW.LIM.s) + sl('r', 'REACH', CustomW.LIM.r)
-                                  : sl('d', 'DAMAGE', CustomW.LIM.d) + sl('c', 'WAIT', CustomW.LIM.c);
-    return `<div class="cw-move cw-${P.k}"><div class="cw-mh"><b>${P.lbl}</b><small>${P.note}</small></div>
-      <select data-k="${P.k}" onchange="cwPick(this)" aria-label="${P.lbl}">${P.need ? '' : '<option value="">— NONE —</option>'}${groups}</select>
-      <div class="cw-sls">${sliders}</div><div class="cw-res" data-r="${P.k}"></div></div>`;
-  }).join('');
-  cwSyncMoves();
+  if (!el.childElementCount) el.innerHTML = CW_PARTS.map(P => `<div class="cw-move cw-${P.k}" data-k="${P.k}"></div>`).join('');
+  for (const P of CW_PARTS) cwRenderMove(P.k);
+  cwPower();
 }
-function cwSyncMoves() {
-  for (const sel of document.querySelectorAll('#cwMoves select')) {
-    const m = cw.moves[sel.dataset.k];
-    sel.value = sel.dataset.k === 'ult' && m.from ? m.from + ':' + m.part : m.from;
-    if (sel.value === '' && sel.dataset.k !== 'su' && sel.dataset.k !== 'ult' && sel.options.length) { sel.selectedIndex = 0; cwPick(sel, true); }
+// One move's box, drawn again whenever its kind changes (sliders only update numbers).
+function cwRenderMove(k) {
+  const P = CW_PARTS.find(x => x.k === k), m = cwMoveState(k), box = document.querySelector(`.cw-move[data-k="${k}"]`);
+  if (!box) return;
+  const head = `<div class="cw-mh"><b>${P.lbl}</b><small>${P.note}</small>
+    <span class="cw-mode"><button class="${m.mode === 'borrow' ? 'on' : ''}" onclick="cwMode('${k}','borrow')">BORROW</button><button class="${m.mode === 'build' ? 'on' : ''}" onclick="cwMode('${k}','build')">✏️ BUILD</button></span></div>`;
+  let body;
+  if (m.mode === 'borrow') {
+    const groups = cwSources(P.part).map(([g, l]) => `<optgroup label="${g}">${l.map(o => `<option value="${o.v}">${escapeHtml(o.t)}</option>`).join('')}</optgroup>`).join('');
+    const sl = (key, lbl, lim) => cwSlider(k, key, lbl, lim[0], lim[1], 5, m[key], v => v + '%');
+    body = `<select data-k="${k}" onchange="cwPick(this)" aria-label="${P.lbl}">${P.need ? '' : '<option value="">— NONE —</option>'}${groups}</select>
+      <div class="cw-sls">${k === 'atk' ? sl('d', 'DAMAGE', CustomW.LIM.d) + sl('s', 'WAIT', CustomW.LIM.s) + sl('r', 'REACH', CustomW.LIM.r)
+                                       : sl('d', 'DAMAGE', CustomW.LIM.d) + sl('c', 'WAIT', CustomW.LIM.c)}</div>`;
+  } else {
+    const b = m.b, sec = v => (v / 1000).toFixed(v < 1000 ? 2 : 1) + 's';
+    const s = (key, lbl, L, step, fmt) => cwSlider(k, 'b.' + key, lbl, L[0], L[1], step, b[key], fmt);
+    let shots = true, sliders, kinds;
+    if (k === 'atk') {
+      const L = b.style === 'swing' ? CustomW.B.swing : CustomW.B.shot;
+      kinds = `<div class="cw-chips">${[['shot', '➶ SHOTS', 'it shoots your projectiles'], ['swing', '⚔ SWING', 'it hits close up']].map(([v, t, d]) =>
+        `<button class="${b.style === v ? 'on' : ''}" title="${d}" onclick="cwSet('${k}','style','${v}')">${t}</button>`).join('')}</div>`;
+      if (b.style === 'swing') {
+        shots = false;
+        sliders = s('dmg', 'DAMAGE', L.dmg, 5) + s('range', 'REACH', L.range, 5) + s('wait', 'WAIT', L.wait, 10, sec)
+          + `<label class="cw-chk"><input type="checkbox" ${b.spin ? 'checked' : ''} onchange="cwSet('${k}','spin',this.checked)"> FULL CIRCLE (hits all round you)</label>`;
+      } else sliders = s('dmg', 'DAMAGE', L.dmg, 5) + s('n', 'SHOTS', L.n, 1) + s('speed', 'SPEED', L.speed, 1) + s('range', 'RANGE', L.range, 10) + s('wait', 'WAIT', L.wait, 10, sec);
+    } else {
+      const L = CustomW.B.move, pat = CustomW.PATS[b.pat];
+      shots = pat.shots;
+      kinds = `<div class="cw-chips">${Object.entries(CustomW.PATS).map(([v, p]) =>
+        `<button class="${b.pat === v ? 'on' : ''}" title="${p.t}" onclick="cwSet('${k}','pat','${v}')">${p.n}</button>`).join('')}</div><div class="cw-hint">${pat.t}</div>`;
+      const cdL = k === 'ult' ? [CustomW.ULT_BUILD_MIN_CD, L.cd[1]] : L.cd;
+      sliders = s('dmg', 'DAMAGE', L.dmg, 5) + (shots ? s('n', 'SHOTS', L.n, 1) : '') + s('range', b.pat === 'nova' ? 'SIZE' : 'RANGE', L.range, 10)
+        + s('cd', 'WAIT', cdL, 500, sec) + (b.pat === 'orbit' ? s('dur', 'LASTS', L.dur, 500, sec) : '');
+    }
+    const fx = !(k === 'atk' && b.style === 'swing') ? `<div class="cw-sub">EFFECTS <small>(up to ${CustomW.MAX_FX})</small></div><div class="cw-chips cw-fx">${Object.entries(CustomW.FX).map(([v, f]) =>
+      `<button class="${b.fx.includes(v) ? 'on' : ''}" title="${f.t}" onclick="cwFx('${k}','${v}')">${f.n}</button>`).join('')}</div>` : '';
+    body = kinds + `<div class="cw-sls">${sliders}</div>` + fx + (shots ? cwShotEditor(k, b) : '');
   }
-  for (const inp of document.querySelectorAll('#cwMoves input[type=range]')) inp.value = cw.moves[inp.dataset.k][inp.dataset.f];
+  box.innerHTML = head + body + `<div class="cw-res" data-r="${k}"></div>`;
+  if (m.mode === 'borrow') { const sel = box.querySelector('select'); sel.value = k === 'ult' && m.from ? m.from + ':' + m.part : m.from;
+    if (sel.value === '' && P.need && sel.options.length) { sel.selectedIndex = 0; cwPick(sel, true); } }
+  const cv = box.querySelector('canvas.cw-shotcv'); if (cv) cwDrawTex(cv, m.b.shot, false);
+}
+function cwSlider(k, key, lbl, min, max, step, val, fmt) {
+  fmt = fmt || (v => v);
+  return `<label class="cw-sl"><span>${lbl} <b data-v="${k}.${key}">${fmt(+val)}</b></span><input type="range" min="${min}" max="${max}" step="${step}" value="${val}" data-k="${k}" data-f="${key}" oninput="cwSlide(this)"></label>`;
+}
+function cwShotEditor(k, b) {
+  return `<div class="cw-sub">ITS SHOTS <small>pick one, then draw on it</small></div>
+    <div class="cw-shot"><canvas class="cw-shotcv" data-paint="${k}" width="192" height="144" aria-label="Shot picture"></canvas>
+      <div class="cw-shotside"><div class="cw-chips cw-shapes2">${CustomW.SHOT_SHAPES.map(s => `<button onclick="cwShotShape('${k}','${s}')">${s.toUpperCase()}</button>`).join('')}</div>
+        <div class="cw-row"><label>MAIN <input type="color" value="${b.c1}" onchange="cwShotCol('${k}',1,this.value)"></label><label>SECOND <input type="color" value="${b.c2}" onchange="cwShotCol('${k}',2,this.value)"></label></div>
+        ${cwPalHtml(k, b.shot)}
+        <div class="cw-row"><button class="mode-btn cw-mini" onclick="cwBlank('${k}')">⬜ BLANK</button><label class="mode-btn cw-mini cw-up">🖼️ IMAGE<input type="file" accept="image/*" onchange="cwShotImg('${k}',this.files[0])"></label></div>
+      </div></div>`;
+}
+const cwFmt = (key, v) => /wait|cd|dur/.test(key) ? (v / 1000).toFixed(v < 1000 ? 2 : 1) + 's' : /^[dsrc]$/.test(key) ? v + '%' : v;
+function cwMode(k, mode) { cwMoveState(k).mode = mode; cwRenderMove(k); cwPower(); }
+function cwSet(k, key, v) { const b = cwMoveState(k).b; b[key] = v; if (key === 'style' || key === 'pat') cwRenderMove(k); cwPower(); }
+function cwFx(k, v) {
+  const b = cwMoveState(k).b;
+  if (b.fx.includes(v)) b.fx = b.fx.filter(x => x !== v);
+  else { if (b.fx.length >= CustomW.MAX_FX) b.fx.shift(); b.fx.push(v); }
+  for (const btn of document.querySelectorAll(`.cw-move[data-k="${k}"] .cw-fx button`)) btn.classList.toggle('on', b.fx.includes(btn.getAttribute('onclick').match(/'(\w+)'\)$/)[1]));
   cwPower();
 }
 function cwPick(sel, quiet) {
@@ -11411,14 +11463,23 @@ function cwPick(sel, quiet) {
   else m.from = sel.value;
   if (!quiet) cwPower();
 }
-function cwSlide(inp) { cw.moves[inp.dataset.k][inp.dataset.f] = +inp.value; cwPower(); }
+function cwSlide(inp) {
+  const m = cw.moves[inp.dataset.k], f = inp.dataset.f;
+  if (f.startsWith('b.')) m.b[f.slice(2)] = +inp.value; else m[f] = +inp.value;
+  const lbl = document.querySelector(`[data-v="${inp.dataset.k}.${f}"]`); if (lbl) lbl.textContent = cwFmt(f.replace('b.', ''), +inp.value);
+  cwPower();
+}
 function cwSpec() {
-  const M = cw.moves, opt = m => m.from ? m : null;
-  return { name: document.getElementById('cwName').value, color: cwVal('cwColor'), tex: cw.tex,
-           atk: M.atk, sp: M.sp, su: opt(M.su), ult: M.ult.from ? M.ult : null };
+  const one = k => {
+    const m = cwMoveState(k);
+    if (m.mode === 'build') { const { c1, c2, ...b } = m.b; return { mode: 'build', ...b }; }
+    if (!m.from) return null;
+    return k === 'atk' ? { from: m.from, d: m.d, s: m.s, r: m.r } : { from: m.from, d: m.d, c: m.c, ...(k === 'ult' ? { part: m.part } : {}) };
+  };
+  return { name: document.getElementById('cwName').value, color: cwVal('cwColor'), tex: cw.tex, atk: one('atk'), sp: one('sp'), su: one('su'), ult: one('ult') };
 }
 function cwPower() {
-  const spec = cwSpec(), pct = CustomW.powerPct(spec, cwById), lim = CustomW.LIMIT_PCT, top = 200;
+  const spec = cwSpec(), pct = CustomW.powerPct(spec, cwById), lim = CustomW.LIMIT_PCT, top = 260;
   const fill = document.getElementById('cwBarFill'); if (!fill) return;
   fill.style.width = Math.min(100, pct / top * 100) + '%';
   fill.classList.toggle('over', pct > lim);
@@ -11426,11 +11487,17 @@ function cwPower() {
   document.getElementById('cwBarLim').style.left = (lim / top * 100) + '%';
   document.getElementById('cwPowTxt').innerHTML = `POWER <b class="${pct > lim ? 'no' : 'ok'}">${pct}</b> &middot; FIRE SPEAR (a secret weapon) = 100 &middot; LIMIT <b>${lim}</b>`
     + (pct > lim ? '<br><span class="no">TOO STRONG: turn something down, or it cannot be made</span>' : pct > 100 ? '<br><span class="ok">STRONGER THAN A SECRET WEAPON</span>' : '');
-  // What each move comes out as.
+  const sec = v => (v / 1000).toFixed(v < 1000 ? 2 : 1) + 's';
   for (const P of CW_PARTS) {
     const el = document.querySelector(`.cw-res[data-r="${P.k}"]`); if (!el) continue;
     const m = cw.moves[P.k];
-    for (const b of document.querySelectorAll(`[data-v^="${P.k}."]`)) b.textContent = m[b.dataset.v.split('.')[1]] + '%';
+    if (m.mode === 'build') {
+      const b = m.b, fx = (b.fx || []).map(x => CustomW.FX[x].n).join(' + ');
+      if (P.k === 'atk') el.innerHTML = b.style === 'swing' ? `= <b>${b.dmg}</b> damage, every <b>${sec(b.wait)}</b>, reach <b>${b.range}</b>${b.spin ? ', all round you' : ''}`
+        : `= <b>${b.dmg}</b> damage × <b>${b.n}</b> shot${b.n > 1 ? 's' : ''}, every <b>${sec(b.wait)}</b>, range <b>${b.range}</b>${fx ? ' · ' + fx : ''}`;
+      else el.innerHTML = `= ${CustomW.PATS[b.pat].n}: <b>${b.dmg}</b> damage${CustomW.PATS[b.pat].shots ? ` × <b>${b.n}</b> shots` : ''}, every <b>${sec(Math.max(P.k === 'ult' ? CustomW.ULT_BUILD_MIN_CD : 0, b.cd))}</b>${fx ? ' · ' + fx : ''}`;
+      continue;
+    }
     const w = cwById(m.from);
     if (!w) { el.textContent = ''; continue; }
     if (P.k === 'atk') { el.innerHTML = `= <b>${Math.round(w.damage * m.d / 100)}</b> damage, every <b>${(w.atkSpd * m.s / 100000).toFixed(2)}s</b>, reach <b>${Math.round(w.range * m.r / 100)}</b>`; continue; }
@@ -11438,6 +11505,113 @@ function cwPower() {
     const dm = P.k === 'ult' ? CustomW.ULT_DMG : 1, cm = P.k === 'ult' ? CustomW.ULT_CD : 1;
     el.innerHTML = `= <b>${Math.round((src.dmg || 0) * m.d / 100 * dm)}</b> damage, every <b>${Math.max(P.k === 'ult' ? 30 : 0.5, src.cd * m.c / 100 * cm / 1000).toFixed(1)}s</b>`;
   }
+}
+
+// ── drawing: the weapon (scope 'w') and each move's shots (scope = its key) ──
+const cwPaintSel = {};
+const cwTexOf = s => s === 'w' ? cw.tex : cwMoveState(s).b.shot;
+function cwTexSet(s, t) { if (s === 'w') cw.tex = t; else cwMoveState(s).b.shot = t; }
+const cwLimOf = s => s === 'w' ? CustomW.TEX : CustomW.SHOT;
+function cwPalHtml(s, t) {
+  const sel = cwPaintSel[s] ?? 1;
+  return `<div class="cw-pal" data-pal="${s}">${(t?.pal || []).map((c, i) => `<button class="${sel === i + 1 ? 'on' : ''}" style="background:${c}" onclick="cwPalPick('${s}',${i + 1})" aria-label="colour ${i + 1}"></button>`).join('')}`
+    + `<button class="cw-erase ${sel === 0 ? 'on' : ''}" onclick="cwPalPick('${s}',0)" title="eraser">⌫</button>`
+    + `<label class="cw-palset" title="change the picked colour (or add one)">🎨<input type="color" value="${t?.pal?.[(sel || 1) - 1] || '#ffffff'}" onchange="cwPalSet('${s}',this.value)"></label></div>`;
+}
+function cwPalRefresh(s) { const el = document.querySelector(`.cw-pal[data-pal="${s}"]`); if (el) el.outerHTML = cwPalHtml(s, cwTexOf(s)); }
+function cwPalPick(s, i) { cwPaintSel[s] = i; cwPalRefresh(s); }
+function cwPalSet(s, c) {
+  const t = cwTexOf(s); if (!t) return;
+  let i = cwPaintSel[s] ?? 1;
+  if (i === 0 || i > t.pal.length) { if (t.pal.length >= cwLimOf(s).maxPal) { cwMsg('No room for more colours: change one instead.', true); return; } t.pal.push(c); i = t.pal.length; }
+  else t.pal[i - 1] = c;
+  cwPaintSel[s] = i;
+  cwPalRefresh(s); cwRedraw(s);
+}
+function cwRedraw(s) { if (s === 'w') cwDraw(); else { const cv = document.querySelector(`canvas.cw-shotcv[data-paint="${s}"]`); if (cv) cwDrawTex(cv, cwTexOf(s), false); } }
+function cwBlank(s) {
+  s = s || 'w';
+  const old = cwTexOf(s), L = s === 'w' ? { w: 40, h: 16 } : { w: 16, h: 12 };
+  const pal = old?.pal?.length ? old.pal.slice() : ['#ffffff'];
+  cwTexSet(s, { w: L.w, h: L.h, pal, px: '0'.repeat(L.w * L.h) });
+  cwPaintSel[s] = 1; cwPalRefresh(s); cwRedraw(s);
+}
+function cwShotShape(k, shape) { const b = cwMoveState(k).b; b.shot = CustomW.genShot(shape, b.c1, b.c2); cwPalRefresh(k); cwRedraw(k); }
+function cwShotCol(k, which, c) { const b = cwMoveState(k).b; b['c' + which] = c; }
+function cwShotImg(k, file) {
+  if (!file || !/^image\//.test(file.type)) return;
+  const url = URL.createObjectURL(file), img = new Image();
+  img.onload = () => { URL.revokeObjectURL(url); const t = cwFromImage(img, true, CustomW.SHOT, 16, 12);
+    if (!t) { cwMsg('Nothing was left of that picture.', true); return; } cwMoveState(k).b.shot = t; cwPalRefresh(k); cwRedraw(k); cwMsg(''); };
+  img.src = url;
+}
+// Draw a pixel picture into a canvas, as big as fits; remembers where, for painting.
+function cwDrawTex(cv, t, grip) {
+  const g = cv.getContext('2d'), W = cv.width, H = cv.height;
+  g.clearRect(0, 0, W, H);
+  for (let y = 0; y < H; y += 10) for (let x = 0; x < W; x += 10) { g.fillStyle = (x + y) / 10 % 2 ? '#15152a' : '#1c1c34'; g.fillRect(x, y, 10, 10); }
+  if (!t) return;
+  const u = Math.max(1, Math.floor(Math.min((W - 12) / t.w, (H - 12) / t.h))), ox = Math.floor((W - t.w * u) / 2), oy = Math.floor((H - t.h * u) / 2);
+  cv._geo = { u, ox, oy };
+  g.strokeStyle = 'rgba(255,255,255,0.07)'; g.lineWidth = 1;          // the grid you paint on
+  for (let x = 0; x <= t.w; x++) { g.beginPath(); g.moveTo(ox + x * u + 0.5, oy); g.lineTo(ox + x * u + 0.5, oy + t.h * u); g.stroke(); }
+  for (let y = 0; y <= t.h; y++) { g.beginPath(); g.moveTo(ox, oy + y * u + 0.5); g.lineTo(ox + t.w * u, oy + y * u + 0.5); g.stroke(); }
+  const solid = (x, y) => x >= 0 && y >= 0 && x < t.w && y < t.h && t.px[y * t.w + x] !== '0';
+  g.fillStyle = '#05050b';
+  const e = Math.max(1, Math.round(u / 5));
+  for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) if (solid(x, y)) g.fillRect(ox + x * u - e, oy + y * u - e, u + e * 2, u + e * 2);
+  for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) {
+    const i = parseInt(t.px[y * t.w + x], 16); if (!i) continue;
+    g.fillStyle = t.pal[i - 1]; g.fillRect(ox + x * u, oy + y * u, u, u);
+  }
+  if (grip) { g.fillStyle = '#8a8aa8'; g.font = '9px "Courier New",monospace'; g.fillText('◄ GRIP', 4, H - 4); }
+  else { g.fillStyle = '#8a8aa8'; g.font = '9px "Courier New",monospace'; g.fillText('FLIES ►', W - 46, H - 4); }
+}
+let cwPainting = null;
+function cwPaintEv(e) {
+  if (e.type === 'pointerup' || e.type === 'pointercancel') { cwPainting = null; return; }
+  const cv = e.target && e.target.closest ? e.target.closest('canvas[data-paint]') : null;
+  if (e.type === 'pointerdown') { if (!cv) return; cwPainting = cv; try { cv.setPointerCapture(e.pointerId); } catch {} }
+  const c = cwPainting; if (!c || (cv && cv !== c)) return;
+  const s = c.dataset.paint;
+  if (s === 'w' && cw.tab !== 'draw') return;
+  const t = cwTexOf(s), geo = c._geo; if (!t || !geo) return;
+  const r = c.getBoundingClientRect(), k = c.width / r.width;
+  const x = Math.floor(((e.clientX - r.left) * k - geo.ox) / geo.u), y = Math.floor(((e.clientY - r.top) * k - geo.oy) / geo.u);
+  if (x < 0 || y < 0 || x >= t.w || y >= t.h) return;
+  const i = Math.min(cwPaintSel[s] ?? 1, t.pal.length), at = y * t.w + x, ch = i.toString(16);
+  if (t.px[at] === ch) return;
+  t.px = t.px.slice(0, at) + ch + t.px.slice(at + 1);
+  e.preventDefault();
+  cwRedraw(s);
+}
+for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) document.addEventListener(ev, cwPaintEv, { passive: false });
+
+// ── in a fight: a built move's shot, drawn with its maker's picture ──
+const cwShotCache = new Map();
+function cwShotCanvas(id, slot) {
+  const key = id + ':' + slot;
+  if (cwShotCache.has(key)) return cwShotCache.get(key);
+  const t = WEAPON_META[id]?.custom?.[slot]?.shot;
+  if (!t) return null;
+  const cv = document.createElement('canvas'); cv.width = t.w + 2; cv.height = t.h + 2;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#05050b';
+  for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) if (t.px[y * t.w + x] !== '0') g.fillRect(x, y, 3, 3);
+  for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) { const i = parseInt(t.px[y * t.w + x], 16); if (i) { g.fillStyle = t.pal[i - 1]; g.fillRect(x + 1, y + 1, 1, 1); } }
+  cwShotCache.set(key, cv);
+  return cv;
+}
+function drawCwShot(pr, ang) {
+  const [, id, slot] = pr.weaponId.split(':');
+  const col = WEAPON_COLOR[id] || '#ffffff', cv = WEAPON_META[id] ? cwShotCanvas(id, slot) : null;
+  if (!WEAPON_META[id]) cwFetch(id);
+  ctx.save(); ctx.translate(pr.x, pr.y);
+  ctx.globalAlpha = 0.3; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, cv ? Math.max(cv.width, cv.height) * 0.45 : 5, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  if (cv) { ctx.rotate(ang); ctx.imageSmoothingEnabled = false; ctx.drawImage(cv, -cv.width / 2, -cv.height / 2); }
+  else { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
 }
 
 // ── making it ──

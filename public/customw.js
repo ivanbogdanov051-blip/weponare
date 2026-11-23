@@ -1,7 +1,8 @@
 'use strict';
 // CUSTOM WEAPONS: made by a player for ◆1,000,000 and ALL their progress. Each of
-// its moves (ATK, SPECIAL, SUPER, ULTIMATE) is borrowed from a real weapon and
-// tuned (more damage, faster, further...). Then it is checked: a weapon over the
+// its moves (ATK, SPECIAL, SUPER, ULTIMATE) is either borrowed from a real weapon
+// and tuned, or BUILT from scratch (a pattern, effects, and shots with a picture
+// the player makes). Then it is checked: a weapon over the
 // POWER limit cannot be made. Both sides load this file, so the meter on the
 // page and the check on the server are the same sum.
 //
@@ -12,49 +13,112 @@
   const PRICE = 1000000;
   const MAX_OWNED = 5;                      // custom weapons one account can hold
   // How far each slider goes, in percent of the borrowed move.
-  const LIM = { d: [50, 200], s: [60, 200], r: [70, 150], c: [60, 200] };
-  const ULT_DMG = 2.5, ULT_CD = 2.5, ULT_MIN_CD = 30000;   // an ULTIMATE: its move, 2.5x as strong and 2.5x as slow to come back
+  const LIM = { d: [50, 300], s: [50, 200], r: [70, 160], c: [50, 200] };
+  const ULT_DMG = 2.5, ULT_CD = 2.5, ULT_MIN_CD = 30000;   // a borrowed ULTIMATE: its move, 2.5x as strong and 2.5x as slow to come back
   const W = { atk: 0.40, sp: 0.25, su: 0.20, ult: 0.15 };  // how much each move counts towards POWER
   const REF = 0.85 * 1.4;                   // the FIRE SPEAR (a secret weapon) on that scale
-  const LIMIT = 1.45;                       // the most a custom weapon may have: about 122% of the Fire Spear
+  const LIMIT = REF * 2;                    // the most a custom weapon may have: twice the Fire Spear
   const TEX = { minW: 8, maxW: 48, minH: 4, maxH: 24, maxPal: 15, minPx: 12 };
+  const SHOT = { minW: 3, maxW: 16, minH: 3, maxH: 12, maxPal: 8, minPx: 3 };   // a projectile's picture
   // Moves that only work with their own weapon's machinery: never borrowed.
   const NO_ATK = ['vortex'];
   const NO_MOVE = ['kunaistorm', 'soulstorm', 'absorbheal'];
+
+  // ── BUILD YOUR OWN: moves made from scratch, with shots you draw ──
+  // m: how much stronger it makes the move (for POWER).
+  const FX = {
+    pierce:    { n: 'PIERCE',    m: 1.25, t: 'goes through every foe' },
+    homing:    { n: 'HOMING',    m: 1.2,  t: 'turns to chase foes' },
+    explode:   { n: 'EXPLODE',   m: 1.35, t: 'blows up, hitting all around' },
+    burn:      { n: 'BURN',      m: 1.15, t: 'sets foes on fire' },
+    freeze:    { n: 'FREEZE',    m: 1.15, t: 'slows foes down' },
+    poison:    { n: 'POISON',    m: 1.15, t: 'venom that keeps hurting' },
+    stun:      { n: 'STUN',      m: 1.3,  t: 'stops foes for a moment' },
+    chain:     { n: 'CHAIN',     m: 1.35, t: 'lightning jumps to 2 more foes' },
+    knock:     { n: 'KNOCKBACK', m: 1.05, t: 'shoves foes away' },
+    lifesteal: { n: 'LIFESTEAL', m: 1.2,  t: 'heals you a fifth of the damage' },
+    bounce:    { n: 'BOUNCE',    m: 1.1,  t: 'bounces off the walls twice' },
+  };
+  const MAX_FX = 2;
+  const PATS = {
+    volley: { n: 'VOLLEY', t: 'a fan of shots at the nearest foe',          shots: true,  hits: b => Math.pow(b.n, 0.6) },
+    ring:   { n: 'RING',   t: 'shots fly out all around you',               shots: true,  hits: b => Math.pow(b.n, 0.45) },
+    rain:   { n: 'RAIN',   t: 'shots fall from the sky on the foes near you', shots: true, hits: b => Math.pow(Math.min(b.n, 8), 0.75) },
+    orbit:  { n: 'ORBIT',  t: 'shots circle you, hitting what they touch',  shots: true,  hits: b => Math.pow(b.n, 0.5) * Math.pow(b.dur / 1000, 0.6) },
+    nova:   { n: 'NOVA',   t: 'a blast all around you',                     shots: false, hits: b => 1.6 * Math.pow(b.range / 120, 0.3) },
+    beam:   { n: 'BEAM',   t: 'a beam through everything in a line',        shots: false, hits: () => 1.5 },
+    dash:   { n: 'DASH',   t: 'dash through the nearest foe, hitting all on the way', shots: false, hits: () => 1.3 },
+  };
+  // [lowest, highest, to start with]
+  const B = {
+    shot:  { dmg: [5, 200, 30], n: [1, 7, 1], speed: [3, 14, 7], range: [100, 520, 220], wait: [120, 3000, 650] },
+    swing: { dmg: [5, 260, 40], range: [30, 140, 60], wait: [150, 3000, 800] },
+    move:  { dmg: [5, 900, 60], n: [1, 24, 5], range: [60, 600, 260], cd: [1500, 60000, 8000], dur: [1000, 8000, 3000] },
+  };
+  const ULT_BUILD_MIN_CD = 15000;
+  // What a common weapon does a second (ATK, SPECIAL) and a legendary's SUPER: a built move like that scores 1.
+  const REF_ATK = 46, REF_SP = 9.4, REF_SU = 5;
 
   const tier = w => !w ? 0 : w.secret ? 1.4 : w.mythic ? 1.3 : w.uncommon ? 1.05 : w.shopOnly ? 1.15 : 1;
   const clamp = (v, [a, b]) => Math.max(a, Math.min(b, Math.round(Number(v) || 100)));
   const pct = (v, k) => clamp(v, LIM[k]) / 100;
   const okSrc = w => !!w && !w.custom;
+  const num = (v, [a, b, def]) => { const n = Math.round(Number(v)); return Math.max(a, Math.min(b, Number.isFinite(n) ? n : def)); };
+  const cleanFx = fx => [...new Set((Array.isArray(fx) ? fx : []).filter(k => FX[k]))].slice(0, MAX_FX);
+  const fxMult = fx => fx.reduce((m, k) => m * FX[k].m, 1);
+  const isBuild = m => !!m && m.mode === 'build';
+
+  // A built ATK or move, with every number inside its limits.
+  function cleanAtkB(r) {
+    if (r.style === 'swing') { const L = B.swing; return { mode: 'build', style: 'swing', dmg: num(r.dmg, L.dmg), range: num(r.range, L.range), wait: num(r.wait, L.wait), spin: !!r.spin }; }
+    const L = B.shot;
+    return { mode: 'build', style: 'shot', dmg: num(r.dmg, L.dmg), n: num(r.n, L.n), speed: num(r.speed, L.speed), range: num(r.range, L.range),
+             wait: num(r.wait, L.wait), fx: cleanFx(r.fx), shot: cleanTex(r.shot, SHOT) };
+  }
+  function cleanMoveB(r, ult) {
+    const L = B.move, pat = PATS[r.pat] ? r.pat : 'volley';
+    return { mode: 'build', pat, dmg: num(r.dmg, L.dmg), n: num(r.n, L.n), range: num(r.range, L.range),
+             cd: Math.max(ult ? ULT_BUILD_MIN_CD : 0, num(r.cd, L.cd)), dur: num(r.dur, L.dur), fx: cleanFx(r.fx),
+             shot: PATS[pat].shots ? cleanTex(r.shot, SHOT) : null };
+  }
+  function atkValue(b) {
+    if (b.style === 'swing') return (b.dmg * 1000 / b.wait) / REF_ATK * Math.sqrt(b.range / 60) * (b.spin ? 1.3 : 1);
+    return (b.dmg * Math.pow(b.n, 0.6) * 1000 / b.wait) / REF_ATK * Math.sqrt(b.range / 180) * fxMult(b.fx);
+  }
+  const moveValue = (b, ref) => (b.dmg * PATS[b.pat].hits(b) * fxMult(b.fx) * 1000 / b.cd) / ref;
 
   // POWER of a spec, given a look-up from weapon id to its definition.
   function power(spec, byId) {
     if (!spec) return 0;
     let s = 0;
-    const a = spec.atk, aw = a && byId(a.from);
-    if (aw) s += W.atk * tier(aw) * pct(a.d, 'd') / pct(a.s, 's') * Math.sqrt(pct(a.r, 'r'));
-    for (const [k, part] of [['sp', 'special'], ['su', 'super']]) {
-      const m = spec[k], w = m && byId(m.from);
+    const a = spec.atk;
+    if (isBuild(a)) s += W.atk * atkValue(cleanAtkB(a));
+    else { const aw = a && byId(a.from); if (aw) s += W.atk * tier(aw) * pct(a.d, 'd') / pct(a.s, 's') * Math.sqrt(pct(a.r, 'r')); }
+    for (const [k, part, ref] of [['sp', 'special', REF_SP], ['su', 'super', REF_SU]]) {
+      const m = spec[k];
+      if (isBuild(m)) { s += W[k] * moveValue(cleanMoveB(m), ref); continue; }
+      const w = m && byId(m.from);
       if (w && w[part]) s += W[k] * tier(w) * pct(m.d, 'd') / pct(m.c, 'c');
     }
-    const u = spec.ult, uw = u && byId(u.from);
-    if (uw && uw[u.part]) s += W.ult * tier(uw) * pct(u.d, 'd') / pct(u.c, 'c');
+    const u = spec.ult;
+    if (isBuild(u)) s += W.ult * moveValue(cleanMoveB(u, true), REF_SU);
+    else { const uw = u && byId(u.from); if (uw && uw[u.part]) s += W.ult * tier(uw) * pct(u.d, 'd') / pct(u.c, 'c'); }
     return s;
   }
   const powerPct = (spec, byId) => Math.round(power(spec, byId) / REF * 100);
   const LIMIT_PCT = Math.round(LIMIT / REF * 100);
 
   const hex6 = c => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
-  function cleanTex(t) {
+  function cleanTex(t, L = TEX) {
     if (!t || typeof t !== 'object') return null;
     const w = Math.floor(t.w), h = Math.floor(t.h);
-    if (!(w >= TEX.minW && w <= TEX.maxW && h >= TEX.minH && h <= TEX.maxH)) return null;
-    if (!Array.isArray(t.pal) || !t.pal.length || t.pal.length > TEX.maxPal || !t.pal.every(hex6)) return null;
+    if (!(w >= L.minW && w <= L.maxW && h >= L.minH && h <= L.maxH)) return null;
+    if (!Array.isArray(t.pal) || !t.pal.length || t.pal.length > L.maxPal || !t.pal.every(hex6)) return null;
     const px = String(t.px || '').toLowerCase();
     if (px.length !== w * h || !/^[0-9a-f]*$/.test(px)) return null;
     let solid = 0;
     for (const ch of px) { const i = parseInt(ch, 16); if (i > t.pal.length) return null; if (i) solid++; }
-    if (solid < TEX.minPx) return null;
+    if (solid < L.minPx) return null;
     return { w, h, pal: t.pal.map(c => c.toLowerCase()), px };
   }
 
@@ -67,11 +131,24 @@
     const color = hex6(raw.color) ? raw.color.toLowerCase() : null;
     if (!color) return { error: 'Pick its colour.' };
     const tex = cleanTex(raw.tex);
-    if (!tex) return { error: 'Its texture is missing or too small: generate one or upload an image.' };
-    const a = raw.atk || {}, aw = byId(a.from);
-    if (!okSrc(aw) || NO_ATK.includes(a.from)) return { error: 'Pick the ATK it borrows.' };
-    const spec = { name, color, tex, atk: { from: a.from, d: clamp(a.d, LIM.d), s: clamp(a.s, LIM.s), r: clamp(a.r, LIM.r) } };
-    const move = (m, part, need) => {
+    if (!tex) return { error: 'Its texture is missing or too small: generate one, draw one or upload an image.' };
+    const a = raw.atk || {};
+    let atk;
+    if (isBuild(a)) {
+      atk = cleanAtkB(a);
+      if (atk.style === 'shot' && !atk.shot) return { error: 'Give your ATK shots a picture (at least 3 pixels).' };
+    } else {
+      const aw = byId(a.from);
+      if (!okSrc(aw) || NO_ATK.includes(a.from)) return { error: 'Pick the ATK it borrows.' };
+      atk = { from: a.from, d: clamp(a.d, LIM.d), s: clamp(a.s, LIM.s), r: clamp(a.r, LIM.r) };
+    }
+    const spec = { name, color, tex, atk };
+    const move = (m, part, need, ult) => {
+      if (isBuild(m)) {
+        const b = cleanMoveB(m, ult);
+        if (PATS[b.pat].shots && !b.shot) return { error: 'Give the shots of its ' + (need || (ult ? 'ULTIMATE' : 'SUPER')) + ' a picture.' };
+        return { v: b };
+      }
       if (!m || !m.from) return need ? { error: 'Pick its ' + need + '.' } : { v: null };
       const w = byId(m.from), mv = w && w[part];
       if (!okSrc(w) || !mv || NO_MOVE.includes(mv.kind)) return { error: 'That move cannot be borrowed.' };
@@ -80,7 +157,8 @@
     let r = move(raw.sp, 'special', 'SPECIAL'); if (r.error) return r; spec.sp = r.v;
     r = move(raw.su, 'super'); if (r.error) return r; spec.su = r.v;
     const u = raw.ult;
-    if (u && u.from) {
+    if (isBuild(u)) { r = move(u, 'super', null, true); if (r.error) return r; spec.ult = { ...r.v, part: 'super' }; }
+    else if (u && u.from) {
       const part = u.part === 'super' ? 'super' : 'special';
       r = move(u, part); if (r.error) return r;
       spec.ult = { ...r.v, part };
@@ -91,30 +169,57 @@
     return { spec };
   }
 
-  // The weapon a spec makes, from the weapons it borrows from. The ATK weapon
-  // lends its whole way of fighting (melee or shots, and its tricks).
+  // The weapon a spec makes. A borrowed ATK lends its weapon's whole way of
+  // fighting (melee or shots, and its tricks); a built one is plain shots or a swing.
   const KEEP_OUT = ['id', 'name', 'price', 'mythic', 'mythicKills', 'mythicNeeds', 'mythicBoss', 'needLegendary', 'needAll', 'needMind',
                     'needLight', 'needSamurai', 'bossReward', 'uncommon', 'from', 'unlockXp', 'special', 'super'];
   function build(id, spec, byId) {
-    const aw = byId(spec.atk.from);
-    const w = {};
-    for (const [k, v] of Object.entries(aw)) if (!KEEP_OUT.includes(k)) w[k] = v;
-    const mv = (m, part, dm, cm, minCd) => {
+    const a = spec.atk, w = {};
+    if (isBuild(a)) {
+      if (a.style === 'swing') Object.assign(w, { type: 'melee', damage: a.dmg, range: a.range, atkSpd: a.wait, ...(a.spin ? { swing360: true } : {}) });
+      else Object.assign(w, { type: 'ranged', damage: a.dmg, range: a.range, atkSpd: a.wait, cwShot: { n: a.n, speed: a.speed, fx: a.fx } });
+    } else {
+      const aw = byId(a.from);
+      for (const [k, v] of Object.entries(aw)) if (!KEEP_OUT.includes(k)) w[k] = v;
+      Object.assign(w, { damage: Math.max(1, Math.round(aw.damage * a.d / 100)), atkSpd: Math.max(70, Math.round(aw.atkSpd * a.s / 100)), range: Math.round(aw.range * a.r / 100) });
+    }
+    const mv = (m, part, dm, cm, minCd, slot) => {
+      if (isBuild(m)) return { kind: 'cwmove', slot, pat: m.pat, dmg: m.dmg, cd: m.cd, n: m.n, range: m.range, dur: m.dur, fx: m.fx };
       const src = byId(m.from)[part];
       return { ...src, dmg: Math.max(1, Math.round((src.dmg || 0) * m.d / 100 * dm)), cd: Math.max(minCd || 500, Math.round(src.cd * m.c / 100 * cm)) };
     };
     Object.assign(w, {
       id, name: spec.name, custom: true, secret: true, shopOnly: true, noRequirement: true, price: 0, unlockXp: 0,
-      damage: Math.max(1, Math.round(aw.damage * spec.atk.d / 100)),
-      atkSpd: Math.max(70, Math.round(aw.atkSpd * spec.atk.s / 100)),
-      range: Math.round(aw.range * spec.atk.r / 100),
-      special: mv(spec.sp, 'special', 1, 1),
-      super: spec.su ? mv(spec.su, 'super', 1, 1) : undefined,
-      ultimate: spec.ult ? { ...mv(spec.ult, spec.ult.part, ULT_DMG, ULT_CD, ULT_MIN_CD), part: spec.ult.part } : undefined,
+      special: mv(spec.sp, 'special', 1, 1, 0, 'sp'),
+      super: spec.su ? mv(spec.su, 'super', 1, 1, 0, 'su') : undefined,
+      ultimate: spec.ult ? { ...mv(spec.ult, spec.ult.part, ULT_DMG, ULT_CD, ULT_MIN_CD, 'ult'), part: spec.ult.part } : undefined,
     });
     if (!w.super) delete w.super;
     if (!w.ultimate) delete w.ultimate;
     return w;
+  }
+
+  // ── Shot pictures: a few to start from (all fly to the right) ──
+  const SHOT_SHAPES = ['orb', 'arrow', 'star', 'shard', 'flame', 'bolt', 'blade', 'skull'];
+  function genShot(shape, c1, c2) {
+    const dims = { orb: [8, 8], arrow: [14, 5], star: [9, 9], shard: [12, 6], flame: [13, 8], bolt: [14, 7], blade: [8, 12], skull: [9, 9] }[shape] || [8, 8];
+    const [w, h] = dims, g = new Array(w * h).fill(0);
+    const pal = [c1, shade(c1, 0.55), c2, shade(c1, -0.45)];
+    const put = (x, y, c) => { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < w && y < h) g[y * w + x] = c; };
+    const disc = (x, y, r, c) => { for (let j = -Math.ceil(r); j <= r; j++) for (let i = -Math.ceil(r); i <= r; i++) if (i * i + j * j <= r * r) put(x + i, y + j, c); };
+    switch (shape) {
+      case 'arrow': for (let x = 1; x < 10; x++) put(x, 2, 3); for (let x = 10; x < 14; x++) for (let y = 2 - (13 - x) * 0.6; y <= 2 + (13 - x) * 0.6; y++) put(x, y, 1);
+        put(13, 2, 2); put(0, 0, 2); put(1, 1, 2); put(0, 4, 2); put(1, 3, 2); break;
+      case 'star': for (let i = -4; i <= 4; i++) { put(4 + i, 4, 1); put(4, 4 + i, 1); if (Math.abs(i) < 3) { put(4 + i, 4 + i, 1); put(4 + i, 4 - i, 1); } } disc(4, 4, 1.5, 2); put(4, 4, 2); break;
+      case 'shard': for (let x = 0; x < 12; x++) { const hw = x < 4 ? x * 0.7 : (11 - x) * 0.35; for (let y = -hw; y <= hw; y++) put(x, 2.5 + y, y < 0 ? 2 : 1); } put(11, 2.5, 2); break;
+      case 'flame': for (let x = 0; x < 9; x++) { const hw = x * 0.35; for (let y = -hw; y <= hw; y++) put(x, 4 + y, (x + Math.round(y)) % 3 ? 3 : 1); }
+        disc(9, 4, 3, 1); disc(9.5, 4, 1.6, 2); break;
+      case 'bolt': { const pts = [[0, 1], [5, 1], [3, 5], [9, 5], [7, 2], [13, 3]]; for (let i = 0; i < pts.length - 1; i++) { const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)); for (let k = 0; k <= n; k++) { put(x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n, 1); put(x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n + 1, 2); } } break; }
+      case 'blade': for (let t = -1.3; t <= 1.3; t += 0.05) for (let r = 4.5; r <= 7 - Math.abs(t) * 1.5; r += 0.5) put(1 + Math.cos(t) * r, 6 + Math.sin(t) * r, r > 6 ? 2 : 1); break;
+      case 'skull': disc(4, 3.5, 3.5, 2); for (let x = 2; x <= 6; x++) put(x, 7, 2); put(3, 8, 2); put(5, 8, 2); put(2, 3, 4); put(3, 3, 4); put(5, 3, 4); put(6, 3, 4); put(4, 5, 4); break;
+      default: disc(3.5, 3.5, 3.6, 1); for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) if (g[y * w + x] && x + y > 9) g[y * w + x] = 4; disc(2.5, 2.5, 1.3, 2);
+    }
+    return { w, h, pal, px: g.map(v => v.toString(16)).join('') };
   }
 
   // The texture as weapon art (the same kit every weapon draws with). Rows of
@@ -210,7 +315,8 @@
     return { w, h, pal, px: g.map(v => v.toString(16)).join('') };
   }
 
-  const CustomW = { PRICE, MAX_OWNED, LIM, ULT_DMG, ULT_CD, LIMIT, LIMIT_PCT, REF, TEX, NO_ATK, NO_MOVE, SHAPES,
+  const CustomW = { PRICE, MAX_OWNED, LIM, ULT_DMG, ULT_CD, LIMIT, LIMIT_PCT, REF, TEX, SHOT, NO_ATK, NO_MOVE, SHAPES, FX, MAX_FX, PATS, B, SHOT_SHAPES, ULT_BUILD_MIN_CD,
+                    isBuild, cleanAtkB, cleanMoveB, genShot,
                     tier, power, powerPct, check, cleanTex, build, art, generate, shade };
   if (typeof module !== 'undefined' && module.exports) module.exports = CustomW;
   else root.CustomW = CustomW;

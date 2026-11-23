@@ -5685,6 +5685,7 @@ function updateProjectile(proj, factor, dt) {
 }
 
 function advanceProjectile(proj, factor, dt) {
+  if (proj.orbit) { if (!cwOrbitStep(proj, dt)) return false; } else {
   if (proj.homing) homeProjectile(proj, dt);
   const step = Math.hypot(proj.dx, proj.dy) * factor;
   proj.x += proj.dx * factor;
@@ -5740,6 +5741,7 @@ function advanceProjectile(proj, factor, dt) {
     if (proj.teleport) doHookTeleport(proj, proj.x, proj.y);
     return false;
   }
+  }
 
   const hr = proj.hitR || 4;
   const hitBox = { x: proj.x - hr, y: proj.y - hr, w: hr * 2, h: hr * 2 };
@@ -5779,6 +5781,7 @@ function advanceProjectile(proj, factor, dt) {
       proj.owner = tk;
       proj.traveled = 0;
       proj.returning = false;
+      proj.orbit = null;                       // a parried ORBIT shot flies off
       proj.damage = Math.round(proj.damage * reflectOf(t));
       // A deflected hook is just a projectile now — it reels nobody in and
       // teleports nobody, so it should stop drawing a chain too.
@@ -5843,6 +5846,7 @@ function detonateAoe(proj) {
       applyDamage(t, proj.damage, proj.owner);
       if (proj.chill) chillTarget(t, proj.chill);
       if (proj.aoeStun && !t.dead) stunTarget(t, proj.aoeStun);   // the ELITE SNIPER's explosive bullet
+      if (proj.cw && !t.dead) onHitExtras(proj, t);
     }
   }
   room.particles.push({
@@ -5993,6 +5997,7 @@ function attackMove(p, pKey) {
   // Any attack can swat an enemy's fire hand out of the air.
   swatFireHands(p, pKey, w.type === 'melee' ? w.range : 48);
   swatShots(p, w.type === 'melee' ? w.range + 10 : 44);
+  if (w.cwShot) { cwAttack(p, pKey, w, dmgMult); return; }
   if (w.infinityShot) { infinityAttack(p, pKey, w, dmgMult); return; }
   if (w.kunaiOrbit) { darklightAttack(p, pKey, w, dmgMult); return; }
   if (w.starStaff) { starAttack(p, pKey, w, dmgMult); return; }
@@ -6190,6 +6195,100 @@ function explodeHand(f) {
   room.particles.push({ type: 'shockwave', x: f.x, y: f.y, maxR: f.aoe, timer: 380, max: 380, color: '#ffc23a' });
 }
 
+// ── BUILT moves of custom weapons (see public/customw.js) ──
+// The effects a built move puts on its shots (and on what NOVA, BEAM and DASH hit).
+function cwFx(fx, dmg) {
+  const o = {};
+  for (const k of fx || []) {
+    if (k === 'pierce') { o.pierce = true; o.hitTargets = new Set(); }
+    else if (k === 'homing') { o.homing = true; o.seekR = 420; }
+    else if (k === 'explode') { o.isAoe = true; o.aoeRadius = 52; }
+    else if (k === 'burn') o.burn = 2500;
+    else if (k === 'freeze') o.chill = 1500;
+    else if (k === 'poison') o.venom = Math.max(2, Math.round(dmg * 0.12));
+    else if (k === 'stun') o.stun = 600;
+    else if (k === 'chain') o.chain = 2;
+    else if (k === 'knock') o.gust = 30;
+    else if (k === 'lifesteal') o.soulHeal = Math.max(1, Math.round(dmg * 0.2));
+    else if (k === 'bounce') o.fgBounce = 2;
+  }
+  return o;
+}
+// One shot, drawn on the page with the picture its maker gave it ('cwp:<weapon>:<move>').
+function cwShoot(pKey, wid, slot, x, y, a, speed, range, dmg, fx, extra) {
+  room.projectiles.push({ id: nextId(), x, y, dx: Math.cos(a) * speed, dy: Math.sin(a) * speed, damage: dmg, owner: pKey,
+    traveled: 0, maxRange: range, weaponId: 'cwp:' + wid + ':' + slot, isAoe: false, aoeRadius: 0, pierce: false, grapple: false,
+    boomerang: false, returning: false, life: 0, hitTargets: null, cw: true, aoeColor: WEAPON_COLORS[wid] || '#ffffff',
+    ...cwFx(fx, dmg), ...(extra || {}) });
+}
+function cwAttack(p, pKey, w, dmgMult) {
+  const s = w.cwShot, n = s.n + (w.multi || 0), aim = nearestTargetAngle(p, pKey);
+  p.facing = Math.cos(aim) < 0 ? -1 : 1;
+  const spread = n > 1 ? Math.min(0.9, 0.14 * (n - 1)) : 0;
+  for (let i = 0; i < n; i++) cwShoot(pKey, w.id, 'atk', cx(p), cy(p), aim + (n > 1 ? -spread / 2 + spread * i / (n - 1) : 0), s.speed, w.range, Math.round(w.damage * dmgMult), s.fx);
+}
+function cwOrbitStep(proj, dt) {
+  const o = room.players[proj.owner];
+  if (!o || o.dead) return false;
+  if (proj.ttl !== undefined && (proj.ttl -= dt) <= 0) return false;
+  const ob = proj.orbit;
+  ob.a += ob.spin * dt / 1000;
+  proj.x = cx(o) + Math.cos(ob.a) * ob.r; proj.y = cy(o) + Math.sin(ob.a) * ob.r;
+  proj.dx = Math.cos(ob.a + Math.PI / 2) * 3; proj.dy = Math.sin(ob.a + Math.PI / 2) * 3;   // which way it faces
+  proj.recycle = (proj.recycle || 0) + dt;
+  if (proj.recycle > 500 && proj.hitTargets) { proj.hitTargets.clear(); proj.recycle = 0; }   // the same foe again, twice a second
+  return true;
+}
+function cwCast(p, pKey, m, dmg) {
+  const wid = weapon(p).id, col = WEAPON_COLORS[wid] || '#ffffff', px = cx(p), py = cy(p);
+  const fx = cwFx(m.fx, dmg);
+  const hitAll = list => { for (const t of list) { strikeTarget(t, dmg, pKey); if (!t.dead) onHitExtras({ owner: pKey, x: cx(t), y: cy(t), dx: 1, dy: 0, damage: dmg, weaponId: 'cwp', ...fx }, t); } };
+  const aim = nearestTargetAngle(p, pKey);
+  p.facing = Math.cos(aim) < 0 ? -1 : 1;
+  const shoot = (x, y, a, speed, range, extra, fxList) => cwShoot(pKey, wid, m.slot, x, y, a, speed, range, dmg, fxList || m.fx, extra);
+  if (m.pat === 'volley') {
+    const spread = m.n > 1 ? Math.min(1.4, 0.16 * (m.n - 1)) : 0;
+    for (let i = 0; i < m.n; i++) shoot(px, py, aim + (m.n > 1 ? -spread / 2 + spread * i / (m.n - 1) : 0), 7, m.range);
+  } else if (m.pat === 'ring') {
+    for (let i = 0; i < m.n; i++) shoot(px, py, aim + i / m.n * Math.PI * 2, 6, m.range);
+  } else if (m.pat === 'rain') {
+    const foes = enemyTargets(pKey).filter(t => Math.hypot(cx(t) - px, cy(t) - py) <= m.range)
+      .sort((a, b) => Math.hypot(cx(a) - px, cy(a) - py) - Math.hypot(cx(b) - px, cy(b) - py));
+    for (let i = 0; i < m.n; i++) {
+      const t = foes.length ? foes[i % foes.length] : null;
+      const tx = t ? cx(t) + (Math.random() - 0.5) * 14 : px + (Math.random() - 0.5) * m.range;
+      const ty = t ? cy(t) : py + (Math.random() - 0.5) * m.range;
+      const y0 = Math.max(ARENA_Y + 3, ty - 150 - i * 22);
+      shoot(tx, y0, Math.PI / 2, 8, ty - y0 + 24, t ? { homing: true, quarry: t, seekR: 80 } : null);
+    }
+  } else if (m.pat === 'orbit') {
+    for (let i = 0; i < m.n; i++) {
+      const a = i / m.n * Math.PI * 2;
+      shoot(px + Math.cos(a) * 44, py + Math.sin(a) * 44, a + Math.PI / 2, 3, 1e9, { orbit: { a, r: 44, spin: 3.2 }, ttl: m.dur, pierce: true, hitTargets: new Set(), homing: false, fgBounce: 0 });
+    }
+  } else if (m.pat === 'nova') {
+    hitAll(enemyTargets(pKey).filter(t => Math.hypot(cx(t) - px, cy(t) - py) <= m.range + t.w / 2));
+    room.particles.push({ type: 'shockwave', x: px, y: py, maxR: m.range, timer: 500, max: 500, color: col });
+  } else if (m.pat === 'beam') {
+    const ex = px + Math.cos(aim) * m.range, ey = py + Math.sin(aim) * m.range;
+    hitAll(enemyTargets(pKey).filter(t => distToSegment(cx(t), cy(t), px, py, ex, ey) <= 14 + t.w / 2));
+    for (let k = 0; k < 3; k++) room.particles.push({ type: 'bolt', x: px, y: py, x2: ex, y2: ey, timer: 260 + k * 60, max: 380, color: k ? '#ffffff' : col });
+  } else if (m.pat === 'dash') {
+    const t = nearestFoe(p, pKey, m.range);
+    const a = t ? Math.atan2(cy(t) - py, cx(t) - px) : aim;
+    const dist = t ? Math.min(m.range, Math.hypot(cx(t) - px, cy(t) - py) + 30) : m.range;
+    room.particles.push({ type: 'teleport', x: px, y: py, timer: 300, max: 300, color: col });
+    p.x += Math.cos(a) * dist; p.y += Math.sin(a) * dist;
+    clampToArena(p, 2);
+    p.pull = null;
+    p.invincible = Math.max(p.invincible || 0, 300);
+    const ex = cx(p), ey = cy(p);
+    hitAll(enemyTargets(pKey).filter(o => distToSegment(cx(o), cy(o), px, py, ex, ey) <= 22 + o.w / 2));
+    room.particles.push({ type: 'bolt', x: px, y: py, x2: ex, y2: ey, timer: 300, max: 300, color: col });
+    room.particles.push({ type: 'teleport', x: ex, y: ey, timer: 300, max: 300, color: '#ffffff' });
+  }
+}
+
 // A custom weapon's ULTIMATE: a special or super borrowed from another weapon,
 // far stronger, on a long cooldown of its own (the weapon's SPECIAL and SUPER
 // are left as they were).
@@ -6217,6 +6316,7 @@ function doSuper(p, pKey) {
   p.superCooldown = su.cd;
   p.swingTimer = 300;
   const dmgMult = hasEffect(p, 'strength') ? 1.8 : 1;
+  if (su.kind === 'cwmove') { cwCast(p, pKey, su, Math.round(su.dmg * dmgMult)); return; }
   if (su.kind === 'skyfall') { startSkyfall(p, pKey, Math.round(su.dmg * dmgMult)); return; }
   if (su.kind === 'spearspin') {
     p.fsSpin = { t: FS_SPIN_MS, tick: 0, dmg: Math.round(su.dmg * dmgMult), hit: [] };
@@ -10720,6 +10820,7 @@ function doSpecial(p, pKey) {
     castFireHand(p, pKey, sp, dmgMult);
     return;
   }
+  if (sp.kind === 'cwmove') { cwCast(p, pKey, sp, spDmg); return; }
   if (sp.kind === 'kunaistorm') { darklightStorm(p, pKey, spDmg); return; }
   if (sp.kind === 'spearthrow') { throwSpear(p, pKey, sp, spDmg); return; }
   if (sp.kind === 'icequake') { if (p.iceSwordOut) { p.specialCooldown = 400; return; } castIceQuake(p, pKey, spDmg); return; }
@@ -11296,9 +11397,9 @@ function weaponCatalog() {
     needLight: !!w.needLight,
     needSamurai: !!w.needSamurai,
     bossReward: !!w.bossReward, secret: !!w.secret, from: w.from || null, uncommon: !!w.uncommon,
-    special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd } : null,
-    super: w.super ? { kind: w.super.kind, dmg: w.super.dmg, cd: w.super.cd } : null,
-    ...(w.ultimate ? { ultimate: { kind: w.ultimate.kind, dmg: w.ultimate.dmg, cd: w.ultimate.cd, part: w.ultimate.part } } : {}),
+    special: w.special ? { kind: w.special.kind, dmg: w.special.dmg, cd: w.special.cd, ...(w.special.pat ? { pat: w.special.pat, fx: w.special.fx } : {}) } : null,
+    super: w.super ? { kind: w.super.kind, dmg: w.super.dmg, cd: w.super.cd, ...(w.super.pat ? { pat: w.super.pat, fx: w.super.fx } : {}) } : null,
+    ...(w.ultimate ? { ultimate: { kind: w.ultimate.kind, dmg: w.ultimate.dmg, cd: w.ultimate.cd, part: w.ultimate.part, ...(w.ultimate.pat ? { pat: w.ultimate.pat, fx: w.ultimate.fx } : {}) } } : {}),
     ...(w.custom ? { custom: cwDefs.get(w.id) || null } : {}),
     upgrades: upgradesFor(w.id),
     passive: PASSIVES[w.id] || null,
