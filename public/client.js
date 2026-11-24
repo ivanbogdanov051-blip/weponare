@@ -1241,6 +1241,7 @@ function updatePrediction(frameDt, now) {
   if (me.kspin > 0) spd *= 1.9;               // the katana's spin
   if (me.phx > 0) spd *= 1.8;                 // Ashfeather's PHOENIX FORM
   if (me.fgs) spd *= me.fgs;                  // forge: FLEET FOOTED, KITER
+  if (me.cwSpd) spd *= me.cwSpd;              // custom weapon: SPEED
   if (me.effects && me.effects.slow  > 0) spd *= 0.4;
   if (me.effects && me.effects.root  > 0) spd = 0;            // ROOT VINES
   if (me.sky || me.gstun || me.tspin) spd = 0;                                        // up in the air (Worldsplitter's leap)
@@ -1323,7 +1324,8 @@ function pinToOwners(state) {
   const fires = (state.fires || []).map(f => { const o = f.fo && at(f.fo); return o ? { ...f, x: o.x, y: o.y } : f; });
   const chains = (state.chains || []).map(ch => { const o = ch.o && at(ch.o); return o ? { ...ch, x1: o.x, y1: o.y } : ch; });
   const projectiles = (state.projectiles || []).map(pr => { const o = pr.ob && at(pr.ob[2]); return o ? { ...pr, x: o.x + Math.cos(pr.ob[0]) * pr.ob[1], y: o.y + Math.sin(pr.ob[0]) * pr.ob[1] } : pr; });
-  return { ...state, fires, chains, projectiles };
+  const particles = (state.particles || []).map(p => { const o = p.pk && at(p.pk); return o ? { ...p, x: o.x, y: o.y } : p; });
+  return { ...state, fires, chains, projectiles, particles };
 }
 
 // The Dagger of Ghosts' cloak, predicted: it goes on (or comes off) the moment
@@ -8286,6 +8288,8 @@ function drawParticles(particles) {
       ctx.globalAlpha = a; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x2, p.y2); ctx.stroke();
       ctx.restore();
+    } else if (p.type==='cwpic') {
+      drawCwPic(p);
     } else if (p.type==='shockwave') {
       const m=p.max||420, k=1-p.timer/m, r=(p.maxR||30)*k;
       ctx.globalAlpha=Math.max(0,p.timer/m)*0.9;
@@ -11368,7 +11372,7 @@ const CW_PARTS = [
   { k: 'ult', lbl: 'ULTIMATE', part: 'any', need: false, note: 'U / 🌟 · the best one' },
 ];
 const CW_BUILD0 = {
-  atk: { style: 'shot', dmg: 30, n: 1, speed: 7, range: 220, wait: 650, spin: false, sdmg: 20, srange: 220, fx: [] },
+  atk: { style: 'shot', dmg: 30, n: 1, speed: 7, range: 220, wait: 650, spin: false, sdmg: 20, srange: 220, apat: 'fan', fx: [] },
   sp:  { pat: 'volley', dmg: 40, n: 5, range: 260, cd: 8000, dur: 3000, orad: 50, ospin: 32, fx: [], steps: [] },
   su:  { pat: 'ring', dmg: 60, n: 10, range: 300, cd: 20000, dur: 4000, orad: 60, ospin: 32, fx: [], steps: [] },
   ult: { pat: 'rain', dmg: 120, n: 8, range: 320, cd: 40000, dur: 5000, orad: 70, ospin: 32, fx: [], steps: [] },
@@ -11425,11 +11429,11 @@ function cwPut(o, path, v) { const ps = path.split('.'), last = ps.pop(); const 
 // The sliders one pattern needs (`at` is where its numbers live: 'b' or 'b.steps.0').
 function cwPatSliders(k, at, st, main) {
   const L = CustomW.B.move, P = CustomW.PATS[st.pat], s = (key, lbl, lim, step) => cwSlider(k, at + '.' + key, lbl, lim, step);
-  return s('dmg', 'DAMAGE', L.dmg, 5) + (P.shots ? s('n', 'SHOTS', L.n, 1) : '') + (st.pat === 'mines' ? '' : s('range', st.pat === 'nova' ? 'SIZE' : 'RANGE', L.range, 10))
+  const many = (P.shots && !P.one) || P.many;
+  return s('dmg', 'DAMAGE', L.dmg, 5) + (many ? s('n', P.many ? 'FOES' : 'SHOTS', L.n, 1) : '') + (st.pat === 'orbit' ? '' : s('range', P.rl || 'RANGE', L.range, 10))
     + (main ? s('cd', 'WAIT', k === 'ult' ? [CustomW.ULT_BUILD_MIN_CD, L.cd[1]] : L.cd, 500) : s('delay', 'AFTER', L.delay, 50))
-    + (['orbit', 'mines', 'spiral'].includes(st.pat) ? s('dur', 'LASTS', L.dur, 250) : '')
-    + (st.pat === 'orbit' ? s('orad', 'CIRCLE SIZE', L.orad, 2) + s('ospin', 'SPIN', L.ospin, 1) : '')
-    + (st.pat === 'mines' ? s('range', 'SPREAD', L.range, 10) : '');
+    + (P.long ? s('dur', 'LASTS', L.dur, 250) : '')
+    + (st.pat === 'orbit' ? s('orad', 'CIRCLE SIZE', L.orad, 2) + s('ospin', 'SPIN', L.ospin, 1) : '');
 }
 function cwPatChips(k, at, cur) {
   return `<div class="cw-chips">${Object.entries(CustomW.PATS).map(([v, p]) =>
@@ -11450,12 +11454,14 @@ function cwRenderMove(k) {
                                        : sl('d', 'DAMAGE', CustomW.LIM.d) + sl('c', 'WAIT', CustomW.LIM.c)}</div>`;
   } else {
     const b = m.b;
-    let shots = true, sliders, kinds, steps = '';
+    let shots = true, picOnly = false, sliders, kinds, steps = '';
     if (k === 'atk') {
       const L = CustomW.B.swing, Q = CustomW.B.shot, s = (key, lbl, lim, step) => cwSlider(k, 'b.' + key, lbl, lim, step);
       kinds = `<div class="cw-chips">${[['shot', '➶ SHOTS', 'it shoots your projectiles'], ['swing', '⚔ SWING', 'it hits close up'], ['both', '⚔+➶ SWING + SHOTS', 'it hits close up AND shoots']].map(([v, t, d]) =>
         `<button class="${b.style === v ? 'on' : ''}" title="${d}" onclick="cwSet('${k}','style','${v}')">${t}</button>`).join('')}</div>`;
       const spin = `<label class="cw-chk"><input type="checkbox" ${b.spin ? 'checked' : ''} onchange="cwSet('${k}','spin',this.checked)"> FULL CIRCLE (hits all round you)</label>`;
+      if (b.style !== 'swing') kinds += `<div class="cw-sub">HOW THE SHOTS FLY</div><div class="cw-chips">${Object.entries(CustomW.APATS).map(([v, a]) =>
+        `<button class="${(b.apat || 'fan') === v ? 'on' : ''}" title="${a.t}" onclick="cwSet('${k}','apat','${v}')">${a.n}</button>`).join('')}</div><div class="cw-hint">${CustomW.APATS[b.apat || 'fan'].t}</div>`;
       if (b.style === 'swing') { shots = false; sliders = s('dmg', 'DAMAGE', L.dmg, 5) + s('range', 'REACH', L.range, 5) + s('wait', 'WAIT', L.wait, 10) + spin; }
       else if (b.style === 'both') sliders = s('dmg', 'SWING DAMAGE', L.dmg, 5) + s('range', 'REACH', L.range, 5) + s('wait', 'WAIT', L.wait, 10)
         + s('sdmg', 'SHOT DAMAGE', Q.dmg, 5) + s('n', 'SHOTS', Q.n, 1) + s('speed', 'SPEED', Q.speed, 1) + s('srange', 'SHOT RANGE', Q.range, 10) + spin;
@@ -11463,7 +11469,8 @@ function cwRenderMove(k) {
     } else {
       kinds = cwPatChips(k, 'b', b.pat);
       sliders = cwPatSliders(k, 'b', b, true);
-      shots = [b, ...b.steps].some(st => CustomW.PATS[st.pat].shots);
+      shots = [b, ...b.steps].some(st => CustomW.PATS[st.pat].shots || CustomW.PATS[st.pat].pic);
+      picOnly = !([b, ...b.steps].some(st => CustomW.PATS[st.pat].shots));
       steps = b.steps.map((st, i) => `<div class="cw-step"><div class="cw-mh"><b>THEN ${i + 2}</b><small>a COMBO: this comes after</small>
           <button class="cw-x" onclick="cwStepDel('${k}',${i})" aria-label="remove">✕</button></div>${cwPatChips(k, 'b.steps.' + i, st.pat)}
           <div class="cw-sls">${cwPatSliders(k, 'b.steps.' + i, st, false)}</div></div>`).join('')
@@ -11471,15 +11478,15 @@ function cwRenderMove(k) {
     }
     const fx = !(k === 'atk' && b.style === 'swing') ? `<div class="cw-sub">EFFECTS <small>(up to ${CustomW.MAX_FX})</small></div><div class="cw-chips cw-fx">${Object.entries(CustomW.FX).map(([v, f]) =>
       `<button class="${b.fx.includes(v) ? 'on' : ''}" data-fx="${v}" title="${f.t}" onclick="cwFx('${k}','${v}')">${f.n}</button>`).join('')}</div>` : '';
-    body = kinds + `<div class="cw-sls">${sliders}</div>` + steps + fx + (shots ? cwShotEditor(k, b) : '');
+    body = kinds + `<div class="cw-sls">${sliders}</div>` + steps + fx + (shots ? cwShotEditor(k, b, picOnly) : '');
   }
   box.innerHTML = head + body + `<div class="cw-res" data-r="${k}"></div>`;
   if (m.mode === 'borrow') { const sel = box.querySelector('select'); sel.value = k === 'ult' && m.from ? m.from + ':' + m.part : m.from;
     if (sel.value === '' && P.need && sel.options.length) { sel.selectedIndex = 0; cwPick(sel, true); } }
   const cv = box.querySelector('canvas.cw-shotcv'); if (cv) { cwDrawTex(cv, m.b.shot, false); cwApplyZoom(k); }
 }
-function cwShotEditor(k, b) {
-  return `<div class="cw-sub">ITS SHOTS <small>pick one, then draw on it</small></div>
+function cwShotEditor(k, b, picOnly) {
+  return `<div class="cw-sub">${picOnly ? 'ITS PICTURE <small>the beam, blast or trail is made of it (optional)</small>' : 'ITS SHOTS <small>pick one, then draw on it</small>'}</div>
     <div class="cw-shot"><div class="cw-shotleft"><div class="cw-zwrap cw-zshot"><canvas class="cw-shotcv" data-paint="${k}" width="192" height="144" aria-label="Shot picture"></canvas></div>${cwZoomBar(k)}</div>
       <div class="cw-shotside"><div class="cw-chips cw-shapes2">${CustomW.SHOT_SHAPES.map(s => `<button onclick="cwShotShape('${k}','${s}')">${s.toUpperCase()}</button>`).join('')}</div>
         <div class="cw-row"><label>MAIN <input type="color" value="${b.c1}" onchange="cwShotCol('${k}',1,this.value)"></label><label>SECOND <input type="color" value="${b.c2}" onchange="cwShotCol('${k}',2,this.value)"></label></div>
@@ -11488,7 +11495,7 @@ function cwShotEditor(k, b) {
       </div></div>${cwToolsHtml(k)}${cwStylesHtml(k)}`;
 }
 function cwMode(k, mode) { cwMoveState(k).mode = mode; cwRenderMove(k); cwPower(); }
-function cwSet(k, key, v) { const b = cwMoveState(k).b; b[key] = v; if (key === 'style') cwRenderMove(k); cwPower(); }
+function cwSet(k, key, v) { const b = cwMoveState(k).b; b[key] = v; if (key === 'style' || key === 'apat') cwRenderMove(k); cwPower(); }
 function cwSetPat(k, at, v) { cwPut(cwMoveState(k), at + '.pat', v); cwRenderMove(k); cwPower(); }
 function cwStepAdd(k) { const b = cwMoveState(k).b; if (b.steps.length < CustomW.MAX_STEPS - 1) b.steps.push({ ...CW_STEP0, pat: b.pat === 'dash' ? 'backfire' : 'nova' }); cwRenderMove(k); cwPower(); }
 function cwStepDel(k, i) { cwMoveState(k).b.steps.splice(i, 1); cwRenderMove(k); cwPower(); }
@@ -11528,27 +11535,30 @@ function cwPower() {
   document.getElementById('cwBarRef').style.left = (100 / top * 100) + '%';
   document.getElementById('cwBarLim').style.left = (lim / top * 100) + '%';
   document.getElementById('cwPowTxt').innerHTML = `POWER <b class="${pct > lim ? 'no' : 'ok'}">${pct}</b> &middot; FIRE SPEAR (a secret weapon) = 100 &middot; LIMIT <b>${lim}</b>`
+    + `<br><small>Custom weapons hit <b>×${CustomW.BOOST}</b> harder in a game than their sliders say: the damage under each move counts it.</small>`
     + (pct > lim ? '<br><span class="no">TOO STRONG: turn something down, or it cannot be made</span>' : pct > 100 ? '<br><span class="ok">STRONGER THAN A SECRET WEAPON</span>' : '');
+  const up = v => Math.round(v * CustomW.BOOST);
   for (const P of CW_PARTS) {
     const el = document.querySelector(`.cw-res[data-r="${P.k}"]`); if (!el) continue;
     const m = cw.moves[P.k];
     if (m.mode === 'build') {
       const b = m.b, fx = (b.fx || []).map(x => CustomW.FX[x].n).join(' + ');
-      if (P.k === 'atk') el.innerHTML = b.style === 'swing' ? `= <b>${b.dmg}</b> damage, every <b>${cwSec(b.wait)}</b>, reach <b>${b.range}</b>${b.spin ? ', all round you' : ''}`
-        : b.style === 'both' ? `= a <b>${b.dmg}</b> swing + <b>${b.sdmg}</b> × <b>${b.n}</b> shot${b.n > 1 ? 's' : ''}, every <b>${cwSec(b.wait)}</b>${fx ? ' · ' + fx : ''}`
-        : `= <b>${b.dmg}</b> damage × <b>${b.n}</b> shot${b.n > 1 ? 's' : ''}, every <b>${cwSec(b.wait)}</b>, range <b>${b.range}</b>${fx ? ' · ' + fx : ''}`;
+      const how = CustomW.APATS[b.apat || 'fan'].n;
+      if (P.k === 'atk') el.innerHTML = b.style === 'swing' ? `= <b>${up(b.dmg)}</b> damage, every <b>${cwSec(b.wait)}</b>, reach <b>${b.range}</b>${b.spin ? ', all round you' : ''}`
+        : b.style === 'both' ? `= a <b>${up(b.dmg)}</b> swing + <b>${up(b.sdmg)}</b> × <b>${b.n}</b> shot${b.n > 1 ? 's' : ''} (${how}), every <b>${cwSec(b.wait)}</b>${fx ? ' · ' + fx : ''}`
+        : `= <b>${up(b.dmg)}</b> damage × <b>${b.n}</b> shot${b.n > 1 ? 's' : ''} (${how}), every <b>${cwSec(b.wait)}</b>, range <b>${b.range}</b>${fx ? ' · ' + fx : ''}`;
       else {
-        const part = st => `${CustomW.PATS[st.pat].n} <b>${st.dmg}</b>${CustomW.PATS[st.pat].shots ? `×<b>${st.n}</b>` : ''}`;
+        const part = st => { const Q = CustomW.PATS[st.pat]; return `${Q.n} <b>${up(st.dmg)}</b>${(Q.shots && !Q.one) || Q.many ? `×<b>${st.n}</b>` : ''}`; };
         el.innerHTML = `= ${[b, ...b.steps].map(part).join(' → ')}, every <b>${cwSec(Math.max(P.k === 'ult' ? CustomW.ULT_BUILD_MIN_CD : 0, b.cd))}</b>${fx ? ' · ' + fx : ''}`;
       }
       continue;
     }
     const w = cwById(m.from);
     if (!w) { el.textContent = ''; continue; }
-    if (P.k === 'atk') { el.innerHTML = `= <b>${Math.round(w.damage * m.d / 100)}</b> damage, every <b>${(w.atkSpd * m.s / 100000).toFixed(2)}s</b>, reach <b>${Math.round(w.range * m.r / 100)}</b>`; continue; }
+    if (P.k === 'atk') { el.innerHTML = `= <b>${up(w.damage * m.d / 100)}</b> damage, every <b>${(w.atkSpd * m.s / 100000).toFixed(2)}s</b>, reach <b>${Math.round(w.range * m.r / 100)}</b>`; continue; }
     const src = w[P.k === 'ult' ? m.part : P.part]; if (!src) { el.textContent = ''; continue; }
     const dm = P.k === 'ult' ? CustomW.ULT_DMG : 1, cm = P.k === 'ult' ? CustomW.ULT_CD : 1;
-    el.innerHTML = `= <b>${Math.round((src.dmg || 0) * m.d / 100 * dm)}</b> damage, every <b>${Math.max(P.k === 'ult' ? 30 : 0.5, src.cd * m.c / 100 * cm / 1000).toFixed(1)}s</b>`;
+    el.innerHTML = `= <b>${up((src.dmg || 0) * m.d / 100 * dm)}</b> damage, every <b>${Math.max(P.k === 'ult' ? 30 : 0.5, src.cd * m.c / 100 * cm / 1000).toFixed(1)}s</b>`;
   }
 }
 
@@ -11820,10 +11830,58 @@ function drawCwShot(pr, ang) {
   const col = WEAPON_COLOR[id] || '#ffffff', cv = WEAPON_META[id] ? cwShotCanvas(id, slot) : null;
   if (!WEAPON_META[id]) cwFetch(id);
   ctx.save(); ctx.translate(pr.x, pr.y);
-  ctx.globalAlpha = 0.3; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, cv ? Math.max(cv.width, cv.height) * 0.45 : 5, 0, Math.PI * 2); ctx.fill();
+  const sc = pr.big || 1;
+  ctx.globalAlpha = 0.3; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, (cv ? Math.max(cv.width, cv.height) * 0.45 : 5) * sc, 0, Math.PI * 2); ctx.fill();
   ctx.globalAlpha = 1;
-  if (cv) { ctx.rotate(ang); ctx.imageSmoothingEnabled = false; ctx.drawImage(cv, -cv.width / 2, -cv.height / 2); }
+  if (cv) { ctx.rotate(ang); ctx.imageSmoothingEnabled = false; if (sc !== 1) ctx.scale(sc, sc); ctx.drawImage(cv, -cv.width / 2, -cv.height / 2); }
   else { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
+}
+
+// A built move's picture, where it has no shots: a BEAM made of it, a NOVA ring
+// of them, a WHIRLWIND of them round you, a BLACK HOLE swallowing them...
+function drawCwPic(p) {
+  const known = !!WEAPON_META[p.wid], cv = known ? cwShotCanvas(p.wid, p.slot) : null;
+  if (!known) cwFetch(p.wid);
+  const m = p.max || 400, a = Math.max(0, Math.min(1, p.timer / m)), k = 1 - a, col = p.color || '#ffffff', t = performance.now() / 1000;
+  const size = cv ? Math.max(cv.width, cv.height) : 8;
+  const img = (x, y, ang, sc = 1, al = 1) => {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(ang); ctx.globalAlpha = Math.max(0, al);
+    if (cv) { ctx.imageSmoothingEnabled = false; ctx.scale(sc, sc); ctx.drawImage(cv, -cv.width / 2, -cv.height / 2); }
+    else { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, 3 * sc, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+  };
+  ctx.save();
+  if (p.mode === 'line') {
+    const dx = p.x2 - p.x, dy = p.y2 - p.y, len = Math.hypot(dx, dy) || 1, ang = Math.atan2(dy, dx);
+    ctx.globalAlpha = a * 0.35; ctx.strokeStyle = col; ctx.lineWidth = size * 0.9; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x2, p.y2); ctx.stroke();
+    const step = Math.max(4, (cv ? cv.width : 8) - 1), n = Math.min(80, Math.ceil(len / step));
+    for (let i = 0; i <= n; i++) img(p.x + dx * i / n, p.y + dy * i / n, ang, 1, a);
+  } else if (p.mode === 'ring') {
+    const R = p.r || 40, r = R * Math.min(1, k * 1.25), n = Math.max(8, Math.min(28, Math.round(Math.PI * 2 * R / (size + 6))));
+    for (let i = 0; i < n; i++) { const ang = i / n * Math.PI * 2; img(p.x + Math.cos(ang) * r, p.y + Math.sin(ang) * r, ang, 1, a); }
+  } else if (p.mode === 'spin') {
+    const r = p.r || 40, n = Math.max(3, Math.min(10, Math.round(r / 14))), fade = Math.min(1, p.timer / 250);
+    ctx.globalAlpha = 0.16 * fade; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+    for (let i = 0; i < n; i++) { const ang = t * 9 + i / n * Math.PI * 2; img(p.x + Math.cos(ang) * r * 0.8, p.y + Math.sin(ang) * r * 0.8, ang + Math.PI / 2, 1, fade); }
+  } else if (p.mode === 'vortex') {
+    const r = p.r || 100, fade = Math.min(1, p.timer / 300, (m - p.timer) / 200 + 0.2);
+    const g = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, r);
+    g.addColorStop(0, '#000000'); g.addColorStop(0.55, col); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.globalAlpha = 0.25 * fade; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.9 * fade; ctx.fillStyle = '#05050b'; ctx.beginPath(); ctx.arc(p.x, p.y, 9, 0, Math.PI * 2); ctx.fill();
+    for (let i = 0; i < 8; i++) { const ph = (t * 0.8 + i / 8) % 1, rr = r * (1 - ph), ang = i * 2.4 + t * 4 + ph * 5;
+      img(p.x + Math.cos(ang) * rr, p.y + Math.sin(ang) * rr, ang + Math.PI / 2, 0.5 + (1 - ph) * 0.6, fade * (0.3 + 0.7 * (1 - ph))); }
+  } else if (p.mode === 'turret') {
+    const fade = Math.min(1, p.timer / 300);
+    ctx.globalAlpha = fade; ctx.fillStyle = '#2a2a3a'; ctx.strokeStyle = col; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(p.x, p.y + 4, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    img(p.x, p.y - 2 + Math.sin(t * 6) * 1.5, 0, 1.6, fade);
+    ctx.globalAlpha = fade; ctx.fillStyle = '#000000'; ctx.fillRect(p.x - 10, p.y + 15, 20, 3); ctx.fillStyle = col; ctx.fillRect(p.x - 10, p.y + 15, 20 * a, 3);
+  } else if (p.mode === 'ghost') {
+    img(p.x, p.y, p.a || 0, 2 + k, a * 0.8);
+  }
   ctx.restore();
 }
 

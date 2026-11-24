@@ -13,7 +13,10 @@
   const PRICE = 1000000;
   const MAX_OWNED = 5;                      // custom weapons one account can hold
   // How far each slider goes, in percent of the borrowed move.
-  const LIM = { d: [50, 300], s: [50, 200], r: [70, 160], c: [50, 200] };
+  const LIM = { d: [50, 600], s: [30, 200], r: [70, 160], c: [30, 200] };
+  // Every custom weapon hits this much harder in a game than its numbers (its maker
+  // lost all their upgrades to make it). POWER is worked out on the numbers before it.
+  const BOOST = 1.5;
   const ULT_DMG = 2.5, ULT_CD = 2.5, ULT_MIN_CD = 30000;   // a borrowed ULTIMATE: its move, 2.5x as strong and 2.5x as slow to come back
   const W = { atk: 0.40, sp: 0.25, su: 0.20, ult: 0.15 };  // how much each move counts towards POWER
   const REF = 0.85 * 1.4;                   // the FIRE SPEAR (a secret weapon) on that scale
@@ -45,6 +48,14 @@
     curse:     { n: 'CURSE',     m: 1.3,  t: 'every bad effect at once, for a moment' },
     frostbite: { n: 'FROSTBITE', m: 1.2,  t: 'the 3rd hit freezes a foe solid' },
     teleport:  { n: 'TELEPORT',  m: 1.05, t: 'you jump to where the shot lands' },
+    bleed:     { n: 'BLEED',     m: 1.2,  t: 'foes bleed half of the hit away over 2 seconds' },
+    shatter:   { n: 'SHATTER',   m: 1.25, t: 'double damage to a foe that is frozen, slowed or stunned' },
+    mark:      { n: 'MARK',      m: 1.15, t: 'a foe you hit takes 25% more from everything for 3s' },
+    giant:     { n: 'GIANT',     m: 1.15, t: 'shots are twice as big (easier to hit with)' },
+    swift:     { n: 'SWIFT',     m: 1.1,  t: 'shots fly much faster and further' },
+    echo:      { n: 'ECHO',      m: 1.3,  t: 'every hit strikes again for half, a moment later' },
+    twin:      { n: 'TWIN',      m: 1.4,  t: 'every shot comes with a twin beside it' },
+    ricochet:  { n: 'RICOCHET',  m: 1.2,  t: 'after a hit, the shot jumps on to the next foe' },
   };
   const MAX_FX = 4;
   // PASSIVES: always on while you hold it (up to 2). v: what each one adds to POWER.
@@ -54,27 +65,61 @@
     dodge:  { n: 'DODGE',  t: '1 hit in 7 misses you completely', v: 0.35 },
     thorns: { n: 'THORNS', t: 'whoever hits you takes 30% of it back', v: 0.25 },
     revive: { n: 'REVIVE', t: 'once a game, come back at 40% health instead of dying', v: 0.4 },
+    armor:   { n: 'ARMOR',   t: 'you take 20% less damage', v: 0.35 },
+    speed:   { n: 'SPEED',   t: 'you run 20% faster', v: 0.2 },
+    vampire: { n: 'VAMPIRE', t: 'heals you 8% of all the damage you deal', v: 0.35 },
+    guard:   { n: 'GUARD',   t: 'blocks one hit completely, every 10 seconds', v: 0.3 },
+    static:  { n: 'STATIC',  t: 'zaps the nearest foe close to you every second, for half your ATK damage', v: 0.3 },
   };
   const MAX_PAS = 2;
   const cleanPas = l => [...new Set((Array.isArray(l) ? l : []).filter(k => PAS[k]))].slice(0, MAX_PAS);
+  // shots: it fires your shots (they need a picture). pic: no shots, but your picture shows in it.
+  // many: it has a SHOTS slider without firing shots; one: it fires one shot (no SHOTS slider).
+  // long: it has a LASTS slider. rl: what its RANGE slider is called.
   const PATS = {
     volley: { n: 'VOLLEY', t: 'a fan of shots at the nearest foe',          shots: true,  hits: b => Math.pow(b.n, 0.6) },
     ring:   { n: 'RING',   t: 'shots fly out all around you',               shots: true,  hits: b => Math.pow(b.n, 0.45) },
     rain:   { n: 'RAIN',   t: 'shots fall from the sky on the foes near you', shots: true, hits: b => Math.pow(Math.min(b.n, 8), 0.75) },
-    orbit:  { n: 'ORBIT',  t: 'shots circle you, hitting what they touch',  shots: true,  hits: b => Math.pow(b.n, 0.5) * Math.pow(b.dur / 1000, 0.6) * Math.pow(b.ospin / 32, 0.3) * Math.pow(b.orad / 50, 0.2) },
-    nova:   { n: 'NOVA',   t: 'a blast all around you',                     shots: false, hits: b => 1.6 * Math.pow(b.range / 120, 0.3) },
-    beam:   { n: 'BEAM',   t: 'a beam through everything in a line',        shots: false, hits: () => 1.5 },
-    dash:   { n: 'DASH',   t: 'dash through the nearest foe, hitting all on the way', shots: false, hits: () => 1.3 },
+    orbit:  { n: 'ORBIT',  t: 'shots circle you, hitting what they touch',  shots: true,  long: true, hits: b => Math.pow(b.n, 0.5) * Math.pow(b.dur / 1000, 0.6) * Math.pow(b.ospin / 32, 0.3) * Math.pow(b.orad / 50, 0.2) },
+    nova:   { n: 'NOVA',   t: 'a blast all around you',                     shots: false, pic: true, rl: 'SIZE', hits: b => 1.6 * Math.pow(b.range / 120, 0.3) },
+    beam:   { n: 'BEAM',   t: 'a beam through everything in a line (made of your picture)', shots: false, pic: true, hits: () => 1.5 },
+    dash:   { n: 'DASH',   t: 'dash through the nearest foe, hitting all on the way', shots: false, pic: true, hits: () => 1.3 },
     backfire: { n: 'BACKFIRE', t: 'shots fly out BEHIND you (behind your dash, after a DASH)', shots: true, hits: b => Math.pow(b.n, 0.5) },
-    mines:  { n: 'MINES',  t: 'shots drop around you and wait there, hitting whoever steps on them', shots: true, hits: b => Math.pow(b.n, 0.5) * Math.pow(b.dur / 1000, 0.3) },
-    spiral: { n: 'SPIRAL', t: 'shots fire one after another, turning round you', shots: true, hits: b => Math.pow(b.n, 0.5) },
+    mines:  { n: 'MINES',  t: 'shots drop around you and wait there, hitting whoever steps on them', shots: true, long: true, rl: 'SPREAD', hits: b => Math.pow(b.n, 0.5) * Math.pow(b.dur / 1000, 0.3) },
+    spiral: { n: 'SPIRAL', t: 'shots fire one after another, turning round you', shots: true, long: true, hits: b => Math.pow(b.n, 0.5) },
+    wall:      { n: 'WALL',       t: 'a wall of shots side by side flies at the foe', shots: true, hits: b => Math.pow(b.n, 0.6) * 1.05 },
+    cross:     { n: 'CROSS',      t: 'shots fly out in a + (an X too, with 8 shots or more)', shots: true, hits: b => Math.pow(b.n, 0.45) },
+    boomerang: { n: 'BOOMERANG',  t: 'shots fly out and come back, hitting both ways', shots: true, hits: b => Math.pow(b.n, 0.6) * 1.5 },
+    meteor:    { n: 'METEOR',     t: 'huge shots fall on the nearest foes and blow up', shots: true, rl: 'BLAST SIZE', hits: b => Math.pow(Math.min(b.n, 6), 0.7) * 1.5 * Math.pow(b.range / 260, 0.3) },
+    shotgun:   { n: 'SHOTGUN',    t: 'lots of shots in a wide, short burst', shots: true, hits: b => Math.pow(b.n, 0.6) * 0.9 },
+    snipe:     { n: 'SNIPE',      t: 'one very fast shot that goes through everything', shots: true, one: true, hits: b => 1.5 * Math.pow(b.range / 260, 0.2) },
+    burst:     { n: 'BURST',      t: 'shots fire one after another, straight at the foe', shots: true, hits: b => Math.pow(b.n, 0.7) },
+    turret:    { n: 'TURRET',     t: 'drops a turret that shoots the nearest foe while it lasts', shots: true, long: true, hits: b => Math.pow(b.n, 0.85) },
+    storm:     { n: 'STORM',      t: 'shots fall at random spots around you while it lasts', shots: true, long: true, rl: 'SPREAD', hits: b => Math.pow(Math.min(b.n, 24), 0.6) },
+    quake:     { n: 'QUAKE',      t: '3 shockwaves, one after another, each bigger', pic: true, rl: 'SIZE', hits: b => 2.3 * Math.pow(b.range / 120, 0.3) },
+    blink:     { n: 'BLINK',      t: 'teleport behind the nearest foe and strike it', pic: true, hits: () => 1.3 },
+    sweep:     { n: 'SWEEP',      t: 'a beam that sweeps across in front of you', pic: true, hits: () => 1.8 },
+    zap:       { n: 'ZAP',        t: 'lightning jumps from foe to foe (SHOTS: how many foes)', pic: true, many: true, hits: b => Math.pow(b.n, 0.7) },
+    whirl:     { n: 'WHIRLWIND',  t: 'you spin, hitting everyone close by again and again', pic: true, long: true, rl: 'SIZE', hits: b => 0.3 * Math.max(1, Math.round(b.dur / 300)) * 1.2 * Math.pow(b.range / 240, 0.3) },
+    vortex:    { n: 'BLACK HOLE', t: 'a hole that pulls foes in and hurts them while it lasts', pic: true, long: true, hits: b => 0.2 * Math.max(1, Math.round(b.dur / 250)) * 1.3 },
   };
+  // How a built ATK's shots fly. h: how much its shots count (for POWER).
+  const APATS = {
+    fan:       { n: 'FAN',       t: 'a fan of shots at the foe',          h: n => Math.pow(n, 0.6) },
+    burst:     { n: 'BURST',     t: 'shots one after another, fast',      h: n => Math.pow(n, 0.7) },
+    wall:      { n: 'WALL',      t: 'a wall of shots side by side',       h: n => Math.pow(n, 0.6) * 1.05 },
+    shotgun:   { n: 'SHOTGUN',   t: 'a wide, short spray',                h: n => Math.pow(n, 0.6) * 0.9 },
+    boomerang: { n: 'BOOMERANG', t: 'they come back, hitting both ways',  h: n => Math.pow(n, 0.6) * 1.5 },
+    snipe:     { n: 'SNIPE',     t: 'very fast and far, through everything', h: n => Math.pow(n, 0.6) * 1.4 },
+    ring:      { n: 'RING',      t: 'all round you',                      h: n => Math.pow(n, 0.45) },
+  };
+  const apatOf = v => APATS[v] ? v : 'fan';
   const MAX_STEPS = 3;                      // a move can be up to 3 patterns, one after another (a COMBO)
   // [lowest, highest, to start with]
   const B = {
-    shot:  { dmg: [5, 200, 30], n: [1, 7, 1], speed: [3, 14, 7], range: [100, 520, 220], wait: [120, 3000, 650] },
-    swing: { dmg: [5, 260, 40], range: [30, 140, 60], wait: [150, 3000, 800] },
-    move:  { dmg: [5, 900, 60], n: [1, 24, 5], range: [60, 600, 260], cd: [1500, 60000, 8000], dur: [1000, 8000, 3000],
+    shot:  { dmg: [5, 600, 30], n: [1, 7, 1], speed: [3, 14, 7], range: [100, 520, 220], wait: [120, 3000, 650] },
+    swing: { dmg: [5, 800, 40], range: [30, 140, 60], wait: [150, 3000, 800] },
+    move:  { dmg: [5, 3000, 60], n: [1, 24, 5], range: [60, 600, 260], cd: [1500, 60000, 8000], dur: [1000, 8000, 3000],
              orad: [24, 140, 50], ospin: [5, 80, 32], delay: [0, 2000, 250] },   // ORBIT's size, its spin (tenths of a turn-radian a second); a step's wait
   };
   const ULT_BUILD_MIN_CD = 15000;
@@ -95,12 +140,12 @@
     if (r.style === 'both') {               // SWING + SHOTS: it hits close and fires too
       const L = B.swing, Q = B.shot;
       return { mode: 'build', style: 'both', dmg: num(r.dmg, L.dmg), range: num(r.range, L.range), wait: num(r.wait, L.wait), spin: !!r.spin,
-               sdmg: num(r.sdmg, Q.dmg), n: num(r.n, Q.n), speed: num(r.speed, Q.speed), srange: num(r.srange, Q.range), fx: cleanFx(r.fx), shot: cleanTex(r.shot, SHOT) };
+               sdmg: num(r.sdmg, Q.dmg), n: num(r.n, Q.n), speed: num(r.speed, Q.speed), srange: num(r.srange, Q.range), apat: apatOf(r.apat), fx: cleanFx(r.fx), shot: cleanTex(r.shot, SHOT) };
     }
     if (r.style === 'swing') { const L = B.swing; return { mode: 'build', style: 'swing', dmg: num(r.dmg, L.dmg), range: num(r.range, L.range), wait: num(r.wait, L.wait), spin: !!r.spin }; }
     const L = B.shot;
     return { mode: 'build', style: 'shot', dmg: num(r.dmg, L.dmg), n: num(r.n, L.n), speed: num(r.speed, L.speed), range: num(r.range, L.range),
-             wait: num(r.wait, L.wait), fx: cleanFx(r.fx), shot: cleanTex(r.shot, SHOT) };
+             wait: num(r.wait, L.wait), apat: apatOf(r.apat), fx: cleanFx(r.fx), shot: cleanTex(r.shot, SHOT) };
   }
   // One pattern of a move (the move itself is the first; a COMBO adds more).
   function cleanStep(r) {
@@ -111,15 +156,15 @@
   function cleanMoveB(r, ult) {
     const L = B.move, first = cleanStep(r);
     const steps = (Array.isArray(r.steps) ? r.steps : []).slice(0, MAX_STEPS - 1).map(cleanStep);
-    const shots = [first, ...steps].some(s => PATS[s.pat].shots);
+    const shots = [first, ...steps].some(s => PATS[s.pat].shots || PATS[s.pat].pic);   // (a BEAM can be made of the picture too)
     const { delay, ...main } = first; void delay;
     return { mode: 'build', ...main, cd: Math.max(ult ? ULT_BUILD_MIN_CD : 0, num(r.cd, L.cd)), fx: cleanFx(r.fx), steps,
              shot: shots ? cleanTex(r.shot, SHOT) : null };
   }
   function atkValue(b) {
-    if (b.style === 'both') return atkValue({ ...b, style: 'swing' }) + atkValue({ style: 'shot', dmg: b.sdmg, n: b.n, wait: b.wait, range: b.srange, fx: b.fx });
+    if (b.style === 'both') return atkValue({ ...b, style: 'swing' }) + atkValue({ style: 'shot', dmg: b.sdmg, n: b.n, wait: b.wait, range: b.srange, apat: b.apat, fx: b.fx });
     if (b.style === 'swing') return (b.dmg * 1000 / b.wait) / REF_ATK * Math.sqrt(b.range / 60) * (b.spin ? 1.3 : 1);
-    return (b.dmg * Math.pow(b.n, 0.6) * 1000 / b.wait) / REF_ATK * Math.sqrt(b.range / 180) * fxMult(b.fx);
+    return (b.dmg * APATS[apatOf(b.apat)].h(b.n) * 1000 / b.wait) / REF_ATK * Math.sqrt(b.range / 180) * fxMult(b.fx);
   }
   const moveValue = (b, ref) => ([b, ...(b.steps || [])].reduce((s, st) => s + st.dmg * PATS[st.pat].hits(st), 0) * fxMult(b.fx) * 1000 / b.cd) / ref;
 
@@ -211,25 +256,27 @@
   const KEEP_OUT = ['id', 'name', 'price', 'mythic', 'mythicKills', 'mythicNeeds', 'mythicBoss', 'needLegendary', 'needAll', 'needMind',
                     'needLight', 'needSamurai', 'bossReward', 'uncommon', 'from', 'unlockXp', 'special', 'super'];
   function build(id, spec, byId) {
-    const a = spec.atk, w = {};
+    const a = spec.atk, w = {}, up = v => Math.max(1, Math.round(v * BOOST));
     if (isBuild(a)) {
-      if (a.style === 'swing') Object.assign(w, { type: 'melee', damage: a.dmg, range: a.range, atkSpd: a.wait, ...(a.spin ? { swing360: true } : {}) });
-      else if (a.style === 'both') Object.assign(w, { type: 'melee', damage: a.dmg, range: a.range, atkSpd: a.wait, ...(a.spin ? { swing360: true } : {}),
-                                                      cwShot: { n: a.n, speed: a.speed, fx: a.fx, dmg: a.sdmg, range: a.srange, swing: true } });
-      else Object.assign(w, { type: 'ranged', damage: a.dmg, range: a.range, atkSpd: a.wait, cwShot: { n: a.n, speed: a.speed, fx: a.fx } });
+      if (a.style === 'swing') Object.assign(w, { type: 'melee', damage: up(a.dmg), range: a.range, atkSpd: a.wait, ...(a.spin ? { swing360: true } : {}) });
+      else if (a.style === 'both') Object.assign(w, { type: 'melee', damage: up(a.dmg), range: a.range, atkSpd: a.wait, ...(a.spin ? { swing360: true } : {}),
+                                                      cwShot: { n: a.n, speed: a.speed, fx: a.fx, dmg: up(a.sdmg), range: a.srange, swing: true, pat: apatOf(a.apat) } });
+      else Object.assign(w, { type: 'ranged', damage: up(a.dmg), range: a.range, atkSpd: a.wait, cwShot: { n: a.n, speed: a.speed, fx: a.fx, pat: apatOf(a.apat) } });
     } else {
       const aw = byId(a.from);
       for (const [k, v] of Object.entries(aw)) if (!KEEP_OUT.includes(k)) w[k] = v;
-      Object.assign(w, { damage: Math.max(1, Math.round(aw.damage * a.d / 100)), atkSpd: Math.max(70, Math.round(aw.atkSpd * a.s / 100)), range: Math.round(aw.range * a.r / 100) });
+      Object.assign(w, { damage: up(aw.damage * a.d / 100), atkSpd: Math.max(70, Math.round(aw.atkSpd * a.s / 100)), range: Math.round(aw.range * a.r / 100) });
     }
     const mv = (m, part, dm, cm, minCd, slot) => {
-      if (isBuild(m)) return { kind: 'cwmove', slot, pat: m.pat, dmg: m.dmg, cd: m.cd, n: m.n, range: m.range, dur: m.dur, orad: m.orad, ospin: m.ospin, fx: m.fx, steps: m.steps || [] };
+      if (isBuild(m)) return { kind: 'cwmove', slot, pat: m.pat, dmg: up(m.dmg), cd: m.cd, n: m.n, range: m.range, dur: m.dur, orad: m.orad, ospin: m.ospin, fx: m.fx,
+                               steps: (m.steps || []).map(st => ({ ...st, dmg: up(st.dmg) })) };
       const src = byId(m.from)[part];
-      return { ...src, dmg: Math.max(1, Math.round((src.dmg || 0) * m.d / 100 * dm)), cd: Math.max(minCd || 500, Math.round(src.cd * m.c / 100 * cm)) };
+      return { ...src, dmg: up((src.dmg || 0) * m.d / 100 * dm), cd: Math.max(minCd || 500, Math.round(src.cd * m.c / 100 * cm)) };
     };
     Object.assign(w, {
       id, name: spec.name, custom: true, secret: true, shopOnly: true, noRequirement: true, price: 0, unlockXp: 0,
       ...(spec.pas && spec.pas.length ? { cwPas: cleanPas(spec.pas) } : {}),
+      ...(cleanPas(spec.pas).includes('vampire') ? { lifesteal: (w.lifesteal || 0) + 0.08 } : {}),
       special: mv(spec.sp, 'special', 1, 1, 0, 'sp'),
       super: spec.su ? mv(spec.su, 'super', 1, 1, 0, 'su') : undefined,
       ultimate: spec.ult ? { ...mv(spec.ult, spec.ult.part, ULT_DMG, ULT_CD, ULT_MIN_CD, 'ult'), part: spec.ult.part } : undefined,
@@ -433,7 +480,7 @@
     return { ...tex, pal: tex.pal.map((c, i) => S.f(c, i, tex.pal.length)) };
   }
 
-  const CustomW = { PRICE, MAX_OWNED, LIM, ULT_DMG, ULT_CD, LIMIT, LIMIT_PCT, REF, TEX, SHOT, NO_ATK, NO_MOVE, SHAPES, FX, MAX_FX, PATS, B, SHOT_SHAPES, ULT_BUILD_MIN_CD,
+  const CustomW = { PRICE, MAX_OWNED, LIM, BOOST, APATS, ULT_DMG, ULT_CD, LIMIT, LIMIT_PCT, REF, TEX, SHOT, NO_ATK, NO_MOVE, SHAPES, FX, MAX_FX, PATS, B, SHOT_SHAPES, ULT_BUILD_MIN_CD,
                     isBuild, cleanAtkB, cleanMoveB, genShot, PAS, MAX_PAS, MAX_STEPS, STYLES, restyle,
                     tier, power, powerPct, check, cleanTex, build, art, generate, shade };
   if (typeof module !== 'undefined' && module.exports) module.exports = CustomW;

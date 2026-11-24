@@ -2206,6 +2206,7 @@ function effectiveSpeed(p) {
   if (p.passive === 'wavestorm') s *= WS_SPEED;         // ENDLESS TIDE
   if (p.kspin > 0) s *= KSPIN_SPEED;
   if (p.fg?.speed) s *= 1 + p.fg.speed;                 // forge: FLEET FOOTED, KITER
+  if (weapon(p).cwPas && weapon(p).cwPas.includes('speed')) s *= 1.2;   // custom: SPEED
   if (p.phoenix) s *= PHX_SPEEDMULT;                    // Ashfeather's PHOENIX FORM                    // the katana's SUPER
   if (p.tk) { s *= 1 + tkV(p, 'boots') / 100; if (p.tkHaste > 0) s *= TK_HASTE; }   // items: SWIFT BOOTS, HASTE CHARM
   if (hasEffect(p, 'slow'))  s *= 0.4;
@@ -4629,6 +4630,13 @@ function applyDamage(target, dmg, attackerKey) {
     room.particles.push({ type: 'crit', x: cx(target), y: target.y - 8, text: 'DODGE', timer: 500, max: 500 });
     return;
   }
+  if (tcp && tcp.includes('guard') && !(target.cwGuardCd > 0) && dmg > 0) {                        // custom: GUARD
+    target.cwGuardCd = 10000;
+    target.invincible = Math.max(target.invincible || 0, 250);
+    room.particles.push({ type: 'shockwave', x: cx(target), y: cy(target), maxR: target.w + 16, timer: 360, max: 360, color: WEAPON_COLORS[weapon(target).id] || '#ffffff' });
+    room.particles.push({ type: 'crit', x: cx(target), y: target.y - 10, text: 'GUARD', timer: 600, max: 600 });
+    return;
+  }
   if (tfg?.ward && !(target.wardCd > 0)) {                                                         // forge: WARDSTONE
     target.wardCd = 8000;
     target.invincible = 300;
@@ -4640,6 +4648,8 @@ function applyDamage(target, dmg, attackerKey) {
   if (aw && aw.ghostCloak && target.boss) dmg *= GHOST_BOSS_MULT;                                  // the Dagger of Ghosts fades against bosses
   if (aw && atk.passive === 'axe') dmg *= 1 + PASSIVE_RAGE * Math.max(0, 1 - atk.hp / atk.maxHp);   // BERSERKER
   if (aw && aw.cwPas && aw.cwPas.includes('rage') && atk.hp < atk.maxHp * 0.4) dmg *= 1.4;         // custom: RAGE
+  if (tcp && tcp.includes('armor')) dmg *= 0.8;                                                    // custom: ARMOR
+  if (target.cwMarkT > Date.now()) dmg *= 1.25;                                                    // a custom weapon's MARK
   if (target.num && hasEffect(target, 'ironskin')) dmg *= 0.5;                                     // IRON SKIN
   if (target.num && hasEffect(target, 'frostarmor')) dmg *= 0.75;                                  // FROST ARMOR
   if (target.num && target.passive === 'soullantern') dmg *= 1 - SOUL_BOND * Math.min(SOUL_MAX, target.souls || 0);   // SOUL BOND
@@ -5282,6 +5292,19 @@ function tickRoom(dt) {
     if (!p.dead && p.hp < p.maxHp && (weapon(p).cwPas || []).includes('regen')) {   // custom REGEN: 2% a second
       p.cwRegen = (p.cwRegen || 0) + dt;
       while (p.cwRegen >= 500) { p.cwRegen -= 500; p.hp = Math.min(p.maxHp, p.hp + Math.max(1, Math.round(p.maxHp * 0.01))); }
+    }
+    if (p.cwGuardCd > 0) p.cwGuardCd -= dt;
+    if (!p.dead && (weapon(p).cwPas || []).includes('static')) {    // custom STATIC: a zap a second
+      p.cwStatic = (p.cwStatic || 0) + dt;
+      if (p.cwStatic >= 1000) {
+        p.cwStatic = 0;
+        const t = nearestFoe(p, key, 130);
+        if (t) {
+          if (!t.num) t.invincible = 0;
+          strikeTarget(t, Math.min(150, Math.max(1, Math.round(weapon(p).damage * 0.5))), key);
+          room.particles.push({ type: 'bolt', x: cx(p), y: cy(p), x2: cx(t), y2: cy(t), timer: 240, max: 240, color: WEAPON_COLORS[weapon(p).id] || '#9ad8ff' });
+        }
+      }
     }
     if (room.parryJustPressed[key] && p.parryCooldown <= 0) {
       startParry(p);
@@ -5948,6 +5971,8 @@ function armorAuraTick(p, key, dt) {
 }
 // What a projectile does beyond its damage: frost slows, storm arcs onward.
 function onHitExtras(proj, t) {
+  // SHATTER looks at the foe before this hit's own FREEZE or STUN lands.
+  const cold = !!proj.cwShatter && ((t.freeze || 0) > 0 || (t.slowTimer || 0) > 0 || (!!t.num && hasEffect(t, 'slow')));
   if (proj.iceBurst) iceBurst(proj.owner, proj.x, proj.y, proj.iceBurst);
   if (proj.fgRico > 0) forgeRicochet(proj, t);
   if (proj.fgBlast) forgeBlast(proj, t);
@@ -5969,7 +5994,7 @@ function onHitExtras(proj, t) {
     clampToArena(t);
   }
   if (proj.burn) ignite(t, proj.burn);
-  if (proj.cw || proj.weaponId === 'cwp') cwHitExtras(proj, t);
+  if (proj.cw || proj.weaponId === 'cwp') cwHitExtras(proj, t, cold);
   if (proj.chain > 0) {
     const hit = new Set([t]);
     let from = t;
@@ -6245,11 +6270,36 @@ function cwFx(fx, dmg) {
     else if (k === 'curse') o.cwCurse = 1500;
     else if (k === 'frostbite') o.frostbite = true;
     else if (k === 'teleport') o.teleport = true;
+    else if (k === 'bleed') o.cwBleed = true;
+    else if (k === 'shatter') o.cwShatter = true;
+    else if (k === 'mark') o.cwMark = true;
+    else if (k === 'giant') { o.big = 2; o.hitR = 9; }
+    else if (k === 'echo') o.cwEcho = true;
+    else if (k === 'ricochet') o.fgRico = 1;
   }
   return o;
 }
 // The effects only built moves have.
-function cwHitExtras(proj, t) {
+function cwHitExtras(proj, t, cold) {
+  const o = room.players[proj.owner];
+  // More hits a moment later (BLEED, ECHO): they ride the owner's queue.
+  const again = (ms, d, txt) => { if (!o) return; (o.cwQ = o.cwQ || []).push({ at: ms, run: () => {
+    if (t.dead || t.dying) return;
+    if (!t.num) t.invincible = 0;
+    strikeTarget(t, d, proj.owner);
+    if (txt) room.particles.push({ type: 'crit', x: cx(t), y: t.y - 10, text: txt, timer: 500, max: 500 });
+  } }); };
+  if (proj.cwBleed && !t.dead) { const d = Math.max(1, Math.round(proj.damage * 0.125)); for (let i = 1; i <= 4; i++) again(i * 500, d, i === 1 ? 'BLEED' : null); }
+  if (proj.cwEcho && !t.dead) again(400, Math.max(1, Math.round(proj.damage * 0.5)), 'ECHO');
+  if (proj.cwShatter && cold && !t.dead) {
+    if (!t.num) t.invincible = 0;
+    strikeTarget(t, proj.damage, proj.owner);
+    room.particles.push({ type: 'crit', x: cx(t), y: t.y - 12, text: 'SHATTER!', timer: 600, max: 600 });
+  }
+  if (proj.cwMark && !t.dead) {
+    if (!(t.cwMarkT > Date.now())) room.particles.push({ type: 'crit', x: cx(t), y: t.y - 14, text: 'MARKED', timer: 600, max: 600 });
+    t.cwMarkT = Date.now() + 3000;
+  }
   if (proj.cwCrit) room.particles.push({ type: 'crit', x: cx(t), y: t.y - 8, text: 'CRIT!', timer: 500, max: 500 });
   if (proj.cwExec && !t.dead && t.hp < (t.maxHp || 0) * 0.3) {
     if (!t.num) t.invincible = 0;
@@ -6270,6 +6320,14 @@ function cwHitExtras(proj, t) {
 
 // One shot, drawn on the page with the picture its maker gave it ('cwp:<weapon>:<move>').
 function cwShoot(pKey, wid, slot, x, y, a, speed, range, dmg, fx, extra) {
+  const L = fx || [];
+  if (L.includes('twin') && !(extra && (extra.cwChild || extra.cwTwin || extra.orbit))) {   // TWIN: one more beside it
+    const nx = -Math.sin(a) * 9, ny = Math.cos(a) * 9, ex = { ...(extra || {}), cwTwin: true };
+    if (ex.hitTargets) ex.hitTargets = new Set();
+    cwShoot(pKey, wid, slot, x - nx, y - ny, a, speed, range, dmg, fx, ex);
+    x += nx; y += ny;
+  }
+  if (L.includes('swift') && !(extra && extra.orbit) && speed > 0.01) { speed *= 1.6; if (range < 1e8) range *= 1.3; }   // SWIFT
   const crit = (fx || []).includes('crit') && Math.random() < 0.25;
   if (crit) dmg *= 2;
   // (SPLIT's shots are born mid-pass, so they join the others after it)
@@ -6281,8 +6339,20 @@ function cwShoot(pKey, wid, slot, x, y, a, speed, range, dmg, fx, extra) {
 function cwAttack(p, pKey, w, dmgMult) {
   const s = w.cwShot, n = s.n + (w.multi || 0), aim = nearestTargetAngle(p, pKey);
   p.facing = Math.cos(aim) < 0 ? -1 : 1;
-  const spread = n > 1 ? Math.min(0.9, 0.14 * (n - 1)) : 0;
-  for (let i = 0; i < n; i++) cwShoot(pKey, w.id, 'atk', cx(p), cy(p), aim + (n > 1 ? -spread / 2 + spread * i / (n - 1) : 0), s.speed, s.range || w.range, Math.round((s.dmg || w.damage) * dmgMult), s.fx);
+  const d = Math.round((s.dmg || w.damage) * dmgMult), R = s.range || w.range, sp = s.speed;
+  const sh = (x, y, a, speed, range, extra) => cwShoot(pKey, w.id, 'atk', x, y, a, speed, range, d, s.fx, extra);
+  const fan = (wide, speed, range, mk) => { const spread = n > 1 ? Math.min(wide, 0.14 * (n - 1)) : 0;
+    for (let i = 0; i < n; i++) sh(cx(p), cy(p), aim + (n > 1 ? -spread / 2 + spread * i / (n - 1) : 0), speed, range, mk ? mk() : null); };
+  const pat = s.pat || 'fan';
+  if (pat === 'burst') {
+    for (let i = 0; i < n; i++) { const fire = () => { if (!p.dead) sh(cx(p), cy(p), nearestTargetAngle(p, pKey), sp, R); };
+      if (i === 0) fire(); else (p.cwQ = p.cwQ || []).push({ at: i * 70, run: fire }); }
+  } else if (pat === 'wall') { const nx = -Math.sin(aim), ny = Math.cos(aim); for (let i = 0; i < n; i++) { const o = (i - (n - 1) / 2) * 12; sh(cx(p) + nx * o, cy(p) + ny * o, aim, sp, R); } }
+  else if (pat === 'shotgun') { for (let i = 0; i < n; i++) sh(cx(p), cy(p), aim + (Math.random() - 0.5) * 0.9, sp * (0.85 + Math.random() * 0.4), R * 0.6); }
+  else if (pat === 'boomerang') fan(0.9, sp, Math.max(60, R * 0.6), () => ({ boomerang: true, pierce: true, hitTargets: new Set(), life: 4000, fgBounce: 0 }));
+  else if (pat === 'snipe') fan(0.3, sp * 2, R * 1.5, () => ({ pierce: true, hitTargets: new Set() }));
+  else if (pat === 'ring') { for (let i = 0; i < n; i++) sh(cx(p), cy(p), aim + i / n * Math.PI * 2, sp, R); }
+  else fan(0.9, sp, R);
 }
 function cwOrbitStep(proj, dt) {
   const o = room.players[proj.owner];
@@ -6319,34 +6389,45 @@ function cwStep(p, pKey, m, st, dmg) {
   const wid = weapon(p).id, col = WEAPON_COLORS[wid] || '#ffffff', px = cx(p), py = cy(p);
   const fx = cwFx(m.fx, dmg);
   const crits = (m.fx || []).includes('crit');
-  const hitAll = list => { for (const t of list) { const c = crits && Math.random() < 0.25, d = c ? dmg * 2 : dmg; strikeTarget(t, d, pKey);
-    if (!t.dead) onHitExtras({ owner: pKey, x: cx(t), y: cy(t), dx: cx(t) - px || 1, dy: cy(t) - py, damage: d, weaponId: 'cwp', ...fx, teleport: false, cwSplit: false, ...(c ? { cwCrit: true } : {}) }, t); } };
+  // Its picture also draws what has no shots (a BEAM made of it, a NOVA of them...).
+  const hasPic = !!(cwDefs.get(wid) || {})[m.slot]?.shot;
+  const pic = (mode, o) => room.particles.push({ type: 'cwpic', wid, slot: m.slot, mode, color: col, ...o });
+  // Hit everyone in a list. d0: each hit's damage; tick: one of a quick run of hits (a monster can't shrug those off).
+  const hitAll = (list, d0 = dmg, tick = false) => { for (const t of list) { if (t.dead) continue; if (tick && !t.num) t.invincible = 0; const c = crits && Math.random() < 0.25, d = c ? d0 * 2 : d0; strikeTarget(t, d, pKey);
+    if (!t.dead) onHitExtras({ owner: pKey, x: cx(t), y: cy(t), dx: cx(t) - px || 1, dy: cy(t) - py, damage: d, weaponId: 'cwp', ...fx, teleport: false, cwSplit: false, fgRico: 0, ...(c ? { cwCrit: true } : {}) }, t); } };
+  const near = (x, y, r) => enemyTargets(pKey).filter(t => !t.dead && Math.hypot(cx(t) - x, cy(t) - y) <= r + (t.w || 16) / 2);
+  const later = (ms, fn) => { if (ms <= 0) fn(); else (p.cwQ = p.cwQ || []).push({ at: ms, run: () => { if (!p.dead) fn(); } }); };
   const aim = nearestTargetAngle(p, pKey);
   p.facing = Math.cos(aim) < 0 ? -1 : 1;
   const shoot = (x, y, a, speed, range, extra, fxList) => cwShoot(pKey, wid, m.slot, x, y, a, speed, range, dmg, fxList || m.fx, extra);
-  const fan = (a0, n, wide) => { const spread = n > 1 ? Math.min(wide, 0.16 * (n - 1)) : 0; for (let i = 0; i < n; i++) shoot(px, py, a0 + (n > 1 ? -spread / 2 + spread * i / (n - 1) : 0), 7, st.range); };
-  if (st.pat === 'volley') fan(aim, st.n, 1.4);
-  else if (st.pat === 'backfire') {
+  const fan = (a0, n, wide, speed = 7, range = st.range, mk = null) => { const spread = n > 1 ? Math.min(wide, 0.16 * (n - 1)) : 0;
+    for (let i = 0; i < n; i++) shoot(px, py, a0 + (n > 1 ? -spread / 2 + spread * i / (n - 1) : 0), speed, range, mk ? mk() : null); };
+  const beamFx = (x0, y0, x1, y1, ms = 380) => {
+    if (hasPic) { pic('line', { x: x0, y: y0, x2: x1, y2: y1, timer: ms, max: ms }); room.particles.push({ type: 'bolt', x: x0, y: y0, x2: x1, y2: y1, timer: Math.round(ms * 0.6), max: ms, color: col }); }
+    else for (let k = 0; k < 3; k++) room.particles.push({ type: 'bolt', x: x0, y: y0, x2: x1, y2: y1, timer: Math.round(ms * 0.7) + k * 60, max: ms, color: k ? '#ffffff' : col });
+  };
+  const ringFx = (x, y, r, ms = 500) => { room.particles.push({ type: 'shockwave', x, y, maxR: r, timer: ms, max: ms, color: col }); if (hasPic) pic('ring', { x, y, r, timer: ms, max: ms }); };
+  const byDist = (x, y, r) => enemyTargets(pKey).filter(t => !t.dead && Math.hypot(cx(t) - x, cy(t) - y) <= r)
+    .sort((a, b) => Math.hypot(cx(a) - x, cy(a) - y) - Math.hypot(cx(b) - x, cy(b) - y));
+  const P = st.pat;
+  if (P === 'volley') fan(aim, st.n, 1.4);
+  else if (P === 'backfire') {
     // Behind you: behind the way you just dashed, or away from the nearest foe.
     const back = p.cwDashAt && Date.now() - p.cwDashAt < 1500 ? p.cwDashA + Math.PI : aim + Math.PI;
     fan(back, st.n, 1.6);
-  } else if (st.pat === 'ring') {
+  } else if (P === 'ring') {
     for (let i = 0; i < st.n; i++) shoot(px, py, aim + i / st.n * Math.PI * 2, 6, st.range);
-  } else if (st.pat === 'spiral') {
+  } else if (P === 'spiral') {
     const gap = Math.max(40, Math.round(st.dur / Math.max(1, st.n) / 2));
-    for (let i = 0; i < st.n; i++) {
-      const fire = () => { if (p.dead) return; shoot(cx(p), cy(p), aim + i * 0.7, 6, st.range); };
-      if (i === 0) fire(); else (p.cwQ = p.cwQ || []).push({ at: i * gap, run: fire });
-    }
-  } else if (st.pat === 'mines') {
+    for (let i = 0; i < st.n; i++) later(i * gap, () => shoot(cx(p), cy(p), aim + i * 0.7, 6, st.range));
+  } else if (P === 'mines') {
     for (let i = 0; i < st.n; i++) {
       const a = Math.random() * Math.PI * 2, d = 24 + Math.random() * Math.max(10, st.range * 0.45);
       const at = arenaClamp(px + Math.cos(a) * d, py + Math.sin(a) * d, 8);
       shoot(at.x, at.y, a, 0.001, 1e9, { ttl: st.dur, homing: false, fgBounce: 0 });
     }
-  } else if (st.pat === 'rain') {
-    const foes = enemyTargets(pKey).filter(t => Math.hypot(cx(t) - px, cy(t) - py) <= st.range)
-      .sort((a, b) => Math.hypot(cx(a) - px, cy(a) - py) - Math.hypot(cx(b) - px, cy(b) - py));
+  } else if (P === 'rain') {
+    const foes = byDist(px, py, st.range);
     for (let i = 0; i < st.n; i++) {
       const t = foes.length ? foes[i % foes.length] : null;
       const tx = t ? cx(t) + (Math.random() - 0.5) * 14 : px + (Math.random() - 0.5) * st.range;
@@ -6354,20 +6435,20 @@ function cwStep(p, pKey, m, st, dmg) {
       const y0 = Math.max(ARENA_Y + 3, ty - 150 - i * 22);
       shoot(tx, y0, Math.PI / 2, 8, ty - y0 + 24, t ? { homing: true, quarry: t, seekR: 80 } : null);
     }
-  } else if (st.pat === 'orbit') {
+  } else if (P === 'orbit') {
     const r = st.orad || 50, spin = (st.ospin || 32) / 10;
     for (let i = 0; i < st.n; i++) {
       const a = i / st.n * Math.PI * 2;
       shoot(px + Math.cos(a) * r, py + Math.sin(a) * r, a + Math.PI / 2, 3, 1e9, { orbit: { a, r, spin }, ttl: st.dur, pierce: true, hitTargets: new Set(), homing: false, fgBounce: 0 });
     }
-  } else if (st.pat === 'nova') {
-    hitAll(enemyTargets(pKey).filter(t => Math.hypot(cx(t) - px, cy(t) - py) <= st.range + t.w / 2));
-    room.particles.push({ type: 'shockwave', x: px, y: py, maxR: st.range, timer: 500, max: 500, color: col });
-  } else if (st.pat === 'beam') {
+  } else if (P === 'nova') {
+    hitAll(near(px, py, st.range));
+    ringFx(px, py, st.range);
+  } else if (P === 'beam') {
     const ex = px + Math.cos(aim) * st.range, ey = py + Math.sin(aim) * st.range;
     hitAll(enemyTargets(pKey).filter(t => distToSegment(cx(t), cy(t), px, py, ex, ey) <= 14 + t.w / 2));
-    for (let k = 0; k < 3; k++) room.particles.push({ type: 'bolt', x: px, y: py, x2: ex, y2: ey, timer: 260 + k * 60, max: 380, color: k ? '#ffffff' : col });
-  } else if (st.pat === 'dash') {
+    beamFx(px, py, ex, ey);
+  } else if (P === 'dash') {
     const t = nearestFoe(p, pKey, st.range);
     const a = t ? Math.atan2(cy(t) - py, cx(t) - px) : aim;
     const dist = t ? Math.min(st.range, Math.hypot(cx(t) - px, cy(t) - py) + 30) : st.range;
@@ -6379,8 +6460,103 @@ function cwStep(p, pKey, m, st, dmg) {
     p.cwDashA = a; p.cwDashAt = Date.now();
     const ex = cx(p), ey = cy(p);
     hitAll(enemyTargets(pKey).filter(o => distToSegment(cx(o), cy(o), px, py, ex, ey) <= 22 + o.w / 2));
-    room.particles.push({ type: 'bolt', x: px, y: py, x2: ex, y2: ey, timer: 300, max: 300, color: col });
+    beamFx(px, py, ex, ey, 300);
     room.particles.push({ type: 'teleport', x: ex, y: ey, timer: 300, max: 300, color: '#ffffff' });
+  // ── the patterns added later ──
+  } else if (P === 'wall') {
+    const nx = -Math.sin(aim), ny = Math.cos(aim);
+    for (let i = 0; i < st.n; i++) { const o = (i - (st.n - 1) / 2) * 15; shoot(px + nx * o, py + ny * o, aim, 6, st.range); }
+  } else if (P === 'cross') {
+    const arms = st.n >= 8 ? 8 : 4, per = Math.max(1, Math.round(st.n / arms));
+    for (let k = 0; k < arms; k++) { const a = aim + k / arms * Math.PI * 2; for (let j = 0; j < per; j++) shoot(px - Math.cos(a) * j * 14, py - Math.sin(a) * j * 14, a, 6.5, st.range + j * 14); }
+  } else if (P === 'boomerang') {
+    fan(aim, st.n, 1.3, 6.5, Math.max(80, st.range * 0.6), () => ({ boomerang: true, pierce: true, hitTargets: new Set(), life: 4000, fgBounce: 0 }));
+  } else if (P === 'shotgun') {
+    for (let i = 0; i < st.n; i++) shoot(px, py, aim + (Math.random() - 0.5) * 1.1, 6 + Math.random() * 3, Math.max(70, st.range * 0.55));
+  } else if (P === 'snipe') {
+    shoot(px, py, aim, 16, st.range * 1.6, { pierce: true, hitTargets: new Set(), homing: false });
+  } else if (P === 'burst') {
+    for (let i = 0; i < st.n; i++) later(i * 90, () => shoot(cx(p), cy(p), nearestTargetAngle(p, pKey) + (Math.random() - 0.5) * 0.08, 9, st.range));
+  } else if (P === 'meteor') {
+    const R = Math.round(30 + st.range * 0.2), foes = byDist(px, py, 480);
+    for (let i = 0; i < Math.min(st.n, 6); i++) later(i * 160, () => {
+      const t = foes.length ? foes[i % foes.length] : null, alive = t && !t.dead;
+      const tx = alive ? cx(t) : px + Math.cos(aim) * (90 + i * 30), ty = alive ? cy(t) : py + Math.sin(aim) * (90 + i * 30);
+      const y0 = Math.max(ARENA_Y + 3, ty - 220);
+      shoot(tx, y0, Math.PI / 2, 7, Math.max(10, ty - y0), { isAoe: true, aoeRadius: R, big: 2, hitR: 9, pierce: false, ...(alive ? { homing: true, quarry: t, seekR: 90 } : { homing: false }) });
+    });
+  } else if (P === 'turret') {
+    const at = arenaClamp(px + Math.cos(aim) * 26, py + Math.sin(aim) * 26, 10);
+    pic('turret', { x: at.x, y: at.y, timer: st.dur, max: st.dur });
+    const gap = Math.max(100, Math.round(st.dur / Math.max(1, st.n)));
+    for (let i = 0; i < st.n; i++) later(i * gap, () => {
+      let best = null, bd = st.range;
+      for (const t of enemyTargets(pKey)) { const d = Math.hypot(cx(t) - at.x, cy(t) - at.y); if (!t.dead && d < bd) { bd = d; best = t; } }
+      shoot(at.x, at.y, best ? Math.atan2(cy(best) - at.y, cx(best) - at.x) : aim + i * 0.5, 8, st.range + 40);
+    });
+  } else if (P === 'storm') {
+    const gap = Math.max(60, Math.round(st.dur / Math.max(1, st.n)));
+    for (let i = 0; i < st.n; i++) later(i * gap, () => {
+      const r = Math.random() * st.range * 0.6, a = Math.random() * Math.PI * 2;
+      const at = arenaClamp(cx(p) + Math.cos(a) * r, cy(p) + Math.sin(a) * r, 6), y0 = Math.max(ARENA_Y + 3, at.y - 160);
+      shoot(at.x, y0, Math.PI / 2, 8, Math.max(10, at.y - y0), { isAoe: true, aoeRadius: 26, homing: false });
+    });
+  } else if (P === 'quake') {
+    const d = Math.max(1, Math.round(dmg * 0.6));
+    for (let k = 0; k < 3; k++) later(k * 280, () => { const r = st.range * (0.45 + k * 0.275); hitAll(near(px, py, r), d, true); ringFx(px, py, r, 450); });
+  } else if (P === 'blink') {
+    const t = nearestFoe(p, pKey, Math.max(st.range, 150));
+    let a = aim, tx, ty;
+    if (t) { a = Math.atan2(cy(t) - py, cx(t) - px); const off = (t.w || 16) / 2 + 16; tx = cx(t) + Math.cos(a) * off; ty = cy(t) + Math.sin(a) * off; }
+    else { tx = px + Math.cos(aim) * st.range * 0.5; ty = py + Math.sin(aim) * st.range * 0.5; }
+    room.particles.push({ type: 'teleport', x: px, y: py, timer: 300, max: 300, color: col });
+    if (hasPic) pic('ghost', { x: px, y: py, a, timer: 400, max: 400 });
+    p.x = tx - p.w / 2; p.y = ty - p.h / 2;
+    clampToArena(p, 2);
+    p.pull = null;
+    p.invincible = Math.max(p.invincible || 0, 300);
+    p.cwDashA = a; p.cwDashAt = Date.now();
+    p.facing = Math.cos(a) < 0 ? 1 : -1;                // turned round, facing it
+    hitAll(t ? [t, ...near(cx(p), cy(p), 36).filter(o => o !== t)] : near(cx(p), cy(p), 40));
+    room.particles.push({ type: 'teleport', x: cx(p), y: cy(p), timer: 300, max: 300, color: '#ffffff' });
+    if (hasPic) pic('ghost', { x: cx(p), y: cy(p), a: a + Math.PI, timer: 400, max: 400 });
+  } else if (P === 'sweep') {
+    const arc = 2.1, beams = 9, hit = new Set();          // (an odd number: the middle one goes straight at the foe)
+    for (let k = 0; k < beams; k++) later(k * 50, () => {
+      const a = aim - arc / 2 + arc * k / (beams - 1), x0 = cx(p), y0 = cy(p), ex = x0 + Math.cos(a) * st.range, ey = y0 + Math.sin(a) * st.range;
+      const list = enemyTargets(pKey).filter(t => !t.dead && !hit.has(t) && distToSegment(cx(t), cy(t), x0, y0, ex, ey) <= 14 + t.w / 2);
+      for (const t of list) hit.add(t);
+      hitAll(list);
+      beamFx(x0, y0, ex, ey, 220);
+    });
+  } else if (P === 'zap') {
+    const hit = new Set();
+    let x0 = px, y0 = py;
+    for (let i = 0; i < st.n; i++) {
+      let best = null, bd = i ? 170 : st.range;
+      for (const t of enemyTargets(pKey)) { if (t.dead || hit.has(t)) continue; const d = Math.hypot(cx(t) - x0, cy(t) - y0); if (d < bd) { bd = d; best = t; } }
+      if (!best) break;
+      hit.add(best);
+      const bx = cx(best), by = cy(best);
+      hitAll([best], i ? Math.max(1, Math.round(dmg * 0.85)) : dmg, true);
+      room.particles.push({ type: 'bolt', x: x0, y: y0, x2: bx, y2: by, timer: 300, max: 300, color: col });
+      if (hasPic) pic('line', { x: x0, y: y0, x2: bx, y2: by, timer: 300, max: 300 });
+      x0 = bx; y0 = by;
+    }
+  } else if (P === 'whirl') {
+    const ticks = Math.max(1, Math.round(st.dur / 300)), r = st.range * 0.5, d = Math.max(1, Math.round(dmg * 0.3));
+    pic('spin', { x: px, y: py, pk: pKey, r, timer: st.dur, max: st.dur });
+    for (let k = 0; k < ticks; k++) later(k * 300, () => hitAll(near(cx(p), cy(p), r), d, true));
+  } else if (P === 'vortex') {
+    const t0 = nearestFoe(p, pKey, st.range);
+    const at = t0 ? { x: cx(t0), y: cy(t0) } : arenaClamp(px + Math.cos(aim) * Math.min(st.range, 160), py + Math.sin(aim) * Math.min(st.range, 160), 10);
+    const R = 110, ticks = Math.max(1, Math.round(st.dur / 250)), d = Math.max(1, Math.round(dmg * 0.2));
+    pic('vortex', { x: at.x, y: at.y, r: R, timer: st.dur, max: st.dur });
+    for (let k = 0; k < ticks; k++) later(k * 250, () => {
+      const list = near(at.x, at.y, R);
+      for (const t of list) if (!t.boss) { const dx = at.x - cx(t), dy = at.y - cy(t), dd = Math.hypot(dx, dy) || 1, s = Math.min(7, dd); t.x += dx / dd * s; t.y += dy / dd * s; clampToArena(t); }
+      hitAll(list, d, true);
+    });
   }
 }
 
@@ -11234,7 +11410,7 @@ function playerView(p) {
     superCd: Math.max(0, p.superCooldown || 0), superMax: w.super?.cd || 0,
     ...(w.ultimate ? { ultCd: Math.max(0, Math.round(p.ultCooldown || 0)), ultMax: w.ultimate.cd } : {}),
     abil: abilityView(p),
-    ...(p.fg?.speed ? { fgs: 1 + p.fg.speed } : {}),
+    ...(p.fg?.speed ? { fgs: 1 + p.fg.speed } : {}), ...(weapon(p).cwPas?.includes('speed') ? { cwSpd: 1.2 } : {}),
     ...(p.suit?.length ? { arm: p.suit.join() } : {}), ...(p.fg?.aura ? { aura: 1 } : {}),
     ...(p.shield ? { sh: p.shield.id, shHp: Math.ceil(p.shHp), shMax: p.shCap || p.shield.guard, shCd: Math.max(0, Math.round(p.shieldCd)), shCdMax: Armor.SHIELD_CD_MS } : {}),
     ...(p.shUp > 0 ? { shOn: 1 } : {}), ...(p.shShow > 0 ? { shHit: 1 } : {}),
